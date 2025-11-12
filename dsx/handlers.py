@@ -6,15 +6,14 @@ from typing import Callable, Optional
 from effectful.ops.syntax import ObjectInterpretation, implements, Term
 import jax
 from effectful.ops.semantics import fwd
-from dsx import TODO
 
 
 class Condition(ObjectInterpretation):
 
-    def __init__(self, obs: tuple[Times, States]) -> None:
+    def __init__(self, data: dict[str, Trajectory]) -> None:
         super().__init__()
 
-        self.obs = obs
+        self.data = data
 
     @implements(sample_ds)
     def _sample_ds(
@@ -23,8 +22,12 @@ class Condition(ObjectInterpretation):
             dynamics: DynamicalModel,
             obs: Optional[Trajectory]
         ) -> FunctionOfTime:
+
+        obs = self.data.get(name, None)
+        if obs is None:
+            return fwd()
         
-        fwd(name, dynamics, self.obs)
+        return fwd(name, dynamics, obs)
 
 
 class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
@@ -37,10 +40,12 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
             obs: Optional[Trajectory]
         ) -> FunctionOfTime:
 
-        if obs is None:
-            fwd()
+        if obs is not None:
+            self.add_log_factors(name, dynamics, obs)
         
-    def add_log_factors(self, dynamics: DynamicalModel, obs: Optional[Trajectory]):
+        return fwd()
+        
+    def add_log_factors(self, name: str, dynamics: DynamicalModel, obs: Optional[Trajectory]):
 
         # Inheritors should implement this method.
         raise NotImplementedError()
@@ -55,6 +60,8 @@ class BaseSolver(ObjectInterpretation):
             dynamics: DynamicalModel,
             obs: Optional[Trajectory]
         ) -> FunctionOfTime:
+
+        # TODO consider instantiating a fresh defop with a free time variable?
 
         return lambda times: self.solve(times, dynamics)
     
