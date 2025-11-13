@@ -117,9 +117,6 @@ def test_forward_sampling_smoke():
         f"Expected sin(t + {sampled_phase}), got {result['x']}"
     assert result["x"].shape == times.shape
 
-# FIXME this doesn't work as is, because "f" is not a site that predictive can return values for
-#  (much less when values are functions).
-
 def run_mcmc_inference(true_phase: float = 0.5, num_samples: int = 1000, num_warmup: int = 500):
     """Run MCMC inference on synthetic data."""
     rng_key = random.PRNGKey(0)
