@@ -5,6 +5,7 @@ from numpyro.infer import MCMC, NUTS, Predictive
 from numpyro.handlers import seed, trace
 import jax.numpy as jnp
 from jax import random
+from contextlib import nullcontext
 from effectful.ops.semantics import handler, fwd, coproduct
 from dsx.handlers import BaseSolver, States, BaseCDDynamaxLogFactorAdder, Condition
 from dsx.dynamical_models import ContinuousTimeDynamicalModel, DynamicalModel
@@ -61,7 +62,7 @@ class MSELogFactorAdder(BaseCDDynamaxLogFactorAdder):
             mse_total += mse
         
         # Add log factor equal to MSE
-        numpyro.factor(f"{name}_mse_log_factor", mse_total)
+        numpyro.factor(f"{name}_mse_log_factor", -15.*mse_total)
 
 
 def model():
@@ -73,11 +74,17 @@ def model():
 
 def conditioned_model(obs_data: dict[str, Trajectory]):
     """Create a conditioned model with solver, log factor adder, and condition handlers."""
-    solver_handler = handler(DumbSolver())
-    log_factor_adder_handler = handler(MSELogFactorAdder())
-    condition_handler = handler(Condition(obs_data))
+
+    # TODO instantiating these out here and reusing in run_model broke. Jack why
+    # solver_handler = handler(DumbSolver())
+    # log_factor_adder_handler = handler(MSELogFactorAdder())
+    # condition_handler = handler(Condition(obs_data))
     
     def run_model():
+        solver_handler = handler(DumbSolver())
+        log_factor_adder_handler = handler(MSELogFactorAdder())
+        condition_handler = handler(Condition(obs_data))
+
         with solver_handler:
             with log_factor_adder_handler:
                 with condition_handler:
@@ -116,22 +123,25 @@ def test_forward_sampling_smoke():
 def run_mcmc_inference(true_phase: float = 0.5, num_samples: int = 1000, num_warmup: int = 500):
     """Run MCMC inference on synthetic data."""
     rng_key = random.PRNGKey(0)
-    
+
+    def evaluated_model(times):
+        f = model()
+        return numpyro.deterministic("feval", f(times))
+
     # Generate synthetic data using Predictive with ground truth phase
     # Predictive handles seeding internally
     solver = handler(DumbSolver())
     
     true_params = {"phase": jnp.array(true_phase)}
-    predictive = Predictive(model, params=true_params)
+    predictive = Predictive(evaluated_model, params=true_params, num_samples=1)
 
     # Generate observations at some times
     obs_times = jnp.linspace(-2.0, 0.0, 10)
     
     with solver:
-        trajectory_fn = predictive(rng_key)["f"]
-        true_trajectory = trajectory_fn(obs_times)
+        samples = predictive(rng_key, obs_times)
 
-    obs_states = {"x": true_trajectory["x"]}
+    obs_states = {"x": samples["feval"]["x"]}
     obs_data = {"f": (obs_times, obs_states)}
     
     # Create conditioned model
@@ -147,10 +157,11 @@ def run_mcmc_inference(true_phase: float = 0.5, num_samples: int = 1000, num_war
     
     # Posterior predictive at evaluation times
     eval_times = jnp.linspace(-2.0, 2.0, 100)
-    predictive = Predictive(cond_model, posterior_samples)
-    pred_samples = predictive(rng_key)
+    predictive = Predictive(evaluated_model, posterior_samples)
+    with handler(DumbSolver()):
+        pred_samples = predictive(rng_key, eval_times)
     
-    trajectory_evals = pred_samples["f"](eval_times)
+    trajectory_evals = pred_samples["feval"]
     
     return {
         "true_phase": true_phase,
