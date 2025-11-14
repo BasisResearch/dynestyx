@@ -8,12 +8,12 @@ from jax import random
 from contextlib import nullcontext
 from effectful.ops.semantics import handler, fwd, coproduct
 from dsx.handlers import BaseSolver, States, BaseCDDynamaxLogFactorAdder, Condition
-from dsx.dynamical_models import ContinuousTimeDynamicalModel, DynamicalModel
+from dsx.dynamical_models import DynamicalModel
 from dsx.ops import sample_ds, Trajectory
 from typing import Callable
 import jax.random as jr
 
-class DumbParameterizedDynamics(ContinuousTimeDynamicalModel):
+class DumbParameterizedDynamics(DynamicalModel):
     """Dynamical model that takes parameters passed to a function."""
     
     def __init__(self, func: Callable, params: dict, state_name: str = "x"):
