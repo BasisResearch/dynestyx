@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -382,7 +382,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cd-dynamax", git = "https://github.com/hd-UQ/cd_dynamax.git" },
-    { name = "effectful", git = "ssh://git@github.com/BasisResearch/effectful.git" },
+    { name = "effectful", git = "https://github.com/BasisResearch/effectful.git" },
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "numpyro", specifier = ">=0.19.0" },
     { name = "pytest", specifier = ">=9.0.1" },
@@ -391,7 +391,7 @@ requires-dist = [
 [[package]]
 name = "effectful"
 version = "0.2.3"
-source = { git = "ssh://git@github.com/BasisResearch/effectful.git#e751d4263419b02a26ec572d82e866cabc4275cf" }
+source = { git = "https://github.com/BasisResearch/effectful.git#ec3a3bd1a36be0e2cb34b6d570099d22332bd900" }
 
 [[package]]
 name = "equinox"

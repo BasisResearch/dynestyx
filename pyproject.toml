@@ -20,5 +20,5 @@ dependencies = [
 packages = ["dsx"]
 
 [tool.uv.sources]
-effectful = { git = "ssh://git@github.com/BasisResearch/effectful.git" }
+effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax.git" }
