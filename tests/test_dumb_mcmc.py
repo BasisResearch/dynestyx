@@ -11,7 +11,7 @@ from dsx.handlers import BaseSolver, States, BaseCDDynamaxLogFactorAdder, Condit
 from dsx.dynamical_models import ContinuousTimeDynamicalModel, DynamicalModel
 from dsx.ops import sample_ds, Trajectory
 from typing import Callable
-
+import jax.random as jr
 
 class DumbParameterizedDynamics(ContinuousTimeDynamicalModel):
     """Dynamical model that takes parameters passed to a function."""
@@ -61,8 +61,13 @@ class MSELogFactorAdder(BaseCDDynamaxLogFactorAdder):
             mse = jnp.mean((pred_states[state_name] - obs_states[state_name]) ** 2)
             mse_total += mse
         
-        # Add log factor equal to MSE
-        numpyro.factor(f"{name}_mse_log_factor", -15.*mse_total)
+        # Draw randomness from the NumPyro RNG stream managed by NUTS
+        key = numpyro.prng_key()            # <- this comes from the seed / MCMC
+        log_factor_noise = jr.normal(key)   # will feed this key into random algorithms (e.g. EnKF).
+
+        noisy_mse = mse_total*(1 + 0.1 * log_factor_noise)
+        # Example: fold it into the log factor (toy pseudo-PF)
+        numpyro.factor(f"{name}_noisy_mse_log_factor", -noisy_mse)
 
 
 def model():
@@ -81,13 +86,10 @@ def conditioned_model(obs_data: dict[str, Trajectory]):
     # condition_handler = handler(Condition(obs_data))
     
     def run_model():
-        solver_handler = handler(DumbSolver())
-        log_factor_adder_handler = handler(MSELogFactorAdder())
-        condition_handler = handler(Condition(obs_data))
 
-        with solver_handler:
-            with log_factor_adder_handler:
-                with condition_handler:
+        with handler(DumbSolver()):
+            with handler(MSELogFactorAdder()):
+                with handler(Condition(obs_data)):
                     return model()
     
     return run_model
