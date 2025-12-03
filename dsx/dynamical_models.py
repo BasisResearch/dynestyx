@@ -1,6 +1,5 @@
 import jax
-import jax.numpy as jnp
-from typing import Union, Dict, Protocol, Optional, Callable, Any
+from typing import Union, Dict, Protocol, Optional
 import numpyro.distributions as dist
 
 # ----------------------------------------------------------------------
@@ -9,7 +8,7 @@ import numpyro.distributions as dist
 State = Union[jax.Array, Dict[str, jax.Array]]
 dState = State
 Observation = jax.Array
-Control = Optional[jax.Array]
+Control = Optional[State]
 Time = float
 Params = Dict[str, Union[float, jax.Array]]
 Key = jax.Array
@@ -28,12 +27,15 @@ class DynamicalModel:
         state_evolution,
         observation_model,
         control_model=None,
+        state_dim: Optional[int] = None,
+        observation_dim: Optional[int] = None
     ):
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
-
+        self.state_dim = state_dim
+        self.observation_dim = observation_dim
 
 class InitialCondition(dist.Distribution):
     """
@@ -59,16 +61,17 @@ class ContinuousTimeStateEvolution(StateEvolution):
 
     def drift(
         self,
-        state: State,
+        x: State,
+        u: Optional[Control],
         t: Time,
-        params: Params
     ) -> dState:
         '''Example implementation:
             x = state['x']
             u = state['u']        
             gamma = params['gamma']
             dxdt = gamma * x + u
-            return dict(x=dxdt)
+            # return dict(x=dxdt)
+            return dxdt
         '''
         raise NotImplementedError()
 
@@ -79,31 +82,33 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
 
     def diffusion_coefficient(
         self,
-        state: State,
+        x: State,
+        u: Optional[Control],
         t: Time,
-        params: Params
     ) -> jax.Array:
         """
         Example implementation:
             dim_brownian = self.diffusion_covariance(state, t, params)['x'].shape[-1]
             dim_x = state['x'].shape[-1]
             L = jnp.eye((dim_x, dim_brownian)) * params['diffusion_scale']
-            return dict(x=L)
+            # return dict(x=L)
+            return L
         """
 
         raise NotImplementedError()
 
     def diffusion_covariance(
         self,
-        state: State,
+        x: State,
+        u: Optional[Control],
         t: Time,
-        params: Params
     ) -> jax.Array:
         """
         Example implementation:
             dim_x = state['x'].shape[-1]
             Q = jnp.eye(dim_x)
-            return dict(x=Q)
+            # return dict(x=Q)
+            return Q
             # typically is Identity
         """
         raise NotImplementedError()
@@ -124,9 +129,9 @@ class DistributionFromStateTimeParams(Protocol):
     """
     def __call__(
         self,
-        state: State,
+        x: State,
+        u: Optional[Control],
         t: Time,
-        params: Params
     ) -> dist.Distribution:
         ...
 
@@ -151,9 +156,9 @@ class DiscreteTimeStateEvolution(StateEvolution, DistributionFromStateTimeParams
 
     def __call__(
         self,
-        state: State,
+        x: State,
+        u: Optional[Control],
         t: Time,
-        params: Params
     ) -> dist.Distribution:
         raise NotImplementedError()
     

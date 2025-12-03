@@ -1,18 +1,16 @@
-import jax
-import jax.numpy as jnp
-from dsx.handlers import BaseSolver, States
+from dsx.handlers import BaseSolver
+from dsx.ops import States
 from dsx.dynamical_models import ContinuousTimeStateEvolution, StochasticContinuousTimeStateEvolution
 from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
-import equinox as eqx
-
+from jax import Array
 
 class SDESolver(BaseSolver):
     """Solver that works with StochasticContinuousTimeStateEvolution."""
     
     def __init__(self,
-                key: jax.Array,
+                key: Array,
                 solver: dfx.AbstractSolver = dfx.Heun(),
                 stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
                 adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
@@ -21,10 +19,8 @@ class SDESolver(BaseSolver):
                 max_steps: int = 1e5,
                 ):
 
-        key1, key2 = jax.random.split(key)
-        
+        self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
         self.diffeqsolve_settings = {
-            "key": key1, # key for SDE solver
             "solver": solver,
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
@@ -32,12 +28,11 @@ class SDESolver(BaseSolver):
             "tol_vbt": tol_vbt,
             "max_steps": max_steps,
         }
-        self.key = key2  # key for other model randomness (initial condition and observation noise)
 
     def solve(self, times, dynamics) -> States:
-                
-        if not isinstance(dynamics, StochasticContinuousTimeStateEvolution):
-            raise NotImplementedError(f"SDESolver only works with StochasticContinuousTimeStateEvolution, got {type(dynamics)}")
+        
+        if not isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
+            raise NotImplementedError(f"SDESolver only works with StochasticContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
 
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
@@ -50,6 +45,9 @@ class SDESolver(BaseSolver):
                                                             )
 
         # Sample states and emissions from the model using solver settings defined above.
+        # ensure that times has shape (num_timesteps, 1)
+        if times.ndim == 1:
+            times = times[:, None]
         states, emissions = cd_dynamax_model.sample(
             params=params,
             key=self.key,
@@ -64,7 +62,7 @@ class ODESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution."""
     
     def __init__(self,
-                key: jax.Array, # key for model randomness (initial condition and observation noise)
+                key: Array, # key for model randomness (initial condition and observation noise)
                 solver: dfx.AbstractSolver = dfx.Dopri5(),
                 stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
                 adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
@@ -72,6 +70,7 @@ class ODESolver(BaseSolver):
                 max_steps: int = 1e5,
                 ):
 
+        self.key = key # key for model randomness (initial condition and observation noise)
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
@@ -82,8 +81,8 @@ class ODESolver(BaseSolver):
 
     def solve(self, times, dynamics) -> States:
                 
-        if not isinstance(dynamics, ContinuousTimeStateEvolution):
-            raise NotImplementedError(f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics)}")
+        if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+            raise NotImplementedError(f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
 
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
@@ -94,6 +93,10 @@ class ODESolver(BaseSolver):
                                                             emission_dim=dynamics.observation_dim,
                                                             diffeqsolve_settings=self.diffeqsolve_settings
                                                             )
+
+        # ensure that times has shape (num_timesteps, 1)
+        if times.ndim == 1:
+            times = times[:, None]
 
         # Sample states and emissions from the model using solver settings defined above.
         states, emissions = cd_dynamax_model.sample(

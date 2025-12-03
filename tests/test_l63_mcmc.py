@@ -1,19 +1,17 @@
-import pytest
+
+import jax.numpy as jnp
+import jax.random as jr
+
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, Predictive
-from numpyro.handlers import seed, trace
-import jax.numpy as jnp
-from jax import random
-from contextlib import nullcontext
-from effectful.ops.semantics import handler, fwd, coproduct
-from dsx.handlers import BaseSolver, States, BaseCDDynamaxLogFactorAdder, Condition
-from dsx.ops import sample_ds, Trajectory
-from typing import Callable
-import jax.random as jr
 
+from effectful.ops.semantics import handler
+from dsx.handlers import Condition
+from dsx.ops import sample_ds, Trajectory, Context
 from dsx.solvers import SDESolver
 from dsx.filters import FilterBasedMarginalLogLikelihood
+
 from dsx.models.lorenz63 import make_L63_SDE_model
 
 
@@ -23,14 +21,11 @@ def model():
     dynamics = make_L63_SDE_model(rho=rho)
     return sample_ds("f", dynamics, None)
 
-
-
-
-def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 1000, num_warmup: int = 500):
+def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmup: int = 100):
     """Run MCMC inference on synthetic data."""
-    rng_key = random.PRNGKey(0)
+    rng_key = jr.PRNGKey(0)
     
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = random.split(rng_key, 4)
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
 
     
     # ---------------------------------------------------------
@@ -43,19 +38,21 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 1000, num_warm
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(model, params=true_params, num_samples=1, exclude_deterministic=False)
 
+    context = Context(solve=Trajectory(times=obs_times))
     with handler(SDESolver(key=data_solver_key)):
-        with handler(Condition({"times": obs_times})):
+        with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
-    obs_states = {"x": synthetic["observations"]}
+    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
     # ---------------------------------------------------------    
     def conditioned_model():
-            with handler(FilterBasedMarginalLogLikelihood()):
-                with handler(Condition({"times": obs_times, "observations": obs_states})):
-                    return model()
+        context = Context(observations=Trajectory(times=obs_times, values=obs_values))
+        with handler(FilterBasedMarginalLogLikelihood()):
+            with handler(Condition(context)):
+                return model()
     
     # Run NUTS MCMC
     nuts_kernel = NUTS(conditioned_model)
@@ -68,17 +65,14 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 1000, num_warm
     # ---------------------------------------------------------
     # Posterior predictive
     # ---------------------------------------------------------
-    predictive_post = Predictive(model, posterior_samples)
+    # predictive_post = Predictive(model, posterior_samples)
 
-    with handler(SDESolver()):
-        pred = predictive_post(posterior_pred_key)
+    # with handler(SDESolver()):
+    #     pred = predictive_post(posterior_pred_key)
 
     return {
         "true_rho": true_rho,
         "posterior_rho": posterior_samples["rho"],
-        "posterior_predictive": pred["f"]["x"],
-        "obs_times": obs_times,
-        "obs_states": obs_states,
     }
 
 

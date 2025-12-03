@@ -1,22 +1,22 @@
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-from dsx.ops import Trajectory
-from dsx.handlers import BaseCDDynamaxLogFactorAdder
-from dsx.dynamical_models import ContinuousTimeStateEvolution, StochasticContinuousTimeStateEvolution
-from dsx.utils import dsx_to_cd_dynamax
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM
-import numpyro
-# import diffrax as dfx
-# from effectful.ops.semantics import handler, fwd, coproduct
 from typing import Optional
 import dataclasses
 
+from dsx.ops import Context
+from dsx.handlers import BaseCDDynamaxLogFactorAdder
+from dsx.dynamical_models import DynamicalModel
+from dsx.utils import dsx_to_cd_dynamax
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM
+import numpyro
+
+
 @dataclasses.dataclass
 class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
-    """ Log factor adder that computes marginal log likelihood via CD-Dynamax filtering."""
+    """Log factor adder that computes marginal log likelihood via CD-Dynamax filtering."""
 
-    key = None
+    key: Optional[jax.Array] = None
     filter_type: str = "EnKF"
     filter_state_order: str = "first"
     filter_emission_order: str = "first"
@@ -32,27 +32,39 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     extra_filter_kwargs: dict = dataclasses.field(default_factory=dict)
     warn: bool = True
 
+    def add_log_factors(
+        self,
+        dynamics: DynamicalModel,
+        context: Context,
+        name: Optional[str] = "EnKF",
+    ):
+        # Pull observed trajectory from context
+        obs_traj = context.observations
+        if obs_traj.times is None or obs_traj.values is None:
+            # No observations → nothing to factor
+            return
 
-    def add_log_factors(self, dynamics: StochasticContinuousTimeStateEvolution, obs: Trajectory, name: Optional[str] = "filter_marginal_log_likelihood"):
-        # Do I need any of this fwd stuff here?
-        # Get trajectory function from solver via fwd()
-        # trajectory_fn = fwd()
-        
-        # Extract observed times and states
-        obs_times, obs_states = obs
-        
+        obs_times = obs_traj.times[:, None]      # shape (T, 1)
+        obs_values = obs_traj.values    # shape (T, emission_dim)
+
         # Generate a CD-Dynamax-compatible parameter dict
         params = dsx_to_cd_dynamax(dynamics)
+
         # Instantiate the CD-Dynamax model
-        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(state_dim=dynamics.state_dim,
-                                                            emission_dim=dynamics.observation_dim,
-                                                            )
+        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+            state_dim=dynamics.state_dim,
+            emission_dim=dynamics.observation_dim,
+        )
+
+        # Choose a key
+        key = self.key if self.key is not None else jr.PRNGKey(0)
+
         # Compute the marginal log likelihood via filtering
         filtered = cd_dynamax_model.filter(
             params=params,
-            emissions=obs_states,
+            emissions=obs_values,
             t_emissions=obs_times,
-            key=numpyro.prng_key() if self.key is None else self.key,
+            key=key,
             filter_type=self.filter_type,
             filter_state_order=self.filter_state_order,
             filter_emission_order=self.filter_emission_order,
@@ -66,8 +78,13 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             diffeqsolve_kwargs=self.diffeqsolve_kwargs,
             extra_filter_kwargs=self.extra_filter_kwargs,
             output_fields=self.output_fields,
-            warn=self.warn
+            warn=self.warn,
         )
 
         # Add the marginal log likelihood as a numpyro factor
-        numpyro.factor(name, filtered.marginal_log_likelihood)
+        numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
+        
+        # numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
+        # numpyro.deterministic(f"{name}_filtered_states_cov", filtered.filtered_covariances)
+        # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
+        # numpyro.deterministic(f"{name}_predicted_states_cov", filtered.predicted_covariances)

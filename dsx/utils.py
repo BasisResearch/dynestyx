@@ -5,6 +5,8 @@ from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution, S
 from dsx.observations import LinearGaussianObservation
 from numpyro import distributions as dist
 
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
+
 def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
     """
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
@@ -13,39 +15,47 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
     params = {}
     
     ## Map state evolution ##
-    if isinstance(dsx_model.state_evolution, ContinuousTimeStateEvolution):
+    state_evo = dsx_model.state_evolution
+    if isinstance(state_evo, ContinuousTimeStateEvolution):
         params.update({
-            'dynamics_drift': dsx_model.drift,
+            'drift': state_evo.drift,
         })    
-        if isinstance(dsx_model.state_evolution, StochasticContinuousTimeStateEvolution):
+        if isinstance(state_evo, StochasticContinuousTimeStateEvolution):
             params.update({
-                'dynamics_diffusion_coefficient': dsx_model.diffusion_coefficient,
-                'dynamics_diffusion_cov': dsx_model.diffusion_covariance,
+                'diffusion_coeff': state_evo.diffusion_coefficient,
+                'diffusion_cov': state_evo.diffusion_covariance,
             })
     else:
-        raise NotImplementedError(f"State evolution of type {type(dsx_model.state_evolution)} is not supported yet.")
+        raise NotImplementedError(f"State evolution of type {type(state_evo)} is not supported yet.")
     
     ## Map initial condition ##
-    if isinstance(dsx_model.initial_condition, dist.MultivariateNormal):
+    ic = dsx_model.initial_condition
+    if isinstance(ic, dist.MultivariateNormal):
         params.update({
-            'initial_mean': dsx_model.initial_condition.loc,
-            'initial_cov': dsx_model.initial_condition.covariance_matrix,
+            'initial_mean': ic.loc,
+            'initial_cov': ic.covariance_matrix,
         })
-    elif isinstance(dsx_model.initial_condition, dist.Normal):
+    elif isinstance(ic, dist.Normal):
         params.update({
-            'initial_mean': dsx_model.initial_condition.loc,
-            'initial_cov': jnp.square(dsx_model.initial_condition.scale)
+            'initial_mean': ic.loc,
+            'initial_cov': jnp.square(ic.scale)
         })
     else:
-        raise NotImplementedError(f"Initial condition of type {type(dsx_model.initial_condition)} is not supported yet.")
+        raise NotImplementedError(f"Initial condition of type {type(ic)} is not supported yet.")
 
     ## Map observation model ##
-    if isinstance(dsx_model.observation_model, LinearGaussianObservation):
+    obs = dsx_model.observation_model
+    if isinstance(obs, LinearGaussianObservation):
         params.update({
-            'emission_function': dsx_model.observation_model.loc,
-            'observation_cov': dsx_model.observation_model.covariance_matrix,
+            'emission_function': lambda x, u, t: obs.H @ x,
+            'emission_cov': obs.R,
         })
     else:
-        raise NotImplementedError(f"Observation model of type {type(dsx_model.observation_model)} is not supported yet.")
+        raise NotImplementedError(f"Observation model of type {type(obs)} is not supported yet.")
 
-    return params
+    
+    cdnlgssm = CDNLGSSM(state_dim=dsx_model.state_dim,
+                            emission_dim=dsx_model.observation_dim)
+    cd_dynamax_params = cdnlgssm.build_params(**params)
+
+    return cd_dynamax_params

@@ -3,7 +3,8 @@ import jax.numpy as jnp
 from dsx.dynamical_models import DynamicalModel
 from dsx.observations import LinearGaussianObservation
 from dsx.dynamical_models import ContinuousTimeStateEvolution, StochasticContinuousTimeStateEvolution
-from dsx.dynamical_models import State, dState, Time, Params
+from dsx.dynamical_models import State, dState, Control, Time
+from typing import Optional
 from numpyro import distributions as dist
 import dataclasses
 
@@ -27,15 +28,18 @@ class Lorenz63ODE(ContinuousTimeStateEvolution):
     sigma: float = 10.0
     beta: float = 8.0 / 3.0
 
-    def drift(self, state: State, t: Time, params: Params) -> dState:
-        xyz = state["x"]  # shape (..., 3)
-        x, y, z = xyz[..., 0], xyz[..., 1], xyz[..., 2]
+    def drift(self,
+              x: State,
+              u: Optional[Control],
+              t: Time) -> dState:
+        x, y, z = x[..., 0], x[..., 1], x[..., 2]
 
         dx = self.sigma * (y - x)
         dy = x * (self.rho - z) - y
         dz = x * y - self.beta * z
 
-        return {"x": jnp.stack([dx, dy, dz], axis=-1)}
+        # return {"x": jnp.stack([dx, dy, dz], axis=-1)}
+        return jnp.array([dx, dy, dz])  # shape (..., 3)
 
 @dataclasses.dataclass
 class Lorenz63SDE(StochasticContinuousTimeStateEvolution, Lorenz63ODE):
@@ -58,7 +62,10 @@ class Lorenz63SDE(StochasticContinuousTimeStateEvolution, Lorenz63ODE):
     # -------------------------------------------------------
     # Diffusion coefficient (L)
     # -------------------------------------------------------
-    def diffusion_coefficient(self, state: State, t: Time, params: Params) -> jax.Array:
+    def diffusion_coefficient(self,
+        x: State,
+        u: Optional[Control],
+        t: Time) -> jax.Array:
         """
         Return the diffusion coefficient matrix L for the SDE:
             dx = f(x,t) dt + L dW_t
@@ -78,17 +85,18 @@ class Lorenz63SDE(StochasticContinuousTimeStateEvolution, Lorenz63ODE):
 
         L = jnp.diag(scale) # shape (3, 3)
 
-        return {"x": L}
+        return L
 
 
     # -------------------------------------------------------
     # Diffusion covariance (Q) as Identity
     # -------------------------------------------------------
-    def diffusion_covariance(self, state: State, t: Time, params: Params) -> jax.Array:
+    def diffusion_covariance(self,
+        x: State,
+        u: Optional[Control],
+        t: Time) -> jax.Array:
         """ Assume dim_x-dimensional brownian motion with identity covariance."""
-        dim_x = state['x'].shape[-1]
-        Q = jnp.eye(dim_x)
-        return {"x": Q}
+        return jnp.eye(3)
 
 
 def make_L63_SDE_model(
@@ -122,4 +130,6 @@ def make_L63_SDE_model(
         initial_condition=initial_condition(),
         state_evolution=state_evolution(),
         observation_model=observation(),
+        state_dim=3,
+        observation_dim=1,
     )

@@ -70,8 +70,8 @@ wheels = [
 
 [[package]]
 name = "cd-dynamax"
-version = "0.2.5"
-source = { git = "https://github.com/hd-UQ/cd_dynamax.git?branch=fix_pyproject#d9bdc93269b22788ade19654329aca9e37130ad0" }
+version = "0.2.6"
+source = { git = "https://github.com/hd-UQ/cd_dynamax.git?branch=dev-numpyro-api#f7c696fc7c71f2ee737509e64e2261a1b673ca53" }
 dependencies = [
     { name = "blackjax" },
     { name = "chex" },
@@ -89,6 +89,7 @@ dependencies = [
     { name = "lineax" },
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "numpyro" },
     { name = "optax" },
     { name = "orbax-checkpoint" },
     { name = "pandas" },
@@ -381,7 +382,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cd-dynamax", git = "https://github.com/hd-UQ/cd_dynamax.git?branch=fix_pyproject" },
+    { name = "cd-dynamax", git = "https://github.com/hd-UQ/cd_dynamax.git?branch=dev-numpyro-api" },
     { name = "effectful", git = "https://github.com/BasisResearch/effectful.git" },
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "numpyro", specifier = ">=0.19.0" },

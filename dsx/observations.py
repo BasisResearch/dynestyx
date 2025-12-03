@@ -10,18 +10,16 @@ class LinearGaussianObservation(ObservationModel):
     where H is the observation matrix and R is the observation noise covariance.
     """
     
-    def __init__(self, H: jax.Array, R: jax.Array, state_key: str = "x"):
+    def __init__(self, H: jax.Array, R: jax.Array):
         """
         H: Observation matrix, shape (obs_dim, state_dim)
         R: Observation noise covariance, shape (obs_dim, obs_dim)
-        state_key: Key in the state dict to observe from. Default is 'x'.
         """
         self.H = H
         self.R = R
-        self.state_key = state_key
 
     def __call__(self, state, t, params):
         return dist.MultivariateNormal(
-            loc = jnp.dot(self.H, state[self.state_key]),
+            loc = jnp.dot(self.H, state),
             covariance_matrix = self.R
         )
