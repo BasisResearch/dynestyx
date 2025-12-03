@@ -4,7 +4,7 @@ import jax.random as jr
 from dsx.ops import Trajectory
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import ContinuousTimeStateEvolution, StochasticContinuousTimeStateEvolution
-from dsx.models.cd_dynamax_mappers import dsx_to_cd_dynamax
+from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
 # import diffrax as dfx
@@ -33,7 +33,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     warn: bool = True
 
 
-    def add_log_factors(self, name: str, dynamics: StochasticContinuousTimeStateEvolution, obs: Trajectory):
+    def add_log_factors(self, dynamics: StochasticContinuousTimeStateEvolution, obs: Trajectory, name: Optional[str] = "filter_marginal_log_likelihood"):
         # Do I need any of this fwd stuff here?
         # Get trajectory function from solver via fwd()
         # trajectory_fn = fwd()
@@ -68,7 +68,6 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             output_fields=self.output_fields,
             warn=self.warn
         )
-            
 
-        # Example: fold it into the log factor (toy pseudo-PF)
-        numpyro.factor(f"{name}_filter_marginal_log_likelihood", filtered.marginal_loglik)
+        # Add the marginal log likelihood as a numpyro factor
+        numpyro.factor(name, filtered.marginal_log_likelihood)

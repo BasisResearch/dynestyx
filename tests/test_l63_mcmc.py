@@ -24,18 +24,6 @@ def model():
     return sample_ds("f", dynamics, None)
 
 
-def conditioned_model(obs_data: dict[str, Trajectory]):
-    """Create a conditioned model with solver, log factor adder, and condition handlers."""
-
-    # TODO instantiating these out here and reusing in run_model broke. Jack why
-    
-    def run_model():
-        with handler(SDESolver()):
-            with handler(FilterBasedMarginalLogLikelihood()):
-                with handler(Condition(obs_data)):
-                    return model()
-    
-    return run_model
 
 
 def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 1000, num_warmup: int = 500):
@@ -53,26 +41,24 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 1000, num_warm
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
-    predictive = Predictive(model, params=true_params, num_samples=1)
+    predictive = Predictive(model, params=true_params, num_samples=1, exclude_deterministic=False)
 
     with handler(SDESolver(key=data_solver_key)):
-        synthetic = predictive(data_init_key)
+        with handler(Condition({"times": obs_times})):
+            synthetic = predictive(data_init_key)
 
-    # synthetic is structure:
-    #   synthetic["f"] is a trajectory function of time
-    #   BUT DSX solver returns *evaluated states directly*
-    obs_states = {"x": synthetic["f"]["x"]}
-    obs_times = synthetic["f"]["t"]
-
-    obs_data = {"f": (obs_times, obs_states)}
+    obs_states = {"x": synthetic["observations"]}
 
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
-    # ---------------------------------------------------------
-    cond_model = conditioned_model(obs_data)
+    # ---------------------------------------------------------    
+    def conditioned_model():
+            with handler(FilterBasedMarginalLogLikelihood()):
+                with handler(Condition({"times": obs_times, "observations": obs_states})):
+                    return model()
     
     # Run NUTS MCMC
-    nuts_kernel = NUTS(cond_model)
+    nuts_kernel = NUTS(conditioned_model)
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
     mcmc.run(mcmc_key)
     

@@ -21,8 +21,10 @@ class SDESolver(BaseSolver):
                 max_steps: int = 1e5,
                 ):
 
+        key1, key2 = jax.random.split(key)
+        
         self.diffeqsolve_settings = {
-            "key": key,
+            "key": key1, # key for SDE solver
             "solver": solver,
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
@@ -30,8 +32,9 @@ class SDESolver(BaseSolver):
             "tol_vbt": tol_vbt,
             "max_steps": max_steps,
         }
+        self.key = key2  # key for other model randomness (initial condition and observation noise)
 
-    def solve(self, times, dynamics, key) -> States:
+    def solve(self, times, dynamics) -> States:
                 
         if not isinstance(dynamics, StochasticContinuousTimeStateEvolution):
             raise NotImplementedError(f"SDESolver only works with StochasticContinuousTimeStateEvolution, got {type(dynamics)}")
@@ -49,7 +52,7 @@ class SDESolver(BaseSolver):
         # Sample states and emissions from the model using solver settings defined above.
         states, emissions = cd_dynamax_model.sample(
             params=params,
-            key=key,
+            key=self.key,
             num_timesteps=len(times),
             t_emissions=times,
             transition_type="path",
@@ -61,6 +64,7 @@ class ODESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution."""
     
     def __init__(self,
+                key: jax.Array, # key for model randomness (initial condition and observation noise)
                 solver: dfx.AbstractSolver = dfx.Dopri5(),
                 stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
                 adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
@@ -76,7 +80,7 @@ class ODESolver(BaseSolver):
             "max_steps": max_steps,
         }
 
-    def solve(self, times, dynamics, key) -> States:
+    def solve(self, times, dynamics) -> States:
                 
         if not isinstance(dynamics, ContinuousTimeStateEvolution):
             raise NotImplementedError(f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics)}")
@@ -94,7 +98,7 @@ class ODESolver(BaseSolver):
         # Sample states and emissions from the model using solver settings defined above.
         states, emissions = cd_dynamax_model.sample(
             params=params,
-            key=key,
+            key=self.key,
             num_timesteps=len(times),
             t_emissions=times,
             transition_type="path",

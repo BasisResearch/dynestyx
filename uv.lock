@@ -71,7 +71,7 @@ wheels = [
 [[package]]
 name = "cd-dynamax"
 version = "0.2.5"
-source = { git = "https://github.com/hd-UQ/cd_dynamax.git#eb965d3d015b37febd9038381bbf99473c8dafa5" }
+source = { git = "https://github.com/hd-UQ/cd_dynamax.git?branch=fix_pyproject#d9bdc93269b22788ade19654329aca9e37130ad0" }
 dependencies = [
     { name = "blackjax" },
     { name = "chex" },
@@ -381,7 +381,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cd-dynamax", git = "https://github.com/hd-UQ/cd_dynamax.git" },
+    { name = "cd-dynamax", git = "https://github.com/hd-UQ/cd_dynamax.git?branch=fix_pyproject" },
     { name = "effectful", git = "https://github.com/BasisResearch/effectful.git" },
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "numpyro", specifier = ">=0.19.0" },
