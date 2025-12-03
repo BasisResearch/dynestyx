@@ -71,7 +71,7 @@ wheels = [
 [[package]]
 name = "cd-dynamax"
 version = "0.2.5"
-source = { git = "https://github.com/hd-UQ/cd_dynamax.git#368efc17c00187ddcfd0bf8a321cc980a520c6ac" }
+source = { git = "https://github.com/hd-UQ/cd_dynamax.git#eb965d3d015b37febd9038381bbf99473c8dafa5" }
 dependencies = [
     { name = "blackjax" },
     { name = "chex" },
