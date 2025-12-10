@@ -122,6 +122,10 @@ def make_L63_SDE_model(
         H = jnp.array([[1.0, 0.0, 0.0]])  # observe first component
         R = jnp.array([[obs_noise_sd**2]]) # observation noise covariance
         return LinearGaussianObservation(H=H, R=R)
+        # return lambda x, u, t: dist.MultivariateNormal(
+        #             loc = jnp.dot(H, x),
+        #             covariance_matrix = R
+        #         ) # We prefer this, but would need to extract H, R later for CD-Dynamax conversion (exploit linear-gaussianity)
 
     def initial_condition():
         return dist.MultivariateNormal(loc=ic_mean, covariance_matrix=ic_cov)

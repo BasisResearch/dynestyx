@@ -48,14 +48,14 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
     # ---------------------------------------------------------    
-    def conditioned_model():
+    def data_conditioned_model():
         context = Context(observations=Trajectory(times=obs_times, values=obs_values))
         with handler(FilterBasedMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return model()
     
     # Run NUTS MCMC
-    nuts_kernel = NUTS(conditioned_model)
+    nuts_kernel = NUTS(data_conditioned_model)
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
     mcmc.run(mcmc_key)
     

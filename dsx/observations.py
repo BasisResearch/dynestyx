@@ -18,8 +18,8 @@ class LinearGaussianObservation(ObservationModel):
         self.H = H
         self.R = R
 
-    def __call__(self, state, t, params):
+    def __call__(self, x, u, t):
         return dist.MultivariateNormal(
-            loc = jnp.dot(self.H, state),
+            loc = jnp.dot(self.H, x),
             covariance_matrix = self.R
         )

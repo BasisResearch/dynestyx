@@ -56,7 +56,7 @@ class StateEvolution:
 
 class ContinuousTimeStateEvolution(StateEvolution):
     """
-    ODE: dx/dt = f(State_t, t; params)
+    ODE: dx/dt = f(State_t, Control_t, t)
     """
 
     def drift(
@@ -136,21 +136,21 @@ class DistributionFromStateTimeParams(Protocol):
         ...
 
 class ObservationModel(DistributionFromStateTimeParams):
-    """p(y_t | State_t, t, params)"""
+    """p(y_t | State_t, Control_t, t)"""
     pass
 
 
 # Control Model
 class ControlModel(DistributionFromStateTimeParams):
     """
-    u_t ~ p(u_t | State_t, t, params)
+    u_t ~ p(u_t | State_t, t)
     Deterministic controls should use dist.Delta.
     """
     pass
 
 class DiscreteTimeStateEvolution(StateEvolution, DistributionFromStateTimeParams):
     """
-    x_{t+1} ~ p(x_{t+1} | State_t, t, params)
+    x_{t+1} ~ p(x_{t+1} | State_t, Control_t, t)
     Return a NumPyro Distribution over next state.
     """
 
