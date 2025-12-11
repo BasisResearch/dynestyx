@@ -1,13 +1,13 @@
 from dsx.handlers import BaseSolver
 from dsx.ops import States
-from dsx.dynamical_models import ContinuousTimeStateEvolution, StochasticContinuousTimeStateEvolution
+from dsx.dynamical_models import ContinuousTimeStateEvolution
 from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
 from jax import Array
 
 class SDESolver(BaseSolver):
-    """Solver that works with StochasticContinuousTimeStateEvolution."""
+    """Solver that works with ContinuousTimeStateEvolution with stochastic dynamics."""
     
     def __init__(self,
                 key: Array,
@@ -31,8 +31,16 @@ class SDESolver(BaseSolver):
 
     def solve(self, times, dynamics) -> States:
         
-        if not isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-            raise NotImplementedError(f"SDESolver only works with StochasticContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
+        if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+            raise NotImplementedError(f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
+        
+        if dynamics.state_evolution.diffusion_coefficient is None or dynamics.state_evolution.diffusion_covariance is None:
+            raise ValueError(
+                "SDESolver requires both diffusion_coefficient and diffusion_covariance to be "
+                f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
+                f"cov={dynamics.state_evolution.diffusion_covariance}). "
+                "Use ODESolver for deterministic dynamics."
+            )
 
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
@@ -83,6 +91,12 @@ class ODESolver(BaseSolver):
                 
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
+
+        if dynamics.state_evolution.diffusion_coefficient is not None or dynamics.state_evolution.diffusion_covariance is not None:
+            raise ValueError(
+                "ODESolver requires both diffusion_coefficient and diffusion_covariance to be "
+                "None for deterministic dynamics. Use SDESolver for stochastic dynamics."
+            )
 
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics

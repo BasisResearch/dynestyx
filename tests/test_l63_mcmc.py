@@ -7,19 +7,49 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, Predictive
 
 from effectful.ops.semantics import handler
+from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+from dsx.observations import LinearGaussianObservation
 from dsx.handlers import Condition
 from dsx.ops import sample_ds, Trajectory, Context
 from dsx.solvers import SDESolver
 from dsx.filters import FilterBasedMarginalLogLikelihood
 
-from dsx.models.lorenz63 import make_L63_SDE_model
-
-
 def model():
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
-    dynamics = make_L63_SDE_model(rho=rho)
-    return sample_ds("f", dynamics, None)
+
+    # Create the dynamical model with sampled rho
+    dynamics = DynamicalModel(
+        state_dim=3,
+        observation_dim=1,
+        initial_condition=dist.MultivariateNormal(loc=jnp.zeros(3),
+                                                 covariance_matrix=20.0**2 * jnp.eye(3)),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.array([
+                10.0 * (x[1] - x[0]),
+                x[0] * (rho - x[2]) - x[1],
+                x[0] * x[1] - (8.0 / 3.0) * x[2]
+            ]),
+            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
+            diffusion_covariance=lambda x, u, t: jnp.eye(3)
+        ),
+        observation_model=LinearGaussianObservation(H=jnp.array([[1.0, 0.0, 0.0]]),
+                                                    R=jnp.array([[5.0**2]])),
+    )
+
+    # TODO: observation_model should simply be dist.MultivariateNormal(...) here,
+    # but for now we wrap it in LinearGaussianObservation for so that we can extract
+    # H and R later for CD-Dynamax conversion (structure exploiting algorithms).
+    # In the future, we will build internal logic to identify linear-gaussian observation models
+    # and extract H, R automatically.
+
+    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
+    # require (x, u, t) arguments if they are not used. We can wrap them internally.
+    # e.g. diffusion_coefficient=jnp.eye(3)
+    # e.g. drift = lambda x: F(x, rho)
+
+    # Return a sampled dynamical model, named "f".
+    return sample_ds("f", dynamics)
 
 def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmup: int = 100):
     """Run MCMC inference on synthetic data."""

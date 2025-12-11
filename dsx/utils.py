@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution, StochasticContinuousTimeStateEvolution
+from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
 from dsx.observations import LinearGaussianObservation
 from numpyro import distributions as dist
 
@@ -17,14 +17,25 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
     ## Map state evolution ##
     state_evo = dsx_model.state_evolution
     if isinstance(state_evo, ContinuousTimeStateEvolution):
-        params.update({
-            'drift': state_evo.drift,
-        })    
-        if isinstance(state_evo, StochasticContinuousTimeStateEvolution):
+        if state_evo.drift is not None:
+            params.update({
+                'drift': state_evo.drift,
+            })
+        else:
+            raise ValueError("drift is None; default drift (e.g., ZERO) is not yet handled carefully.")
+        if state_evo.diffusion_coefficient is not None:
             params.update({
                 'diffusion_coeff': state_evo.diffusion_coefficient,
+            })
+        else:
+            raise ValueError("diffusion_coefficient is None; default diffusion_coefficient (e.g., Identity) is not yet handled carefully.")
+        if state_evo.diffusion_covariance is not None:
+            params.update({
                 'diffusion_cov': state_evo.diffusion_covariance,
             })
+        else:
+            raise Warning("diffusion_covariance is None; defaulting to Identity (via CD-Dynamax defaults).")
+
     else:
         raise NotImplementedError(f"State evolution of type {type(state_evo)} is not supported yet.")
     
@@ -51,6 +62,8 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
             'emission_cov': obs.R,
         })
     else:
+    # TODO: check for linear-gaussian observation models and extract H, R        
+        
         raise NotImplementedError(f"Observation model of type {type(obs)} is not supported yet.")
 
     
