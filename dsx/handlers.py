@@ -20,7 +20,7 @@ class Condition(ObjectInterpretation):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context],
+        context: Optional[Context] = None,
     ) -> FunctionOfTime:
         # Ignore any context passed in the call and use the handler's context
         site_ctx = self.context
@@ -34,7 +34,7 @@ class BaseSolver(ObjectInterpretation):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context],
+        context: Optional[Context] = None,
     ) -> FunctionOfTime:
 
         # Only solve if we have solve-times
