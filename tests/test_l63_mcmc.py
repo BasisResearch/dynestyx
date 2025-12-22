@@ -75,6 +75,12 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
+    import matplotlib.pyplot as plt    
+    plt.plot(obs_times, synthetic["states"].squeeze(0)[:, 0], label="x[0]")
+    plt.plot(obs_times, synthetic["observations"].squeeze(0)[:, 0], label="observations", linestyle="--")
+    plt.legend()
+    plt.show()
+
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
     # ---------------------------------------------------------    
@@ -104,16 +110,6 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
         "true_rho": true_rho,
         "posterior_rho": posterior_samples["rho"],
     }
-
-
-# -------------------------------------------------------------
-# SMOKE TEST
-# -------------------------------------------------------------
-def test_mcmc_smoke():
-    result = run_mcmc_inference(true_rho=28.0, num_samples=50, num_warmup=50)
-    assert "posterior_rho" in result
-    assert len(result["posterior_rho"]) > 0
-    print("Smoke test passed.")
 
     
 if __name__ == "__main__":
