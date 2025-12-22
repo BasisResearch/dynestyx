@@ -10,6 +10,7 @@ from dsx.dynamical_models import DynamicalModel
 from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
+from numpyro.contrib.control_flow import scan as nscan
 
 
 @dataclasses.dataclass
@@ -88,3 +89,57 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         # numpyro.deterministic(f"{name}_filtered_states_cov", filtered.filtered_covariances)
         # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
         # numpyro.deterministic(f"{name}_predicted_states_cov", filtered.predicted_covariances)
+
+
+@dataclasses.dataclass
+class ModelUnroller(BaseCDDynamaxLogFactorAdder):
+    """Assume we have ic, transition, and observation distributions,
+    as well as (time_index, observation) pairs in the context.
+    
+    Simply unroll the model and add obs=data as you would in numpyro.
+    
+    This does not add logfactors, just unrolls the model and adds observed sites.
+    """
+
+    def add_log_factors(
+        self,
+        dynamics: DynamicalModel,
+        context: Context,
+        name: Optional[str] = "EnKF",
+    ):
+        # Pull observed trajectory from context
+        obs_traj = context.observations
+        if obs_traj.times is None or obs_traj.values is None:
+            # No observations → nothing to factor
+            return
+
+        obs_times = obs_traj.times      # shape (T)
+        obs_values = obs_traj.values    # shape (T, emission_dim)
+
+        T = len(obs_times)
+        
+        # Sample initial state
+        x_prev = numpyro.sample(f"x_0", dynamics.initial_condition)
+        
+        # sample initial observation
+        numpyro.sample("y_0", dynamics.observation_model(x=x_prev, u=None, t=obs_times[0]), obs=obs_values[0])
+        
+        def _step(x_prev, t_idx):
+            t = obs_times[t_idx]
+            # Sample next state
+            x_t = numpyro.sample(
+                f"x_{t_idx+1}",
+                dynamics.state_evolution(x=x_prev, u=None, t=t)
+            )
+            
+            # Sample observation
+            numpyro.sample(
+                f"y_{t_idx+1}",
+                dynamics.observation_model(x=x_t, u=None, t=t),
+                obs=obs_values[t_idx+1]
+            )
+            return x_t, None
+        
+        nscan(_step, x_prev, jnp.arange(T-1))
+        # got errors with lax.scan
+        # This seems to run slower than i expected!

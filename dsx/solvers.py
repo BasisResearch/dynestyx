@@ -1,13 +1,17 @@
 from dsx.handlers import BaseSolver
 from dsx.ops import States
-from dsx.dynamical_models import ContinuousTimeStateEvolution
+from dsx.dynamical_models import ContinuousTimeStateEvolution, DiscreteTimeStateEvolution
 from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
 from jax import Array
+import jax.numpy as jnp
+import jax.random as jr
+from jax import lax
 
 class SDESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution with stochastic dynamics."""
+    # TODO: add control inputs
     
     def __init__(self,
                 key: Array,
@@ -68,7 +72,8 @@ class SDESolver(BaseSolver):
 
 class ODESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution."""
-    
+    # TODO: add control inputs
+
     def __init__(self,
                 key: Array, # key for model randomness (initial condition and observation noise)
                 solver: dfx.AbstractSolver = dfx.Dopri5(),
@@ -122,3 +127,60 @@ class ODESolver(BaseSolver):
         )
 
         return {"states": states, "observations": emissions}
+
+class DiscreteTimeSolver(BaseSolver):
+    """Solver for discrete-time state evolution models using lax.scan."""
+    # TODO: add controls
+
+    def __init__(self, key: Array):
+        self.key = key
+
+    def solve(self, times, dynamics) -> States:
+        
+        T = len(times)
+        key = self.key
+
+        # --- Sample initial state ---
+        key, subkey = jr.split(key)
+        x0 = dynamics.initial_condition.sample(subkey)
+        key, subkey = jr.split(key)
+        y0 = dynamics.observation_model(x=x0, u=None, t=times[0]).sample(subkey) if dynamics.observation_model is not None else None
+
+        def step(carry, t):
+            key, x_t = carry
+
+            # --- Transition ---
+            key, subkey = jr.split(key)
+            transition_dist = dynamics.state_evolution(x=x_t, u=None, t=t)
+            x_next = transition_dist.sample(subkey)
+
+            # --- Observation (optional) ---
+            if dynamics.observation_model is not None:
+                key, subkey = jr.split(key)
+                obs_dist = dynamics.observation_model(x=x_next, u=None, t=t)
+                y_next = obs_dist.sample(subkey)
+            else:
+                y_next = None
+
+            return (key, x_next), (x_next, y_next)
+
+        # Run scan over times[:-1] (since x0 is already sampled)
+        (_, _), (xs, ys) = lax.scan(
+            step,
+            (key, x0),
+            times[:-1],
+        )
+
+        # Prepend initial state
+        states = jnp.concatenate([x0[None, ...], xs], axis=0)
+
+        if dynamics.observation_model is not None:
+            observations = jnp.concatenate([y0[None, ...], ys], axis=0)
+            return {
+                "states": states,
+                "observations": observations,
+            }
+        else:
+            return {
+                "states": states,
+            }

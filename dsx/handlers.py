@@ -51,6 +51,7 @@ class BaseSolver(ObjectInterpretation):
     ):
 
         # Run the solver
+        # Make sure this can throw an error if needed? I think it is not.
         new_sites = self.solve(times, dynamics)
 
         # Add the results from the solver as deterministic sites
