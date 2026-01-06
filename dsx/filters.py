@@ -8,6 +8,7 @@ from dsx.ops import Context
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import DynamicalModel
 from dsx.utils import dsx_to_cd_dynamax
+from dsx.hmm_filter import (hmm_log_components, hmm_filter)
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
 from numpyro.contrib.control_flow import scan as nscan
@@ -90,6 +91,58 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
         # numpyro.deterministic(f"{name}_predicted_states_cov", filtered.predicted_covariances)
 
+@dataclasses.dataclass
+class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+    """
+    Exact HMM marginal log-likelihood via forward filtering.
+
+    - No sampling
+    - No RNG
+    - Exact likelihood
+    - Optional filtered-state logging
+    """
+
+    record_filtered: bool = False
+    record_log_filtered: bool = False
+
+    def add_log_factors(
+        self,
+        dynamics: DynamicalModel,
+        context: Context,
+        name: Optional[str] = "hmm",
+    ):
+        obs = context.observations
+        if obs.times is None or obs.values is None:
+            return
+
+        log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+            dynamics,
+            obs.times,
+            obs.values,
+        )
+
+        loglik, log_filt_seq = hmm_filter(
+            log_pi,
+            log_A_seq,
+            log_emit_seq,
+        )
+
+        numpyro.factor(
+            f"{name}_marginal_loglik",
+            loglik,
+        )
+
+        if self.record_log_filtered:
+            numpyro.deterministic(
+                f"{name}_log_filtered_states",
+                log_filt_seq,  # (T, K)
+            )
+
+        if self.record_filtered:
+            numpyro.deterministic(
+                f"{name}_filtered_states",
+                jnp.exp(log_filt_seq),  # (T, K)
+            )
 
 @dataclasses.dataclass
 class ModelUnroller(BaseCDDynamaxLogFactorAdder):
@@ -143,3 +196,4 @@ class ModelUnroller(BaseCDDynamaxLogFactorAdder):
         nscan(_step, x_prev, jnp.arange(T-1))
         # got errors with lax.scan
         # This seems to run slower than i expected!
+
