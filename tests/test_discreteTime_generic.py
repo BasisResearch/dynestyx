@@ -37,7 +37,7 @@ def model():
                                                  covariance_matrix=20.0**2 * jnp.eye(3)),
         state_evolution=state_evolution,
         observation_model=LinearGaussianObservation(H=jnp.array([[1.0, 0.0, 0.0]]),
-                                                    R=jnp.array([[5.0**2]])),
+                                                    R=jnp.array([[1.0**2]])),
     )
 
     # TODO: observation_model should simply be dist.MultivariateNormal(...) here,
