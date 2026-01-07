@@ -60,7 +60,8 @@ def hmm_log_emission_probs(
 
     def lp(x):
         dist = dynamics.observation_model(x=x, u=None, t=t)
-        return dist.log_prob(y)
+        lp = dist.log_prob(y)
+        return jnp.sum(lp)  # critical for vector-valued observations
 
     return jax.vmap(lp)(xs)
 
@@ -111,28 +112,33 @@ def hmm_filter(
     """
 
     def step(carry, inputs):
-        log_alpha_prev, loglik = carry
+        log_filt_prev, loglik = carry
         log_A_t, log_emit_t = inputs
 
-        log_alpha = log_emit_t + logsumexp(
-            log_alpha_prev[:, None] + log_A_t,
+        # Predict: p(x_t | y_{1:t-1}) = sum_{x_{t-1}} p(x_t | x_{t-1}) p(x_{t-1} | y_{1:t-1})
+        log_pred = logsumexp(
+            log_filt_prev[:, None] + log_A_t,
             axis=0,
         )
+        
+        # Update: p(x_t | y_{1:t}) \propto p(y_t | x_t) p(x_t | y_{1:t-1})
+        log_alpha = log_emit_t + log_pred
 
-        log_Z = logsumexp(log_alpha)
+        log_Z = logsumexp(log_alpha, axis=-1)
         log_filt = log_alpha - log_Z
 
-        return (log_alpha, loglik + log_Z), log_filt
+        return (log_filt, loglik + log_Z), log_filt
 
     # t = 0
     log_alpha0 = log_pi + log_emit_seq[0]
-    log_Z0 = logsumexp(log_alpha0)
+    log_Z0 = logsumexp(log_alpha0, axis=-1)
     log_filt0 = log_alpha0 - log_Z0
 
     # t = 1..T-1
+    # Use normalized filtered state (log_filt0) in carry for numerical stability
     (_, loglik), log_filt_rest = lax.scan(
         step,
-        (log_alpha0, log_Z0),
+        (log_filt0, log_Z0),
         (log_A_seq, log_emit_seq[1:]),
     )
 
