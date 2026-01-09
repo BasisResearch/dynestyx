@@ -109,8 +109,7 @@ def run_mcmc_inference(num_samples: int = 200, num_warmup: int = 100):
         obs_times,
         synthetic["states"][0],
         obs_values,
-        true_mu,
-        true_sigma,
+        show_fig=True,
     )
 
     # ---------------------------------------------------------

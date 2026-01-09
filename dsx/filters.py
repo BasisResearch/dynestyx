@@ -148,7 +148,9 @@ class ModelUnroller(BaseCDDynamaxLogFactorAdder):
     
     Simply unroll the model and add obs=data as you would in numpyro.
     
-    This does not add logfactors, just unrolls the model and adds observed sites.
+    This does not explicitly add logfactors; it let's numpyro do it automatically.
+    Instead, it just unrolls the model and adds observed sites 
+    (which numpyro uses to compute logfactors).
     """
 
     def add_log_factors(
@@ -191,6 +193,4 @@ class ModelUnroller(BaseCDDynamaxLogFactorAdder):
             return x_t, None
         
         nscan(_step, x_prev, jnp.arange(T-1))
-        # got errors with lax.scan
-        # This seems to run slower than i expected!
 

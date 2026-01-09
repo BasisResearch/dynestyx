@@ -89,12 +89,9 @@ def hmm_log_components(
     )(obs_values, obs_times)
 
     # Transitions
-    if T > 1:
-        log_A_seq = jax.vmap(
-            lambda t: hmm_log_transition_matrix(dynamics, xs, xs, t)
-        )(obs_times[:-1])
-    else:
-        log_A_seq = jnp.zeros((0, xs.shape[0], xs.shape[0]))
+    log_A_seq = jax.vmap(
+        lambda t: hmm_log_transition_matrix(dynamics, xs, xs, t)
+    )(obs_times[:-1])
 
     return log_pi, log_A_seq, log_emit_seq
 
