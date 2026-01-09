@@ -13,6 +13,7 @@ from dsx.handlers import Condition
 from dsx.ops import sample_ds, Trajectory, Context
 from dsx.solvers import ODESolver
 from dsx.filters import ODEUnroller
+from dsx.plotters import plot_continuous_states_and_partial_observations
 
 def model():
     """Model that samples drift parameter rho and uses it in dynamics."""
@@ -33,7 +34,7 @@ def model():
             # diffusion_coefficient=lambda x, u, t: jnp.eye(3),
             # diffusion_covariance=lambda x, u, t: jnp.eye(3)
         ),
-        observation_model=LinearGaussianObservation(H=jnp.array([[1.0, 0.0, 0.0]]),
+        observation_model=LinearGaussianObservation(H=jnp.array([[0.0, 1.0, 0.0]]),
                                                     R=jnp.array([[1.0**2]])),
     )
 
@@ -75,11 +76,12 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
-    import matplotlib.pyplot as plt    
-    plt.plot(obs_times, synthetic["states"].squeeze(0)[:, 0], label="x[0]")
-    plt.plot(obs_times, synthetic["observations"].squeeze(0)[:, 0], label="observations", linestyle="--")
-    plt.legend()
-    plt.show()
+    plot_continuous_states_and_partial_observations(
+        times=obs_times,
+        x=synthetic["states"].squeeze(0),
+        y=obs_values,
+        show_fig=True
+    )
 
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
