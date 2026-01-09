@@ -96,10 +96,7 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     """
     Exact HMM marginal log-likelihood via forward filtering.
 
-    - No sampling
-    - No RNG
-    - Exact likelihood
-    - Optional filtered-state logging
+    Optionally, (log-)filtered states are recorded if `record_(log_)filtered == True`.
     """
 
     record_filtered: bool = False
