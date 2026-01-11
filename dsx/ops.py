@@ -7,7 +7,7 @@ import dataclasses
 
 # Type alias for states: dict mapping state names to arrays
 Times = Array
-States = Array  # [str, Array]
+States = Dict[str, Array]
 FunctionOfTime = Callable[[Times], States]
 
 

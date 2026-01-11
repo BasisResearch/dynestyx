@@ -58,7 +58,7 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
     if isinstance(ic, dist.MultivariateNormal):
         params.update(
             {
-                "initial_mean": ic.loc,
+                "initial_mean": ic.loc,  # type: ignore
                 "initial_cov": ic.covariance_matrix,
             }
         )

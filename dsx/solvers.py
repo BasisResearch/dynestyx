@@ -18,7 +18,7 @@ class SDESolver(BaseSolver):
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         dt0: float = 0.01,
         tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
-        max_steps: int = 1e5,
+        max_steps: int = int(1e5),
     ):
         self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
         self.diffeqsolve_settings = {
@@ -83,7 +83,7 @@ class ODESolver(BaseSolver):
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         dt0: float = 0.01,
-        max_steps: int = 1e5,
+        max_steps: int = int(1e5),
     ):
         self.key = (
             key  # key for model randomness (initial condition and observation noise)

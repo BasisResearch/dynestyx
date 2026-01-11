@@ -39,10 +39,22 @@ class DynamicalModel:
         self.observation_model = observation_model
         self.control_model = control_model
 
-        self.state_dim = state_dim
-        self.observation_dim = observation_dim
-        self.control_dim = control_dim
-        # TODO: auto-infer dims from models.
+        if state_dim is None:
+            raise ValueError(
+                "state_dim is required; auto-infer is not implemented yet."
+            )
+        if observation_dim is None:
+            raise ValueError(
+                "observation_dim is required; auto-infer is not implemented yet."
+            )
+        if control_dim is None:
+            raise ValueError(
+                "control_dim is required; auto-infer is not implemented yet."
+            )
+
+        self.state_dim: int = state_dim
+        self.observation_dim: int = observation_dim
+        self.control_dim: int = control_dim
 
 
 class InitialCondition(dist.Distribution):
