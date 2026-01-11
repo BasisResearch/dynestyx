@@ -2,6 +2,7 @@ import jax
 from typing import Union, Dict, Protocol, Optional
 import numpyro.distributions as dist
 import dataclasses
+import warnings
 
 # ----------------------------------------------------------------------
 # TYPE ALIASES
@@ -48,8 +49,9 @@ class DynamicalModel:
                 "observation_dim is required; auto-infer is not implemented yet."
             )
         if control_dim is None:
-            raise ValueError(
-                "control_dim is required; auto-infer is not implemented yet."
+            control_dim = 0
+            warnings.warn(
+                "control_dim is not provided; auto-infer is not implemented yet. Setting to 0."
             )
 
         self.state_dim: int = state_dim
