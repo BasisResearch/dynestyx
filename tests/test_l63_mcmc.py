@@ -1,4 +1,3 @@
-
 import jax.numpy as jnp
 import jax.random as jr
 
@@ -14,6 +13,7 @@ from dsx.ops import sample_ds, Trajectory, Context
 from dsx.solvers import SDESolver
 from dsx.filters import FilterBasedMarginalLogLikelihood
 
+
 def model():
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
@@ -22,19 +22,23 @@ def model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
-        initial_condition=dist.MultivariateNormal(loc=jnp.zeros(3),
-                                                 covariance_matrix=20.0**2 * jnp.eye(3)),
-        state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: jnp.array([
-                10.0 * (x[1] - x[0]),
-                x[0] * (rho - x[2]) - x[1],
-                x[0] * x[1] - (8.0 / 3.0) * x[2]
-            ]),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3)
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
-        observation_model=LinearGaussianObservation(H=jnp.array([[1.0, 0.0, 0.0]]),
-                                                    R=jnp.array([[5.0**2]])),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.array(
+                [
+                    10.0 * (x[1] - x[0]),
+                    x[0] * (rho - x[2]) - x[1],
+                    x[0] * x[1] - (8.0 / 3.0) * x[2],
+                ]
+            ),
+            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
+            diffusion_covariance=lambda x, u, t: jnp.eye(3),
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[5.0**2]])
+        ),
     )
 
     # TODO: observation_model should simply be dist.MultivariateNormal(...) here,
@@ -51,13 +55,15 @@ def model():
     # Return a sampled dynamical model, named "f".
     return sample_ds("f", dynamics)
 
-def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmup: int = 100):
+
+def run_mcmc_inference(
+    true_rho: float = 28.0, num_samples: int = 200, num_warmup: int = 100
+):
     """Run MCMC inference on synthetic data."""
     rng_key = jr.PRNGKey(0)
-    
+
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
 
-    
     # ---------------------------------------------------------
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
@@ -66,7 +72,9 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
-    predictive = Predictive(model, params=true_params, num_samples=1, exclude_deterministic=False)
+    predictive = Predictive(
+        model, params=true_params, num_samples=1, exclude_deterministic=False
+    )
 
     context = Context(solve=Trajectory(times=obs_times))
     with handler(SDESolver(key=data_solver_key)):
@@ -77,18 +85,18 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
 
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
-    # ---------------------------------------------------------    
+    # ---------------------------------------------------------
     def data_conditioned_model():
         context = Context(observations=Trajectory(times=obs_times, values=obs_values))
         with handler(FilterBasedMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return model()
-    
+
     # Run NUTS MCMC
     nuts_kernel = NUTS(data_conditioned_model)
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
     mcmc.run(mcmc_key)
-    
+
     # Get posterior samples
     posterior_samples = mcmc.get_samples()
 
@@ -115,7 +123,7 @@ def test_mcmc_smoke():
     assert len(result["posterior_rho"]) > 0
     print("Smoke test passed.")
 
-    
+
 if __name__ == "__main__":
     result = run_mcmc_inference(true_rho=28.0)
 

@@ -10,6 +10,7 @@ import numpyro
 from dsx.ops import sample_ds, Times, FunctionOfTime, Trajectory, Context
 from dsx.dynamical_models import DynamicalModel
 
+
 class Condition(ObjectInterpretation):
     def __init__(self, context: Context):
         super().__init__()
@@ -28,7 +29,6 @@ class Condition(ObjectInterpretation):
 
 
 class BaseSolver(ObjectInterpretation):
-
     @implements(sample_ds)
     def _sample_ds(
         self,
@@ -36,7 +36,6 @@ class BaseSolver(ObjectInterpretation):
         dynamics: DynamicalModel,
         context: Optional[Context] = None,
     ) -> FunctionOfTime:
-
         # Only solve if we have solve-times
         if context is not None and context.solve.times is not None:
             self.add_solved_sites(dynamics, context.solve.times, name)
@@ -49,7 +48,6 @@ class BaseSolver(ObjectInterpretation):
         times: Times,
         name: Optional[str] = None,
     ):
-
         # Run the solver
         new_sites = self.solve(times, dynamics)
 
@@ -67,8 +65,8 @@ class BaseSolver(ObjectInterpretation):
         """
         raise NotImplementedError()
 
-class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
 
+class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
     @implements(sample_ds)
     def _sample_ds(
         self,
@@ -76,7 +74,6 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
         dynamics: DynamicalModel,
         context: Optional[Context],
     ) -> FunctionOfTime:
-
         if context is not None:
             self.add_log_factors(dynamics, context, name)
 

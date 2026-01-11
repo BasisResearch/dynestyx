@@ -7,8 +7,9 @@ import dataclasses
 
 # Type alias for states: dict mapping state names to arrays
 Times = Array
-States = Array #[str, Array]
+States = Array  # [str, Array]
 FunctionOfTime = Callable[[Times], States]
+
 
 @dataclasses.dataclass
 class Trajectory:
@@ -22,6 +23,7 @@ class Trajectory:
 
     times: Optional[Times] = None
     values: Optional[States] = None
+
 
 @dataclasses.dataclass
 class Context:
@@ -43,8 +45,7 @@ class Context:
 
 
 @defop
-def sample_ds(name: str,
-              dynamics: DynamicalModel,
-              context: Optional[Context] = None) -> FunctionOfTime:
+def sample_ds(
+    name: str, dynamics: DynamicalModel, context: Optional[Context] = None
+) -> FunctionOfTime:
     raise NotHandled()
-    

@@ -14,6 +14,7 @@ Time = float
 Params = Dict[str, Union[float, jax.Array]]
 Key = jax.Array
 
+
 class DynamicalModel:
     """
     Unified interface:
@@ -22,6 +23,7 @@ class DynamicalModel:
         - observation_model: ObservationModel
         - control_model: optional
     """
+
     def __init__(
         self,
         initial_condition,
@@ -36,17 +38,20 @@ class DynamicalModel:
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
-        
+
         self.state_dim = state_dim
         self.observation_dim = observation_dim
         self.control_dim = control_dim
         # TODO: auto-infer dims from models.
 
+
 class InitialCondition(dist.Distribution):
     """
     The initial-condition is a distribution over State.
     """
+
     pass
+
 
 class StateEvolution:
     """
@@ -56,8 +61,10 @@ class StateEvolution:
         - diffusion for SDE
     No stepping. No sampling.
     """
+
     pass
     ...
+
 
 class Drift(Protocol):
     """
@@ -73,6 +80,7 @@ class Drift(Protocol):
     ) -> dState:
         raise NotImplementedError()
 
+
 @dataclasses.dataclass
 class ContinuousTimeStateEvolution(StateEvolution):
     """
@@ -82,8 +90,9 @@ class ContinuousTimeStateEvolution(StateEvolution):
     drift: Optional[Drift] = None
     diffusion_coefficient: Optional[Drift] = None
     diffusion_covariance: Optional[Drift] = None
-        
+
     ...
+
 
 class DistributionFromStateTimeParams(Protocol):
     """
@@ -97,16 +106,18 @@ class DistributionFromStateTimeParams(Protocol):
 
     This is a structural type: anything with this __call__ signature is valid.
     """
+
     def __call__(
         self,
         x: State,
         u: Optional[Control],
         t: Time,
-    ) -> dist.Distribution:
-        ...
+    ) -> dist.Distribution: ...
+
 
 class ObservationModel(DistributionFromStateTimeParams):
     """p(y_t | State_t, Control_t, t)"""
+
     pass
 
 
@@ -116,7 +127,9 @@ class ControlModel(DistributionFromStateTimeParams):
     u_t ~ p(u_t | State_t, t)
     Deterministic controls should use dist.Delta.
     """
+
     pass
+
 
 class DiscreteTimeStateEvolution(StateEvolution, DistributionFromStateTimeParams):
     """
@@ -131,4 +144,3 @@ class DiscreteTimeStateEvolution(StateEvolution, DistributionFromStateTimeParams
         t: Time,
     ) -> dist.Distribution:
         raise NotImplementedError()
-    
