@@ -1,5 +1,4 @@
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 from typing import Optional
 import dataclasses
@@ -44,8 +43,8 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             # No observations → nothing to factor
             return
 
-        obs_times = obs_traj.times[:, None]      # shape (T, 1)
-        obs_values = obs_traj.values    # shape (T, emission_dim)
+        obs_times = obs_traj.times[:, None]  # shape (T, 1)
+        obs_values = obs_traj.values  # shape (T, emission_dim)
 
         # Generate a CD-Dynamax-compatible parameter dict
         params = dsx_to_cd_dynamax(dynamics)
@@ -83,7 +82,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
         # Add the marginal log likelihood as a numpyro factor
         numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
-        
+
         # numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
         # numpyro.deterministic(f"{name}_filtered_states_cov", filtered.filtered_covariances)
         # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)

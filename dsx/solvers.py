@@ -6,19 +6,20 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
 from jax import Array
 
+
 class SDESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution with stochastic dynamics."""
-    
-    def __init__(self,
-                key: Array,
-                solver: dfx.AbstractSolver = dfx.Heun(),
-                stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-                adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-                dt0: float = 0.01,
-                tol_vbt: float = 1e-1, # tolerance for virtual brownian tree
-                max_steps: int = 1e5,
-                ):
 
+    def __init__(
+        self,
+        key: Array,
+        solver: dfx.AbstractSolver = dfx.Heun(),
+        stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+        adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+        dt0: float = 0.01,
+        tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
+        max_steps: int = int(1e5),
+    ):
         self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
         self.diffeqsolve_settings = {
             "solver": solver,
@@ -30,11 +31,15 @@ class SDESolver(BaseSolver):
         }
 
     def solve(self, times, dynamics) -> States:
-        
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-            raise NotImplementedError(f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
-        
-        if dynamics.state_evolution.diffusion_coefficient is None or dynamics.state_evolution.diffusion_covariance is None:
+            raise NotImplementedError(
+                f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
+            )
+
+        if (
+            dynamics.state_evolution.diffusion_coefficient is None
+            or dynamics.state_evolution.diffusion_covariance is None
+        ):
             raise ValueError(
                 "SDESolver requires both diffusion_coefficient and diffusion_covariance to be "
                 f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
@@ -45,12 +50,13 @@ class SDESolver(BaseSolver):
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
         params = dsx_to_cd_dynamax(dynamics)
-        
+
         # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(state_dim=dynamics.state_dim,
-                                                            emission_dim=dynamics.observation_dim,
-                                                            diffeqsolve_settings=self.diffeqsolve_settings
-                                                            )
+        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+            state_dim=dynamics.state_dim,
+            emission_dim=dynamics.observation_dim,
+            diffeqsolve_settings=self.diffeqsolve_settings,
+        )
 
         # Sample states and emissions from the model using solver settings defined above.
         # ensure that times has shape (num_timesteps, 1)
@@ -66,19 +72,22 @@ class SDESolver(BaseSolver):
 
         return {"states": states, "observations": emissions}
 
+
 class ODESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution."""
-    
-    def __init__(self,
-                key: Array, # key for model randomness (initial condition and observation noise)
-                solver: dfx.AbstractSolver = dfx.Dopri5(),
-                stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-                adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-                dt0: float = 0.01,
-                max_steps: int = 1e5,
-                ):
 
-        self.key = key # key for model randomness (initial condition and observation noise)
+    def __init__(
+        self,
+        key: Array,  # key for model randomness (initial condition and observation noise)
+        solver: dfx.AbstractSolver = dfx.Dopri5(),
+        stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+        adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+        dt0: float = 0.01,
+        max_steps: int = int(1e5),
+    ):
+        self.key = (
+            key  # key for model randomness (initial condition and observation noise)
+        )
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
@@ -88,11 +97,15 @@ class ODESolver(BaseSolver):
         }
 
     def solve(self, times, dynamics) -> States:
-                
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-            raise NotImplementedError(f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
+            raise NotImplementedError(
+                f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
+            )
 
-        if dynamics.state_evolution.diffusion_coefficient is not None or dynamics.state_evolution.diffusion_covariance is not None:
+        if (
+            dynamics.state_evolution.diffusion_coefficient is not None
+            or dynamics.state_evolution.diffusion_covariance is not None
+        ):
             raise ValueError(
                 "ODESolver requires both diffusion_coefficient and diffusion_covariance to be "
                 "None for deterministic dynamics. Use SDESolver for stochastic dynamics."
@@ -101,12 +114,13 @@ class ODESolver(BaseSolver):
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
         params = dsx_to_cd_dynamax(dynamics)
-        
+
         # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(state_dim=dynamics.state_dim,
-                                                            emission_dim=dynamics.observation_dim,
-                                                            diffeqsolve_settings=self.diffeqsolve_settings
-                                                            )
+        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+            state_dim=dynamics.state_dim,
+            emission_dim=dynamics.observation_dim,
+            diffeqsolve_settings=self.diffeqsolve_settings,
+        )
 
         # ensure that times has shape (num_timesteps, 1)
         if times.ndim == 1:

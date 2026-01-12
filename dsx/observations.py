@@ -3,13 +3,14 @@ import jax.numpy as jnp
 from dsx.dynamical_models import ObservationModel
 from numpyro import distributions as dist
 
+
 class LinearGaussianObservation(ObservationModel):
     """
     y_t | x_t ~ Normal( H x_t, R )
 
     where H is the observation matrix and R is the observation noise covariance.
     """
-    
+
     def __init__(self, H: jax.Array, R: jax.Array):
         """
         H: Observation matrix, shape (obs_dim, state_dim)
@@ -19,7 +20,4 @@ class LinearGaussianObservation(ObservationModel):
         self.R = R
 
     def __call__(self, x, u, t):
-        return dist.MultivariateNormal(
-            loc = jnp.dot(self.H, x),
-            covariance_matrix = self.R
-        )
+        return dist.MultivariateNormal(loc=jnp.dot(self.H, x), covariance_matrix=self.R)

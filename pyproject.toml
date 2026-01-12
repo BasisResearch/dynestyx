@@ -22,3 +22,16 @@ packages = ["dsx"]
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax.git", branch = "dev-numpyro-api" }
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.14.11",
+]
+
+
+[[tool.mypy.overrides]]
+module = ["cd_dynamax.*", "numpyro.*"]
+follow_untyped_imports = true
