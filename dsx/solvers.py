@@ -191,6 +191,9 @@ class DiscreteTimeSolver(BaseSolver):
         states = jnp.concatenate([x0[None, ...], xs], axis=0)
 
         if dynamics.observation_model is not None:
+            assert (
+                y0 is not None
+            )  # y0 cannot be None when observation_model is not None
             observations = jnp.concatenate([y0[None, ...], ys], axis=0)
             return {
                 "states": states,

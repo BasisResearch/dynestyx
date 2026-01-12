@@ -53,9 +53,14 @@ class BaseSolver(ObjectInterpretation):
         new_sites = self.solve(times, dynamics)
 
         # Add the results from the solver as deterministic sites
-        for site_name, trajectory in new_sites.items():
-            # TODO: dw: check this type ignore. I think it has a point...
-            numpyro.deterministic(site_name, trajectory)  # type: ignore
+        # solve() always returns Dict[str, Array], but States is Union for Trajectory.values
+        if isinstance(new_sites, dict):
+            for site_name, trajectory in new_sites.items():
+                # TODO: dw: check this type ignore. I think it has a point...
+                numpyro.deterministic(site_name, trajectory)  # type: ignore
+        else:
+            # If it's just an array (shouldn't happen for solve() but handle it)
+            numpyro.deterministic("value", new_sites)
 
     def solve(self, times: Times, dynamics: DynamicalModel) -> States:
         """

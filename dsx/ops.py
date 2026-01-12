@@ -1,13 +1,13 @@
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
 from dsx.dynamical_models import DynamicalModel
-from typing import Dict, Callable, Optional
+from typing import Dict, Callable, Optional, Union
 from jax import Array
 import dataclasses
 
-# Type alias for states: dict mapping state names to arrays
+# Type alias for states: dict mapping state names to arrays, or just an array
 Times = Array
-States = Dict[str, Array]
+States = Union[Dict[str, Array], Array]
 FunctionOfTime = Callable[[Times], States]
 
 

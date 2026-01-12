@@ -47,6 +47,8 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             return
 
         obs_times = obs_traj.times[:, None]  # shape (T, 1)
+        if isinstance(obs_traj.values, dict):
+            raise ValueError("obs_traj.values must be an Array, not a dict")
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
         # Generate a CD-Dynamax-compatible parameter dict
@@ -113,10 +115,13 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         if obs.times is None or obs.values is None:
             return
 
+        if isinstance(obs.values, dict):
+            raise ValueError("obs.values must be an Array, not a dict")
+        obs_values = obs.values
         log_pi, log_A_seq, log_emit_seq = hmm_log_components(
             dynamics,
             obs.times,
-            obs.values,
+            obs_values,
         )
 
         loglik, log_filt_seq = hmm_filter(
@@ -168,6 +173,8 @@ class ModelUnroller(BaseCDDynamaxLogFactorAdder):
             return
 
         obs_times = obs_traj.times  # shape (T)
+        if isinstance(obs_traj.values, dict):
+            raise ValueError("obs_traj.values must be an Array, not a dict")
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
         T = len(obs_times)
