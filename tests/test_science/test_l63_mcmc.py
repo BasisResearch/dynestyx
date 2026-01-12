@@ -118,7 +118,8 @@ def run_mcmc_inference(
 # SMOKE TEST
 # -------------------------------------------------------------
 def test_mcmc_smoke():
-    result = run_mcmc_inference(true_rho=28.0, num_samples=1, num_warmup=1)
+    raise NotImplementedError("This shouldn't run yet :)")
+    result = run_mcmc_inference(true_rho=28.0, num_samples=50, num_warmup=50)
     assert "posterior_rho" in result
     assert len(result["posterior_rho"]) > 0
     print("Smoke test passed.")
