@@ -175,3 +175,6 @@ dist/
 *.DS_Store
 .vscode/
 .venv
+
+# Test output directories
+.output/

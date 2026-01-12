@@ -1,4 +1,3 @@
-
 import jax.numpy as jnp
 import jax.random as jr
 
@@ -7,34 +6,43 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, Predictive
 
 from effectful.ops.semantics import handler
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+from dsx.dynamical_models import DynamicalModel
 from dsx.observations import LinearGaussianObservation
 from dsx.handlers import Condition
 from dsx.ops import sample_ds, Trajectory, Context
-from dsx.solvers import SDESolver
-from dsx.filters import FilterBasedMarginalLogLikelihood
+from dsx.solvers import DiscreteTimeSolver
+from dsx.filters import ModelUnroller
+
 
 def model():
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
 
+    def drift(x):
+        return jnp.array(
+            [
+                10.0 * (x[1] - x[0]),
+                x[0] * (rho - x[2]) - x[1],
+                x[0] * x[1] - (8.0 / 3.0) * x[2],
+            ]
+        )
+
+    def state_evolution(x, u, t):
+        loc = x + 0.01 * drift(x)
+        cov = 0.01 * jnp.eye(3)
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+
     # Create the dynamical model with sampled rho
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
-        initial_condition=dist.MultivariateNormal(loc=jnp.zeros(3),
-                                                 covariance_matrix=20.0**2 * jnp.eye(3)),
-        state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: jnp.array([
-                10.0 * (x[1] - x[0]),
-                x[0] * (rho - x[2]) - x[1],
-                x[0] * x[1] - (8.0 / 3.0) * x[2]
-            ]),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3)
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
-        observation_model=LinearGaussianObservation(H=jnp.array([[1.0, 0.0, 0.0]]),
-                                                    R=jnp.array([[5.0**2]])),
+        state_evolution=state_evolution,
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
+        ),
     )
 
     # TODO: observation_model should simply be dist.MultivariateNormal(...) here,
@@ -51,13 +59,19 @@ def model():
     # Return a sampled dynamical model, named "f".
     return sample_ds("f", dynamics)
 
-def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmup: int = 100):
+
+def run_mcmc_inference(
+    true_rho: float = 28.0,
+    num_samples: int = 200,
+    num_warmup: int = 100,
+    save_fig: bool = False,
+    output_dir=None,
+):
     """Run MCMC inference on synthetic data."""
     rng_key = jr.PRNGKey(0)
-    
+
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
 
-    
     # ---------------------------------------------------------
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
@@ -66,35 +80,47 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
-    predictive = Predictive(model, params=true_params, num_samples=1, exclude_deterministic=False)
+    predictive = Predictive(
+        model, params=true_params, num_samples=1, exclude_deterministic=False
+    )
 
     context = Context(solve=Trajectory(times=obs_times))
-    with handler(SDESolver(key=data_solver_key)):
+
+    # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
+    with handler(DiscreteTimeSolver(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
-    import matplotlib.pyplot as plt    
-    plt.plot(obs_times, synthetic["states"].squeeze(0)[:, 0], label="x[0]")
-    plt.plot(obs_times, synthetic["observations"].squeeze(0)[:, 0], label="observations", linestyle="--")
-    plt.legend()
-    plt.show()
+    if save_fig and output_dir is not None:
+        import matplotlib.pyplot as plt
+
+        plt.plot(obs_times, synthetic["states"].squeeze(0)[:, 0], label="x[0]")
+        plt.plot(
+            obs_times,
+            synthetic["observations"].squeeze(0)[:, 0],
+            label="observations",
+            linestyle="--",
+        )
+        plt.legend()
+        plt.savefig(output_dir / "data_generation.png", dpi=150, bbox_inches="tight")
+        plt.close()
 
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
-    # ---------------------------------------------------------    
+    # ---------------------------------------------------------
     def data_conditioned_model():
         context = Context(observations=Trajectory(times=obs_times, values=obs_values))
-        with handler(FilterBasedMarginalLogLikelihood()):
+        with handler(ModelUnroller()):
             with handler(Condition(context)):
                 return model()
-    
+
     # Run NUTS MCMC
     nuts_kernel = NUTS(data_conditioned_model)
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
     mcmc.run(mcmc_key)
-    
+
     # Get posterior samples
     posterior_samples = mcmc.get_samples()
 
@@ -111,11 +137,34 @@ def run_mcmc_inference(true_rho: float = 28.0, num_samples: int = 200, num_warmu
         "posterior_rho": posterior_samples["rho"],
     }
 
-    
-if __name__ == "__main__":
-    result = run_mcmc_inference(true_rho=28.0)
 
+# -------------------------------------------------------------
+def test_mcmc_smoke():
+    result = run_mcmc_inference(true_rho=28.0, num_samples=1, num_warmup=1)
+    assert "posterior_rho" in result
+    assert len(result["posterior_rho"]) > 0
+    print("Smoke test passed.")
+
+
+def test_science_smoke():
+    from tests.test_utils import get_output_dir
     import matplotlib.pyplot as plt
+
+    output_dir = get_output_dir("test_discreteTime_generic")
+
+    result = run_mcmc_inference(
+        true_rho=28.0,
+        num_samples=100,
+        num_warmup=200,
+        save_fig=True,
+        output_dir=output_dir,
+    )
+
+    # Note: performs well with observation noise sd = 1.0
+    # Performs poorly with observation noise sd = 5.0
+    # Also, we should be able to speed up this discrete time model.
+    # Currently using numpyro's nscan to step through the time sequence.
+    # Should probably be doing something else, but lax.scan isn't working!
 
     post = result["posterior_rho"]
     print("Posterior mean rho:", post.mean())
@@ -123,4 +172,11 @@ if __name__ == "__main__":
     plt.hist(post, bins=40, alpha=0.7)
     plt.axvline(result["true_rho"], color="r", linestyle="--")
     plt.title("Posterior on rho")
-    plt.show()
+    plt.savefig(output_dir / "posterior_rho.png", dpi=150, bbox_inches="tight")
+    plt.close()
+
+    print(f"Figures saved to {output_dir}")
+
+
+if __name__ == "__main__":
+    test_science_smoke()

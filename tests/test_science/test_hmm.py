@@ -1,4 +1,3 @@
-
 import jax.numpy as jnp
 import jax.random as jr
 
@@ -7,16 +6,16 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, Predictive
 
 from effectful.ops.semantics import handler
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
+from dsx.dynamical_models import DynamicalModel
 from dsx.handlers import Condition
 from dsx.ops import sample_ds, Trajectory, Context
-from dsx.solvers import DiscreteTimeSolver #, #SDESolver
-from dsx.filters import FilterBasedHMMMarginalLogLikelihood #, FilterBasedMarginalLogLikelihood
+from dsx.solvers import DiscreteTimeSolver
+from dsx.filters import FilterBasedHMMMarginalLogLikelihood
 
 import numpy as np
 import matplotlib.pyplot as plt
 from dsx.plotters import plot_hmm_states_and_observations
+
 
 def model():
     K = 3  # number of discrete states
@@ -25,16 +24,14 @@ def model():
     # Transition matrix
     # -------------------------------------------------
     A = numpyro.sample(
-        "A",
-        dist.Dirichlet(jnp.ones(K)).expand([K]).to_event(1)
+        "A", dist.Dirichlet(jnp.ones(K)).expand([K]).to_event(1)
     )  # shape (K, K)
 
     # -------------------------------------------------
     # Emission parameters
     # -------------------------------------------------
     mu = numpyro.sample(
-        "mu",
-        dist.Normal(0.0, 10.0).expand([K]).to_event(1)
+        "mu", dist.Normal(0.0, 10.0).expand([K]).to_event(1)
     )  # shape (K,)
 
     sigma = numpyro.sample("sigma", dist.Uniform(0.1, 2.0))
@@ -42,9 +39,7 @@ def model():
     # -------------------------------------------------
     # Initial condition
     # -------------------------------------------------
-    initial_condition = dist.Categorical(
-        probs=jnp.ones(K) / K
-    )
+    initial_condition = dist.Categorical(probs=jnp.ones(K) / K)
 
     # -------------------------------------------------
     # State evolution
@@ -70,33 +65,37 @@ def model():
 
     return sample_ds("f", dynamics)
 
-def run_mcmc_inference(num_samples: int = 200, num_warmup: int = 100):
+
+def run_mcmc_inference(
+    num_samples: int = 200,
+    num_warmup: int = 100,
+    save_fig: bool = False,
+    output_dir=None,
+):
     """Run MCMC inference on synthetic data."""
     rng_key = jr.PRNGKey(0)
-    
+
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
 
     # Set true parameters for synthetic data generation
-    true_A = jnp.array([[0.7, 0.2, 0.1],
-                        [0.3, 0.4, 0.3],
-                        [0.2, 0.3, 0.5]])
+    true_A = jnp.array([[0.7, 0.2, 0.1], [0.3, 0.4, 0.3], [0.2, 0.3, 0.5]])
     true_mu = jnp.array([-10.0, 0.0, 10.0])
     true_sigma = 0.5
-    
+
     # ---------------------------------------------------------
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
- 
+
     # Generate synthetic data
-    true_params = {"A": true_A,
-                   "mu": true_mu,
-                   "sigma": true_sigma}
-    predictive = Predictive(model, params=true_params, num_samples=1, exclude_deterministic=False)
+    true_params = {"A": true_A, "mu": true_mu, "sigma": true_sigma}
+    predictive = Predictive(
+        model, params=true_params, num_samples=1, exclude_deterministic=False
+    )
 
     context = Context(solve=Trajectory(times=obs_times))
-    
+
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
     with handler(DiscreteTimeSolver(key=data_solver_key)):
         with handler(Condition(context)):
@@ -104,28 +103,29 @@ def run_mcmc_inference(num_samples: int = 200, num_warmup: int = 100):
 
     # Prefer indexing rather than squeeze, to keep (T, obs_dim)
     obs_values = synthetic["observations"][0]  # (T,)
-    
-    plot_hmm_states_and_observations(
-        obs_times,
-        synthetic["states"][0],
-        obs_values,
-        show_fig=True,
-    )
+
+    if save_fig and output_dir is not None:
+        plot_hmm_states_and_observations(
+            obs_times,
+            synthetic["states"][0],
+            obs_values,
+            save_path=output_dir / "data_generation.png",
+        )
 
     # ---------------------------------------------------------
     # Build conditioned model and run NUTS
-    # ---------------------------------------------------------    
+    # ---------------------------------------------------------
     def data_conditioned_model():
         context = Context(observations=Trajectory(times=obs_times, values=obs_values))
         with handler(FilterBasedHMMMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return model()
-    
+
     # Run NUTS MCMC
     nuts_kernel = NUTS(data_conditioned_model)
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
     mcmc.run(mcmc_key)
-    
+
     # Get posterior samples
     posterior_samples = mcmc.get_samples()
 
@@ -141,7 +141,7 @@ def run_mcmc_inference(num_samples: int = 200, num_warmup: int = 100):
     #     "true_rho": true_rho,
     #     "posterior_rho": posterior_samples["rho"],
     # }
-    
+
     return {
         "true_A": true_A,
         "true_mu": true_mu,
@@ -151,18 +151,30 @@ def run_mcmc_inference(num_samples: int = 200, num_warmup: int = 100):
         "posterior_sigma": posterior_samples["sigma"],
     }
 
-# -------------------------------------------------------------    
-if __name__ == "__main__":
-    result = run_mcmc_inference(num_samples=1000, num_warmup=2000)
-    
+
+# -------------------------------------------------------------
+def test_mcmc_smoke():
+    result = run_mcmc_inference(num_samples=1, num_warmup=1)
+    assert "posterior_sigma" in result
+    assert len(result["posterior_sigma"]) > 0
+    print("Smoke test passed.")
+
+
+def test_science_smoke():
+    from tests.test_utils import get_output_dir
+    import arviz as az
+
+    output_dir = get_output_dir("test_hmm")
+
+    result = run_mcmc_inference(
+        num_samples=1000, num_warmup=2000, save_fig=True, output_dir=output_dir
+    )
+
     # Note: performs well with observation noise sd = 1.0
     # Performs poorly with observation noise sd = 5.0
     # Also, we should be able to speed up this discrete time model.
     # Currently using numpyro's nscan to step through the time sequence.
     # Should probably be doing something else, but lax.scan isn't working!
-    
-    import arviz as az
-    import numpy as np
 
     def add_chain_dim(x):
         # Converts (draw, ...) -> (chain=1, draw, ...)
@@ -170,9 +182,9 @@ if __name__ == "__main__":
 
     idata = az.from_dict(
         posterior={
-            "mu": add_chain_dim(result["posterior_mu"]),        # (1, draw, K)
+            "mu": add_chain_dim(result["posterior_mu"]),  # (1, draw, K)
             "sigma": add_chain_dim(result["posterior_sigma"]),  # (1, draw)
-            "A": add_chain_dim(result["posterior_A"]),          # (1, draw, K, K)
+            "A": add_chain_dim(result["posterior_A"]),  # (1, draw, K, K)
         },
         coords={
             "state": [0, 1, 2],
@@ -193,20 +205,29 @@ if __name__ == "__main__":
         hdi_prob=0.9,
         ref_val=result["true_sigma"],
     )
-    plt.show()
-    
+    plt.savefig(output_dir / "posterior_sigma.png", dpi=150, bbox_inches="tight")
+    plt.close()
+
     az.plot_forest(
         idata,
         var_names=["mu"],
         hdi_prob=0.9,
         # ref_val=result["true_mu"],
     )
-    plt.show()
+    plt.savefig(output_dir / "forest_mu.png", dpi=150, bbox_inches="tight")
+    plt.close()
 
     az.plot_forest(
         idata,
         var_names=["A"],
         hdi_prob=0.9,
         # ref_val=result["true_A"],
-    )    
-    plt.show()
+    )
+    plt.savefig(output_dir / "forest_A.png", dpi=150, bbox_inches="tight")
+    plt.close()
+
+    print(f"Figures saved to {output_dir}")
+
+
+if __name__ == "__main__":
+    test_science_smoke()

@@ -2,15 +2,18 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_hmm_states_and_observations(times, x, y, state_cmap="tab10", obs_cmap="Set1", show_fig=False):
-    '''
+
+def plot_hmm_states_and_observations(
+    times, x, y, state_cmap="tab10", obs_cmap="Set1", show_fig=False, save_path=None
+):
+    """
     Plot latent discrete HMM states as colored background bands
     with observed signals overlaid.
 
     :param times: (T,) Time points
     :param x: (T,) Discrete latent state indices (0..K-1)
     :param y: (T,) or (T, N_obs) Observations
-    '''
+    """
 
     times = np.asarray(times)
     x = np.asarray(x)
@@ -20,7 +23,7 @@ def plot_hmm_states_and_observations(times, x, y, state_cmap="tab10", obs_cmap="
 
     # ---- Normalize observation shape ----
     if y.ndim == 1:
-        y = y[:, None]   # (T, 1)
+        y = y[:, None]  # (T, 1)
 
     N_obs = y.shape[1]
     K = int(x.max()) + 1
@@ -72,6 +75,7 @@ def plot_hmm_states_and_observations(times, x, y, state_cmap="tab10", obs_cmap="
 
     # ---- Build state legend separately ----
     from matplotlib.patches import Patch
+
     state_patches = [
         Patch(facecolor=state_colors[k], alpha=0.3, label=f"state {k}")
         for k in range(K)
@@ -84,8 +88,11 @@ def plot_hmm_states_and_observations(times, x, y, state_cmap="tab10", obs_cmap="
     )
 
     plt.tight_layout()
-    
-    if show_fig:
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        plt.close()
+    elif show_fig:
         plt.show()
 
     return fig, ax
