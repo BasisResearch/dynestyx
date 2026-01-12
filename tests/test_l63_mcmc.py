@@ -13,6 +13,8 @@ from dsx.ops import sample_ds, Trajectory, Context
 from dsx.solvers import SDESolver
 from dsx.filters import FilterBasedMarginalLogLikelihood
 
+USE_DPF = True
+
 
 def model():
     """Model that samples drift parameter rho and uses it in dynamics."""
@@ -68,7 +70,7 @@ def run_mcmc_inference(
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.01)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -88,7 +90,15 @@ def run_mcmc_inference(
     # ---------------------------------------------------------
     def data_conditioned_model():
         context = Context(observations=Trajectory(times=obs_times, values=obs_values))
-        with handler(FilterBasedMarginalLogLikelihood()):
+
+        handler_kwargs = {}
+        if USE_DPF:
+            handler_kwargs["filter_type"] = "DPF"
+            handler_kwargs["dpf_num_particles"] = 50
+            handler_kwargs["dpf_resampling_type"] = "soft"
+            handler_kwargs["warn"] = False
+
+        with handler(FilterBasedMarginalLogLikelihood(**handler_kwargs)):
             with handler(Condition(context)):
                 return model()
 
