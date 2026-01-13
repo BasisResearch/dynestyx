@@ -6,7 +6,7 @@ from numpyro.infer import MCMC, NUTS
 import pytest
 
 from tests.test_utils import get_output_dir
-
+from tests.fixtures import data_conditioned_hmm  # noqa: F401
 
 SAVE_FIG = True
 OUTPUT_DIR = get_output_dir("test_hmm")

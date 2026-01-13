@@ -7,6 +7,8 @@ from tests.test_utils import get_output_dir
 import arviz as az
 import pytest
 
+from tests.fixtures import data_conditioned_discrete_time_l63  # noqa: F401
+
 SAVE_FIG = True
 OUTPUT_DIR = get_output_dir("test_discreteTime_generic")
 
