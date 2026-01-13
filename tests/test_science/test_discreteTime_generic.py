@@ -1,25 +1,21 @@
 import jax.numpy as jnp
 import jax.random as jr
 
-import arviz as az
 from numpyro.infer import MCMC, NUTS
+
+from tests.test_utils import get_output_dir
+import arviz as az
 import pytest
 
-from tests.fixtures import data_conditioned_continuous_time_l63  # noqa: F401
-from tests.test_utils import get_output_dir
-
+from tests.fixtures import data_conditioned_discrete_time_l63  # noqa: F401
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_l63_mcmc")
+OUTPUT_DIR = get_output_dir("test_discreteTime_generic")
 
 
 @pytest.mark.parametrize("num_samples", [250])
-def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # noqa: F811
-    (
-        data_conditioned_model,
-        true_params,
-        synthetic,
-    ) = data_conditioned_continuous_time_l63
+def test_mcmc_inference(data_conditioned_discrete_time_l63, num_samples):  # noqa: F811
+    data_conditioned_model, true_params, synthetic = data_conditioned_discrete_time_l63
 
     obs_times = synthetic["times"]
 
@@ -41,11 +37,13 @@ def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # n
         plt.savefig(OUTPUT_DIR / "data_generation.png", dpi=150, bbox_inches="tight")
         plt.close()
 
+    # Run NUTS MCMC
     mcmc_key = jr.PRNGKey(0)
     nuts_kernel = NUTS(data_conditioned_model)
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_samples)
     mcmc.run(mcmc_key)
 
+    # Get posterior samples
     posterior_samples = mcmc.get_samples()
 
     assert "rho" in posterior_samples
@@ -61,6 +59,7 @@ def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # n
 
     assert jnp.abs(posterior_rho.mean() - true_params["rho"]) < 5.0
 
+    # Use arviz to compute 95% HDI and assert that true value is within it
     hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
     hdi_min = hdi_data["x"].sel(hdi="lower").item()
     hdi_max = hdi_data["x"].sel(hdi="higher").item()
