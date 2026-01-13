@@ -1,233 +1,64 @@
 import jax.numpy as jnp
 import jax.random as jr
 
-import numpyro
-import numpyro.distributions as dist
-from numpyro.infer import MCMC, NUTS, Predictive
+import arviz as az
+from numpyro.infer import MCMC, NUTS
+import pytest
 
-from effectful.ops.semantics import handler
-from dsx.dynamical_models import DynamicalModel
-from dsx.handlers import Condition
-from dsx.ops import sample_ds, Trajectory, Context
-from dsx.solvers import DiscreteTimeSolver
-from dsx.filters import FilterBasedHMMMarginalLogLikelihood
-
-import numpy as np
-import matplotlib.pyplot as plt
-from dsx.plotters import plot_hmm_states_and_observations
+from tests.test_utils import get_output_dir
 
 
-def model():
-    K = 3  # number of discrete states
-
-    # -------------------------------------------------
-    # Transition matrix
-    # -------------------------------------------------
-    A = numpyro.sample(
-        "A", dist.Dirichlet(jnp.ones(K)).expand([K]).to_event(1)
-    )  # shape (K, K)
-
-    # -------------------------------------------------
-    # Emission parameters
-    # -------------------------------------------------
-    mu = numpyro.sample(
-        "mu", dist.Normal(0.0, 10.0).expand([K]).to_event(1)
-    )  # shape (K,)
-
-    sigma = numpyro.sample("sigma", dist.Uniform(0.1, 2.0))
-
-    # -------------------------------------------------
-    # Initial condition
-    # -------------------------------------------------
-    initial_condition = dist.Categorical(probs=jnp.ones(K) / K)
-
-    # -------------------------------------------------
-    # State evolution
-    # -------------------------------------------------
-    def state_evolution(x, u, t):
-        # x is an integer in {0, ..., K-1}
-        return dist.Categorical(probs=A[x])
-
-    # -------------------------------------------------
-    # Observation model
-    # -------------------------------------------------
-    def observation_model(x, u, t):
-        # y_t | x_t ~ N(mu[x_t], sigma^2)
-        return dist.Normal(mu[x], sigma)
-
-    dynamics = DynamicalModel(
-        state_dim=K,
-        observation_dim=1,
-        initial_condition=initial_condition,
-        state_evolution=state_evolution,
-        observation_model=observation_model,
-    )
-
-    return sample_ds("f", dynamics)
+SAVE_FIG = True
+OUTPUT_DIR = get_output_dir("test_hmm")
 
 
-def run_mcmc_inference(
-    num_samples: int = 200,
-    num_warmup: int = 100,
-    save_fig: bool = False,
-    output_dir=None,
-):
-    """Run MCMC inference on synthetic data."""
-    rng_key = jr.PRNGKey(0)
+@pytest.mark.parametrize("num_samples", [250])
+def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811
+    data_conditioned_model, true_params, synthetic = data_conditioned_hmm
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    obs_times = synthetic["times"]
 
-    # Set true parameters for synthetic data generation
-    true_A = jnp.array([[0.7, 0.2, 0.1], [0.3, 0.4, 0.3], [0.2, 0.3, 0.5]])
-    true_mu = jnp.array([-10.0, 0.0, 10.0])
-    true_sigma = 0.5
+    if SAVE_FIG and OUTPUT_DIR is not None:
+        import matplotlib.pyplot as plt
 
-    # ---------------------------------------------------------
-    # Generate synthetic observations using Predictive
-    # ---------------------------------------------------------
-    # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
-
-    # Generate synthetic data
-    true_params = {"A": true_A, "mu": true_mu, "sigma": true_sigma}
-    predictive = Predictive(
-        model, params=true_params, num_samples=1, exclude_deterministic=False
-    )
-
-    context = Context(solve=Trajectory(times=obs_times))
-
-    # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSolver(key=data_solver_key)):
-        with handler(Condition(context)):
-            synthetic = predictive(data_init_key)
-
-    # Prefer indexing rather than squeeze, to keep (T, obs_dim)
-    obs_values = synthetic["observations"][0]  # (T,)
-
-    if save_fig and output_dir is not None:
-        plot_hmm_states_and_observations(
-            obs_times,
-            synthetic["states"][0],
-            obs_values,
-            save_path=output_dir / "data_generation.png",
+        plt.plot(
+            obs_times.squeeze(0),
+            synthetic["states"].squeeze(0),
+            label="states",
         )
+        plt.plot(
+            obs_times.squeeze(0),
+            synthetic["observations"].squeeze(0),
+            label="observations",
+            linestyle="--",
+        )
+        plt.legend()
+        plt.savefig(OUTPUT_DIR / "data_generation.png", dpi=150, bbox_inches="tight")
+        plt.close()
 
-    # ---------------------------------------------------------
-    # Build conditioned model and run NUTS
-    # ---------------------------------------------------------
-    def data_conditioned_model():
-        context = Context(observations=Trajectory(times=obs_times, values=obs_values))
-        with handler(FilterBasedHMMMarginalLogLikelihood()):
-            with handler(Condition(context)):
-                return model()
-
-    # Run NUTS MCMC
+    mcmc_key = jr.PRNGKey(0)
     nuts_kernel = NUTS(data_conditioned_model)
-    mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
+    mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_samples)
     mcmc.run(mcmc_key)
 
-    # Get posterior samples
     posterior_samples = mcmc.get_samples()
 
-    # ---------------------------------------------------------
-    # Posterior predictive
-    # ---------------------------------------------------------
-    # predictive_post = Predictive(model, posterior_samples)
+    assert "sigma" in posterior_samples
+    posterior_sigma = posterior_samples["sigma"]
+    assert len(posterior_sigma) == num_samples
+    assert not jnp.isnan(posterior_sigma).any()
+    assert not jnp.isinf(posterior_sigma).any()
 
-    # with handler(SDESolver()):
-    #     pred = predictive_post(posterior_pred_key)
+    if SAVE_FIG and OUTPUT_DIR is not None:
+        az.plot_posterior(posterior_sigma, hdi_prob=0.95)
+        plt.savefig(OUTPUT_DIR / "posterior_sigma.png", dpi=150, bbox_inches="tight")
+        plt.close()
 
-    # return {
-    #     "true_rho": true_rho,
-    #     "posterior_rho": posterior_samples["rho"],
-    # }
+    assert jnp.abs(posterior_sigma.mean() - true_params["sigma"]) < 2.0
 
-    return {
-        "true_A": true_A,
-        "true_mu": true_mu,
-        "true_sigma": true_sigma,
-        "posterior_A": posterior_samples["A"],
-        "posterior_mu": posterior_samples["mu"],
-        "posterior_sigma": posterior_samples["sigma"],
-    }
-
-
-# -------------------------------------------------------------
-def test_mcmc_smoke():
-    result = run_mcmc_inference(num_samples=1, num_warmup=1)
-    assert "posterior_sigma" in result
-    assert len(result["posterior_sigma"]) > 0
-    print("Smoke test passed.")
-
-
-def test_science_smoke():
-    from tests.test_utils import get_output_dir
-    import arviz as az
-
-    output_dir = get_output_dir("test_hmm")
-
-    result = run_mcmc_inference(
-        num_samples=1000, num_warmup=2000, save_fig=True, output_dir=output_dir
+    hdi_data = az.hdi(posterior_sigma, hdi_prob=0.95)
+    hdi_min = hdi_data["x"].sel(hdi="lower").item()
+    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    assert hdi_min <= true_params["sigma"] <= hdi_max, (
+        f"True sigma {true_params['sigma']} not in HDI {hdi_min}, {hdi_max}"
     )
-
-    # Note: performs well with observation noise sd = 1.0
-    # Performs poorly with observation noise sd = 5.0
-    # Also, we should be able to speed up this discrete time model.
-    # Currently using numpyro's nscan to step through the time sequence.
-    # Should probably be doing something else, but lax.scan isn't working!
-
-    def add_chain_dim(x):
-        # Converts (draw, ...) -> (chain=1, draw, ...)
-        return np.expand_dims(x, axis=0)
-
-    idata = az.from_dict(
-        posterior={
-            "mu": add_chain_dim(result["posterior_mu"]),  # (1, draw, K)
-            "sigma": add_chain_dim(result["posterior_sigma"]),  # (1, draw)
-            "A": add_chain_dim(result["posterior_A"]),  # (1, draw, K, K)
-        },
-        coords={
-            "state": [0, 1, 2],
-            "state_row": [0, 1, 2],
-            "state_col": [0, 1, 2],
-            "observation": [],
-        },
-        dims={
-            "mu": ["state"],
-            "A": ["state_row", "state_col"],
-            "sigma": [],
-        },
-    )
-
-    az.plot_posterior(
-        idata,
-        var_names=["sigma"],
-        hdi_prob=0.9,
-        ref_val=result["true_sigma"],
-    )
-    plt.savefig(output_dir / "posterior_sigma.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    az.plot_forest(
-        idata,
-        var_names=["mu"],
-        hdi_prob=0.9,
-        # ref_val=result["true_mu"],
-    )
-    plt.savefig(output_dir / "forest_mu.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    az.plot_forest(
-        idata,
-        var_names=["A"],
-        hdi_prob=0.9,
-        # ref_val=result["true_A"],
-    )
-    plt.savefig(output_dir / "forest_A.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    print(f"Figures saved to {output_dir}")
-
-
-if __name__ == "__main__":
-    test_science_smoke()

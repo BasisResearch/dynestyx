@@ -60,13 +60,15 @@ def data_conditioned_hmm():
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
     def data_conditioned_model():
-        context = Context(observations=Trajectory(times=obs_times, values=obs_values))
+        context = Context(observations=observation_trajectory)
         with handler(FilterBasedHMMMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return hmm_model()
 
-    return data_conditioned_model, true_params, context
+    return data_conditioned_model, true_params, synthetic
 
 
 @pytest.fixture
@@ -105,13 +107,15 @@ def data_conditioned_discrete_time_l63():
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
     def data_conditioned_model():
-        context = Context(observations=Trajectory(times=obs_times, values=obs_values))
+        context = Context(observations=observation_trajectory)
         with handler(ModelUnroller()):
             with handler(Condition(context)):
                 return discrete_time_l63_model()
 
-    return data_conditioned_model, true_params, context
+    return data_conditioned_model, true_params, synthetic
 
 
 @pytest.fixture
@@ -146,10 +150,12 @@ def data_conditioned_continuous_time_l63():
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
     def data_conditioned_model():
-        context = Context(observations=Trajectory(times=obs_times, values=obs_values))
+        context = Context(observations=observation_trajectory)
         with handler(FilterBasedMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return continuous_time_stochastic_l63_model()
 
-    return data_conditioned_model, true_params, context
+    return data_conditioned_model, true_params, synthetic

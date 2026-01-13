@@ -1,166 +1,69 @@
 import jax.numpy as jnp
 import jax.random as jr
 
-import numpyro
-import numpyro.distributions as dist
-from numpyro.infer import MCMC, NUTS, Predictive
+import arviz as az
+from numpyro.infer import MCMC, NUTS
+import pytest
 
-from effectful.ops.semantics import handler
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
-from dsx.handlers import Condition
-from dsx.ops import sample_ds, Trajectory, Context
-from dsx.solvers import SDESolver
-from dsx.filters import FilterBasedMarginalLogLikelihood
+from tests.fixtures import data_conditioned_continuous_time_l63  # noqa: F401
+from tests.test_utils import get_output_dir
 
 
-def model():
-    """Model that samples drift parameter rho and uses it in dynamics."""
-    rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
-
-    # Create the dynamical model with sampled rho
-    dynamics = DynamicalModel(
-        state_dim=3,
-        observation_dim=1,
-        initial_condition=dist.MultivariateNormal(
-            loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
-        ),
-        state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: jnp.array(
-                [
-                    10.0 * (x[1] - x[0]),
-                    x[0] * (rho - x[2]) - x[1],
-                    x[0] * x[1] - (8.0 / 3.0) * x[2],
-                ]
-            ),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3),
-        ),
-        observation_model=LinearGaussianObservation(
-            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[5.0**2]])
-        ),
-    )
-
-    # TODO: observation_model should simply be dist.MultivariateNormal(...) here,
-    # but for now we wrap it in LinearGaussianObservation for so that we can extract
-    # H and R later for CD-Dynamax conversion (structure exploiting algorithms).
-    # In the future, we will build internal logic to identify linear-gaussian observation models
-    # and extract H, R automatically.
-
-    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
-    # require (x, u, t) arguments if they are not used. We can wrap them internally.
-    # e.g. diffusion_coefficient=jnp.eye(3)
-    # e.g. drift = lambda x: F(x, rho)
-
-    # Return a sampled dynamical model, named "f".
-    return sample_ds("f", dynamics)
+SAVE_FIG = True
+OUTPUT_DIR = get_output_dir("test_l63_mcmc")
 
 
-def run_mcmc_inference(
-    true_rho: float = 28.0,
-    num_samples: int = 200,
-    num_warmup: int = 100,
-    save_fig: bool = False,
-    output_dir=None,
-):
-    """Run MCMC inference on synthetic data."""
-    rng_key = jr.PRNGKey(0)
+@pytest.mark.parametrize("num_samples", [250])
+def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # noqa: F811
+    (
+        data_conditioned_model,
+        true_params,
+        synthetic,
+    ) = data_conditioned_continuous_time_l63
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    obs_times = synthetic["times"]
 
-    # ---------------------------------------------------------
-    # Generate synthetic observations using Predictive
-    # ---------------------------------------------------------
-    # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
-
-    # Generate synthetic data
-    true_params = {"rho": jnp.array(true_rho)}
-    predictive = Predictive(
-        model, params=true_params, num_samples=1, exclude_deterministic=False
-    )
-
-    context = Context(solve=Trajectory(times=obs_times))
-    with handler(SDESolver(key=data_solver_key)):
-        with handler(Condition(context)):
-            synthetic = predictive(data_init_key)
-
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
-
-    if save_fig and output_dir is not None:
+    if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
-        plt.plot(obs_times, synthetic["states"].squeeze(0)[:, 0], label="x[0]")
         plt.plot(
-            obs_times,
+            obs_times.squeeze(0),
+            synthetic["states"].squeeze(0)[:, 0],
+            label="x[0]",
+        )
+        plt.plot(
+            obs_times.squeeze(0),
             synthetic["observations"].squeeze(0)[:, 0],
             label="observations",
             linestyle="--",
         )
         plt.legend()
-        plt.savefig(output_dir / "data_generation.png", dpi=150, bbox_inches="tight")
+        plt.savefig(OUTPUT_DIR / "data_generation.png", dpi=150, bbox_inches="tight")
         plt.close()
 
-    # ---------------------------------------------------------
-    # Build conditioned model and run NUTS
-    # ---------------------------------------------------------
-    def data_conditioned_model():
-        context = Context(observations=Trajectory(times=obs_times, values=obs_values))
-        with handler(FilterBasedMarginalLogLikelihood()):
-            with handler(Condition(context)):
-                return model()
-
-    # Run NUTS MCMC
+    mcmc_key = jr.PRNGKey(0)
     nuts_kernel = NUTS(data_conditioned_model)
-    mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_warmup)
+    mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_samples)
     mcmc.run(mcmc_key)
 
-    # Get posterior samples
     posterior_samples = mcmc.get_samples()
 
-    # ---------------------------------------------------------
-    # Posterior predictive
-    # ---------------------------------------------------------
-    # predictive_post = Predictive(model, posterior_samples)
+    assert "rho" in posterior_samples
+    posterior_rho = posterior_samples["rho"]
+    assert len(posterior_rho) == num_samples
+    assert not jnp.isnan(posterior_rho).any()
+    assert not jnp.isinf(posterior_rho).any()
 
-    # with handler(SDESolver()):
-    #     pred = predictive_post(posterior_pred_key)
+    if SAVE_FIG and OUTPUT_DIR is not None:
+        az.plot_posterior(posterior_rho, hdi_prob=0.95)
+        plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
+        plt.close()
 
-    return {
-        "true_rho": true_rho,
-        "posterior_rho": posterior_samples["rho"],
-    }
+    assert jnp.abs(posterior_rho.mean() - true_params["rho"]) < 5.0
 
-
-# -------------------------------------------------------------
-# SMOKE TEST
-# -------------------------------------------------------------
-def test_mcmc_smoke():
-    result = run_mcmc_inference(true_rho=28.0, num_samples=1, num_warmup=1)
-    assert "posterior_rho" in result
-    assert len(result["posterior_rho"]) > 0
-    print("Smoke test passed.")
-
-
-def test_science_smoke():
-    from tests.test_utils import get_output_dir
-    import matplotlib.pyplot as plt
-
-    output_dir = get_output_dir("test_l63_mcmc")
-
-    result = run_mcmc_inference(true_rho=28.0, save_fig=True, output_dir=output_dir)
-
-    post = result["posterior_rho"]
-    print("Posterior mean rho:", post.mean())
-
-    plt.hist(post, bins=40, alpha=0.7)
-    plt.axvline(result["true_rho"], color="r", linestyle="--")
-    plt.title("Posterior on rho")
-    plt.savefig(output_dir / "posterior_rho.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    print(f"Figures saved to {output_dir}")
-
-
-if __name__ == "__main__":
-    test_science_smoke()
+    hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
+    hdi_min = hdi_data["x"].sel(hdi="lower").item()
+    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    assert hdi_min <= true_params["rho"] <= hdi_max, (
+        f"True rho {true_params['rho']} not in HDI {hdi_min}, {hdi_max}"
+    )

@@ -73,7 +73,7 @@ class SDESolver(BaseSolver):
             transition_type="path",
         )
 
-        return {"states": states, "observations": emissions}
+        return {"times": times, "states": states, "observations": emissions}
 
 
 class ODESolver(BaseSolver):
@@ -138,7 +138,7 @@ class ODESolver(BaseSolver):
             transition_type="path",
         )
 
-        return {"states": states, "observations": emissions}
+        return {"times": times, "states": states, "observations": emissions}
 
 
 class DiscreteTimeSolver(BaseSolver):
@@ -196,10 +196,12 @@ class DiscreteTimeSolver(BaseSolver):
             )  # y0 cannot be None when observation_model is not None
             observations = jnp.concatenate([y0[None, ...], ys], axis=0)
             return {
+                "times": times,
                 "states": states,
                 "observations": observations,
             }
         else:
             return {
+                "times": times,
                 "states": states,
             }

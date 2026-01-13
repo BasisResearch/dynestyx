@@ -8,7 +8,6 @@ from dsx.observations import LinearGaussianObservation
 from dsx.ops import sample_ds
 
 
-
 def hmm_model():
     K = 3  # number of discrete states
 
