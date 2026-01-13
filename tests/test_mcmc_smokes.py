@@ -5,23 +5,37 @@ This module imports and runs smoke tests from the test_science modules,
 ensuring that all MCMC inference pipelines can run with minimal parameters.
 """
 
-from tests.test_science.test_discreteTime_generic import (
-    test_mcmc_smoke as _test_discreteTime_generic_smoke,
-)
-from tests.test_science.test_hmm import test_mcmc_smoke as _test_hmm_smoke
-from tests.test_science.test_l63_mcmc import test_mcmc_smoke as _test_l63_mcmc_smoke
+import jax.random as jr
+from numpyro.infer import MCMC, NUTS
 
 
-def test_discreteTime_generic_mcmc_smoke():
-    """Smoke test for discrete time generic MCMC inference."""
-    _test_discreteTime_generic_smoke()
+
+def test_hmm_mcmc_smoke(data_conditioned_hmm):  # noqa: F811
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, context = data_conditioned_hmm
+    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "A" in posterior_samples
+    assert "mu" in posterior_samples
+    assert "sigma" in posterior_samples
 
 
-def test_hmm_mcmc_smoke():
-    """Smoke test for HMM MCMC inference."""
-    _test_hmm_smoke()
+def test_discrete_time_l63_mcmc_smoke(data_conditioned_discrete_time_l63):  # noqa: F811
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, context = data_conditioned_discrete_time_l63
+    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "rho" in posterior_samples
 
 
-def test_l63_mcmc_smoke():
-    """Smoke test for Lorenz 63 MCMC inference."""
-    _test_l63_mcmc_smoke()
+def test_continuous_time_stochastic_l63_mcmc_smoke(
+    data_conditioned_continuous_time_l63,  # noqa: F811
+):
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, context = data_conditioned_continuous_time_l63
+    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "rho" in posterior_samples
