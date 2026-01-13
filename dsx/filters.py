@@ -1,4 +1,5 @@
 import jax
+import jax.numpy as jnp
 import jax.random as jr
 from typing import Optional
 import dataclasses
@@ -7,8 +8,10 @@ from dsx.ops import Context
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import DynamicalModel
 from dsx.utils import dsx_to_cd_dynamax
+from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import numpyro
+from numpyro.contrib.control_flow import scan as nscan
 
 
 @dataclasses.dataclass
@@ -46,6 +49,8 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             return
 
         obs_times = obs_traj.times[:, None]  # shape (T, 1)
+        if isinstance(obs_traj.values, dict):
+            raise ValueError("obs_traj.values must be an Array, not a dict")
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
         if self.filter_type.lower() == "dpf":
@@ -114,3 +119,116 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         # numpyro.deterministic(f"{name}_filtered_states_cov", filtered.filtered_covariances)
         # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
         # numpyro.deterministic(f"{name}_predicted_states_cov", filtered.predicted_covariances)
+
+
+@dataclasses.dataclass
+class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+    """
+    Exact HMM marginal log-likelihood via forward filtering.
+
+    Optionally, (log-)filtered states are recorded if `record_(log_)filtered == True`.
+    """
+
+    record_filtered: bool = False
+    record_log_filtered: bool = False
+
+    def add_log_factors(
+        self,
+        dynamics: DynamicalModel,
+        context: Context,
+        name: Optional[str] = "hmm",
+    ):
+        obs = context.observations
+        if obs.times is None or obs.values is None:
+            return
+
+        if isinstance(obs.values, dict):
+            raise ValueError("obs.values must be an Array, not a dict")
+        obs_values = obs.values
+        log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+            dynamics,
+            obs.times,
+            obs_values,
+        )
+
+        loglik, log_filt_seq = hmm_filter(
+            log_pi,
+            log_A_seq,
+            log_emit_seq,
+        )
+
+        numpyro.factor(
+            f"{name}_marginal_loglik",
+            loglik,
+        )
+
+        if self.record_log_filtered:
+            numpyro.deterministic(
+                f"{name}_log_filtered_states",
+                log_filt_seq,  # (T, K)
+            )
+
+        if self.record_filtered:
+            numpyro.deterministic(
+                f"{name}_filtered_states",
+                jnp.exp(log_filt_seq),  # (T, K)
+            )
+
+
+@dataclasses.dataclass
+class ModelUnroller(BaseCDDynamaxLogFactorAdder):
+    """Assume we have ic, transition, and observation distributions,
+    as well as (time_index, observation) pairs in the context.
+
+    Simply unroll the model and add obs=data as you would in numpyro.
+
+    This does not explicitly add logfactors; it let's numpyro do it automatically.
+    Instead, it just unrolls the model and adds observed sites
+    (which numpyro uses to compute logfactors).
+    """
+
+    def add_log_factors(
+        self,
+        dynamics: DynamicalModel,
+        context: Context,
+        name: Optional[str] = "EnKF",
+    ):
+        # Pull observed trajectory from context
+        obs_traj = context.observations
+        if obs_traj.times is None or obs_traj.values is None:
+            # No observations → nothing to factor
+            return
+
+        obs_times = obs_traj.times  # shape (T)
+        if isinstance(obs_traj.values, dict):
+            raise ValueError("obs_traj.values must be an Array, not a dict")
+        obs_values = obs_traj.values  # shape (T, emission_dim)
+
+        T = len(obs_times)
+
+        # Sample initial state
+        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
+
+        # sample initial observation
+        numpyro.sample(
+            "y_0",
+            dynamics.observation_model(x=x_prev, u=None, t=obs_times[0]),
+            obs=obs_values[0],
+        )
+
+        def _step(x_prev, t_idx):
+            t = obs_times[t_idx]
+            # Sample next state
+            x_t = numpyro.sample(
+                f"x_{t_idx + 1}", dynamics.state_evolution(x=x_prev, u=None, t=t)
+            )
+
+            # Sample observation
+            numpyro.sample(
+                f"y_{t_idx + 1}",
+                dynamics.observation_model(x=x_t, u=None, t=t),
+                obs=obs_values[t_idx + 1],
+            )
+            return x_t, None
+
+        nscan(_step, x_prev, jnp.arange(T - 1))
