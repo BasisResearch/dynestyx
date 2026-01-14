@@ -170,13 +170,13 @@ class ODEUnroller(BaseUnroller):
 @dataclasses.dataclass
 class ProbabilisticODEUnroller(BaseUnroller):
     """Probabilistic ODE unroller using rodeo for probabilistic numerics.
-    
+
     Uses rodeo to solve the ODE probabilistically, representing the solution
     as a joint Gaussian distribution. This joint Gaussian is then related to
     data (if present) via the observation_model.
-    
+
     This does not add logfactors, just unrolls the model and adds observed sites.
-    
+
     Requires that observation times are on a regular grid.
     """
 
@@ -207,6 +207,8 @@ class ProbabilisticODEUnroller(BaseUnroller):
 
         # Sample initial state (known, no variance in the solution)
         x0 = numpyro.sample("x_0", dynamics.initial_condition)
+        # Ensure x0 is a JAX array
+        x0 = jnp.asarray(x0)
 
         # Prepare all inputs for rodeo
         rodeo_inputs = pn.prepare_rodeo_inputs(
@@ -224,27 +226,31 @@ class ProbabilisticODEUnroller(BaseUnroller):
             key=key,
             **rodeo_inputs,
         )
-        
+
         # Reshape rodeo output to (T, state_dim) format
         # rodeo returns (n_steps+1, ...) = (T, ...) including initial condition at index 0
         states_mean, states_cov = pn.reshape_rodeo_output(
             mean_state_smooth, var_state_smooth, T, state_dim
         )
-        
+
         # Exclude x0 (index 0) from the probabilistic solution since it's known
         # Build joint distribution for times 1..T-1 (excluding initial condition)
         states_mean_future = states_mean[1:]  # (T-1, state_dim) - exclude x0
-        states_cov_future = states_cov[1:]    # (T-1, state_dim, state_dim)
-        
+        states_cov_future = states_cov[1:]  # (T-1, state_dim, state_dim)
+
         # Build joint covariance matrix for future states (excluding x0)
         mean_flat = states_mean_future.flatten()  # ((T-1) * state_dim,)
         covariance_flat = pn.build_joint_covariance(states_cov_future, T - 1, state_dim)
-        
+
         # Sample future states from the joint Gaussian (x0 is excluded, has no variance)
-        solution_dist = dist.MultivariateNormal(loc=mean_flat, covariance_matrix=covariance_flat)
+        solution_dist = dist.MultivariateNormal(
+            loc=mean_flat, covariance_matrix=covariance_flat
+        )
         states_future_flat = numpyro.sample("states_future_flat", solution_dist)
+        # Ensure states_future_flat is a JAX array before reshaping
+        states_future_flat = jnp.asarray(states_future_flat)
         states_future = states_future_flat.reshape(T - 1, state_dim)  # (T-1, state_dim)
-        
+
         # Stitch x0 with future states to get full trajectory
         x0_expanded = jnp.expand_dims(x0, axis=0)  # (1, state_dim)
         states = jnp.concatenate([x0_expanded, states_future], axis=0)  # (T, state_dim)

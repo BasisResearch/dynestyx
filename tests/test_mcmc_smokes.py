@@ -62,6 +62,7 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
 
+
 def test_continuous_time_deterministic_l63_with_probabilistic_solver_mcmc_smoke(
     data_conditioned_continuous_time_deterministic_l63_with_probabilistic_solver,  # noqa: F811
 ):

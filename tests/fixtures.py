@@ -204,6 +204,7 @@ def data_conditioned_continuous_time_deterministic_l63():
 
     return data_conditioned_model, true_params, synthetic
 
+
 @pytest.fixture
 def data_conditioned_continuous_time_deterministic_l63_with_probabilistic_solver():
     rng_key = jr.PRNGKey(0)

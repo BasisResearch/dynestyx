@@ -5,7 +5,9 @@ import arviz as az
 from numpyro.infer import MCMC, NUTS
 import pytest
 
-from tests.fixtures import data_conditioned_continuous_time_deterministic_l63_with_probabilistic_solver  # noqa: F401
+from tests.fixtures import (
+    data_conditioned_continuous_time_deterministic_l63_with_probabilistic_solver,  # noqa: F401
+)
 from tests.test_utils import get_output_dir
 
 
