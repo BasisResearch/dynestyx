@@ -15,6 +15,7 @@ dependencies = [
     "numpyro>=0.19.0",
     "pytest>=9.0.1",
     "arviz>=0.18.0",
+    "rodeo",
 ]
 
 [tool.hatch.build.targets.wheel]

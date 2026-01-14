@@ -7,7 +7,7 @@ from effectful.ops.semantics import handler
 from dsx.handlers import Condition
 from dsx.ops import Trajectory, Context
 from dsx.solvers import SDESolver
-from dsx.unrollers import DiscreteTimeUnroller, ODEUnroller
+from dsx.unrollers import DiscreteTimeUnroller, ODEUnroller, ProbabilisticODEUnroller
 from dsx.filters import (
     FilterBasedMarginalLogLikelihood,
     FilterBasedHMMMarginalLogLikelihood,
@@ -199,6 +199,48 @@ def data_conditioned_continuous_time_deterministic_l63():
     def data_conditioned_model():
         context = Context(observations=observation_trajectory)
         with handler(ODEUnroller()):
+            with handler(Condition(context)):
+                return continuous_time_deterministic_l63_model()
+
+    return data_conditioned_model, true_params, synthetic
+
+@pytest.fixture
+def data_conditioned_continuous_time_deterministic_l63_with_probabilistic_solver():
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+
+    true_rho = 28.0
+    # ---------------------------------------------------------
+    # Generate synthetic observations using Predictive
+    # ---------------------------------------------------------
+    # Generate observations at some times
+    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
+
+    # Generate synthetic data
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        continuous_time_deterministic_l63_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(observations=Trajectory(times=obs_times))
+    with handler(ProbabilisticODEUnroller()):
+        with handler(Condition(context)):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+
+    # ---------------------------------------------------------
+    # Build conditioned model
+    # ---------------------------------------------------------
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(observations=observation_trajectory)
+        with handler(ProbabilisticODEUnroller()):
             with handler(Condition(context)):
                 return continuous_time_deterministic_l63_model()
 
