@@ -1,79 +1,116 @@
-import jax.numpy as jnp
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import seaborn as sns
-
 # HMM
-def plot_hmm_states_and_observations(times, x, y, mu, sigma):
-    K = len(mu)
-    colors = ["#AED6F1", "#ABEBC6", "#F9E79F"]  # soft, readable
+import matplotlib.pyplot as plt
+import numpy as np
+import jax.numpy as jnp
 
-    fig, ax = plt.subplots(figsize=(10, 3))
 
-    # --- State background shading ---
-    for k in range(K):
-        mask = (x == k)
-        ax.fill_between(
+def plot_hmm_states_and_observations(
+    times, x, y, state_cmap="tab10", obs_cmap="Set1", show_fig=False, save_path=None
+):
+    """
+    Plot latent discrete HMM states as colored background bands
+    with observed signals overlaid.
+
+    :param times: (T,) Time points
+    :param x: (T,) Discrete latent state indices (0..K-1)
+    :param y: (T,) or (T, N_obs) Observations
+    """
+
+    times = np.asarray(times)
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    T = len(times)
+
+    # ---- Normalize observation shape ----
+    if y.ndim == 1:
+        y = y[:, None]  # (T, 1)
+
+    N_obs = y.shape[1]
+    K = int(x.max()) + 1
+
+    # ---- Color maps ----
+    cmap_states = plt.cm.get_cmap(state_cmap, K)
+    state_colors = [cmap_states(k) for k in range(K)]
+
+    cmap_obs = plt.cm.get_cmap(obs_cmap, N_obs)
+    obs_colors = [cmap_obs(i) for i in range(N_obs)]
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # ---- Draw state background as contiguous segments ----
+    def draw_state_blocks():
+        start = 0
+        for t in range(1, T + 1):
+            if t == T or x[t] != x[start]:
+                k = int(x[start])
+                ax.axvspan(
+                    times[start],
+                    times[t - 1] if t < T else times[-1],
+                    color=state_colors[k],
+                    alpha=0.18,
+                    linewidth=0,
+                )
+                start = t
+
+    draw_state_blocks()
+
+    # ---- Plot observations ----
+    for n in range(N_obs):
+        ax.plot(
             times,
-            y.min() - 3 * sigma,
-            y.max() + 3 * sigma,
-            where=mask,
-            color=colors[k],
-            alpha=0.4,
-            step="post",
+            y[:, n],
+            color=obs_colors[n],
+            lw=2,
+            label=f"obs[{n}]",
+            zorder=5,
         )
 
-    # --- Observations ---
-    ax.plot(times, y, color="black", lw=1, label="observations")
+    # ---- Formatting ----
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Observations")
+    ax.set_title("HMM latent states and observations")
 
-    # --- Emission means ---
-    for k in range(K):
-        ax.axhline(mu[k], color=colors[k], lw=2, linestyle="--")
+    ax.grid(True, alpha=0.3)
+    ax.legend(frameon=False)
 
-    # Legend
-    patches = [
-        mpatches.Patch(color=colors[k], label=f"State {k}")
+    # ---- Build state legend separately ----
+    from matplotlib.patches import Patch
+
+    state_patches = [
+        Patch(facecolor=state_colors[k], alpha=0.3, label=f"state {k}")
         for k in range(K)
     ]
-    ax.legend(handles=patches, loc="upper left", frameon=False)
 
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Observation y")
-    ax.set_title("Latent state regimes with observations")
+    ax.legend(
+        handles=state_patches + ax.get_legend_handles_labels()[0],
+        loc="upper left",
+        frameon=False,
+    )
+
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        plt.close()
+    elif show_fig:
+        plt.show()
+
+    return fig, ax
 
 
 def plot_continuous_states_and_partial_observations(
-    times,
-    x,
-    y,
-    x_labels=None,
-    y_indices=None,
-    show_fig=False,
-    figsize=(10, 2.2),
+    times, x, y, show_fig=False, save_path=None
 ):
     """
-    Clean, publication-quality plot of continuous latent states
-    with partial noisy observations (Seaborn-styled).
+    Plot continuous latent states with partial noisy observations.
+
+    :param times: (T,) Time points
+    :param x: (T, state_dim) Continuous latent states
+    :param y: (T, obs_dim) Observations
+    :param show_fig: Whether to show the figure
+    :param save_path: Optional path to save the figure
     """
-
-    # ---------- Style ----------
-    sns.set_theme(
-        style="whitegrid",
-        context="paper",
-        font_scale=1.1,
-        rc={
-            "axes.spines.right": False,
-            "axes.spines.top": False,
-            "axes.linewidth": 1.0,
-            "grid.linewidth": 0.8,
-            "grid.alpha": 0.4,
-        },
-    )
-
-    # ---------- Data prep ----------
     times = np.asarray(times)
     x = np.asarray(jnp.asarray(x))
     y = np.asarray(jnp.asarray(y))
@@ -81,32 +118,22 @@ def plot_continuous_states_and_partial_observations(
     T, num_x = x.shape
     num_y = y.shape[1]
 
-    if y_indices is None:
-        print("Assuming observations correspond to first num_y states.")
-        y_indices = list(range(num_y))
-
-    if x_labels is None:
-        x_labels = [f"x{i+1}" for i in range(num_x)]
-
     # Colors
-    state_color = sns.color_palette("deep")[0]
-    obs_color = sns.color_palette("deep")[2]
+    state_color = "C0"
+    obs_color = "C2"
 
-    # ---------- Figure ----------
+    # Figure
     fig, axes = plt.subplots(
-        num_x, 1,
-        figsize=(figsize[0], figsize[1] * num_x),
-        sharex=True,
-        constrained_layout=True,
+        num_x, 1, figsize=(10, 2.2 * num_x), sharex=True, constrained_layout=True
     )
 
     if num_x == 1:
         axes = [axes]
 
-    # ---------- Plot ----------
+    # Plot
     for i, ax in enumerate(axes):
         # Latent state
-        is_first_state = (i == 0)
+        is_first_state = i == 0
         ax.plot(
             times,
             x[:, i],
@@ -116,15 +143,14 @@ def plot_continuous_states_and_partial_observations(
             label="Latent state" if is_first_state else None,
         )
 
-        # Observations
-        if i in y_indices:
-            is_first_obs = (i == y_indices[0])
-            y_idx = y_indices.index(i)
+        # Observations (assume first num_y states are observed)
+        if i < num_y:
+            is_first_obs = i == 0
             ax.scatter(
                 times,
-                y[:, y_idx],
+                y[:, i],
                 s=28,
-                facecolors="none",          # hollow
+                facecolors="none",
                 edgecolors=obs_color,
                 linewidth=1.0,
                 alpha=0.7,
@@ -132,19 +158,20 @@ def plot_continuous_states_and_partial_observations(
                 label="Observation" if is_first_obs else None,
             )
 
-        ax.set_ylabel(x_labels[i])
+        ax.set_ylabel(f"x{i + 1}")
+        ax.grid(True, alpha=0.3)
 
     axes[-1].set_xlabel("Time")
 
-    # ---------- One clean legend ----------
-    axes[0].legend(
-        loc="upper right",
-        frameon=False,
-        ncol=2,
-        handlelength=2,
-    )
+    # Legend
+    axes[0].legend(loc="upper right", frameon=False, ncol=2)
 
-    if show_fig:
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        plt.close()
+    elif show_fig:
         plt.show()
 
     return fig, axes

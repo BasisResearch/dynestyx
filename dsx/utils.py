@@ -1,4 +1,3 @@
-import jax
 import jax.numpy as jnp
 
 from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
@@ -7,63 +6,79 @@ from numpyro import distributions as dist
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 
+
 def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
     """
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
     """
-    
+
     params = {}
-    
+
     ## Map state evolution ##
     state_evo = dsx_model.state_evolution
     if isinstance(state_evo, ContinuousTimeStateEvolution):
         if state_evo.drift is not None:
-            params.update({
-                'drift': state_evo.drift,
-            })
+            params.update(
+                {
+                    "drift": state_evo.drift,
+                }
+            )
         else:
-            raise ValueError("drift is None; default drift (e.g., ZERO) is not yet handled carefully.")
+            raise ValueError(
+                "drift is None; default drift (e.g., ZERO) is not yet handled carefully."
+            )
         if state_evo.diffusion_coefficient is not None:
-            params.update({
-                'diffusion_coeff': state_evo.diffusion_coefficient,
-            })
+            params.update(
+                {
+                    "diffusion_coeff": state_evo.diffusion_coefficient,
+                }
+            )
         if state_evo.diffusion_covariance is not None:
-            params.update({
-                'diffusion_cov': state_evo.diffusion_covariance,
-            })
+            params.update(
+                {
+                    "diffusion_cov": state_evo.diffusion_covariance,
+                }
+            )
     else:
-        raise NotImplementedError(f"State evolution of type {type(state_evo)} is not supported yet.")
-    
+        raise NotImplementedError(
+            f"State evolution of type {type(state_evo)} is not supported yet."
+        )
+
     ## Map initial condition ##
     ic = dsx_model.initial_condition
     if isinstance(ic, dist.MultivariateNormal):
-        params.update({
-            'initial_mean': ic.loc,
-            'initial_cov': ic.covariance_matrix,
-        })
+        params.update(
+            {
+                "initial_mean": ic.loc,  # type: ignore
+                "initial_cov": ic.covariance_matrix,
+            }
+        )
     elif isinstance(ic, dist.Normal):
-        params.update({
-            'initial_mean': ic.loc,
-            'initial_cov': jnp.square(ic.scale)
-        })
+        params.update({"initial_mean": ic.loc, "initial_cov": jnp.square(ic.scale)})  # type: ignore
     else:
-        raise NotImplementedError(f"Initial condition of type {type(ic)} is not supported yet.")
+        raise NotImplementedError(
+            f"Initial condition of type {type(ic)} is not supported yet."
+        )
 
     ## Map observation model ##
     obs = dsx_model.observation_model
     if isinstance(obs, LinearGaussianObservation):
-        params.update({
-            'emission_function': lambda x, u, t: obs.H @ x,
-            'emission_cov': obs.R,
-        })
+        params.update(
+            {
+                "emission_function": lambda x, u, t: obs.H @ x,
+                "emission_cov": obs.R,  # type: ignore
+            }
+        )
     else:
-    # TODO: check for linear-gaussian observation models and extract H, R        
-        
-        raise NotImplementedError(f"Observation model of type {type(obs)} is not supported yet.")
+        # TODO: check for linear-gaussian observation models and extract H, R
 
-    
-    cdnlgssm = CDNLGSSM(state_dim=dsx_model.state_dim,
-                            emission_dim=dsx_model.observation_dim)
+        raise NotImplementedError(
+            f"Observation model of type {type(obs)} is not supported yet."
+        )
+
+    cdnlgssm = CDNLGSSM(
+        state_dim=dsx_model.state_dim, emission_dim=dsx_model.observation_dim
+    )
     cd_dynamax_params = cdnlgssm.build_params(**params)
 
     return cd_dynamax_params

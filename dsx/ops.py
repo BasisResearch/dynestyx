@@ -1,14 +1,15 @@
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
 from dsx.dynamical_models import DynamicalModel
-from typing import Dict, Callable, Optional
+from typing import Dict, Callable, Optional, Union
 from jax import Array
 import dataclasses
 
-# Type alias for states: dict mapping state names to arrays
+# Type alias for states: dict mapping state names to arrays, or just an array
 Times = Array
-States = Array #[str, Array]
+States = Union[Dict[str, Array], Array]
 FunctionOfTime = Callable[[Times], States]
+
 
 @dataclasses.dataclass
 class Trajectory:
@@ -22,6 +23,7 @@ class Trajectory:
 
     times: Optional[Times] = None
     values: Optional[States] = None
+
 
 @dataclasses.dataclass
 class Context:
@@ -43,8 +45,7 @@ class Context:
 
 
 @defop
-def sample_ds(name: str,
-              dynamics: DynamicalModel,
-              context: Optional[Context] = None) -> FunctionOfTime:
+def sample_ds(
+    name: str, dynamics: DynamicalModel, context: Optional[Context] = None
+) -> FunctionOfTime:
     raise NotHandled()
-    

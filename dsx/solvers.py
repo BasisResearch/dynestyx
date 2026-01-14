@@ -1,6 +1,6 @@
 from dsx.handlers import BaseSolver
 from dsx.ops import States
-from dsx.dynamical_models import ContinuousTimeStateEvolution, DiscreteTimeStateEvolution
+from dsx.dynamical_models import ContinuousTimeStateEvolution
 from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
@@ -9,20 +9,20 @@ import jax.numpy as jnp
 import jax.random as jr
 from jax import lax
 
+
 class SDESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution with stochastic dynamics."""
-    # TODO: add control inputs
-    
-    def __init__(self,
-                key: Array,
-                solver: dfx.AbstractSolver = dfx.Heun(),
-                stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-                adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-                dt0: float = 0.01,
-                tol_vbt: float = 1e-1, # tolerance for virtual brownian tree
-                max_steps: int = 1e5,
-                ):
 
+    def __init__(
+        self,
+        key: Array,
+        solver: dfx.AbstractSolver = dfx.Heun(),
+        stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+        adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+        dt0: float = 0.01,
+        tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
+        max_steps: int = int(1e5),
+    ):
         self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
         self.diffeqsolve_settings = {
             "solver": solver,
@@ -34,11 +34,15 @@ class SDESolver(BaseSolver):
         }
 
     def solve(self, times, dynamics) -> States:
-        
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-            raise NotImplementedError(f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
-        
-        if dynamics.state_evolution.diffusion_coefficient is None or dynamics.state_evolution.diffusion_covariance is None:
+            raise NotImplementedError(
+                f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
+            )
+
+        if (
+            dynamics.state_evolution.diffusion_coefficient is None
+            or dynamics.state_evolution.diffusion_covariance is None
+        ):
             raise ValueError(
                 "SDESolver requires both diffusion_coefficient and diffusion_covariance to be "
                 f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
@@ -49,12 +53,13 @@ class SDESolver(BaseSolver):
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
         params = dsx_to_cd_dynamax(dynamics)
-        
+
         # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(state_dim=dynamics.state_dim,
-                                                            emission_dim=dynamics.observation_dim,
-                                                            diffeqsolve_settings=self.diffeqsolve_settings
-                                                            )
+        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+            state_dim=dynamics.state_dim,
+            emission_dim=dynamics.observation_dim,
+            diffeqsolve_settings=self.diffeqsolve_settings,
+        )
 
         # Sample states and emissions from the model using solver settings defined above.
         # ensure that times has shape (num_timesteps, 1)
@@ -68,22 +73,24 @@ class SDESolver(BaseSolver):
             transition_type="path",
         )
 
-        return {"states": states, "observations": emissions}
+        return {"times": times, "states": states, "observations": emissions}
+
 
 class ODESolver(BaseSolver):
     """Solver that works with ContinuousTimeStateEvolution."""
-    # TODO: add control inputs
 
-    def __init__(self,
-                key: Array, # key for model randomness (initial condition and observation noise)
-                solver: dfx.AbstractSolver = dfx.Dopri5(),
-                stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-                adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-                dt0: float = 0.01,
-                max_steps: int = 1e5,
-                ):
-
-        self.key = key # key for model randomness (initial condition and observation noise)
+    def __init__(
+        self,
+        key: Array,  # key for model randomness (initial condition and observation noise)
+        solver: dfx.AbstractSolver = dfx.Dopri5(),
+        stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+        adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+        dt0: float = 0.01,
+        max_steps: int = int(1e5),
+    ):
+        self.key = (
+            key  # key for model randomness (initial condition and observation noise)
+        )
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
@@ -93,11 +100,15 @@ class ODESolver(BaseSolver):
         }
 
     def solve(self, times, dynamics) -> States:
-                
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-            raise NotImplementedError(f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}")
+            raise NotImplementedError(
+                f"ODESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
+            )
 
-        if dynamics.state_evolution.diffusion_coefficient is not None or dynamics.state_evolution.diffusion_covariance is not None:
+        if (
+            dynamics.state_evolution.diffusion_coefficient is not None
+            or dynamics.state_evolution.diffusion_covariance is not None
+        ):
             raise ValueError(
                 "ODESolver requires both diffusion_coefficient and diffusion_covariance to be "
                 "None for deterministic dynamics. Use SDESolver for stochastic dynamics."
@@ -106,12 +117,13 @@ class ODESolver(BaseSolver):
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
         params = dsx_to_cd_dynamax(dynamics)
-        
+
         # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(state_dim=dynamics.state_dim,
-                                                            emission_dim=dynamics.observation_dim,
-                                                            diffeqsolve_settings=self.diffeqsolve_settings
-                                                            )
+        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+            state_dim=dynamics.state_dim,
+            emission_dim=dynamics.observation_dim,
+            diffeqsolve_settings=self.diffeqsolve_settings,
+        )
 
         # ensure that times has shape (num_timesteps, 1)
         if times.ndim == 1:
@@ -126,25 +138,29 @@ class ODESolver(BaseSolver):
             transition_type="path",
         )
 
-        return {"states": states, "observations": emissions}
+        return {"times": times, "states": states, "observations": emissions}
+
 
 class DiscreteTimeSolver(BaseSolver):
     """Solver for discrete-time state evolution models using lax.scan."""
+
     # TODO: add controls
 
     def __init__(self, key: Array):
         self.key = key
 
     def solve(self, times, dynamics) -> States:
-        
-        T = len(times)
         key = self.key
 
         # --- Sample initial state ---
         key, subkey = jr.split(key)
         x0 = dynamics.initial_condition.sample(subkey)
         key, subkey = jr.split(key)
-        y0 = dynamics.observation_model(x=x0, u=None, t=times[0]).sample(subkey) if dynamics.observation_model is not None else None
+        y0 = (
+            dynamics.observation_model(x=x0, u=None, t=times[0]).sample(subkey)
+            if dynamics.observation_model is not None
+            else None
+        )
 
         def step(carry, t):
             key, x_t = carry
@@ -175,12 +191,17 @@ class DiscreteTimeSolver(BaseSolver):
         states = jnp.concatenate([x0[None, ...], xs], axis=0)
 
         if dynamics.observation_model is not None:
+            assert (
+                y0 is not None
+            )  # y0 cannot be None when observation_model is not None
             observations = jnp.concatenate([y0[None, ...], ys], axis=0)
             return {
+                "times": times,
                 "states": states,
                 "observations": observations,
             }
         else:
             return {
+                "times": times,
                 "states": states,
             }
