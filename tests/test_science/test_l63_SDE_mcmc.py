@@ -55,7 +55,9 @@ def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # n
     assert not jnp.isinf(posterior_rho).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        az.plot_posterior(posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item())
+        az.plot_posterior(
+            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+        )
         plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
         plt.close()
 

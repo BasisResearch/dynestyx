@@ -15,8 +15,9 @@ OUTPUT_DIR = get_output_dir("test_l63_ODE_mcmc")
 
 @pytest.mark.parametrize("num_samples", [250])
 def test_mcmc_inference(
-    data_conditioned_continuous_time_deterministic_l63, num_samples
-):  # noqa: F811
+    data_conditioned_continuous_time_deterministic_l63,  # noqa: F811
+    num_samples,
+):
     (
         data_conditioned_model,
         true_params,
@@ -57,7 +58,9 @@ def test_mcmc_inference(
     assert not jnp.isinf(posterior_rho).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        az.plot_posterior(posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item())
+        az.plot_posterior(
+            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+        )
         plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
         plt.close()
 
