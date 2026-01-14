@@ -32,6 +32,8 @@ class DiscreteTimeUnroller(BaseUnroller):
         obs_times = obs_traj.times
         if obs_times is None:
             return
+        if isinstance(obs_traj.values, dict):
+            raise ValueError("obs_traj.values must be an Array or None, not a dict")
         obs_values = obs_traj.values
 
         T = len(obs_times)
