@@ -11,8 +11,6 @@ from dsx.utils import dsx_to_cd_dynamax
 from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
-from numpyro.contrib.control_flow import scan as nscan
-import diffrax as dfx
 
 
 @dataclasses.dataclass
@@ -37,9 +35,9 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
     def add_log_factors(
         self,
+        name: str,
         dynamics: DynamicalModel,
         context: Context,
-        name: Optional[str] = "EnKF",
     ):
         # Pull observed trajectory from context
         obs_traj = context.observations
@@ -108,9 +106,9 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
     def add_log_factors(
         self,
+        name: str,
         dynamics: DynamicalModel,
         context: Context,
-        name: Optional[str] = "hmm",
     ):
         obs = context.observations
         if obs.times is None or obs.values is None:
@@ -147,133 +145,3 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 f"{name}_filtered_states",
                 jnp.exp(log_filt_seq),  # (T, K)
             )
-
-
-@dataclasses.dataclass
-class ModelUnroller(BaseCDDynamaxLogFactorAdder):
-    """Assume we have ic, transition, and observation distributions,
-    as well as (time_index, observation) pairs in the context.
-
-    Simply unroll the model and add obs=data as you would in numpyro.
-
-    This does not explicitly add logfactors; it let's numpyro do it automatically.
-    Instead, it just unrolls the model and adds observed sites
-    (which numpyro uses to compute logfactors).
-    """
-
-    def add_log_factors(
-        self,
-        dynamics: DynamicalModel,
-        context: Context,
-        name: Optional[str] = "EnKF",
-    ):
-        # Pull observed trajectory from context
-        obs_traj = context.observations
-        if obs_traj.times is None or obs_traj.values is None:
-            # No observations → nothing to factor
-            return
-
-        obs_times = obs_traj.times  # shape (T)
-        if isinstance(obs_traj.values, dict):
-            raise ValueError("obs_traj.values must be an Array, not a dict")
-        obs_values = obs_traj.values  # shape (T, emission_dim)
-
-        T = len(obs_times)
-
-        # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
-
-        # sample initial observation
-        numpyro.sample(
-            "y_0",
-            dynamics.observation_model(x=x_prev, u=None, t=obs_times[0]),
-            obs=obs_values[0],
-        )
-
-        def _step(x_prev, t_idx):
-            t = obs_times[t_idx]
-            # Sample next state
-            x_t = numpyro.sample(
-                f"x_{t_idx + 1}", dynamics.state_evolution(x=x_prev, u=None, t=t)
-            )
-
-            # Sample observation
-            numpyro.sample(
-                f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
-                obs=obs_values[t_idx + 1],
-            )
-            return x_t, None
-
-        nscan(_step, x_prev, jnp.arange(T - 1))
-
-
-@dataclasses.dataclass
-class ODEUnroller(BaseCDDynamaxLogFactorAdder):
-    """Assume we have ic, transition, and observation distributions,
-    as well as (time_index, observation) pairs in the context.
-
-    Simply unroll the model and add obs=data as you would in numpyro.
-
-    This does not add logfactors, just unrolls the model and adds observed sites.
-    """
-
-    solver: dfx.AbstractSolver = dfx.Heun()
-    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint()
-    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
-    dt0: float = 0.01
-    max_steps: int = 10_000
-
-    def add_log_factors(
-        self,
-        dynamics: DynamicalModel,
-        context: Context,
-        name: Optional[str] = "ODEUnroller",
-    ):
-        # Pull observed trajectory from context
-        obs_traj = context.observations
-        if obs_traj.times is None or obs_traj.values is None:
-            # No observations → nothing to factor
-            return
-
-        obs_times = obs_traj.times  # shape (T)
-        if isinstance(obs_traj.values, dict):
-            raise ValueError("obs_traj.values must be an Array, not a dict")
-        obs_values = obs_traj.values  # shape (T, emission_dim)
-
-        T = len(obs_times)
-
-        # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
-
-        def f(t, y, args):
-            return dynamics.state_evolution.drift(x=y, u=None, t=t)
-
-        # Solve ODE at all observation times using diffrax
-        sol = dfx.diffeqsolve(
-            terms=dfx.ODETerm(f),
-            solver=self.solver,
-            t0=obs_times[0],
-            t1=obs_times[-1],
-            dt0=self.dt0,
-            y0=x_prev,
-            saveat=dfx.SaveAt(ts=obs_times),
-            stepsize_controller=self.stepsize_controller,
-            adjoint=self.adjoint,
-            max_steps=self.max_steps,
-        )
-        x_sol = sol.ys  # shape (T, state_dim) # includes initial state at t0
-
-        # use scan to do this
-        def _step(carry, t_idx):
-            x_t = x_sol[t_idx]
-            t = obs_times[t_idx]
-            # Sample observation
-            numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
-                obs=obs_values[t_idx],
-            )
-            return carry, None
-
-        nscan(_step, None, jnp.arange(T))

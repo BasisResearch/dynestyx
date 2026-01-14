@@ -28,29 +28,40 @@ class Condition(ObjectInterpretation):
         return fwd(name, dynamics, site_ctx)
 
 
-class BaseSolver(ObjectInterpretation):
+class BaseUnroller(ObjectInterpretation):
     @implements(sample_ds)
     def _sample_ds(
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context] = None,
+        context: Context,
     ) -> FunctionOfTime:
-        # Only solve if we have solve-times
-        if context is not None and context.solve.times is not None:
-            self.add_solved_sites(dynamics, context.solve.times, name)
-
+        self.add_solved_sites(name, dynamics, context)
         return fwd(name, dynamics, context)
 
     def add_solved_sites(
         self,
+        name: str,
         dynamics: DynamicalModel,
-        times: Times,
-        name: Optional[str] = None,
+        context: Context,
     ):
+        raise NotImplementedError()
+
+
+class BaseSolver(BaseUnroller):
+    def add_solved_sites(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        context: Context,
+    ):
+        # Only solve if we have solve-times
+        if context is None or context.observations.times is None:
+            return
+
         # Run the solver
         # Make sure this can throw an error if needed? I think it is not.
-        new_sites = self.solve(times, dynamics)
+        new_sites = self.solve(context.observations.times, dynamics)
 
         # Add the results from the solver as deterministic sites
         # solve() always returns Dict[str, Array], but States is Union for Trajectory.values
@@ -79,10 +90,9 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context],
+        context: Context,
     ) -> FunctionOfTime:
-        if context is not None:
-            self.add_log_factors(dynamics, context, name)
+        self.add_log_factors(name, dynamics, context)
 
         # Forward unchanged so downstream handlers (or default implementation)
         # can still see this op if needed.
@@ -90,9 +100,9 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
 
     def add_log_factors(
         self,
+        name: str,
         dynamics: DynamicalModel,
         context: Context,
-        name: Optional[str] = None,
     ):
         # Inheritors should implement this method.
         raise NotImplementedError()

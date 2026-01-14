@@ -166,7 +166,7 @@ def continuous_time_deterministic_l63_model():
             ),
         ),
         observation_model=LinearGaussianObservation(
-            H=jnp.array([[0.0, 1.0, 0.0]]), R=jnp.array([[1.0**2]])
+            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
         ),
     )
 

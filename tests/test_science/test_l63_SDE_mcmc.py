@@ -5,7 +5,7 @@ import arviz as az
 from numpyro.infer import MCMC, NUTS
 import pytest
 
-from tests.fixtures import data_conditioned_continuous_time_l63  # noqa: F401
+from tests.fixtures import data_conditioned_continuous_time_stochastic_l63  # noqa: F401
 from tests.test_utils import get_output_dir
 
 
@@ -14,12 +14,12 @@ OUTPUT_DIR = get_output_dir("test_l63_SDE_mcmc")
 
 
 @pytest.mark.parametrize("num_samples", [250])
-def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # noqa: F811
+def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_samples):  # noqa: F811
     (
         data_conditioned_model,
         true_params,
         synthetic,
-    ) = data_conditioned_continuous_time_l63
+    ) = data_conditioned_continuous_time_stochastic_l63
 
     obs_times = synthetic["times"]
 

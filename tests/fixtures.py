@@ -6,14 +6,12 @@ from numpyro.infer import Predictive
 from effectful.ops.semantics import handler
 from dsx.handlers import Condition
 from dsx.ops import Trajectory, Context
-from dsx.solvers import DiscreteTimeSolver
-from dsx.filters import FilterBasedHMMMarginalLogLikelihood
-from dsx.filters import ModelUnroller
-from dsx.filters import FilterBasedMarginalLogLikelihood
 from dsx.solvers import SDESolver
-from dsx.solvers import ODESolver
-from dsx.filters import ODEUnroller
-
+from dsx.unrollers import DiscreteTimeUnroller, ODEUnroller
+from dsx.filters import (
+    FilterBasedMarginalLogLikelihood,
+    FilterBasedHMMMarginalLogLikelihood,
+)
 
 from tests.models import (
     discrete_time_l63_model,
@@ -50,10 +48,10 @@ def data_conditioned_hmm():
         exclude_deterministic=False,
     )
 
-    context = Context(solve=Trajectory(times=obs_times))
+    context = Context(observations=Trajectory(times=obs_times))
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSolver(key=data_solver_key)):
+    with handler(DiscreteTimeUnroller()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -98,10 +96,10 @@ def data_conditioned_discrete_time_l63():
         exclude_deterministic=False,
     )
 
-    context = Context(solve=Trajectory(times=obs_times))
+    context = Context(observations=Trajectory(times=obs_times))
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSolver(key=data_solver_key)):
+    with handler(DiscreteTimeUnroller()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -114,7 +112,7 @@ def data_conditioned_discrete_time_l63():
 
     def data_conditioned_model():
         context = Context(observations=observation_trajectory)
-        with handler(ModelUnroller()):
+        with handler(DiscreteTimeUnroller()):
             with handler(Condition(context)):
                 return discrete_time_l63_model()
 
@@ -122,7 +120,7 @@ def data_conditioned_discrete_time_l63():
 
 
 @pytest.fixture
-def data_conditioned_continuous_time_l63():
+def data_conditioned_continuous_time_stochastic_l63():
     rng_key = jr.PRNGKey(0)
 
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
@@ -143,7 +141,7 @@ def data_conditioned_continuous_time_l63():
         exclude_deterministic=False,
     )
 
-    context = Context(solve=Trajectory(times=obs_times))
+    context = Context(observations=Trajectory(times=obs_times))
     with handler(SDESolver(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
@@ -175,7 +173,7 @@ def data_conditioned_continuous_time_deterministic_l63():
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=5.0, step=0.01)
+    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -186,8 +184,8 @@ def data_conditioned_continuous_time_deterministic_l63():
         exclude_deterministic=False,
     )
 
-    context = Context(solve=Trajectory(times=obs_times))
-    with handler(ODESolver(key=data_solver_key)):
+    context = Context(observations=Trajectory(times=obs_times))
+    with handler(ODEUnroller()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
