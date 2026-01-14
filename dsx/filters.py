@@ -28,7 +28,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     filter_dt_average: float = 0.1
     enkf_N_particles: int = 25
     enkf_inflation_delta: float = 0.0
-    diffeqsolve_max_steps: int = 1000
+    diffeqsolve_max_steps: int = 1_000
     diffeqsolve_dt0: float = 0.01
     output_fields = None
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
@@ -222,7 +222,7 @@ class ODEUnroller(BaseCDDynamaxLogFactorAdder):
     adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint()
     stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
     dt0: float = 0.01
-    max_steps: int = 10000
+    max_steps: int = 10_000
 
     def add_log_factors(
         self,
