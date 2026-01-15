@@ -216,7 +216,7 @@ def data_conditioned_continuous_time_deterministic_l63_with_probabilistic_solver
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
+    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.01)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
