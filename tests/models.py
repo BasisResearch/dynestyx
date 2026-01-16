@@ -35,7 +35,7 @@ def hmm_model():
     # -------------------------------------------------
     # State evolution
     # -------------------------------------------------
-    def state_evolution(x, u, t):
+    def state_evolution(x, u, t_now, t_next):
         # x is an integer in {0, ..., K-1}
         return dist.Categorical(probs=A[x])
 
@@ -70,7 +70,7 @@ def discrete_time_l63_model():
             ]
         )
 
-    def state_evolution(x, u, t):
+    def state_evolution(x, u, t_now, t_next):
         loc = x + 0.01 * drift(x)
         cov = 0.01 * jnp.eye(3)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)

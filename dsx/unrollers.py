@@ -49,16 +49,18 @@ class DiscreteTimeUnroller(BaseUnroller):
         )
 
         def _step(x_prev, t_idx):
-            t = obs_times[t_idx]
+            t_now = obs_times[t_idx]
+            t_next = obs_times[t_idx + 1]
             # Sample next state
             x_t = numpyro.sample(
-                f"x_{t_idx + 1}", dynamics.state_evolution(x=x_prev, u=None, t=t)
+                f"x_{t_idx + 1}",
+                dynamics.state_evolution(x=x_prev, u=None, t_now=t_now, t_next=t_next),
             )
 
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
+                dynamics.observation_model(x=x_t, u=None, t=t_next),
                 obs=obs_values[t_idx + 1] if obs_values is not None else None,
             )
             return x_t, (x_t, y_t)

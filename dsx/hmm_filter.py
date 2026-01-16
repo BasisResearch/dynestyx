@@ -31,24 +31,24 @@ def hmm_log_initial_probs(
 
 def hmm_log_transition_matrix(
     dynamics: DynamicalModel,
-    xs_prev: jnp.ndarray,
-    xs_next: jnp.ndarray,
-    t,
+    xs: jnp.ndarray,
+    t_now,
+    t_next,
 ) -> jnp.ndarray:
     """
-    log p(x_t = j | x_{t-1} = i)
+    log p(x_{t_next} = j | x_{t_now} = i)
     shape: (K, K)
     """
 
     def row(x_prev):
-        dist = dynamics.state_evolution(x=x_prev, u=None, t=t)
+        dist = dynamics.state_evolution(x=x_prev, u=None, t_now=t_now, t_next=t_next)
 
         def col(x_next):
             return dist.log_prob(x_next)
 
-        return jax.vmap(col)(xs_next)
+        return jax.vmap(col)(xs)
 
-    return jax.vmap(row)(xs_prev)
+    return jax.vmap(row)(xs)
 
 
 def hmm_log_emission_probs(
@@ -93,9 +93,9 @@ def hmm_log_components(
     )
 
     # Transitions
-    log_A_seq = jax.vmap(lambda t: hmm_log_transition_matrix(dynamics, xs, xs, t))(
-        obs_times[:-1]
-    )
+    log_A_seq = jax.vmap(
+        lambda t_now, t_next: hmm_log_transition_matrix(dynamics, xs, t_now, t_next)
+    )(obs_times[:-1], obs_times[1:])
 
     return log_pi, log_A_seq, log_emit_seq
 
