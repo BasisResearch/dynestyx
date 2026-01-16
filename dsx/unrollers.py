@@ -31,7 +31,7 @@ class DiscreteTimeUnroller(BaseUnroller):
         obs_traj = context.observations
         obs_times = obs_traj.times
         if obs_times is None:
-            return
+            raise ValueError("obs_times must be provided, but got None")
         if isinstance(obs_traj.values, dict):
             raise ValueError("obs_traj.values must be an Array or None, not a dict")
         obs_values = obs_traj.values
@@ -114,7 +114,9 @@ class ODEUnroller(BaseUnroller):
         obs_times = obs_traj.times
         obs_values = obs_traj.values
         if obs_times is None:
-            return
+            raise ValueError("obs_times must be provided, but got None")
+        if isinstance(obs_values, dict):
+            raise ValueError("obs_values must be an Array or None, not a dict")
         T = len(obs_times)
 
         # Sample initial state
