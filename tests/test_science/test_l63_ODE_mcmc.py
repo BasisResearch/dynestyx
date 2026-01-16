@@ -5,21 +5,24 @@ import arviz as az
 from numpyro.infer import MCMC, NUTS
 import pytest
 
-from tests.fixtures import data_conditioned_continuous_time_l63  # noqa: F401
+from tests.fixtures import data_conditioned_continuous_time_deterministic_l63  # noqa: F401
 from tests.test_utils import get_output_dir
 
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_l63_mcmc")
+OUTPUT_DIR = get_output_dir("test_l63_ODE_mcmc")
 
 
 @pytest.mark.parametrize("num_samples", [250])
-def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # noqa: F811
+def test_mcmc_inference(
+    data_conditioned_continuous_time_deterministic_l63,  # noqa: F811
+    num_samples,
+):
     (
         data_conditioned_model,
         true_params,
         synthetic,
-    ) = data_conditioned_continuous_time_l63
+    ) = data_conditioned_continuous_time_deterministic_l63
 
     obs_times = synthetic["times"]
 
@@ -55,7 +58,9 @@ def test_mcmc_inference(data_conditioned_continuous_time_l63, num_samples):  # n
     assert not jnp.isinf(posterior_rho).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        az.plot_posterior(posterior_rho, hdi_prob=0.95)
+        az.plot_posterior(
+            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+        )
         plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
         plt.close()
 

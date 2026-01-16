@@ -7,6 +7,7 @@ import pytest
 
 from tests.test_utils import get_output_dir
 from tests.fixtures import data_conditioned_hmm  # noqa: F401
+from dsx.plotters import plot_hmm_states_and_observations
 
 SAVE_FIG = True
 OUTPUT_DIR = get_output_dir("test_hmm")
@@ -19,22 +20,12 @@ def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811
     obs_times = synthetic["times"]
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        import matplotlib.pyplot as plt
-
-        plt.plot(
-            obs_times.squeeze(0),
-            synthetic["states"].squeeze(0),
-            label="states",
+        plot_hmm_states_and_observations(
+            times=obs_times.squeeze(0),
+            x=synthetic["states"].squeeze(0),
+            y=synthetic["observations"].squeeze(0),
+            save_path=OUTPUT_DIR / "data_generation.png",
         )
-        plt.plot(
-            obs_times.squeeze(0),
-            synthetic["observations"].squeeze(0),
-            label="observations",
-            linestyle="--",
-        )
-        plt.legend()
-        plt.savefig(OUTPUT_DIR / "data_generation.png", dpi=150, bbox_inches="tight")
-        plt.close()
 
     mcmc_key = jr.PRNGKey(0)
     nuts_kernel = NUTS(data_conditioned_model)
@@ -50,7 +41,9 @@ def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811
     assert not jnp.isinf(posterior_sigma).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        az.plot_posterior(posterior_sigma, hdi_prob=0.95)
+        import matplotlib.pyplot as plt
+
+        az.plot_posterior(posterior_sigma, hdi_prob=0.95, ref_val=true_params["sigma"])
         plt.savefig(OUTPUT_DIR / "posterior_sigma.png", dpi=150, bbox_inches="tight")
         plt.close()
 
