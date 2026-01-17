@@ -15,11 +15,16 @@ from tests.fixtures import (
     data_conditioned_continuous_time_deterministic_l63,  # noqa: F401
 )
 
+NUM_SAMPLES = 10
+NUM_WARMUP = 10
+
 
 def test_hmm_mcmc_smoke(data_conditioned_hmm):  # noqa: F811
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = data_conditioned_hmm
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "A" in posterior_samples
@@ -32,7 +37,9 @@ def test_discrete_time_l63_mcmc_smoke(data_conditioned_discrete_time_l63):  # no
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_discrete_time_l63
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
@@ -45,7 +52,9 @@ def test_continuous_time_stochastic_l63_mcmc_smoke(
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_stochastic_l63
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
@@ -58,7 +67,9 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_deterministic_l63
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
