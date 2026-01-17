@@ -37,14 +37,20 @@ def hmm_model():
     # -------------------------------------------------
     def state_evolution(x, u, t_now, t_next):
         # x is an integer in {0, ..., K-1}
-        return dist.Categorical(probs=A[x])
+        # Add light dependence on u: shift transition probabilities slightly
+        u_effect = jnp.sum(u) if u is not None else 0.0
+        probs = A[x] + u_effect * (1.0 / K - A[x])  # Small perturbation toward uniform
+        probs = jnp.clip(probs, 1e-6, 1.0)  # Ensure valid probabilities
+        probs = probs / jnp.sum(probs)  # Renormalize
+        return dist.Categorical(probs=probs)
 
     # -------------------------------------------------
     # Observation model
     # -------------------------------------------------
     def observation_model(x, u, t):
-        # y_t | x_t ~ N(mu[x_t], sigma^2)
-        return dist.Normal(mu[x], sigma)
+        # y_t | x_t ~ N(mu[x_t] + u_effect, sigma^2)
+        u_effect = jnp.sum(u) if u is not None else 0.0
+        return dist.Normal(mu[x] + u_effect, sigma)
 
     dynamics = DynamicalModel(
         state_dim=K,
@@ -71,7 +77,9 @@ def discrete_time_l63_model():
         )
 
     def state_evolution(x, u, t_now, t_next):
-        loc = x + 0.01 * drift(x)
+        # Add light dependence on u: add small control term to drift
+        u_effect = 10 * u if u is not None else jnp.zeros(3)
+        loc = x + 0.01 * (drift(x) + u_effect)
         cov = 0.01 * jnp.eye(3)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
@@ -121,7 +129,8 @@ def continuous_time_stochastic_l63_model():
                     x[0] * (rho - x[2]) - x[1],
                     x[0] * x[1] - (8.0 / 3.0) * x[2],
                 ]
-            ),
+            )
+            + (10 * u if u is not None else jnp.zeros(3)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
             diffusion_covariance=lambda x, u, t: jnp.eye(3),
         ),
@@ -163,7 +172,8 @@ def continuous_time_deterministic_l63_model():
                     x[0] * (rho - x[2]) - x[1],
                     x[0] * x[1] - (8.0 / 3.0) * x[2],
                 ]
-            ),
+            )
+            + (10 * u if u is not None else jnp.zeros(3)),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])

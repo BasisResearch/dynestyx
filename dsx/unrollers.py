@@ -36,31 +36,57 @@ class DiscreteTimeUnroller(BaseUnroller):
             raise ValueError("obs_traj.values must be an Array or None, not a dict")
         obs_values = obs_traj.values
 
+        # Pull control trajectory from context
+        # Only validate controls if they actually have times
+        # If controls is a Trajectory with times=None, treat it as no controls
+        ctrl_traj = context.controls
+        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
+        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
+
+        # Validate controls are Array (not dict) if provided
+        if isinstance(ctrl_values, dict):
+            raise ValueError("ctrl_values must be an Array or None, not a dict")
+
+        # If controls are provided (have times), verify that control times match observation times
+        if ctrl_times is not None:
+            # Check lengths match (concrete check, safe in traced context)
+            if len(ctrl_times) != len(obs_times):
+                raise ValueError(
+                    f"Control times length ({len(ctrl_times)}) must match "
+                    f"observation times length ({len(obs_times)})"
+                )
+            # Note: Full equality check would require jnp.array_equal which creates
+            # traced booleans. We trust that if lengths match, times match (validated
+            # at fixture/context creation time).
+
         T = len(obs_times)
 
         # Sample initial state
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
         # sample initial observation
+        u_0 = ctrl_values[0] if ctrl_values is not None else None
         y_0 = numpyro.sample(
             "y_0",
-            dynamics.observation_model(x=x_prev, u=None, t=obs_times[0]),
+            dynamics.observation_model(x=x_prev, u=u_0, t=obs_times[0]),
             obs=obs_values[0] if obs_values is not None else None,
         )
 
         def _step(x_prev, t_idx):
             t_now = obs_times[t_idx]
             t_next = obs_times[t_idx + 1]
+            u_now = ctrl_values[t_idx] if ctrl_values is not None else None
+            u_next = ctrl_values[t_idx + 1] if ctrl_values is not None else None
             # Sample next state
             x_t = numpyro.sample(
                 f"x_{t_idx + 1}",
-                dynamics.state_evolution(x=x_prev, u=None, t_now=t_now, t_next=t_next),
+                dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
             )
 
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=None, t=t_next),
+                dynamics.observation_model(x=x_t, u=u_next, t=t_next),
                 obs=obs_values[t_idx + 1] if obs_values is not None else None,
             )
             return x_t, (x_t, y_t)
@@ -119,13 +145,49 @@ class ODEUnroller(BaseUnroller):
             raise ValueError("obs_times must be provided, but got None")
         if isinstance(obs_values, dict):
             raise ValueError("obs_values must be an Array or None, not a dict")
+
+        # Pull control trajectory from context
+        # Only validate controls if they actually have times
+        # If controls is a Trajectory with times=None, treat it as no controls
+        ctrl_traj = context.controls
+        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
+        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
+
+        # Validate controls are Array (not dict) if provided
+        if isinstance(ctrl_values, dict):
+            raise ValueError("ctrl_values must be an Array or None, not a dict")
+
+        # If controls are provided (have times), verify that control times match observation times
+        if ctrl_times is not None:
+            # Check lengths match (concrete check, safe in traced context)
+            if len(ctrl_times) != len(obs_times):
+                raise ValueError(
+                    f"Control times length ({len(ctrl_times)}) must match "
+                    f"observation times length ({len(obs_times)})"
+                )
+            # Note: Full equality check would require jnp.array_equal which creates
+            # traced booleans. We trust that if lengths match, times match (validated
+            # at fixture/context creation time).
+
         T = len(obs_times)
 
         # Sample initial state
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
-        def f(t, y, args):
-            return dynamics.state_evolution.drift(x=y, u=None, t=t)
+        # Create drift function that interpolates controls
+        # For now, use piecewise constant (nearest neighbor) interpolation
+        if ctrl_values is not None:
+            # Create LinearInterpolation for controls using diffrax
+            control_path = dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
+
+            def f(t, y, args):
+                # Evaluate control at time t using interpolation
+                u_t = control_path.evaluate(t)
+                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+        else:
+
+            def f(t, y, args):
+                return dynamics.state_evolution.drift(x=y, u=None, t=t)
 
         # Solve ODE at all observation times using diffrax
         sol = dfx.diffeqsolve(
@@ -146,10 +208,11 @@ class ODEUnroller(BaseUnroller):
         def _step(carry, t_idx):
             x_t = x_sol[t_idx]
             t = obs_times[t_idx]
+            u_t = ctrl_values[t_idx] if ctrl_values is not None else None
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
+                dynamics.observation_model(x=x_t, u=u_t, t=t),
                 obs=obs_values[t_idx] if obs_values is not None else None,
             )
             return carry, y_t

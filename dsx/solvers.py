@@ -1,5 +1,5 @@
 from dsx.handlers import BaseSolver
-from dsx.ops import States
+from dsx.ops import States, Context
 from dsx.dynamical_models import ContinuousTimeStateEvolution
 from dsx.utils import dsx_to_cd_dynamax
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
@@ -30,7 +30,7 @@ class SDESolver(BaseSolver):
             "max_steps": max_steps,
         }
 
-    def solve(self, times, dynamics) -> States:
+    def solve(self, context: Context, dynamics) -> States:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -46,6 +46,20 @@ class SDESolver(BaseSolver):
                 f"cov={dynamics.state_evolution.diffusion_covariance}). "
                 "Use ODESolver for deterministic dynamics."
             )
+
+        # Extract times from context
+        if context.observations is None or context.observations.times is None:
+            raise ValueError("context.observations.times must be provided")
+        times = context.observations.times
+
+        # Extract controls from context if available
+        ctrl_traj = context.controls
+        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
+        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
+
+        # Validate controls are Array (not dict) if provided
+        if isinstance(ctrl_values, dict):
+            raise ValueError("ctrl_values must be an Array or None, not a dict")
 
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
@@ -67,6 +81,7 @@ class SDESolver(BaseSolver):
             key=self.key,
             num_timesteps=len(times),
             t_emissions=times,
+            inputs=ctrl_values,
             transition_type="path",
         )
 
