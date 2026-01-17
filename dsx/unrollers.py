@@ -176,7 +176,7 @@ class ODEUnroller(BaseUnroller):
 
         # Create drift function that interpolates controls
         # For now, use piecewise constant (nearest neighbor) interpolation
-        if ctrl_values is not None:
+        if ctrl_times is not None and ctrl_values is not None:
             # Create LinearInterpolation for controls using diffrax
             control_path = dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
 
