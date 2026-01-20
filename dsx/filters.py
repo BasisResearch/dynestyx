@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-from typing import Optional
+from typing import Optional, TypeAlias
 import dataclasses
 
 from dsx.ops import Context
@@ -12,6 +12,8 @@ from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import numpyro
 from numpyro.contrib.control_flow import scan as nscan
+
+SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 @dataclasses.dataclass
@@ -54,7 +56,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
         if self.filter_type.lower() == "dpf":
-            cd_dynamax_model = ContDiscreteNonlinearSSM(
+            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
                 state_dim=dynamics.state_dim,
                 emission_dim=dynamics.observation_dim,
             )
@@ -110,7 +112,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 "warn": self.warn,
             }
 
-        filtered = cd_dynamax_model.filter(**filter_kwargs)
+        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
         # Add the marginal log likelihood as a numpyro factor
         numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
