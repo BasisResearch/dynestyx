@@ -174,7 +174,7 @@ def data_conditioned_continuous_time_l63_dpf():
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -199,7 +199,7 @@ def data_conditioned_continuous_time_l63_dpf():
 
     def data_conditioned_model():
         context = Context(observations=observation_trajectory)
-        with handler(FilterBasedMarginalLogLikelihood(filter_type="dpf")):
+        with handler(FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)):
             with handler(Condition(context)):
                 return continuous_time_stochastic_l63_model()
 
@@ -310,7 +310,7 @@ def data_conditioned_continuous_time_lingam_dpf():
 
     def data_conditioned_model():
         context = Context(observations=observation_trajectory)
-        with handler(FilterBasedMarginalLogLikelihood(filter_type="dpf")):
+        with handler(FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)):
             with handler(Condition(context)):
                 return continuous_time_lingam_model()
 

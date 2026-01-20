@@ -27,7 +27,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     filter_state_cov_rescaling: float = 1.0
     filter_dt_average: float = 0.1
     dpf_num_particles: int = 100
-    dpf_resampling_type: str = "soft"
+    dpf_resampling_type: str = "stop_gradient"
     enkf_N_particles: int = 25
     enkf_inflation_delta: float = 0.0
     diffeqsolve_max_steps: int = 1_000
