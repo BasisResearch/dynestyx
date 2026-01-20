@@ -1,6 +1,7 @@
 # HMM
 import matplotlib.pyplot as plt
 import numpy as np
+import jax.numpy as jnp
 
 
 def plot_hmm_states_and_observations(
@@ -96,3 +97,81 @@ def plot_hmm_states_and_observations(
         plt.show()
 
     return fig, ax
+
+
+def plot_continuous_states_and_partial_observations(
+    times, x, y, show_fig=False, save_path=None
+):
+    """
+    Plot continuous latent states with partial noisy observations.
+
+    :param times: (T,) Time points
+    :param x: (T, state_dim) Continuous latent states
+    :param y: (T, obs_dim) Observations
+    :param show_fig: Whether to show the figure
+    :param save_path: Optional path to save the figure
+    """
+    times = np.asarray(times)
+    x = np.asarray(jnp.asarray(x))
+    y = np.asarray(jnp.asarray(y))
+
+    T, num_x = x.shape
+    num_y = y.shape[1]
+
+    # Colors
+    state_color = "C0"
+    obs_color = "C2"
+
+    # Figure
+    fig, axes = plt.subplots(
+        num_x, 1, figsize=(10, 2.2 * num_x), sharex=True, constrained_layout=True
+    )
+
+    if num_x == 1:
+        axes = [axes]
+
+    # Plot
+    for i, ax in enumerate(axes):
+        # Latent state
+        is_first_state = i == 0
+        ax.plot(
+            times,
+            x[:, i],
+            color=state_color,
+            lw=2.0,
+            alpha=0.95,
+            label="Latent state" if is_first_state else None,
+        )
+
+        # Observations (assume first num_y states are observed)
+        if i < num_y:
+            is_first_obs = i == 0
+            ax.scatter(
+                times,
+                y[:, i],
+                s=28,
+                facecolors="none",
+                edgecolors=obs_color,
+                linewidth=1.0,
+                alpha=0.7,
+                zorder=3,
+                label="Observation" if is_first_obs else None,
+            )
+
+        ax.set_ylabel(f"x{i + 1}")
+        ax.grid(True, alpha=0.3)
+
+    axes[-1].set_xlabel("Time")
+
+    # Legend
+    axes[0].legend(loc="upper right", frameon=False, ncol=2)
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        plt.close()
+    elif show_fig:
+        plt.show()
+
+    return fig, axes

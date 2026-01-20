@@ -11,7 +11,6 @@ from dsx.utils import dsx_to_cd_dynamax
 from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import numpyro
-from numpyro.contrib.control_flow import scan as nscan
 
 SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -31,7 +30,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     dpf_resampling_type: str = "soft"
     enkf_N_particles: int = 25
     enkf_inflation_delta: float = 0.0
-    diffeqsolve_max_steps: int = 1000
+    diffeqsolve_max_steps: int = 1_000
     diffeqsolve_dt0: float = 0.01
     output_fields = None
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
@@ -40,9 +39,9 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
     def add_log_factors(
         self,
+        name: str,
         dynamics: DynamicalModel,
         context: Context,
-        name: Optional[str] = "EnKF",
     ):
         # Pull observed trajectory from context
         obs_traj = context.observations
@@ -136,9 +135,9 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
     def add_log_factors(
         self,
+        name: str,
         dynamics: DynamicalModel,
         context: Context,
-        name: Optional[str] = "hmm",
     ):
         obs = context.observations
         if obs.times is None or obs.values is None:
@@ -175,62 +174,3 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 f"{name}_filtered_states",
                 jnp.exp(log_filt_seq),  # (T, K)
             )
-
-
-@dataclasses.dataclass
-class ModelUnroller(BaseCDDynamaxLogFactorAdder):
-    """Assume we have ic, transition, and observation distributions,
-    as well as (time_index, observation) pairs in the context.
-
-    Simply unroll the model and add obs=data as you would in numpyro.
-
-    This does not explicitly add logfactors; it let's numpyro do it automatically.
-    Instead, it just unrolls the model and adds observed sites
-    (which numpyro uses to compute logfactors).
-    """
-
-    def add_log_factors(
-        self,
-        dynamics: DynamicalModel,
-        context: Context,
-        name: Optional[str] = "EnKF",
-    ):
-        # Pull observed trajectory from context
-        obs_traj = context.observations
-        if obs_traj.times is None or obs_traj.values is None:
-            # No observations → nothing to factor
-            return
-
-        obs_times = obs_traj.times  # shape (T)
-        if isinstance(obs_traj.values, dict):
-            raise ValueError("obs_traj.values must be an Array, not a dict")
-        obs_values = obs_traj.values  # shape (T, emission_dim)
-
-        T = len(obs_times)
-
-        # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
-
-        # sample initial observation
-        numpyro.sample(
-            "y_0",
-            dynamics.observation_model(x=x_prev, u=None, t=obs_times[0]),
-            obs=obs_values[0],
-        )
-
-        def _step(x_prev, t_idx):
-            t = obs_times[t_idx]
-            # Sample next state
-            x_t = numpyro.sample(
-                f"x_{t_idx + 1}", dynamics.state_evolution(x=x_prev, u=None, t=t)
-            )
-
-            # Sample observation
-            numpyro.sample(
-                f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
-                obs=obs_values[t_idx + 1],
-            )
-            return x_t, None
-
-        nscan(_step, x_prev, jnp.arange(T - 1))

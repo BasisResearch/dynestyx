@@ -166,5 +166,33 @@ def continuous_time_lingam_model():
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
         ),
     )
+    return sample_ds("f", dynamics)
 
+
+def continuous_time_deterministic_l63_model():
+    """Model that samples drift parameter rho and uses it in dynamics (ODE, no diffusion)."""
+    rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
+
+    # Create the dynamical model with sampled rho
+    dynamics = DynamicalModel(
+        state_dim=3,
+        observation_dim=1,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(3), covariance_matrix=2.0**2 * jnp.eye(3)
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.array(
+                [
+                    10.0 * (x[1] - x[0]),
+                    x[0] * (rho - x[2]) - x[1],
+                    x[0] * x[1] - (8.0 / 3.0) * x[2],
+                ]
+            ),
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
+        ),
+    )
+
+    # Return a sampled dynamical model, named "f".
     return sample_ds("f", dynamics)

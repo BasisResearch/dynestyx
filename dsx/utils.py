@@ -33,21 +33,12 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
                     "diffusion_coeff": state_evo.diffusion_coefficient,
                 }
             )
-        else:
-            raise ValueError(
-                "diffusion_coefficient is None; default diffusion_coefficient (e.g., Identity) is not yet handled carefully."
-            )
         if state_evo.diffusion_covariance is not None:
             params.update(
                 {
                     "diffusion_cov": state_evo.diffusion_covariance,
                 }
             )
-        else:
-            raise Warning(
-                "diffusion_covariance is None; defaulting to Identity (via CD-Dynamax defaults)."
-            )
-
     else:
         raise NotImplementedError(
             f"State evolution of type {type(state_evo)} is not supported yet."
