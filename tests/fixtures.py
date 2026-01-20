@@ -199,7 +199,9 @@ def data_conditioned_continuous_time_l63_dpf():
 
     def data_conditioned_model():
         context = Context(observations=observation_trajectory)
-        with handler(FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)):
+        with handler(
+            FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)
+        ):
             with handler(Condition(context)):
                 return continuous_time_stochastic_l63_model()
 
@@ -310,7 +312,9 @@ def data_conditioned_continuous_time_lingam_dpf():
 
     def data_conditioned_model():
         context = Context(observations=observation_trajectory)
-        with handler(FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)):
+        with handler(
+            FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)
+        ):
             with handler(Condition(context)):
                 return continuous_time_lingam_model()
 
