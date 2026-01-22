@@ -59,14 +59,13 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
 
     initial_position = init_params.z
 
-    sgld = blackjax.sgld(grad_estimator)  # , 25)
+    sgld = blackjax.sgld(grad_estimator) 
     position = sgld.init(initial_position)
 
     def schedule_fn(k):
         return 1e-4 * jnp.ones(k.shape)
 
-    num_steps = 500
-    schedule = schedule_fn(jnp.arange(1, num_steps + 1))
+    schedule = schedule_fn(jnp.arange(1, num_samples + 1))
 
     def inference_loop(rng_key, step, initial_position, num_samples, step_sizes):
         position = initial_position
@@ -81,22 +80,23 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         return positions
 
     positions = inference_loop(
-        jax.random.PRNGKey(0), sgld.step, position, num_steps, schedule
+        jax.random.PRNGKey(0), sgld.step, position, num_samples, schedule
     )
-    posterior_samples = {
+    positions = {
         k: jnp.stack([positions[i][k] for i in range(len(positions))])
         for k in positions[0].keys()
     }
+    posterior_samples = postprocess_fn()({k: v[None, ...] for k, v in positions.items()})
 
     assert "rho" in posterior_samples
     posterior_rho = posterior_samples["rho"]
-    assert len(posterior_rho) == num_samples
+    assert posterior_samples["rho"].size == num_samples
     assert not jnp.isnan(posterior_rho).any()
     assert not jnp.isinf(posterior_rho).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
         az.plot_posterior(
-            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+            posterior_rho[:, 100:], hdi_prob=0.95, ref_val=true_params["rho"].item()
         )
         plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
         plt.close()
