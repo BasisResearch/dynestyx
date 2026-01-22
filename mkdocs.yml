@@ -2,7 +2,7 @@
 site_name: dynestyx documentation
 site_description: "Documentation for dynestyx"
 site_author: "Basis Research Institute"
-#site_url: 'https://www.andre601.ch/mkdocs-template' # Uncomment to set a canonical URL
+site_url: "https://basisresearch.github.io/dynestyx/"
 
 copyright: |
   &copy; Basis Research Institute
