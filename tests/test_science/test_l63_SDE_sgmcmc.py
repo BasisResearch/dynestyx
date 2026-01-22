@@ -59,7 +59,7 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
 
     initial_position = init_params.z
 
-    sgld = blackjax.sgld(grad_estimator) 
+    sgld = blackjax.sgld(grad_estimator)
     position = sgld.init(initial_position)
 
     def schedule_fn(k):
@@ -86,7 +86,9 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         k: jnp.stack([positions[i][k] for i in range(len(positions))])
         for k in positions[0].keys()
     }
-    posterior_samples = postprocess_fn()({k: v[None, ...] for k, v in positions.items()})
+    posterior_samples = postprocess_fn()(
+        {k: v[None, ...] for k, v in positions.items()}
+    )
 
     assert "rho" in posterior_samples
     posterior_rho = posterior_samples["rho"]
