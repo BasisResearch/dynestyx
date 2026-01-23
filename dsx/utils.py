@@ -110,21 +110,35 @@ def _get_controls(
     # If controls is a Trajectory with times=None, treat it as no controls
     ctrl_traj = context.controls
     ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-    ctrl_values = ctrl_traj.values if ctrl_times is not None else None
 
-    # If controls are provided (have times), verify that control times match observation times
-    if ctrl_times is not None:
-        # Check lengths match (concrete check, safe in traced context)
-        if len(ctrl_times) != len(obs_times):
+    if ctrl_times is None:
+        if ctrl_traj.values is not None:
             raise ValueError(
-                f"Control times length ({len(ctrl_times)}) must match "
-                f"observation times length ({len(obs_times)})"
+                "ctrl_traj.values is not None, but ctrl_times is None. This is likely a bug in the context creation."
             )
-        # Note: Full equality check would require jnp.array_equal which creates
-        # traced booleans. We trust that if lengths match, times match (validated
-        # at fixture/context creation time).
-        if isinstance(ctrl_values, dict):
-            raise ValueError("ctrl_values must be an Array or None, not a dict")
+        # No controls provided
+        return None, None
+    elif ctrl_traj.values is None:
+        raise ValueError(
+            "ctrl_traj.values is None, but ctrl_times is not None. This is likely a bug in the context creation."
+        )
+
+    # Check lengths match (concrete check, safe in traced context)
+    if len(ctrl_times) != len(obs_times):
+        raise ValueError(
+            f"Control times length ({len(ctrl_times)}) must match "
+            f"observation times length ({len(obs_times)})"
+        )
+    # Note: Full equality check would require jnp.array_equal which creates
+    # traced booleans. We trust that if lengths match, times match (validated
+    # at fixture/context creation time).
+
+    # Controls are provided (have times), extract and validate
+    ctrl_values = ctrl_traj.values
+
+    # Validate ctrl_values is not a dict
+    if isinstance(ctrl_values, dict):
+        raise ValueError("ctrl_values must be an Array or None, not a dict")
 
     return ctrl_times, ctrl_values
 
