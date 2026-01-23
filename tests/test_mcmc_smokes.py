@@ -13,6 +13,7 @@ from tests.fixtures import (
     data_conditioned_discrete_time_l63,  # noqa: F401
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F401
     data_conditioned_continuous_time_deterministic_l63,  # noqa: F401
+    data_conditioned_continuous_time_linear_sde,  # noqa: F401
 )
 
 NUM_SAMPLES = 10
@@ -73,3 +74,21 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+
+
+def test_continuous_time_linear_sde_mcmc_smoke(
+    data_conditioned_continuous_time_linear_sde,  # noqa: F811
+):
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, synthetic, _ = (
+        data_conditioned_continuous_time_linear_sde
+    )
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "A" in posterior_samples
+    assert "B" in posterior_samples
+    assert "L" in posterior_samples
+    assert "sigma_observation" in posterior_samples

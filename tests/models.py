@@ -182,3 +182,42 @@ def continuous_time_deterministic_l63_model():
 
     # Return a sampled dynamical model, named "f".
     return sample_ds("f", dynamics)
+
+
+def continuous_time_linear_sde_model():
+    """Linear SDE model: dx = (Ax + Bu) dt + LdW_t
+
+    y_t = Hx_t + e_t, e_t ~ N(0, R)
+    
+    2D linear system with linear observation model.
+    """
+    
+    state_dim = 2
+    observation_dim = 2
+    control_dim = 1
+    # Sample A matrix entries independently
+    A = numpyro.sample("A", dist.Uniform(-10.0, 10.0).expand([state_dim, state_dim]))
+    B = numpyro.sample("B", dist.Uniform(-10.0, 10.0).expand([state_dim, control_dim]))
+    L = numpyro.sample("L", dist.Uniform(-10.0, 10.0).expand([state_dim, state_dim]))
+    sigma_observation = numpyro.sample("sigma_observation", dist.Uniform(0.1, 0.5))  # noise scale
+    R = sigma_observation**2 * jnp.eye(observation_dim)
+    H = jnp.eye(observation_dim, state_dim)
+
+    # Create the dynamical model
+    dynamics = DynamicalModel(
+        state_dim=state_dim,
+        observation_dim=observation_dim,
+        control_dim=control_dim,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(state_dim), covariance_matrix=jnp.eye(state_dim)
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: A @ x + B @ u if u is not None else A @ x,
+            diffusion_coefficient=lambda x, u, t: L,
+            diffusion_covariance=lambda x, u, t: jnp.eye(state_dim)
+        ),
+        observation_model=LinearGaussianObservation(H=H, R=R),
+    )
+
+    # Return a sampled dynamical model, named "f".
+    return sample_ds("f", dynamics)
