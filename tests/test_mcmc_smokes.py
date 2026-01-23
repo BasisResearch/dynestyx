@@ -95,7 +95,7 @@ def test_continuous_time_lingam_mcmc_smoke(
     data_conditioned_continuous_time_lingam,  # noqa: F811
 ):
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic = (
+    data_conditioned_model, true_params, synthetic, use_controls = (
         data_conditioned_continuous_time_lingam
     )
     mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
@@ -108,7 +108,7 @@ def test_continuous_time_lingam_dpf_mcmc_smoke(
     data_conditioned_continuous_time_lingam_dpf,  # noqa: F811
 ):
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic = (
+    data_conditioned_model, true_params, synthetic, use_controls = (
         data_conditioned_continuous_time_lingam_dpf
     )
     mcmc = MCMC(BarkerMH(data_conditioned_model), num_samples=10, num_warmup=10)

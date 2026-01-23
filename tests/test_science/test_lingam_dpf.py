@@ -10,14 +10,20 @@ from tests.test_utils import get_output_dir
 
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_lingam_dpf")
 
 
 @pytest.mark.parametrize("num_samples", [250])
 def test_mcmc_inference(data_conditioned_continuous_time_lingam_dpf, num_samples):  # noqa: F811
-    data_conditioned_model, true_params, synthetic = (
-        data_conditioned_continuous_time_lingam_dpf
-    )
+    (
+        data_conditioned_model,
+        true_params,
+        synthetic,
+        use_controls,
+    ) = data_conditioned_continuous_time_lingam_dpf
+
+    output_dir_name = "test_lingam_dpf" + ("_controlled" if use_controls else "")
+    OUTPUT_DIR = get_output_dir(output_dir_name)
+
     obs_times = synthetic["times"]
 
     if SAVE_FIG and OUTPUT_DIR is not None:
