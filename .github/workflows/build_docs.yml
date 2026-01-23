@@ -2,6 +2,8 @@ name: Build docs
 
 on:
   push:
+    branches: [main]
+  pull_request: # for temp test, will revert
     branches:
       - main
 
