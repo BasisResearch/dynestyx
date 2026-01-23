@@ -127,3 +127,17 @@ def _get_controls(
             raise ValueError("ctrl_values must be an Array or None, not a dict")
 
     return ctrl_times, ctrl_values
+
+
+def _get_val_or_None(values: Optional[Array], t_idx: int) -> Optional[Array]:
+    """
+    Safely get value at index t_idx, returning None if values is None.
+
+    Args:
+        values: Values array or None
+        t_idx: Time index to access
+
+    Returns:
+        Value at index t_idx, or None if values is None
+    """
+    return values[t_idx] if values is not None else None

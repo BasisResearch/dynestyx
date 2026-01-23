@@ -4,7 +4,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseUnroller
 from dsx.dynamical_models import DynamicalModel
-from dsx.utils import _get_controls
+from dsx.utils import _get_controls, _get_val_or_None
 import numpyro
 from numpyro.contrib.control_flow import scan as nscan
 import diffrax as dfx
@@ -46,18 +46,18 @@ class DiscreteTimeUnroller(BaseUnroller):
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
         # sample initial observation
-        u_0 = ctrl_values[0] if ctrl_values is not None else None
+        u_0 = _get_val_or_None(ctrl_values, 0)
         y_0 = numpyro.sample(
             "y_0",
             dynamics.observation_model(x=x_prev, u=u_0, t=obs_times[0]),
-            obs=obs_values[0] if obs_values is not None else None,
+            obs=_get_val_or_None(obs_values, 0),
         )
 
         def _step(x_prev, t_idx):
             t_now = obs_times[t_idx]
             t_next = obs_times[t_idx + 1]
-            u_now = ctrl_values[t_idx] if ctrl_values is not None else None
-            u_next = ctrl_values[t_idx + 1] if ctrl_values is not None else None
+            u_now = _get_val_or_None(ctrl_values, t_idx)
+            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
             # Sample next state
             x_t = numpyro.sample(
                 f"x_{t_idx + 1}",
@@ -68,7 +68,7 @@ class DiscreteTimeUnroller(BaseUnroller):
             y_t = numpyro.sample(
                 f"y_{t_idx + 1}",
                 dynamics.observation_model(x=x_t, u=u_next, t=t_next),
-                obs=obs_values[t_idx + 1] if obs_values is not None else None,
+                obs=_get_val_or_None(obs_values, t_idx + 1),
             )
             return x_t, (x_t, y_t)
 
@@ -169,12 +169,12 @@ class ODEUnroller(BaseUnroller):
         def _step(carry, t_idx):
             x_t = x_sol[t_idx]
             t = obs_times[t_idx]
-            u_t = ctrl_values[t_idx] if ctrl_values is not None else None
+            u_t = _get_val_or_None(ctrl_values, t_idx)
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx}",
                 dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=obs_values[t_idx] if obs_values is not None else None,
+                obs=_get_val_or_None(obs_values, t_idx),
             )
             return carry, y_t
 
