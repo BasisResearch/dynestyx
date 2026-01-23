@@ -26,13 +26,13 @@ jobs:
 
       - name: Build docs
         run: |
-          mkdocs build
+          source .venv/bin/activate && mkdocs build
 
       - name: Upload static files as artifact
         id: deployment
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build_outputs_folder/
+          path: site/
 
   # Deployment job
   deploy:
