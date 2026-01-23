@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def get_output_dir(test_name: str) -> Path:
-    """Create and return an output directory for a test within the master output directory.
+    """Create and return an output directory for a test within the master output directory stored in environment variable $TEST_OUTPUT_MASTER_DIR.
 
     Args:
         test_name: Name of the test (e.g., "test_discreteTime_generic")
