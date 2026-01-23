@@ -215,11 +215,15 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     return data_conditioned_model, true_params, synthetic, use_controls
 
 
-@pytest.fixture
-def data_conditioned_continuous_time_l63_dpf():
+@pytest.fixture(params=[False, True])
+def data_conditioned_continuous_time_l63_dpf(request):
+    use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
 
     true_rho = 28.0
     # ---------------------------------------------------------
@@ -227,6 +231,13 @@ def data_conditioned_continuous_time_l63_dpf():
     # ---------------------------------------------------------
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -237,7 +248,10 @@ def data_conditioned_continuous_time_l63_dpf():
         exclude_deterministic=False,
     )
 
-    context = Context(observations=Trajectory(times=obs_times))
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
     with handler(SDESolver(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
@@ -250,7 +264,10 @@ def data_conditioned_continuous_time_l63_dpf():
     observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(observations=observation_trajectory)
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
         with handler(
             FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)
         ):
