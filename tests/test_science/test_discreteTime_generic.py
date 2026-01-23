@@ -10,12 +10,19 @@ import pytest
 from tests.fixtures import data_conditioned_discrete_time_l63  # noqa: F401
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_discreteTime_generic")
 
 
 @pytest.mark.parametrize("num_samples", [250])
 def test_mcmc_inference(data_conditioned_discrete_time_l63, num_samples):  # noqa: F811
-    data_conditioned_model, true_params, synthetic = data_conditioned_discrete_time_l63
+    data_conditioned_model, true_params, synthetic, use_controls = (
+        data_conditioned_discrete_time_l63
+    )
+
+    # Set output dir based on whether controls are used
+    output_dir_name = "test_discreteTime_generic" + (
+        "_controlled" if use_controls else ""
+    )
+    OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]
 

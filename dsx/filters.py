@@ -7,7 +7,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import DynamicalModel
-from dsx.utils import dsx_to_cd_dynamax
+from dsx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
 from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import numpyro
@@ -54,16 +54,23 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             raise ValueError("obs_traj.values must be an Array, not a dict")
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
+
+        # Validate that control_dim is set when controls are present
+        _validate_control_dim(dynamics, ctrl_values)
+
         if self.filter_type.lower() == "dpf":
             cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
                 state_dim=dynamics.state_dim,
                 emission_dim=dynamics.observation_dim,
+                input_dim=dynamics.control_dim,
             )
         else:
-            # Instantiate the CD-Dynamax model
             cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
                 state_dim=dynamics.state_dim,
                 emission_dim=dynamics.observation_dim,
+                input_dim=dynamics.control_dim,
             )
 
         # Generate a CD-Dynamax-compatible parameter dict using the chosen model
@@ -86,6 +93,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 "diffeqsolve_kwargs": self.diffeqsolve_kwargs,
                 "output_fields": self.output_fields,
                 "warn": self.warn,
+                "inputs": ctrl_values,
             }
             if self.extra_filter_kwargs:
                 filter_kwargs.update(self.extra_filter_kwargs)
@@ -109,6 +117,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 "extra_filter_kwargs": self.extra_filter_kwargs,
                 "output_fields": self.output_fields,
                 "warn": self.warn,
+                "inputs": ctrl_values,
             }
 
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
@@ -146,10 +155,15 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         if isinstance(obs.values, dict):
             raise ValueError("obs.values must be an Array, not a dict")
         obs_values = obs.values
+
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs.times)
+
         log_pi, log_A_seq, log_emit_seq = hmm_log_components(
             dynamics,
             obs.times,
             obs_values,
+            ctrl_values=ctrl_values,
         )
 
         loglik, log_filt_seq = hmm_filter(

@@ -7,7 +7,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from effectful.ops.semantics import fwd
 import numpyro
 
-from dsx.ops import sample_ds, Times, FunctionOfTime, Context, States
+from dsx.ops import sample_ds, FunctionOfTime, Context, States
 from dsx.dynamical_models import DynamicalModel
 
 
@@ -61,7 +61,7 @@ class BaseSolver(BaseUnroller):
 
         # Run the solver
         # Make sure this can throw an error if needed? I think it is not.
-        new_sites = self.solve(context.observations.times, dynamics)
+        new_sites = self.solve(context, dynamics)
 
         # Add the results from the solver as deterministic sites
         # solve() always returns Dict[str, Array], but States is Union for Trajectory.values
@@ -73,10 +73,10 @@ class BaseSolver(BaseUnroller):
             # If it's just an array (shouldn't happen for solve() but handle it)
             numpyro.deterministic("value", new_sites)
 
-    def solve(self, times: Times, dynamics: DynamicalModel) -> States:
+    def solve(self, context: Context, dynamics: DynamicalModel) -> States:
         """
         Args:
-            times (Times): Array of times at which to solve the dynamics.
+            context (Context): Context containing times and potentially controls.
             dynamics (DynamicalModel): The dynamical model to solve.
         Returns:
             dict[str, Trajectory]: A dictionary mapping site names to solved trajectories.

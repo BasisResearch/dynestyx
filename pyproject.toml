@@ -16,6 +16,10 @@ dependencies = [
     "pytest>=9.0.1",
     "arviz>=0.18.0",
     "blackjax>=1.3",
+    "pytkdocs-tweaks>=0.0.8",
+    "mkdocstrings[python]>=1.0.1",
+    "jupyter>=1.1.1",
+    "ipywidgets>=8.1.8",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -23,14 +27,17 @@ packages = ["dsx"]
 
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
-cd-dynamax = { git = "https://github.com/DanWaxman/cd_dynamax.git", rev = "dw-dpf" }
+cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax", rev = "dev-numpyro-api" }
 
 [dependency-groups]
 dev = [
+    "mkdocs-material>=9.7.1",
+    "mkdocs>=1.6.1",
     "mypy>=1.19.1",
     "pytest>=9.0.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.11",
+    "mkdocs-jupyter>=0.25.1",
 ]
 
 

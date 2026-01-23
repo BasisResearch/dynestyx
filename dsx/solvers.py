@@ -1,7 +1,7 @@
 from dsx.handlers import BaseSolver
-from dsx.ops import States
+from dsx.ops import States, Context
 from dsx.dynamical_models import ContinuousTimeStateEvolution
-from dsx.utils import dsx_to_cd_dynamax
+from dsx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
 from jax import Array
@@ -30,7 +30,7 @@ class SDESolver(BaseSolver):
             "max_steps": max_steps,
         }
 
-    def solve(self, times, dynamics) -> States:
+    def solve(self, context: Context, dynamics) -> States:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESolver only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -47,6 +47,17 @@ class SDESolver(BaseSolver):
                 "Use ODESolver for deterministic dynamics."
             )
 
+        # Extract times from context
+        if context.observations is None or context.observations.times is None:
+            raise ValueError("context.observations.times must be provided")
+        times = context.observations.times
+
+        # Extract controls from context if available
+        ctrl_times, ctrl_values = _get_controls(context, times)
+
+        # Validate that control_dim is set when controls are present
+        _validate_control_dim(dynamics, ctrl_values)
+
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
         params = dsx_to_cd_dynamax(dynamics)
@@ -55,6 +66,7 @@ class SDESolver(BaseSolver):
         cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
             state_dim=dynamics.state_dim,
             emission_dim=dynamics.observation_dim,
+            input_dim=dynamics.control_dim,
             diffeqsolve_settings=self.diffeqsolve_settings,
         )
 
@@ -67,6 +79,7 @@ class SDESolver(BaseSolver):
             key=self.key,
             num_timesteps=len(times),
             t_emissions=times,
+            inputs=ctrl_values,
             transition_type="path",
         )
 
