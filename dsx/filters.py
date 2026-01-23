@@ -7,7 +7,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import DynamicalModel
-from dsx.utils import dsx_to_cd_dynamax
+from dsx.utils import dsx_to_cd_dynamax, _get_controls
 from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
@@ -51,25 +51,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
         # Pull control trajectory from context and validate
-        # Only validate controls if they actually have times
-        # If controls is a Trajectory with times=None, treat it as no controls
-        ctrl_traj = context.controls
-        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-        if ctrl_times is not None:
-            # Check lengths match (concrete check, safe in traced context)
-            if len(ctrl_times) != len(obs_traj.times):
-                raise ValueError(
-                    f"Control times length ({len(ctrl_times)}) must match "
-                    f"observation times length ({len(obs_traj.times)})"
-                )
-            # Note: Full equality check would require jnp.array_equal which creates
-            # traced booleans. We trust that if lengths match, times match (validated
-            # at fixture/context creation time).
-            if isinstance(ctrl_traj.values, dict):
-                raise ValueError("ctrl_values must be an Array or None, not a dict")
-            # Note: CD-Dynamax may not directly support controls in its filter API
-            # Controls would need to be baked into the dynamics drift function
-        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
+        ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
 
         # Generate a CD-Dynamax-compatible parameter dict
         params = dsx_to_cd_dynamax(dynamics)
@@ -140,26 +122,8 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             raise ValueError("obs.values must be an Array, not a dict")
         obs_values = obs.values
 
-        # Pull control trajectory from context
-        # Only validate controls if they actually have times
-        # If controls is a Trajectory with times=None, treat it as no controls
-        ctrl_traj = context.controls
-        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
-
-        # If controls are provided (have times), verify that control times match observation times
-        if ctrl_times is not None:
-            # Check lengths match (concrete check, safe in traced context)
-            if len(ctrl_times) != len(obs.times):
-                raise ValueError(
-                    f"Control times length ({len(ctrl_times)}) must match "
-                    f"observation times length ({len(obs.times)})"
-                )
-            # Note: Full equality check would require jnp.array_equal which creates
-            # traced booleans. We trust that if lengths match, times match (validated
-            # at fixture/context creation time).
-            if isinstance(ctrl_values, dict):
-                raise ValueError("ctrl_values must be an Array or None, not a dict")
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs.times)
 
         log_pi, log_A_seq, log_emit_seq = hmm_log_components(
             dynamics,

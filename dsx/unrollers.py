@@ -4,6 +4,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseUnroller
 from dsx.dynamical_models import DynamicalModel
+from dsx.utils import _get_controls
 import numpyro
 from numpyro.contrib.control_flow import scan as nscan
 import diffrax as dfx
@@ -36,28 +37,8 @@ class DiscreteTimeUnroller(BaseUnroller):
             raise ValueError("obs_traj.values must be an Array or None, not a dict")
         obs_values = obs_traj.values
 
-        # Pull control trajectory from context
-        # Only validate controls if they actually have times
-        # If controls is a Trajectory with times=None, treat it as no controls
-        ctrl_traj = context.controls
-        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
-
-        # Validate controls are Array (not dict) if provided
-        if isinstance(ctrl_values, dict):
-            raise ValueError("ctrl_values must be an Array or None, not a dict")
-
-        # If controls are provided (have times), verify that control times match observation times
-        if ctrl_times is not None:
-            # Check lengths match (concrete check, safe in traced context)
-            if len(ctrl_times) != len(obs_times):
-                raise ValueError(
-                    f"Control times length ({len(ctrl_times)}) must match "
-                    f"observation times length ({len(obs_times)})"
-                )
-            # Note: Full equality check would require jnp.array_equal which creates
-            # traced booleans. We trust that if lengths match, times match (validated
-            # at fixture/context creation time).
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs_times)
 
         T = len(obs_times)
 
@@ -146,28 +127,8 @@ class ODEUnroller(BaseUnroller):
         if isinstance(obs_values, dict):
             raise ValueError("obs_values must be an Array or None, not a dict")
 
-        # Pull control trajectory from context
-        # Only validate controls if they actually have times
-        # If controls is a Trajectory with times=None, treat it as no controls
-        ctrl_traj = context.controls
-        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
-
-        # Validate controls are Array (not dict) if provided
-        if isinstance(ctrl_values, dict):
-            raise ValueError("ctrl_values must be an Array or None, not a dict")
-
-        # If controls are provided (have times), verify that control times match observation times
-        if ctrl_times is not None:
-            # Check lengths match (concrete check, safe in traced context)
-            if len(ctrl_times) != len(obs_times):
-                raise ValueError(
-                    f"Control times length ({len(ctrl_times)}) must match "
-                    f"observation times length ({len(obs_times)})"
-                )
-            # Note: Full equality check would require jnp.array_equal which creates
-            # traced booleans. We trust that if lengths match, times match (validated
-            # at fixture/context creation time).
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs_times)
 
         T = len(obs_times)
 
