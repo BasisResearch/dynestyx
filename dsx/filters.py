@@ -7,7 +7,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import DynamicalModel
-from dsx.utils import dsx_to_cd_dynamax
+from dsx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
 from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
@@ -50,6 +50,12 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             raise ValueError("obs_traj.values must be an Array, not a dict")
         obs_values = obs_traj.values  # shape (T, emission_dim)
 
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
+
+        # Validate that control_dim is set when controls are present
+        _validate_control_dim(dynamics, ctrl_values)
+
         # Generate a CD-Dynamax-compatible parameter dict
         params = dsx_to_cd_dynamax(dynamics)
 
@@ -57,6 +63,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
             state_dim=dynamics.state_dim,
             emission_dim=dynamics.observation_dim,
+            input_dim=dynamics.control_dim,
         )
 
         # Choose a key
@@ -67,6 +74,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             params=params,
             emissions=obs_values,
             t_emissions=obs_times,
+            inputs=ctrl_values,
             key=key,
             filter_type=self.filter_type,
             filter_state_order=self.filter_state_order,
@@ -117,10 +125,15 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         if isinstance(obs.values, dict):
             raise ValueError("obs.values must be an Array, not a dict")
         obs_values = obs.values
+
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs.times)
+
         log_pi, log_A_seq, log_emit_seq = hmm_log_components(
             dynamics,
             obs.times,
             obs_values,
+            ctrl_values=ctrl_values,
         )
 
         loglik, log_filt_seq = hmm_filter(

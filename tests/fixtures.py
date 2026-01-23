@@ -22,11 +22,15 @@ from tests.models import (
 import pytest
 
 
-@pytest.fixture
-def data_conditioned_hmm():
+@pytest.fixture(params=[False, True])
+def data_conditioned_hmm(request):
+    use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
 
     # Set true parameters for synthetic data generation
     true_A = jnp.array([[0.7, 0.2, 0.1], [0.3, 0.4, 0.3], [0.2, 0.3, 0.5]])
@@ -39,6 +43,14 @@ def data_conditioned_hmm():
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
 
+    # Initialize control trajectory (empty if not using controls)
+    control_trajectory = Trajectory()
+    if use_controls:
+        # Generate controls and set trajectory
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
     # Generate synthetic data
     true_params = {"A": true_A, "mu": true_mu, "sigma": true_sigma}
     predictive = Predictive(
@@ -48,7 +60,10 @@ def data_conditioned_hmm():
         exclude_deterministic=False,
     )
 
-    context = Context(observations=Trajectory(times=obs_times))
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
     with handler(DiscreteTimeUnroller()):
@@ -64,19 +79,26 @@ def data_conditioned_hmm():
     observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(observations=observation_trajectory)
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
         with handler(FilterBasedHMMMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return hmm_model()
 
-    return data_conditioned_model, true_params, synthetic
+    return data_conditioned_model, true_params, synthetic, use_controls
 
 
-@pytest.fixture
-def data_conditioned_discrete_time_l63():
+@pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_l63(request):
+    use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
 
     # Set true parameters for synthetic data generation
     true_rho = 28.0
@@ -87,6 +109,13 @@ def data_conditioned_discrete_time_l63():
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -96,7 +125,10 @@ def data_conditioned_discrete_time_l63():
         exclude_deterministic=False,
     )
 
-    context = Context(observations=Trajectory(times=obs_times))
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
     with handler(DiscreteTimeUnroller()):
@@ -111,19 +143,26 @@ def data_conditioned_discrete_time_l63():
     observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(observations=observation_trajectory)
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
         with handler(DiscreteTimeUnroller()):
             with handler(Condition(context)):
                 return discrete_time_l63_model()
 
-    return data_conditioned_model, true_params, synthetic
+    return data_conditioned_model, true_params, synthetic, use_controls
 
 
-@pytest.fixture
-def data_conditioned_continuous_time_stochastic_l63():
+@pytest.fixture(params=[False, True])
+def data_conditioned_continuous_time_stochastic_l63(request):
+    use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
 
     true_rho = 28.0
     # ---------------------------------------------------------
@@ -131,6 +170,13 @@ def data_conditioned_continuous_time_stochastic_l63():
     # ---------------------------------------------------------
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -141,7 +187,10 @@ def data_conditioned_continuous_time_stochastic_l63():
         exclude_deterministic=False,
     )
 
-    context = Context(observations=Trajectory(times=obs_times))
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
     with handler(SDESolver(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
@@ -154,19 +203,26 @@ def data_conditioned_continuous_time_stochastic_l63():
     observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(observations=observation_trajectory)
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
         with handler(FilterBasedMarginalLogLikelihood()):
             with handler(Condition(context)):
                 return continuous_time_stochastic_l63_model()
 
-    return data_conditioned_model, true_params, synthetic
+    return data_conditioned_model, true_params, synthetic, use_controls
 
 
-@pytest.fixture
-def data_conditioned_continuous_time_deterministic_l63():
+@pytest.fixture(params=[False, True])
+def data_conditioned_continuous_time_deterministic_l63(request):
+    use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
-    data_init_key, data_solver_key, mcmc_key, posterior_pred_key = jr.split(rng_key, 4)
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
 
     true_rho = 28.0
     # ---------------------------------------------------------
@@ -174,6 +230,13 @@ def data_conditioned_continuous_time_deterministic_l63():
     # ---------------------------------------------------------
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -184,7 +247,10 @@ def data_conditioned_continuous_time_deterministic_l63():
         exclude_deterministic=False,
     )
 
-    context = Context(observations=Trajectory(times=obs_times))
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
     with handler(ODEUnroller()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
@@ -197,9 +263,12 @@ def data_conditioned_continuous_time_deterministic_l63():
     observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(observations=observation_trajectory)
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
         with handler(ODEUnroller()):
             with handler(Condition(context)):
                 return continuous_time_deterministic_l63_model()
 
-    return data_conditioned_model, true_params, synthetic
+    return data_conditioned_model, true_params, synthetic, use_controls
