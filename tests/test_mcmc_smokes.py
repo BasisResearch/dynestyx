@@ -6,7 +6,7 @@ ensuring that all MCMC inference pipelines can run with minimal parameters.
 """
 
 import jax.random as jr
-from numpyro.infer import MCMC, NUTS
+from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
     data_conditioned_hmm,  # noqa: F401
@@ -85,7 +85,7 @@ def test_continuous_time_stochastic_l63_dpf_mcmc_smoke(
     data_conditioned_model, true_params, synthetic = (
         data_conditioned_continuous_time_l63_dpf
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(BarkerMH(data_conditioned_model), num_samples=10, num_warmup=10)
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
@@ -111,7 +111,7 @@ def test_continuous_time_lingam_dpf_mcmc_smoke(
     data_conditioned_model, true_params, synthetic = (
         data_conditioned_continuous_time_lingam_dpf
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(BarkerMH(data_conditioned_model), num_samples=10, num_warmup=10)
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
