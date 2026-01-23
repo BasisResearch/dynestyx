@@ -4,6 +4,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseUnroller
 from dsx.dynamical_models import DynamicalModel
+from dsx.utils import _get_controls, _get_val_or_None
 import numpyro
 from numpyro.contrib.control_flow import scan as nscan
 import diffrax as dfx
@@ -36,30 +37,38 @@ class DiscreteTimeUnroller(BaseUnroller):
             raise ValueError("obs_traj.values must be an Array or None, not a dict")
         obs_values = obs_traj.values
 
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs_times)
+
         T = len(obs_times)
 
         # Sample initial state
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
         # sample initial observation
+        u_0 = _get_val_or_None(ctrl_values, 0)
         y_0 = numpyro.sample(
             "y_0",
-            dynamics.observation_model(x=x_prev, u=None, t=obs_times[0]),
-            obs=obs_values[0] if obs_values is not None else None,
+            dynamics.observation_model(x=x_prev, u=u_0, t=obs_times[0]),
+            obs=_get_val_or_None(obs_values, 0),
         )
 
         def _step(x_prev, t_idx):
-            t = obs_times[t_idx]
+            t_now = obs_times[t_idx]
+            t_next = obs_times[t_idx + 1]
+            u_now = _get_val_or_None(ctrl_values, t_idx)
+            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
             # Sample next state
             x_t = numpyro.sample(
-                f"x_{t_idx + 1}", dynamics.state_evolution(x=x_prev, u=None, t=t)
+                f"x_{t_idx + 1}",
+                dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
             )
 
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
-                obs=obs_values[t_idx + 1] if obs_values is not None else None,
+                dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                obs=_get_val_or_None(obs_values, t_idx + 1),
             )
             return x_t, (x_t, y_t)
 
@@ -117,13 +126,29 @@ class ODEUnroller(BaseUnroller):
             raise ValueError("obs_times must be provided, but got None")
         if isinstance(obs_values, dict):
             raise ValueError("obs_values must be an Array or None, not a dict")
+
+        # Pull control trajectory from context and validate
+        ctrl_times, ctrl_values = _get_controls(context, obs_times)
+
         T = len(obs_times)
 
         # Sample initial state
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
-        def f(t, y, args):
-            return dynamics.state_evolution.drift(x=y, u=None, t=t)
+        # Create drift function that interpolates controls
+        # For now, use piecewise constant (nearest neighbor) interpolation
+        if ctrl_times is not None and ctrl_values is not None:
+            # Create LinearInterpolation for controls using diffrax
+            control_path = dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
+
+            def f(t, y, args):
+                # Evaluate control at time t using interpolation
+                u_t = control_path.evaluate(t)
+                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+        else:
+
+            def f(t, y, args):
+                return dynamics.state_evolution.drift(x=y, u=None, t=t)
 
         # Solve ODE at all observation times using diffrax
         sol = dfx.diffeqsolve(
@@ -144,11 +169,12 @@ class ODEUnroller(BaseUnroller):
         def _step(carry, t_idx):
             x_t = x_sol[t_idx]
             t = obs_times[t_idx]
+            u_t = _get_val_or_None(ctrl_values, t_idx)
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=None, t=t),
-                obs=obs_values[t_idx] if obs_values is not None else None,
+                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                obs=_get_val_or_None(obs_values, t_idx),
             )
             return carry, y_t
 

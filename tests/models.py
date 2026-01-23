@@ -35,20 +35,27 @@ def hmm_model():
     # -------------------------------------------------
     # State evolution
     # -------------------------------------------------
-    def state_evolution(x, u, t):
+    def state_evolution(x, u, t_now, t_next):
         # x is an integer in {0, ..., K-1}
-        return dist.Categorical(probs=A[x])
+        # Add light dependence on u: shift transition probabilities slightly
+        u_effect = jnp.sum(u) if u is not None else 0.0
+        probs = A[x] + u_effect * (1.0 / K - A[x])  # Small perturbation toward uniform
+        probs = jnp.clip(probs, 1e-6, 1.0)  # Ensure valid probabilities
+        probs = probs / jnp.sum(probs)  # Renormalize
+        return dist.Categorical(probs=probs)
 
     # -------------------------------------------------
     # Observation model
     # -------------------------------------------------
     def observation_model(x, u, t):
-        # y_t | x_t ~ N(mu[x_t], sigma^2)
-        return dist.Normal(mu[x], sigma)
+        # y_t | x_t ~ N(mu[x_t] + u_effect, sigma^2)
+        u_effect = jnp.sum(u) if u is not None else 0.0
+        return dist.Normal(mu[x] + u_effect, sigma)
 
     dynamics = DynamicalModel(
         state_dim=K,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=initial_condition,
         state_evolution=state_evolution,
         observation_model=observation_model,
@@ -70,8 +77,10 @@ def discrete_time_l63_model():
             ]
         )
 
-    def state_evolution(x, u, t):
-        loc = x + 0.01 * drift(x)
+    def state_evolution(x, u, t_now, t_next):
+        # Add light dependence on u: add small control term to drift
+        u_effect = 10 * u if u is not None else jnp.zeros(3)
+        loc = x + 0.01 * (drift(x) + u_effect)
         cov = 0.01 * jnp.eye(3)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
@@ -79,6 +88,7 @@ def discrete_time_l63_model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
@@ -111,6 +121,7 @@ def continuous_time_stochastic_l63_model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
@@ -121,7 +132,8 @@ def continuous_time_stochastic_l63_model():
                     x[0] * (rho - x[2]) - x[1],
                     x[0] * x[1] - (8.0 / 3.0) * x[2],
                 ]
-            ),
+            )
+            + (10 * u if u is not None else jnp.zeros(3)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
             diffusion_covariance=lambda x, u, t: jnp.eye(3),
         ),
@@ -177,6 +189,7 @@ def continuous_time_deterministic_l63_model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=2.0**2 * jnp.eye(3)
         ),
@@ -187,7 +200,8 @@ def continuous_time_deterministic_l63_model():
                     x[0] * (rho - x[2]) - x[1],
                     x[0] * x[1] - (8.0 / 3.0) * x[2],
                 ]
-            ),
+            )
+            + (10 * u if u is not None else jnp.zeros(3)),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])

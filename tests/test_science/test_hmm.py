@@ -10,12 +10,15 @@ from tests.fixtures import data_conditioned_hmm  # noqa: F401
 from dsx.plotters import plot_hmm_states_and_observations
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_hmm")
 
 
 @pytest.mark.parametrize("num_samples", [250])
 def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811
-    data_conditioned_model, true_params, synthetic = data_conditioned_hmm
+    data_conditioned_model, true_params, synthetic, use_controls = data_conditioned_hmm
+
+    # Set output dir based on whether controls are used
+    output_dir_name = "test_hmm" + ("_controlled" if use_controls else "")
+    OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]
 
