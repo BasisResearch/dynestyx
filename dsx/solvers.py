@@ -1,7 +1,7 @@
 from dsx.handlers import BaseSolver
 from dsx.ops import States, Context
 from dsx.dynamical_models import ContinuousTimeStateEvolution
-from dsx.utils import dsx_to_cd_dynamax
+from dsx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import diffrax as dfx
 from jax import Array
@@ -53,13 +53,10 @@ class SDESolver(BaseSolver):
         times = context.observations.times
 
         # Extract controls from context if available
-        ctrl_traj = context.controls
-        ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-        ctrl_values = ctrl_traj.values if ctrl_times is not None else None
+        ctrl_times, ctrl_values = _get_controls(context, times)
 
-        # Validate controls are Array (not dict) if provided
-        if isinstance(ctrl_values, dict):
-            raise ValueError("ctrl_values must be an Array or None, not a dict")
+        # Validate that control_dim is set when controls are present
+        _validate_control_dim(dynamics, ctrl_values)
 
         # Generate a CD-Dynamax-compatible parameter dict
         # Works for both stochastic and deterministic dynamics
@@ -69,6 +66,7 @@ class SDESolver(BaseSolver):
         cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
             state_dim=dynamics.state_dim,
             emission_dim=dynamics.observation_dim,
+            input_dim=dynamics.control_dim,
             diffeqsolve_settings=self.diffeqsolve_settings,
         )
 

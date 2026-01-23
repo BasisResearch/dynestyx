@@ -55,6 +55,7 @@ def hmm_model():
     dynamics = DynamicalModel(
         state_dim=K,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=initial_condition,
         state_evolution=state_evolution,
         observation_model=observation_model,
@@ -87,6 +88,7 @@ def discrete_time_l63_model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
@@ -119,6 +121,7 @@ def continuous_time_stochastic_l63_model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
@@ -162,6 +165,7 @@ def continuous_time_deterministic_l63_model():
     dynamics = DynamicalModel(
         state_dim=3,
         observation_dim=1,
+        control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=2.0**2 * jnp.eye(3)
         ),

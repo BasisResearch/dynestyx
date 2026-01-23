@@ -7,7 +7,7 @@ import dataclasses
 from dsx.ops import Context
 from dsx.handlers import BaseCDDynamaxLogFactorAdder
 from dsx.dynamical_models import DynamicalModel
-from dsx.utils import dsx_to_cd_dynamax, _get_controls
+from dsx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
 from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM
 import numpyro
@@ -53,6 +53,9 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         # Pull control trajectory from context and validate
         ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
 
+        # Validate that control_dim is set when controls are present
+        _validate_control_dim(dynamics, ctrl_values)
+
         # Generate a CD-Dynamax-compatible parameter dict
         params = dsx_to_cd_dynamax(dynamics)
 
@@ -60,6 +63,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
             state_dim=dynamics.state_dim,
             emission_dim=dynamics.observation_dim,
+            input_dim=dynamics.control_dim,
         )
 
         # Choose a key

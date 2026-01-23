@@ -80,11 +80,43 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
         )
 
     cdnlgssm = CDNLGSSM(
-        state_dim=dsx_model.state_dim, emission_dim=dsx_model.observation_dim
+        state_dim=dsx_model.state_dim,
+        emission_dim=dsx_model.observation_dim,
+        input_dim=dsx_model.control_dim,
     )
     cd_dynamax_params = cdnlgssm.build_params(**params)
 
     return cd_dynamax_params
+
+
+def _validate_control_dim(
+    dynamics: DynamicalModel, ctrl_values: Optional[Array]
+) -> None:
+    """
+    Validate that control_dim is set in DynamicalModel when controls are present.
+
+    Args:
+        dynamics: DynamicalModel instance
+        ctrl_values: Control values array or None
+
+    Raises:
+        ValueError: If controls are provided but control_dim is not set or is 0
+    """
+    if ctrl_values is not None:
+        if dynamics.control_dim is None or dynamics.control_dim == 0:
+            # Try to infer from shape
+            if ctrl_values.ndim >= 2:
+                inferred_dim = ctrl_values.shape[1]
+                raise ValueError(
+                    f"Controls are provided (shape: {ctrl_values.shape}), but "
+                    f"dynamics.control_dim is {dynamics.control_dim}. "
+                    f"Please set control_dim={inferred_dim} when creating the DynamicalModel."
+                )
+            else:
+                raise ValueError(
+                    f"Controls are provided, but dynamics.control_dim is {dynamics.control_dim}. "
+                    "Please set control_dim when creating the DynamicalModel."
+                )
 
 
 def _get_controls(
