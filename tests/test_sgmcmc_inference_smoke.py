@@ -15,11 +15,9 @@ def test_sgmcmc_inference_smoke(
     num_samples,
 ):
     """Smoke test version - minimal samples to verify code runs without errors."""
-    (
-        data_conditioned_model,
-        true_params,
-        synthetic,
-    ) = data_conditioned_continuous_time_stochastic_l63
+    (data_conditioned_model, true_params, synthetic, _) = (
+        data_conditioned_continuous_time_stochastic_l63
+    )
 
     rng_key, init_key = jax.random.split(jax.random.PRNGKey(0))
     init_params, potential_fn_gen, postprocess_fn, *_ = initialize_model(
