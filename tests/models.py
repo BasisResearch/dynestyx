@@ -166,11 +166,12 @@ def continuous_time_lingam_model():
     dynamics = DynamicalModel(
         state_dim=2,
         observation_dim=1,
+        control_dim=1, 
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(2), covariance_matrix=1.0**2 * jnp.eye(2)
         ),
         state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: A @ x,
+            drift=lambda x, u, t: A @ x + (u if u is not None else jnp.zeros(2)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(2),
             diffusion_covariance=lambda x, u, t: jnp.eye(2),
         ),
