@@ -166,7 +166,7 @@ def continuous_time_lingam_model():
     dynamics = DynamicalModel(
         state_dim=2,
         observation_dim=1,
-        control_dim=1, 
+        control_dim=1,
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(2), covariance_matrix=1.0**2 * jnp.eye(2)
         ),

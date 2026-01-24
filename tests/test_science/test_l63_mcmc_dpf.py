@@ -45,7 +45,10 @@ def test_mcmc_inference(data_conditioned_continuous_time_l63_dpf, num_samples): 
 
     mcmc_key = jr.PRNGKey(0)
     nuts_kernel = BarkerMH(
-        data_conditioned_model, step_size=2.5e-1, adapt_step_size=False, adapt_mass_matrix=False
+        data_conditioned_model,
+        step_size=2.5e-1,
+        adapt_step_size=False,
+        adapt_mass_matrix=False,
     )
     mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_samples)
     mcmc.run(mcmc_key)
@@ -74,4 +77,7 @@ def test_mcmc_inference(data_conditioned_continuous_time_l63_dpf, num_samples): 
         )
     except AssertionError:
         import warnings
-        warnings.warn("Tests for L63 DPF MCMC failed, though this is expected based on current inference methods.")
+
+        warnings.warn(
+            "Tests for L63 DPF MCMC failed, though this is expected based on current inference methods."
+        )
