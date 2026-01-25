@@ -10,7 +10,7 @@ from numpyro import distributions as dist
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 
 
-def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
+def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
     """
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
     """
@@ -68,7 +68,9 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
     if isinstance(obs, LinearGaussianObservation):
         params.update(
             {
-                "emission_function": lambda x, u, t: obs.H @ x,
+                "emission_function": lambda x, u, t: x @ obs.H.T
+                if x.ndim > 1
+                else obs.H @ x,
                 "emission_cov": obs.R,  # type: ignore
             }
         )
@@ -79,12 +81,16 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel) -> dict:
             f"Observation model of type {type(obs)} is not supported yet."
         )
 
-    cdnlgssm = CDNLGSSM(
-        state_dim=dsx_model.state_dim,
-        emission_dim=dsx_model.observation_dim,
-        input_dim=dsx_model.control_dim,
+    model_to_use = (
+        cd_model
+        if cd_model is not None
+        else CDNLGSSM(
+            state_dim=dsx_model.state_dim,
+            emission_dim=dsx_model.observation_dim,
+            input_dim=dsx_model.control_dim,
+        )
     )
-    cd_dynamax_params = cdnlgssm.build_params(**params)
+    cd_dynamax_params = model_to_use.build_params(**params)
 
     return cd_dynamax_params
 

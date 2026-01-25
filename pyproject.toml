@@ -26,7 +26,7 @@ packages = ["dsx"]
 
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
-cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax.git", branch = "dev-numpyro-api" }
+cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax", rev = "dev-numpyro-api" }
 
 [dependency-groups]
 dev = [

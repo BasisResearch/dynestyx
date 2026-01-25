@@ -157,6 +157,31 @@ def continuous_time_stochastic_l63_model():
     return sample_ds("f", dynamics)
 
 
+def continuous_time_lingam_model():
+    """2D linear SDE with a sampled coupling."""
+    rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
+
+    A = jnp.array([[-1.0, 0.0], [rho, -1.0]])
+
+    dynamics = DynamicalModel(
+        state_dim=2,
+        observation_dim=1,
+        control_dim=1,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(2), covariance_matrix=1.0**2 * jnp.eye(2)
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: A @ x + (10 * u if u is not None else jnp.zeros(2)),
+            diffusion_coefficient=lambda x, u, t: jnp.eye(2),
+            diffusion_covariance=lambda x, u, t: jnp.eye(2),
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
+        ),
+    )
+    return sample_ds("f", dynamics)
+
+
 def continuous_time_deterministic_l63_model():
     """Model that samples drift parameter rho and uses it in dynamics (ODE, no diffusion)."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
