@@ -171,7 +171,7 @@ def continuous_time_lingam_model():
             loc=jnp.zeros(2), covariance_matrix=1.0**2 * jnp.eye(2)
         ),
         state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: A @ x + (u if u is not None else jnp.zeros(2)),
+            drift=lambda x, u, t: A @ x + (10 * u if u is not None else jnp.zeros(2)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(2),
             diffusion_covariance=lambda x, u, t: jnp.eye(2),
         ),
