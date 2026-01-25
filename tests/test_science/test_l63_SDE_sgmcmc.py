@@ -12,7 +12,6 @@ from numpyro.infer.util import initialize_model
 import blackjax
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_l63_SDE_sgmcmc")
 
 
 @pytest.mark.parametrize("num_samples", [250])
@@ -21,7 +20,11 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         data_conditioned_model,
         true_params,
         synthetic,
+        use_controls,
     ) = data_conditioned_continuous_time_stochastic_l63
+
+    output_dir_name = "test_l63_SDE_sgmcmc" + ("_controlled" if use_controls else "")
+    OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]
 
