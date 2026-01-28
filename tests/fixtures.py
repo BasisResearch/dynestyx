@@ -6,8 +6,8 @@ from numpyro.infer import Predictive
 from effectful.ops.semantics import handler
 from dsx.handlers import Condition
 from dsx.ops import Trajectory, Context
-from dsx.solvers import SDESolver
-from dsx.unrollers import DiscreteTimeUnroller, ODEUnroller
+from dsx.simulators import SDESimulator
+from dsx.simulators import DiscreteTimeSimulator, ODESimulator
 from dsx.filters import (
     FilterBasedMarginalLogLikelihood,
     FilterBasedHMMMarginalLogLikelihood,
@@ -17,7 +17,7 @@ from tests.models import (
     discrete_time_l63_model,
     hmm_model,
     continuous_time_stochastic_l63_model,
-    continuous_time_lingam_model,
+    continuous_time_LTI_gaussian,
     continuous_time_deterministic_l63_model,
 )
 import pytest
@@ -67,7 +67,7 @@ def data_conditioned_hmm(request):
     )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeUnroller()):
+    with handler(DiscreteTimeSimulator()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -132,7 +132,7 @@ def data_conditioned_discrete_time_l63(request):
     )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeUnroller()):
+    with handler(DiscreteTimeSimulator()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -148,7 +148,7 @@ def data_conditioned_discrete_time_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(DiscreteTimeUnroller()):
+        with handler(DiscreteTimeSimulator()):
             with handler(Condition(context)):
                 return discrete_time_l63_model()
 
@@ -192,8 +192,8 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESolver(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -208,8 +208,8 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedMarginalLogLikelihood()):
-            with handler(Condition(context)):
+        with FilterBasedMarginalLogLikelihood():
+            with Condition(context):
                 return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -252,7 +252,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESolver(key=data_solver_key)):
+    with handler(SDESimulator(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -314,7 +314,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(ODEUnroller()):
+    with handler(ODESimulator()):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -330,7 +330,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(ODEUnroller()):
+        with handler(ODESimulator()):
             with handler(Condition(context)):
                 return continuous_time_deterministic_l63_model()
 
@@ -359,7 +359,7 @@ def data_conditioned_continuous_time_lingam(request):
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
-        continuous_time_lingam_model,
+        continuous_time_LTI_gaussian,
         params=true_params,
         num_samples=1,
         exclude_deterministic=False,
@@ -369,7 +369,7 @@ def data_conditioned_continuous_time_lingam(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESolver(key=data_solver_key)):
+    with handler(SDESimulator(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -383,7 +383,7 @@ def data_conditioned_continuous_time_lingam(request):
         )
         with handler(FilterBasedMarginalLogLikelihood()):
             with handler(Condition(context)):
-                return continuous_time_lingam_model()
+                return continuous_time_LTI_gaussian()
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -410,7 +410,7 @@ def data_conditioned_continuous_time_lingam_dpf(request):
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
-        continuous_time_lingam_model,
+        continuous_time_LTI_gaussian,
         params=true_params,
         num_samples=1,
         exclude_deterministic=False,
@@ -420,7 +420,7 @@ def data_conditioned_continuous_time_lingam_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESolver(key=data_solver_key)):
+    with handler(SDESimulator(key=data_solver_key)):
         with handler(Condition(context)):
             synthetic = predictive(data_init_key)
 
@@ -436,6 +436,6 @@ def data_conditioned_continuous_time_lingam_dpf(request):
             FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)
         ):
             with handler(Condition(context)):
-                return continuous_time_lingam_model()
+                return continuous_time_LTI_gaussian()
 
     return data_conditioned_model, true_params, synthetic, use_controls
