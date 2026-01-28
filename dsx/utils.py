@@ -8,6 +8,7 @@ from dsx.ops import Context
 from numpyro import distributions as dist
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
+from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 
 
 def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
@@ -65,6 +66,7 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
 
     ## Map observation model ##
     obs = dsx_model.observation_model
+    non_gaussian_flag = False
     if isinstance(obs, LinearGaussianObservation):
         params.update(
             {
@@ -76,23 +78,32 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
         )
     else:
         # TODO: check for linear-gaussian observation models and extract H, R
+        # TODO: check for Gaussian observation and use CDNLGSSM
+        non_gaussian_flag = True
+        params.update(emission_distribution=dsx_model.observation_model)
+        # raise NotImplementedError(
+        #     f"Observation model of type {type(obs)} is not supported yet."
+        # )
 
-        raise NotImplementedError(
-            f"Observation model of type {type(obs)} is not supported yet."
-        )
+    if cd_model is None:
+        if non_gaussian_flag:
+            model_to_use = CDNLSSM(
+                state_dim=dsx_model.state_dim,
+                emission_dim=dsx_model.observation_dim,
+                input_dim=dsx_model.control_dim,
+            )
+        else:
+            model_to_use = CDNLGSSM(
+                state_dim=dsx_model.state_dim,
+                emission_dim=dsx_model.observation_dim,
+                input_dim=dsx_model.control_dim,
+            )
+    else:
+        model_to_use = cd_model
 
-    model_to_use = (
-        cd_model
-        if cd_model is not None
-        else CDNLGSSM(
-            state_dim=dsx_model.state_dim,
-            emission_dim=dsx_model.observation_dim,
-            input_dim=dsx_model.control_dim,
-        )
-    )
     cd_dynamax_params = model_to_use.build_params(**params)
 
-    return cd_dynamax_params
+    return cd_dynamax_params, non_gaussian_flag
 
 
 def _validate_control_dim(

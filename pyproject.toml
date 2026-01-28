@@ -20,6 +20,7 @@ dependencies = [
     "mkdocstrings[python]>=1.0.1",
     "jupyter>=1.1.1",
     "ipywidgets>=8.1.8",
+    "equinox>=0.13.2",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -38,6 +39,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.11",
     "mkdocs-jupyter>=0.25.1",
+    "seaborn>=0.13.2",
 ]
 
 

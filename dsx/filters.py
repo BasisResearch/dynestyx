@@ -74,7 +74,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             )
 
         # Generate a CD-Dynamax-compatible parameter dict using the chosen model
-        params = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
+        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
 
         # Choose a key
         key = self.key if self.key is not None else jr.PRNGKey(0)

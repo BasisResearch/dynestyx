@@ -146,7 +146,7 @@ class ObservationModel(eqx.Module):
 
 
 # Control Model
-class ControlModel(DistributionFromStateTimeParams):
+class ControlModel(eqx.Module):
     """
     u_t ~ p(u_t | State_t, t)
     Deterministic controls should use dist.Delta.
