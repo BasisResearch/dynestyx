@@ -10,8 +10,22 @@ import numpyro
 from dsx.ops import sample_ds, FunctionOfTime, Context, States
 from dsx.dynamical_models import DynamicalModel
 
+from effectful.ops.semantics import handler
 
-class Condition(ObjectInterpretation):
+
+class HandlesSelf:
+    _cm = None
+
+    def __enter__(self):
+        self._cm = handler(self)
+        self._cm.__enter__()
+        return self._cm
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._cm.__exit__(exc_type, exc, tb)
+
+
+class Condition(ObjectInterpretation, HandlesSelf):
     def __init__(self, context: Context):
         super().__init__()
         self.context = context
@@ -28,7 +42,13 @@ class Condition(ObjectInterpretation):
         return fwd(name, dynamics, site_ctx)
 
 
-class BaseUnroller(ObjectInterpretation):
+class BaseSimulator(ObjectInterpretation, HandlesSelf):
+    """Base class for simulators/unrollers.
+
+    Concrete simulators implement `simulate(context, dynamics)` and optionally
+    override `add_solved_sites` if they need custom behavior.
+    """
+
     @implements(sample_ds)
     def _sample_ds(
         self,
@@ -45,46 +65,34 @@ class BaseUnroller(ObjectInterpretation):
         dynamics: DynamicalModel,
         context: Context,
     ):
-        raise NotImplementedError()
-
-
-class BaseSolver(BaseUnroller):
-    def add_solved_sites(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        context: Context,
-    ):
-        # Only solve if we have solve-times
+        # Only simulate if we have observation times
         if context is None or context.observations.times is None:
             return
 
-        # Run the solver
-        # Make sure this can throw an error if needed? I think it is not.
-        new_sites = self.solve(context, dynamics)
+        # Run the simulator
+        simulated = self.simulate(context, dynamics)
 
-        # Add the results from the solver as deterministic sites
-        # solve() always returns Dict[str, Array], but States is Union for Trajectory.values
-        if isinstance(new_sites, dict):
-            for site_name, trajectory in new_sites.items():
+        # Add the results from the simulator as deterministic sites
+        if isinstance(simulated, dict):
+            for site_name, trajectory in simulated.items():
                 # TODO: dw: check this type ignore. I think it has a point...
                 numpyro.deterministic(site_name, trajectory)  # type: ignore
         else:
-            # If it's just an array (shouldn't happen for solve() but handle it)
-            numpyro.deterministic("value", new_sites)
+            # If it's just an array (shouldn't happen for simulate() but handle it)
+            numpyro.deterministic("value", simulated)
 
-    def solve(self, context: Context, dynamics: DynamicalModel) -> States:
+    def simulate(self, context: Context, dynamics: DynamicalModel) -> States:
         """
         Args:
             context (Context): Context containing times and potentially controls.
-            dynamics (DynamicalModel): The dynamical model to solve.
+            dynamics (DynamicalModel): The dynamical model to simulate.
         Returns:
-            dict[str, Trajectory]: A dictionary mapping site names to solved trajectories.
+            dict[str, Trajectory]: A dictionary mapping site names to simulated trajectories.
         """
         raise NotImplementedError()
 
 
-class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
+class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
     @implements(sample_ds)
     def _sample_ds(
         self,

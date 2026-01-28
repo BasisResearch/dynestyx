@@ -3,6 +3,7 @@ from typing import Union, Dict, Protocol, Optional
 import numpyro.distributions as dist
 import dataclasses
 import warnings
+import equinox as eqx
 
 # ----------------------------------------------------------------------
 # TYPE ALIASES
@@ -129,14 +130,23 @@ class DistributionFromStateTimeParams(Protocol):
     ) -> dist.Distribution: ...
 
 
-class ObservationModel(DistributionFromStateTimeParams):
+class ObservationModel(eqx.Module):
     """p(y_t | State_t, Control_t, t)"""
 
-    pass
+    def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
+        dist = self(x, u, t)
+        return dist.log_prob(y)
+
+    def sample(self, x, u, t, *args, **kwargs):
+        dist = self(x, u, t)
+        if "seed" in kwargs:  # for CD-Dynamax compatibility
+            seed = kwargs.pop("seed")
+            kwargs["key"] = seed
+        return dist.sample(*args, **kwargs)
 
 
 # Control Model
-class ControlModel(DistributionFromStateTimeParams):
+class ControlModel(eqx.Module):
     """
     u_t ~ p(u_t | State_t, t)
     Deterministic controls should use dist.Delta.

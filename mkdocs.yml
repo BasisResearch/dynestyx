@@ -14,8 +14,26 @@ repo_url: https://github.com/BasisResearch/dynestyx
 
 nav:
   - Welcome: index.md
-  - API Reference: api_reference.md
-  - Tutorials: tutorials/quickstart.ipynb
+  - Introduction: intro.md
+  - API Reference:
+    - api_reference.md
+    - dynamical_models: api_reference/dynamical_models.md
+    - filters: api_reference/filters.md
+    - handlers: api_reference/handlers.md
+    - hmm_filter: api_reference/hmm_filter.md
+    - observations: api_reference/observations.md
+    - ops: api_reference/ops.md
+    - plotters: api_reference/plotters.md
+    - simulators: api_reference/simulators.md
+    - utils: api_reference/utils.md
+  - Tutorials:
+    - tutorials.md
+    - Quickstart: tutorials/quickstart.ipynb
+    - Discrete Time Inference: tutorials/discrete_time_inference.ipynb
+    - SDE Inference: tutorials/sde_inference.ipynb
+    - HMM Inference: tutorials/hmm_inference.ipynb
+    - SDE with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
+    - ODE Inference: tutorials/ode_inference.ipynb
 
 theme:
   name: "material"
@@ -78,7 +96,7 @@ theme:
     # | - https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#color-scheme              |
     # |                                                                                                    |
     # +----------------------------------------------------------------------------------------------------+
-    scheme: "slate"
+    scheme: "default"
 
     # +----------------------------------------------------------------------------------------------------+
     # |                                                                                                    |
@@ -90,7 +108,7 @@ theme:
     # | - https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#primary-color             |
     # |                                                                                                    |
     # +----------------------------------------------------------------------------------------------------+
-    primary: "indigo"
+    primary: "black"
 
     # +----------------------------------------------------------------------------------------------------+
     # |                                                                                                    |
@@ -255,7 +273,9 @@ theme:
 # | - https://www.mkdocs.org/user-guide/configuration/#extra_javascript                                    |
 # |                                                                                                        |
 # +--------------------------------------------------------------------------------------------------------+
-#extra_javascript:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 # +--------------------------------------------------------------------------------------------------------+
 # |                                                                                                        |
@@ -284,7 +304,7 @@ extra:
   # +------------------------------------------------------------------------------------------------------+
   social:
     - icon: "fontawesome/brands/github"
-      link: "https://github.com/Andre601/mkdocs-template"
+      link: "https://github.com/BasisResearch/dynestyx"
 
   # +------------------------------------------------------------------------------------------------------+
   # |                                                                                                      |
@@ -347,7 +367,9 @@ markdown_extensions:
       guess_lang: false
   - markdown.extensions.toc:
       permalink: true
-  #- pymdownx.arithmex:
+  - pymdownx.arithmatex:
+      generic: true
+  #- pymdownx.b64:
   #- pymdownx.b64:
   #- pymdownx.betterem:
   #- pymdownx.caret:

@@ -11,6 +11,9 @@ class LinearGaussianObservation(ObservationModel):
     where H is the observation matrix and R is the observation noise covariance.
     """
 
+    H: jax.Array
+    R: jax.Array
+
     def __init__(self, H: jax.Array, R: jax.Array):
         """
         H: Observation matrix, shape (obs_dim, state_dim)
