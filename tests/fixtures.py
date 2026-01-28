@@ -338,7 +338,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
 
 
 @pytest.fixture(params=[False, True])
-def data_conditioned_continuous_time_lingam(request):
+def data_conditioned_continuous_time_lti_gaussian(request):
     use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
@@ -389,7 +389,7 @@ def data_conditioned_continuous_time_lingam(request):
 
 
 @pytest.fixture(params=[False, True])
-def data_conditioned_continuous_time_lingam_dpf(request):
+def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     use_controls = request.param
     rng_key = jr.PRNGKey(0)
 

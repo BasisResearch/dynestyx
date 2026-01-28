@@ -5,7 +5,7 @@ import arviz as az
 from numpyro.infer import MCMC, BarkerMH
 import pytest
 
-from tests.fixtures import data_conditioned_continuous_time_lingam_dpf  # noqa: F401
+from tests.fixtures import data_conditioned_continuous_time_lti_gaussian_dpf  # noqa: F401
 from tests.test_utils import get_output_dir
 
 
@@ -13,15 +13,15 @@ SAVE_FIG = True
 
 
 @pytest.mark.parametrize("num_samples", [250])
-def test_mcmc_inference(data_conditioned_continuous_time_lingam_dpf, num_samples):  # noqa: F811
+def test_mcmc_inference(data_conditioned_continuous_time_lti_gaussian_dpf, num_samples):  # noqa: F811
     (
         data_conditioned_model,
         true_params,
         synthetic,
         use_controls,
-    ) = data_conditioned_continuous_time_lingam_dpf
+    ) = data_conditioned_continuous_time_lti_gaussian_dpf
 
-    output_dir_name = "test_lingam_dpf" + ("_controlled" if use_controls else "")
+    output_dir_name = "test_lti_gaussian_dpf" + ("_controlled" if use_controls else "")
     OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]
