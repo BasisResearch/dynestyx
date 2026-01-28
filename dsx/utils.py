@@ -10,8 +10,14 @@ from numpyro import distributions as dist
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 
+from typing import TypeAlias
 
-def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
+SSMType: TypeAlias = CDNLGSSM | CDNLSSM
+
+
+def dsx_to_cd_dynamax(
+    dsx_model: DynamicalModel, cd_model: Optional[SSMType] = None
+) -> Tuple[dict, bool]:
     """
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
     """
@@ -87,7 +93,7 @@ def dsx_to_cd_dynamax(dsx_model: DynamicalModel, cd_model=None) -> dict:
 
     if cd_model is None:
         if non_gaussian_flag:
-            model_to_use = CDNLSSM(
+            model_to_use: SSMType = CDNLSSM(
                 state_dim=dsx_model.state_dim,
                 emission_dim=dsx_model.observation_dim,
                 input_dim=dsx_model.control_dim,

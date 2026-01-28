@@ -17,6 +17,10 @@ import numpyro
 from numpyro.contrib.control_flow import scan as nscan
 import warnings
 
+from typing import TypeAlias
+
+SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+
 
 class SDESimulator(BaseSimulator):
     """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics."""
@@ -75,7 +79,7 @@ class SDESimulator(BaseSimulator):
 
         # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
         if non_gaussian_flag:
-            cd_dynamax_model = ContDiscreteNonlinearSSM(
+            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
                 state_dim=dynamics.state_dim,
                 emission_dim=dynamics.observation_dim,
                 input_dim=dynamics.control_dim,
