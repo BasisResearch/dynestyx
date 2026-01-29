@@ -5,7 +5,15 @@ import jax.numpy as jnp
 
 
 def plot_hmm_states_and_observations(
-    times, x, y, state_cmap="tab10", obs_cmap="Set1", show_fig=False, save_path=None
+    times,
+    x,
+    y,
+    state_cmap="tab10",
+    obs_cmap="Set1",
+    show_fig=False,
+    save_path=None,
+    obs_style="auto",
+    obs_marker="x",
 ):
     """
     Plot latent discrete HMM states as colored background bands
@@ -21,13 +29,34 @@ def plot_hmm_states_and_observations(
     y = np.asarray(y)
 
     T = len(times)
+    if x.shape[0] != T:
+        raise ValueError(f"`x` must have shape (T,), got {x.shape} with T={T}.")
+    if y.shape[0] != T:
+        raise ValueError(
+            f"`y` must have shape (T,) or (T, N_obs), got {y.shape} with T={T}."
+        )
 
     # ---- Normalize observation shape ----
     if y.ndim == 1:
         y = y[:, None]  # (T, 1)
 
     N_obs = y.shape[1]
-    K = int(x.max()) + 1
+
+    # ---- Discrete state labels (may not be 0..K-1) ----
+    state_values = np.unique(x)
+    K = int(state_values.size)
+    state_to_idx = {int(s): i for i, s in enumerate(state_values.tolist())}
+
+    # ---- Time "edges" for clean contiguous state bands ----
+    # For irregular sampling, use midpoints between times; extend at ends by half-step.
+    if T == 1:
+        dt = 1.0
+        edges = np.array([times[0] - 0.5 * dt, times[0] + 0.5 * dt])
+    else:
+        mids = 0.5 * (times[:-1] + times[1:])
+        left = times[0] - 0.5 * (times[1] - times[0])
+        right = times[-1] + 0.5 * (times[-1] - times[-2])
+        edges = np.concatenate(([left], mids, [right]))
 
     # ---- Color maps ----
     cmap_states = plt.cm.get_cmap(state_cmap, K)
@@ -43,10 +72,11 @@ def plot_hmm_states_and_observations(
         start = 0
         for t in range(1, T + 1):
             if t == T or x[t] != x[start]:
-                k = int(x[start])
+                s_val = int(x[start])
+                k = state_to_idx[s_val]
                 ax.axvspan(
-                    times[start],
-                    times[t - 1] if t < T else times[-1],
+                    edges[start],
+                    edges[t],
                     color=state_colors[k],
                     alpha=0.18,
                     linewidth=0,
@@ -55,16 +85,46 @@ def plot_hmm_states_and_observations(
 
     draw_state_blocks()
 
+    # ---- Choose observation style ----
+    # If observations are discrete-valued, lines look misleading; default to scatter.
+    def _is_discrete_column(col: np.ndarray) -> bool:
+        if np.issubdtype(col.dtype, np.integer) or np.issubdtype(col.dtype, np.bool_):
+            return True
+        # Heuristic: "few unique values" relative to length suggests discrete categories.
+        # (Keeps continuous floats like SDE outputs as lines.)
+        unique = np.unique(col)
+        return unique.size <= min(20, max(3, T // 5))
+
+    if obs_style not in {"auto", "line", "scatter"}:
+        raise ValueError("`obs_style` must be one of {'auto','line','scatter'}.")
+
     # ---- Plot observations ----
     for n in range(N_obs):
-        ax.plot(
-            times,
-            y[:, n],
-            color=obs_colors[n],
-            lw=2,
-            label=f"obs[{n}]",
-            zorder=5,
-        )
+        col = y[:, n]
+        style = obs_style
+        if style == "auto":
+            style = "scatter" if _is_discrete_column(col) else "line"
+
+        if style == "line":
+            ax.plot(
+                times,
+                col,
+                color=obs_colors[n],
+                lw=2,
+                label=f"obs[{n}]",
+                zorder=5,
+            )
+        else:
+            ax.scatter(
+                times,
+                col,
+                color=obs_colors[n],
+                marker=obs_marker,
+                s=35,
+                linewidths=1.5,
+                label=f"obs[{n}]",
+                zorder=6,
+            )
 
     # ---- Formatting ----
     ax.set_xlabel("Time")
@@ -78,8 +138,12 @@ def plot_hmm_states_and_observations(
     from matplotlib.patches import Patch
 
     state_patches = [
-        Patch(facecolor=state_colors[k], alpha=0.3, label=f"state {k}")
-        for k in range(K)
+        Patch(
+            facecolor=state_colors[state_to_idx[int(s)]],
+            alpha=0.3,
+            label=f"state {int(s)}",
+        )
+        for s in state_values
     ]
 
     ax.legend(
