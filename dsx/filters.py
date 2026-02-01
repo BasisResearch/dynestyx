@@ -130,10 +130,10 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         numpyro.deterministic(
             f"{name}_filtered_states_cov", filtered.filtered_covariances
         )
-        numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
-        numpyro.deterministic(
-            f"{name}_predicted_states_cov", filtered.predicted_covariances
-        )
+        # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
+        # numpyro.deterministic(
+        #     f"{name}_predicted_states_cov", filtered.predicted_covariances
+        # )
 
 
 @dataclasses.dataclass
