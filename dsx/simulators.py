@@ -5,7 +5,6 @@ from dsx.handlers import BaseSimulator
 from dsx.ops import States, Context
 from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
 from dsx.utils import (
-    dsx_to_cd_dynamax,
     _get_controls,
     _validate_control_dim,
     _get_val_or_None,
@@ -18,6 +17,9 @@ from numpyro.contrib.control_flow import scan as nscan
 import warnings
 
 from typing import TypeAlias
+
+from dsx.utils import diffeqsolve_util
+from jax.tree_util import tree_map
 
 SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -67,43 +69,79 @@ class SDESimulator(BaseSimulator):
             raise ValueError("context.observations.times must be provided")
         times = context.observations.times
 
-        # Extract controls from context if available
-        ctrl_times, ctrl_values = _get_controls(context, times)
+        with numpyro.handlers.seed(rng_seed=self.key):
+            # Extract controls from context if available
+            ctrl_times, ctrl_values = _get_controls(context, times)
 
-        # Validate that control_dim is set when controls are present
-        _validate_control_dim(dynamics, ctrl_values)
+            # Validate that control_dim is set when controls are present
+            _validate_control_dim(dynamics, ctrl_values)
 
-        # Generate a CD-Dynamax-compatible parameter dict
-        # Works for both stochastic and deterministic dynamics
-        params, non_gaussian_flag = dsx_to_cd_dynamax(dynamics)
+            _init_state = dynamics.initial_condition.sample(numpyro.prng_key())
+            initial_state = numpyro.deterministic("x_0", _init_state)
 
-        # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        if non_gaussian_flag:
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-                diffeqsolve_settings=self.diffeqsolve_settings,
+            u_0 = tree_map(lambda x: x[0], ctrl_values)
+
+            _init_obs = dynamics.observation_model(
+                x=initial_state, u=u_0, t=times[0]
+            ).sample(numpyro.prng_key())
+            y_0 = numpyro.deterministic("y_0", _init_obs)
+
+            def _step(prev_state, args):
+                t_next_idx, t0, t1, inpt = args
+
+                numpyro_key = numpyro.prng_key()
+
+                def drift(t, y, args):
+                    return dynamics.state_evolution.drift(y, inpt, t)
+
+                def diffusion(t, y, args):
+                    Qc_t = dynamics.state_evolution.diffusion_covariance(y, inpt, t)
+                    L_t = dynamics.state_evolution.diffusion_coefficient(y, inpt, t)
+
+                    Q_sqrt = jnp.linalg.cholesky(Qc_t)
+                    combined_diffusion = L_t @ Q_sqrt
+                    return combined_diffusion
+
+                state = diffeqsolve_util(
+                    key=numpyro_key,
+                    drift=drift,
+                    diffusion=diffusion,
+                    t0=t0,
+                    t1=t1,
+                    y0=prev_state,
+                    **self.diffeqsolve_settings,
+                )[0]
+
+                state = numpyro.deterministic(f"x_{t_next_idx}", state)
+
+                # TODO: Make this a sample, and add log factors
+                # This is a bit tricky because the plate will try to modify these.
+                emission = numpyro.deterministic(
+                    f"y_{t_next_idx}",
+                    dynamics.observation_model(x=state, u=inpt, t=t1).sample(
+                        numpyro.prng_key()
+                    ),
+                    # obs=_get_val_or_None(context.observations.values, t_next_idx),
+                )
+
+                return state, (state, emission)
+
+            num_timesteps = len(times)
+            t0 = tree_map(lambda x: x[0:-1], times)
+            t1 = tree_map(lambda x: x[1:], times)
+            next_inputs = tree_map(lambda x: x[1:], ctrl_values)
+
+            _, (next_states, next_emissions) = nscan(
+                _step,
+                initial_state,
+                (jnp.arange(1, num_timesteps), t0, t1, next_inputs),
             )
-        else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
 
-        # Sample states and emissions from the model using solver settings defined above.
-        # ensure that times has shape (num_timesteps, 1)
-        if times.ndim == 1:
-            times = times[:, None]
-        states, emissions = cd_dynamax_model.sample(
-            params=params,
-            key=self.key,
-            num_timesteps=len(times),
-            t_emissions=times,
-            inputs=ctrl_values,
-            transition_type="path",
-        )
+        def expand_and_cat(x0, x1T):
+            return jnp.concatenate((jnp.expand_dims(x0, 0), x1T))
+
+        states = tree_map(expand_and_cat, initial_state, next_states)
+        emissions = tree_map(expand_and_cat, y_0, next_emissions)
 
         return {"times": times, "states": states, "observations": emissions}
 
