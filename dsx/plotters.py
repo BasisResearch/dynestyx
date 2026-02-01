@@ -314,59 +314,91 @@ def plot_drift_field(
     fig, axes = plt.subplots(2, ncols, figsize=(5 * ncols, 8), constrained_layout=True)
 
     im0 = axes[0, 0].imshow(
-        f1_true.T, origin="lower", extent=(*x1_range, *x2_range),
-        cmap="seismic", vmin=-vlim1, vmax=vlim1, aspect="auto"
+        f1_true.T,
+        origin="lower",
+        extent=(*x1_range, *x2_range),
+        cmap="seismic",
+        vmin=-vlim1,
+        vmax=vlim1,
+        aspect="auto",
     )
     axes[0, 0].set_title("f1 true")
     fig.colorbar(im0, ax=axes[0, 0], fraction=0.046, pad=0.04)
 
     im1 = axes[0, 1].imshow(
-        f1_learned.T, origin="lower", extent=(*x1_range, *x2_range),
-        cmap="seismic", vmin=-vlim1, vmax=vlim1, aspect="auto"
+        f1_learned.T,
+        origin="lower",
+        extent=(*x1_range, *x2_range),
+        cmap="seismic",
+        vmin=-vlim1,
+        vmax=vlim1,
+        aspect="auto",
     )
     axes[0, 1].set_title("f1 learned")
     fig.colorbar(im1, ax=axes[0, 1], fraction=0.046, pad=0.04)
 
     im2 = axes[0, 2].imshow(
-        f1_err.T, origin="lower", extent=(*x1_range, *x2_range),
-        cmap="viridis", aspect="auto"
+        f1_err.T,
+        origin="lower",
+        extent=(*x1_range, *x2_range),
+        cmap="viridis",
+        aspect="auto",
     )
     axes[0, 2].set_title("f1 error")
     fig.colorbar(im2, ax=axes[0, 2], fraction=0.046, pad=0.04)
 
     if f1_sd is not None:
         im3 = axes[0, 3].imshow(
-            f1_sd.T, origin="lower", extent=(*x1_range, *x2_range),
-            cmap="magma", aspect="auto"
+            f1_sd.T,
+            origin="lower",
+            extent=(*x1_range, *x2_range),
+            cmap="magma",
+            aspect="auto",
         )
         axes[0, 3].set_title("f1 stddev")
         fig.colorbar(im3, ax=axes[0, 3], fraction=0.046, pad=0.04)
 
     im4 = axes[1, 0].imshow(
-        f2_true.T, origin="lower", extent=(*x1_range, *x2_range),
-        cmap="seismic", vmin=-vlim2, vmax=vlim2, aspect="auto"
+        f2_true.T,
+        origin="lower",
+        extent=(*x1_range, *x2_range),
+        cmap="seismic",
+        vmin=-vlim2,
+        vmax=vlim2,
+        aspect="auto",
     )
     axes[1, 0].set_title("f2 true")
     fig.colorbar(im4, ax=axes[1, 0], fraction=0.046, pad=0.04)
 
     im5 = axes[1, 1].imshow(
-        f2_learned.T, origin="lower", extent=(*x1_range, *x2_range),
-        cmap="seismic", vmin=-vlim2, vmax=vlim2, aspect="auto"
+        f2_learned.T,
+        origin="lower",
+        extent=(*x1_range, *x2_range),
+        cmap="seismic",
+        vmin=-vlim2,
+        vmax=vlim2,
+        aspect="auto",
     )
     axes[1, 1].set_title("f2 learned")
     fig.colorbar(im5, ax=axes[1, 1], fraction=0.046, pad=0.04)
 
     im6 = axes[1, 2].imshow(
-        f2_err.T, origin="lower", extent=(*x1_range, *x2_range),
-        cmap="viridis", aspect="auto"
+        f2_err.T,
+        origin="lower",
+        extent=(*x1_range, *x2_range),
+        cmap="viridis",
+        aspect="auto",
     )
     axes[1, 2].set_title("f2 error")
     fig.colorbar(im6, ax=axes[1, 2], fraction=0.046, pad=0.04)
 
     if f2_sd is not None:
         im7 = axes[1, 3].imshow(
-            f2_sd.T, origin="lower", extent=(*x1_range, *x2_range),
-            cmap="magma", aspect="auto"
+            f2_sd.T,
+            origin="lower",
+            extent=(*x1_range, *x2_range),
+            cmap="magma",
+            aspect="auto",
         )
         axes[1, 3].set_title("f2 stddev")
         fig.colorbar(im7, ax=axes[1, 3], fraction=0.046, pad=0.04)
@@ -388,8 +420,11 @@ def plot_drift_field(
             raise ValueError('trajectory_axes must be "error" or "all"')
         for ax in overlay_axes:
             ax.plot(
-                traj[:, 0], traj[:, 1],
-                color=trajectory_color, lw=trajectory_lw, alpha=trajectory_alpha,
+                traj[:, 0],
+                traj[:, 1],
+                color=trajectory_color,
+                lw=trajectory_lw,
+                alpha=trajectory_alpha,
                 zorder=5,
             )
 
