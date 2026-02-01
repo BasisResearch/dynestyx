@@ -1,6 +1,7 @@
 # HMM
 import matplotlib.pyplot as plt
 import numpy as np
+import jax
 import jax.numpy as jnp
 
 
@@ -239,3 +240,160 @@ def plot_continuous_states_and_partial_observations(
         plt.show()
 
     return fig, axes
+
+
+def plot_drift_field(
+    f_true,
+    f_learned,
+    f_learned_sd=None,
+    x1_range=(-3.0, 3.0),
+    x2_range=(-3.2, 3.2),
+    num_points=50,
+    return_rmse=False,
+    relative_error=False,
+    trajectory=None,
+    trajectory_axes="error",
+    trajectory_color="red",
+    trajectory_lw=1.5,
+    trajectory_alpha=0.85,
+):
+    """
+    Plot true vs learned drift fields (2D state space).
+    Optionally include learned uncertainty (stddev) and/or overlay a data trajectory.
+
+    Args:
+        f_true: callable f(x) -> (2,) array, true drift function
+        f_learned: callable f(x) -> (2,) array, learned drift function
+        f_learned_sd: optional callable f(x) -> (2,) array (stddev per output dim)
+        x1_range: tuple (low, high) for x1 axis
+        x2_range: tuple (low, high) for x2 axis
+        num_points: number of grid points per axis
+        return_rmse: if True, return (fig, rmse)
+        relative_error: if True, plot relative error instead of absolute
+        trajectory: optional (T, 2) array of (x1, x2) points to overlay (e.g. data path)
+        trajectory_axes: "error" (overlay on error panels only) or "all"
+        trajectory_color: color for trajectory line
+        trajectory_lw: linewidth for trajectory
+        trajectory_alpha: alpha for trajectory
+
+    Returns:
+        fig, or (fig, rmse) if return_rmse is True
+    """
+    x1 = jnp.linspace(x1_range[0], x1_range[1], num_points)
+    x2 = jnp.linspace(x2_range[0], x2_range[1], num_points)
+    X1, X2 = jnp.meshgrid(x1, x2, indexing="ij")
+    grid_points = jnp.stack([X1.ravel(), X2.ravel()], axis=-1)
+
+    f_true_vals = jax.vmap(f_true)(grid_points)
+    f_learned_vals = jax.vmap(f_learned)(grid_points)
+
+    if f_learned_sd is not None:
+        f_learned_sd_vals = jax.vmap(f_learned_sd)(grid_points)
+        if f_learned_sd_vals.ndim == 3 and f_learned_sd_vals.shape[1] == 1:
+            f_learned_sd_vals = f_learned_sd_vals.squeeze(1)
+        f1_sd = np.asarray(f_learned_sd_vals[:, 0].reshape(num_points, num_points))
+        f2_sd = np.asarray(f_learned_sd_vals[:, 1].reshape(num_points, num_points))
+    else:
+        f1_sd = f2_sd = None
+
+    f1_true = np.asarray(f_true_vals[:, 0].reshape(num_points, num_points))
+    f2_true = np.asarray(f_true_vals[:, 1].reshape(num_points, num_points))
+    f1_learned = np.asarray(f_learned_vals[:, 0].reshape(num_points, num_points))
+    f2_learned = np.asarray(f_learned_vals[:, 1].reshape(num_points, num_points))
+
+    f1_err = np.abs(f1_learned - f1_true)
+    f2_err = np.abs(f2_learned - f2_true)
+    if relative_error:
+        f1_err /= np.abs(f1_true) + 1e-6
+        f2_err /= np.abs(f2_true) + 1e-6
+
+    vlim1 = float(np.max(np.abs(np.concatenate([f1_true.ravel(), f1_learned.ravel()]))))
+    vlim2 = float(np.max(np.abs(np.concatenate([f2_true.ravel(), f2_learned.ravel()]))))
+
+    ncols = 4 if f_learned_sd is not None else 3
+    fig, axes = plt.subplots(2, ncols, figsize=(5 * ncols, 8), constrained_layout=True)
+
+    im0 = axes[0, 0].imshow(
+        f1_true.T, origin="lower", extent=(*x1_range, *x2_range),
+        cmap="seismic", vmin=-vlim1, vmax=vlim1, aspect="auto"
+    )
+    axes[0, 0].set_title("f1 true")
+    fig.colorbar(im0, ax=axes[0, 0], fraction=0.046, pad=0.04)
+
+    im1 = axes[0, 1].imshow(
+        f1_learned.T, origin="lower", extent=(*x1_range, *x2_range),
+        cmap="seismic", vmin=-vlim1, vmax=vlim1, aspect="auto"
+    )
+    axes[0, 1].set_title("f1 learned")
+    fig.colorbar(im1, ax=axes[0, 1], fraction=0.046, pad=0.04)
+
+    im2 = axes[0, 2].imshow(
+        f1_err.T, origin="lower", extent=(*x1_range, *x2_range),
+        cmap="viridis", aspect="auto"
+    )
+    axes[0, 2].set_title("f1 error")
+    fig.colorbar(im2, ax=axes[0, 2], fraction=0.046, pad=0.04)
+
+    if f1_sd is not None:
+        im3 = axes[0, 3].imshow(
+            f1_sd.T, origin="lower", extent=(*x1_range, *x2_range),
+            cmap="magma", aspect="auto"
+        )
+        axes[0, 3].set_title("f1 stddev")
+        fig.colorbar(im3, ax=axes[0, 3], fraction=0.046, pad=0.04)
+
+    im4 = axes[1, 0].imshow(
+        f2_true.T, origin="lower", extent=(*x1_range, *x2_range),
+        cmap="seismic", vmin=-vlim2, vmax=vlim2, aspect="auto"
+    )
+    axes[1, 0].set_title("f2 true")
+    fig.colorbar(im4, ax=axes[1, 0], fraction=0.046, pad=0.04)
+
+    im5 = axes[1, 1].imshow(
+        f2_learned.T, origin="lower", extent=(*x1_range, *x2_range),
+        cmap="seismic", vmin=-vlim2, vmax=vlim2, aspect="auto"
+    )
+    axes[1, 1].set_title("f2 learned")
+    fig.colorbar(im5, ax=axes[1, 1], fraction=0.046, pad=0.04)
+
+    im6 = axes[1, 2].imshow(
+        f2_err.T, origin="lower", extent=(*x1_range, *x2_range),
+        cmap="viridis", aspect="auto"
+    )
+    axes[1, 2].set_title("f2 error")
+    fig.colorbar(im6, ax=axes[1, 2], fraction=0.046, pad=0.04)
+
+    if f2_sd is not None:
+        im7 = axes[1, 3].imshow(
+            f2_sd.T, origin="lower", extent=(*x1_range, *x2_range),
+            cmap="magma", aspect="auto"
+        )
+        axes[1, 3].set_title("f2 stddev")
+        fig.colorbar(im7, ax=axes[1, 3], fraction=0.046, pad=0.04)
+
+    for ax in axes.ravel():
+        ax.set_xlabel("x1")
+        ax.set_ylabel("x2")
+        ax.grid(False)
+
+    if trajectory is not None:
+        traj = np.asarray(trajectory)
+        if traj.ndim != 2 or traj.shape[1] != 2:
+            raise ValueError("trajectory must have shape (T, 2) for (x1, x2)")
+        if trajectory_axes == "error":
+            overlay_axes = [axes[0, 2], axes[1, 2]]
+        elif trajectory_axes == "all":
+            overlay_axes = list(axes.ravel())
+        else:
+            raise ValueError('trajectory_axes must be "error" or "all"')
+        for ax in overlay_axes:
+            ax.plot(
+                traj[:, 0], traj[:, 1],
+                color=trajectory_color, lw=trajectory_lw, alpha=trajectory_alpha,
+                zorder=5,
+            )
+
+    if return_rmse:
+        rmse = float(jnp.sqrt(jnp.mean((f_learned_vals - f_true_vals) ** 2)))
+        return fig, rmse
+    return fig
