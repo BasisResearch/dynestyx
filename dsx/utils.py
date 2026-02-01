@@ -14,7 +14,6 @@ from typing import TypeAlias
 
 import jax.random as jr
 import diffrax as dfx
-from diffrax import diffeqsolve
 
 SSMType: TypeAlias = CDNLGSSM | CDNLSSM
 
@@ -216,7 +215,7 @@ def _get_val_or_None(values: Optional[Array], t_idx: int) -> Optional[Array]:
     return values[t_idx] if values is not None else None
 
 
-def diffeqsolve(
+def diffeqsolve_util(
     drift,
     t0: float,
     t1: float,

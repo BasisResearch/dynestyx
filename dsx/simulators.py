@@ -114,15 +114,20 @@ class SDESimulator(BaseSimulator):
 
                 state = numpyro.deterministic(f"x_{t_next_idx}", state)
 
-                # TODO: Make this a sample, and add log factors
+                # TODO: Double-check this.
                 # This is a bit tricky because the plate will try to modify these.
+                # We accordingly separate deterministic (which is side-effect free)
+                # from the corresponding factor statement.
                 emission = numpyro.deterministic(
                     f"y_{t_next_idx}",
                     dynamics.observation_model(x=state, u=inpt, t=t1).sample(
                         numpyro.prng_key()
                     ),
-                    # obs=_get_val_or_None(context.observations.values, t_next_idx),
                 )
+                log_prob = dynamics.observation_model(x=state, u=inpt, t=t1).log_prob(
+                    emission
+                )
+                numpyro.factor(f"log_prob_{t_next_idx}", log_prob)
 
                 return state, (state, emission)
 
