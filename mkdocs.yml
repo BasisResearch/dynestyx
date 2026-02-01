@@ -34,6 +34,9 @@ nav:
     - HMM Inference: tutorials/hmm_inference.ipynb
     - SDE with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - ODE Inference: tutorials/ode_inference.ipynb
+  - Deep Dives:
+    - SDE Inference with Gaussian Process drift prior: deep_dives/gp_drift.ipynb
+    - LTI identifiability (naive vs canonical): deep_dives/lti_identifiability.ipynb
 
 theme:
   name: "material"
