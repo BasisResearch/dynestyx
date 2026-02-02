@@ -79,8 +79,12 @@ def discrete_time_l63_model():
 
     def state_evolution(x, u, t_now, t_next):
         # Add light dependence on u: add small control term to drift
-        u_effect = 10 * u if u is not None else jnp.zeros(3)
-        loc = x + 0.01 * (drift(x) + u_effect)
+        drift_term = drift(x)
+        if u is None or u.shape == (0,):
+            u_effect = jnp.zeros_like(drift_term)
+        else:
+            u_effect = 10 * u
+        loc = x + 0.01 * (drift_term + u_effect)
         cov = 0.01 * jnp.eye(3)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 

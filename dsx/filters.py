@@ -12,6 +12,12 @@ from dsx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import numpyro
 
+from cuthbert import filter as cuthbert_filter
+from cuthbert.gaussian import taylor
+from typing import NamedTuple
+
+from jax import lax
+
 SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
@@ -42,6 +48,133 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         context: Context,
+    ):
+        if dynamics.continuous_time:
+            self._filter_continuous_time(name, dynamics, context)
+        else:
+            self._filter_discrete_time(name, dynamics, context)
+
+    def _filter_discrete_time(
+        self, name: str, dynamics: DynamicalModel, context: Context
+    ):
+        """
+        Discrete-time marginal likelihood via cuthbert.gaussian.taylor (linearized Kalman filter).
+        """
+
+        obs_traj = context.observations
+        if obs_traj.values is None:
+            return
+        if isinstance(obs_traj.values, dict):
+            raise ValueError("obs_traj.values must be an Array, not a dict")
+
+        ys = obs_traj.values
+        T1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
+        if T1 == 0:
+            return
+
+        # Time axis (scalar at each step after slicing by cuthbert.filter)
+        if obs_traj.times is None:
+            times = jnp.arange(T1, dtype=jnp.float32)
+        else:
+            times = jnp.asarray(obs_traj.times)
+
+        # Align controls (if any) to observation times
+        _, ctrl_values = _get_controls(context, times)
+        _validate_control_dim(dynamics, ctrl_values)
+
+        if ctrl_values is None:
+            ctrl_values = jnp.zeros((T1, 0), dtype=ys.dtype)
+
+        dt0 = times[1] - times[0]
+
+        time_prev = jnp.concatenate([times[:1] - dt0, times[:-1]], axis=0)
+
+        u_prev = jnp.concatenate([ctrl_values[:1], ctrl_values[:-1]], axis=0)
+
+        class KFInputs(NamedTuple):
+            time: jax.Array
+            time_prev: jax.Array
+            y: jax.Array
+            u: jax.Array
+            u_prev: jax.Array
+
+        model_inputs = KFInputs(
+            time=times,
+            time_prev=time_prev,
+            y=ys,
+            u=ctrl_values,
+            u_prev=u_prev,
+        )
+
+        key = self.key if self.key is not None else numpyro.prng_key()
+
+        rtol = self.extra_filter_kwargs.get("rtol", None)
+
+        def get_init_log_density(mi: KFInputs):
+            dist0 = dynamics.initial_condition
+
+            def init_log_density(x):
+                return jnp.asarray(dist0.log_prob(x)).sum()
+
+            x0_lin = dist0.mean
+            return init_log_density, x0_lin
+
+        def get_dynamics_log_density(
+            state: taylor.LinearizedKalmanFilterState, mi: KFInputs
+        ):
+            # log p(x_t | x_{t-1})
+            def dynamics_log_density(x_prev, x):
+                dist = dynamics.state_evolution(
+                    x_prev, mi.u_prev, mi.time_prev, mi.time
+                )
+                return jnp.asarray(dist.log_prob(x)).sum()
+
+            # Linearize around previous filtered mean.
+            x_prev_lin = state.mean
+
+            # A decent guess for the x_t linearization point is the conditional mean at x_prev_lin (if available).
+            dist_at_lin = dynamics.state_evolution(
+                x_prev_lin, mi.u_prev, mi.time_prev, mi.time
+            )
+            x_lin = dist_at_lin.mean
+
+            return dynamics_log_density, x_prev_lin, x_lin
+
+        def get_observation_func(
+            state: taylor.LinearizedKalmanFilterState, mi: KFInputs
+        ):
+            y_t = mi.y
+
+            missing = jnp.issubdtype(y_t.dtype, jnp.floating) & jnp.any(jnp.isnan(y_t))
+
+            def log_potential(x):
+                def _present(_):
+                    edist = dynamics.observation_model(x, mi.u, mi.time)
+                    return jnp.asarray(edist.log_prob(y_t)).sum()
+
+                return lax.cond(
+                    missing, lambda _: jnp.array(0.0, y_t.dtype), _present, operand=None
+                )
+
+            return log_potential, state.mean
+
+        kf = taylor.build_filter(
+            get_init_log_density,
+            get_dynamics_log_density,
+            get_observation_func,
+            associative=False,
+            rtol=rtol,
+            ignore_nan_dims=True,
+        )
+
+        states = cuthbert_filter(kf, model_inputs, parallel=False, key=key)
+
+        marginal_loglik = states.log_normalizing_constant[-1]
+
+        numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
+
+    def _filter_continuous_time(
+        self, name: str, dynamics: DynamicalModel, context: Context
     ):
         # Pull observed trajectory from context
         obs_traj = context.observations
