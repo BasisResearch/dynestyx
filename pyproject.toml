@@ -21,6 +21,7 @@ dependencies = [
     "jupyter>=1.1.1",
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
+    "cuthbert>=0.0.2",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -29,6 +30,7 @@ packages = ["dsx"]
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax", rev = "dev-numpyro-api" }
+cuthbert = { git = "https://github.com/DanWaxman/cuthbert.git", rev = "dw-fix-install" }
 
 [dependency-groups]
 dev = [
