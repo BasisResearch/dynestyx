@@ -4,6 +4,7 @@ import numpyro.distributions as dist
 import dataclasses
 import warnings
 import equinox as eqx
+from typing import Callable, Any
 
 # ----------------------------------------------------------------------
 # TYPE ALIASES
@@ -17,7 +18,7 @@ Params = Dict[str, Union[float, jax.Array]]
 Key = jax.Array
 
 
-class DynamicalModel:
+class DynamicalModel(eqx.Module):
     """
     Unified interface:
         - initial_condition: InitialCondition
@@ -25,6 +26,14 @@ class DynamicalModel:
         - observation_model: ObservationModel
         - control_model: optional
     """
+
+    state_dim: int
+    observation_dim: int
+    control_dim: int
+    initial_condition: dist.Distribution
+    state_evolution: Callable[[State, Control, Time], State]
+    observation_model: Callable[[State, Control, Time], dist.Distribution]
+    control_model: Any
 
     def __init__(
         self,

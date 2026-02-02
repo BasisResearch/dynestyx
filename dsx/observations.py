@@ -1,5 +1,4 @@
 import jax
-import jax.numpy as jnp
 from dsx.dynamical_models import ObservationModel
 from numpyro import distributions as dist
 
@@ -23,4 +22,4 @@ class LinearGaussianObservation(ObservationModel):
         self.R = R
 
     def __call__(self, x, u, t):
-        return dist.MultivariateNormal(loc=jnp.dot(self.H, x), covariance_matrix=self.R)
+        return dist.MultivariateNormal(loc=x @ self.H.T, covariance_matrix=self.R)
