@@ -6,6 +6,8 @@ from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
 from dsx.observations import LinearGaussianObservation
 from dsx.ops import Context
 from numpyro import distributions as dist
+import numpyro
+from numpyro.primitives import _PYRO_STACK, CondIndepStackFrame
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
@@ -16,6 +18,19 @@ import jax.random as jr
 import diffrax as dfx
 
 SSMType: TypeAlias = CDNLGSSM | CDNLSSM
+
+
+def infer_batch_shape():
+    """Infer the current plate-induced batch shape, or None if not in a plate."""
+    cond_indep_stack = []
+    for frame in _PYRO_STACK:
+        if isinstance(frame, numpyro.primitives.plate):
+            cond_indep_stack.append(
+                CondIndepStackFrame(frame.name, frame.dim, frame.size)
+            )
+    if cond_indep_stack:
+        return numpyro.primitives.plate._get_batch_shape(cond_indep_stack)
+    return None
 
 
 def dsx_to_cd_dynamax(
@@ -328,8 +343,17 @@ def diffeqsolve_util(
     if diffusion_new is None:
         terms = dfx.ODETerm(drift_new)
     else:
+        # Important: `shape` here specifies the shape of the Brownian increment (control),
+        # not the shape of the state.
+        #
+        # If `y0` is batched (e.g. shape (B, state_dim)), setting `shape=y0.shape` would
+        # create a batched Brownian control and can cause shape mismatches inside diffrax
+        # (e.g. when contracting diffusion with the control).
+        #
+        # We instead use only the trailing (state) dimension(s) as the Brownian shape.
+        bm_shape = y0.shape[-1:] if hasattr(y0, "shape") else ()
         bm = dfx.VirtualBrownianTree(
-            t0=t0_new, t1=t1_new, tol=tol_vbt, shape=y0.shape, key=key
+            t0=t0_new, t1=t1_new, tol=tol_vbt, shape=bm_shape, key=key
         )
         terms = dfx.MultiTerm(
             dfx.ODETerm(drift_new), dfx.ControlTerm(diffusion_new, bm)

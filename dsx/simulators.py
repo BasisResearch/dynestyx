@@ -1,4 +1,6 @@
+import jax
 import jax.numpy as jnp
+import jax.random as jr
 import dataclasses
 
 from dsx.handlers import BaseSimulator
@@ -8,6 +10,7 @@ from dsx.utils import (
     _get_controls,
     _validate_control_dim,
     _get_val_or_None,
+    infer_batch_shape,
 )
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import diffrax as dfx
@@ -67,74 +70,193 @@ class SDESimulator(BaseSimulator):
         # Extract times from context
         if context.observations is None or context.observations.times is None:
             raise ValueError("context.observations.times must be provided")
-        times = context.observations.times
+        raw_times = jnp.asarray(context.observations.times)
+
+        # Detect batch shape from surrounding plates (if any)
+        batch_shape = infer_batch_shape() or ()
+        batch_size = int(jnp.prod(jnp.array(batch_shape))) if batch_shape else 0
+
+        def _ensure_batch_prefix(x):
+            if x is None or not batch_shape:
+                return x
+            if tuple(x.shape[: len(batch_shape)]) == tuple(batch_shape):
+                return x
+            return jnp.broadcast_to(x, batch_shape + x.shape)
+
+        def _flatten_batch_prefix(x):
+            if x is None or not batch_shape:
+                return x
+            if tuple(x.shape[: len(batch_shape)]) != tuple(batch_shape):
+                return x
+            return x.reshape((batch_size,) + x.shape[len(batch_shape) :])
+
+        def _drift_has_batched_params(drift_obj) -> bool:
+            if not batch_shape:
+                return False
+            for leaf in jax.tree.leaves(drift_obj):
+                if hasattr(leaf, "shape") and getattr(leaf, "ndim", 0) >= 1:
+                    if leaf.shape[0] == batch_size:
+                        return True
+            return False
+
+        def _extract_time_vector(ts: Array) -> Array:
+            """Return a 1D time vector of shape (T,) from any array shaped (..., T)."""
+            if ts.ndim == 1:
+                return ts
+            # Treat the last axis as time and pick the first leading index.
+            return ts.reshape((-1, ts.shape[-1]))[0]
+
+        def _extract_control_trajectory(us: Array) -> Array:
+            """
+            Return a control trajectory shaped (T, control_dim) from any array shaped (..., T, control_dim).
+            """
+            if us.ndim == 2:
+                return us
+            return us.reshape((-1,) + us.shape[-2:])[0]
+
+        def _move_control_time_first(us: Array) -> Array:
+            # Controls are assumed shaped (..., T, control_dim) after extraction/broadcast.
+            return jnp.moveaxis(us, -2, 0)
 
         with numpyro.handlers.seed(rng_seed=self.key):
             # Extract controls from context if available
+            times = _extract_time_vector(raw_times)
             ctrl_times, ctrl_values = _get_controls(context, times)
 
             # Validate that control_dim is set when controls are present
             _validate_control_dim(dynamics, ctrl_values)
 
-            _init_state = dynamics.initial_condition.sample(numpyro.prng_key())
-            initial_state = numpyro.deterministic("x_0", _init_state)
+            # Diffrax expects scalar times; keep the integration time grid unbatched.
+            # (If callers provide batched times, we pick the first time grid.)
+            times_scan = times
 
-            u_0 = tree_map(lambda x: x[0], ctrl_values)
+            initial_state = numpyro.sample("x_0", dynamics.initial_condition)
+            initial_state = _ensure_batch_prefix(initial_state)
 
-            _init_obs = dynamics.observation_model(
-                x=initial_state, u=u_0, t=times[0]
-            ).sample(numpyro.prng_key())
-            y_0 = numpyro.deterministic("y_0", _init_obs)
+            if ctrl_values is not None:
+                ctrl_values = _extract_control_trajectory(ctrl_values)
+                ctrl_values = _ensure_batch_prefix(ctrl_values)
+                ctrl_scan = _move_control_time_first(
+                    ctrl_values
+                )  # (T, ..., control_dim)
+                u_0 = ctrl_scan[0]
+            else:
+                ctrl_scan = None
+                u_0 = None
+
+            y_0 = numpyro.sample(
+                "y_0",
+                dynamics.observation_model(x=initial_state, u=u_0, t=times_scan[0]),
+            )
+            y_0 = _ensure_batch_prefix(y_0)
 
             def _step(prev_state, args):
                 t_next_idx, t0, t1, inpt = args
 
                 numpyro_key = numpyro.prng_key()
 
-                def drift(t, y, args):
-                    return dynamics.state_evolution.drift(y, inpt, t)
+                def integrate_once(key, y0, t0_single, t1_single, inpt_single):
+                    def drift(t, y, args):
+                        return dynamics.state_evolution.drift(y, inpt_single, t)
 
-                def diffusion(t, y, args):
-                    Qc_t = dynamics.state_evolution.diffusion_covariance(y, inpt, t)
-                    L_t = dynamics.state_evolution.diffusion_coefficient(y, inpt, t)
+                    def diffusion(t, y, args):
+                        Qc_t = dynamics.state_evolution.diffusion_covariance(
+                            y, inpt_single, t
+                        )
+                        L_t = dynamics.state_evolution.diffusion_coefficient(
+                            y, inpt_single, t
+                        )
 
-                    Q_sqrt = jnp.linalg.cholesky(Qc_t)
-                    combined_diffusion = L_t @ Q_sqrt
-                    return combined_diffusion
+                        Q_sqrt = jnp.linalg.cholesky(Qc_t)
+                        combined = L_t @ Q_sqrt
+                        # If the model provides unbatched diffusion (state_dim,state_dim)
+                        # but the state is batched (...,state_dim), broadcast across the
+                        # leading batch dims so diffrax can contract with the control.
+                        if y.ndim > 1 and combined.ndim == 2:
+                            combined = jnp.broadcast_to(
+                                combined, y.shape[:-1] + combined.shape
+                            )
+                        return combined
 
-                state = diffeqsolve_util(
-                    key=numpyro_key,
-                    drift=drift,
-                    diffusion=diffusion,
-                    t0=t0,
-                    t1=t1,
-                    y0=prev_state,
-                    **self.diffeqsolve_settings,
-                )[0]
+                    # If times were broadcast, pick a representative scalar
+                    t0_scalar = t0
+                    t1_scalar = t1
+
+                    return diffeqsolve_util(
+                        key=key,
+                        drift=drift,
+                        diffusion=diffusion,
+                        t0=t0_scalar,
+                        t1=t1_scalar,
+                        y0=y0,
+                        **self.diffeqsolve_settings,
+                    )[0]
+
+                if batch_shape:
+                    # If the drift is a PyTree (e.g. eqx.Module) with batched parameter leaves,
+                    # then vmap over the batch and slice those leaves automatically.
+                    drift_obj = dynamics.state_evolution.drift
+                    if _drift_has_batched_params(drift_obj):
+                        keys = jr.split(numpyro_key, batch_size)
+                        prev_state = _flatten_batch_prefix(prev_state)
+                        inpt_flat = (
+                            _flatten_batch_prefix(inpt) if inpt is not None else None
+                        )
+
+                        def integrate_single(drift_i, key_i, y0_i, inpt_i):
+                            def drift(t, y, args):
+                                return drift_i(y, inpt_i, t)
+
+                            def diffusion(t, y, args):
+                                Qc_t = dynamics.state_evolution.diffusion_covariance(
+                                    y, inpt_i, t
+                                )
+                                L_t = dynamics.state_evolution.diffusion_coefficient(
+                                    y, inpt_i, t
+                                )
+                                Q_sqrt = jnp.linalg.cholesky(Qc_t)
+                                return L_t @ Q_sqrt
+
+                            return diffeqsolve_util(
+                                key=key_i,
+                                drift=drift,
+                                diffusion=diffusion,
+                                t0=t0,
+                                t1=t1,
+                                y0=y0_i,
+                                **self.diffeqsolve_settings,
+                            )[0]
+
+                        if inpt_flat is None:
+                            state = jax.vmap(
+                                lambda drift_i, key_i, y0_i: integrate_single(
+                                    drift_i, key_i, y0_i, None
+                                ),
+                                in_axes=(0, 0, 0),
+                            )(drift_obj, keys, prev_state)
+                        else:
+                            state = jax.vmap(integrate_single, in_axes=(0, 0, 0, 0))(
+                                drift_obj, keys, prev_state, inpt_flat
+                            )
+                        state = state.reshape(batch_shape + state.shape[1:])
+                    else:
+                        state = integrate_once(numpyro_key, prev_state, t0, t1, inpt)
+                else:
+                    state = integrate_once(numpyro_key, prev_state, t0, t1, inpt)
 
                 state = numpyro.deterministic(f"x_{t_next_idx}", state)
 
-                # TODO: Double-check this.
-                # This is a bit tricky because the plate will try to modify these.
-                # We accordingly separate deterministic (which is side-effect free)
-                # from the corresponding factor statement.
-                emission = numpyro.deterministic(
+                emission = numpyro.sample(
                     f"y_{t_next_idx}",
-                    dynamics.observation_model(x=state, u=inpt, t=t1).sample(
-                        numpyro.prng_key()
-                    ),
+                    dynamics.observation_model(x=state, u=inpt, t=t1),
                 )
-                log_prob = dynamics.observation_model(x=state, u=inpt, t=t1).log_prob(
-                    emission
-                )
-                numpyro.factor(f"log_prob_{t_next_idx}", log_prob)
 
                 return state, (state, emission)
 
-            num_timesteps = len(times)
-            t0 = tree_map(lambda x: x[0:-1], times)
-            t1 = tree_map(lambda x: x[1:], times)
-            next_inputs = tree_map(lambda x: x[1:], ctrl_values)
+            num_timesteps = times_scan.shape[0]
+            t0 = times_scan[:-1]
+            t1 = times_scan[1:]
+            next_inputs = ctrl_scan[1:] if ctrl_scan is not None else None
 
             _, (next_states, next_emissions) = nscan(
                 _step,
