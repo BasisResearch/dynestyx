@@ -3,8 +3,11 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
+from dsx.dynamical_models import (
+    DynamicalModel,
+    ContinuousTimeStateEvolution,
+)
+from dsx.observations import LinearGaussianObservation, DiracIdentityObservation
 import dsx
 
 
@@ -178,6 +181,36 @@ def continuous_time_LTI_gaussian():
         observation_model=LinearGaussianObservation(
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
         ),
+    )
+    return dsx.sample_ds("f", dynamics)
+
+
+def stochastic_volatility(identity_observation: bool = False):
+    """Discrete-time stochastic volatility: log-variance follows AR(1).
+    One unknown parameter: phi (persistence). No controls.
+    If identity_observation=True, y_t = x_t (DiracIdentityObservation); else noisily observed."""
+    phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0))  # type: ignore[arg-type]
+    sigma_eta = 0.5  # fixed vol-of-vol
+
+    initial_condition = dist.Normal(0.0, 1.0)
+
+    def state_evolution(x, u, t_now, t_next):
+        return dist.Normal(phi * x, sigma_eta)
+
+    if identity_observation:
+        observation_model = DiracIdentityObservation()
+    else:
+
+        def observation_model(x, u, t):  # type: ignore[misc]
+            return dist.Normal(0.0, jnp.exp(x / 2.0))
+
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=0,
+        initial_condition=initial_condition,
+        state_evolution=state_evolution,
+        observation_model=observation_model,
     )
     return dsx.sample_ds("f", dynamics)
 
