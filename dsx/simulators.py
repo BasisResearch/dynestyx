@@ -202,9 +202,12 @@ class DiscreteTimeSimulator(BaseSimulator):
 
             with numpyro.plate("time", T - 1):
                 trans = dynamics.state_evolution(
-                    x=x_prev, u=u_prev, t_now=t_now, t_next=t_next
+                    x_prev,
+                    u_prev,
+                    t_now,
+                    t_next,  # type: ignore
                 )
-                numpyro.sample("x_next", trans, obs=x_next)
+                numpyro.sample("x_next", trans, obs=x_next)  # type: ignore
 
             return {
                 "times": obs_times,
@@ -214,7 +217,7 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # Default: scan over time
         # Sample initial state
-        x_prev: State= numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore[assignment]
+        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)

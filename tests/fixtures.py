@@ -193,8 +193,8 @@ def data_conditioned_discrete_time_l63_filter(request):
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
 
-    with handler(DiscreteTimeSimulator()):
-        with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -207,8 +207,8 @@ def data_conditioned_discrete_time_l63_filter(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedMarginalLogLikelihood()):
-            with handler(Condition(context)):
+        with FilterBasedMarginalLogLikelihood():
+            with Condition(context):
                 return discrete_time_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -252,8 +252,8 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
 
-    with handler(DiscreteTimeSimulator()):
-        with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -266,10 +266,10 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(
-            FilterBasedMarginalLogLikelihood(filter_type="pf", n_filter_particles=3_000)
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="pf", n_filter_particles=3_000
         ):
-            with handler(Condition(context)):
+            with Condition(context):
                 return discrete_time_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
