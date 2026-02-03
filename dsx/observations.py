@@ -24,3 +24,12 @@ class LinearGaussianObservation(ObservationModel):
 
     def __call__(self, x, u, t):
         return dist.MultivariateNormal(loc=jnp.dot(self.H, x), covariance_matrix=self.R)
+
+
+class DiracIdentityObservation(ObservationModel):
+    """
+    y_t | x_t ~ DiracDelta(x_t)
+    """
+
+    def __call__(self, x, u, t):
+        return dist.Delta(x)

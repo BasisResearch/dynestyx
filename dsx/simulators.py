@@ -4,6 +4,7 @@ import dataclasses
 from dsx.handlers import BaseSimulator
 from dsx.ops import States, Context
 from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+from dsx.observations import DiracIdentityObservation
 from dsx.utils import (
     dsx_to_cd_dynamax,
     _get_controls,
@@ -185,8 +186,35 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         T = len(obs_times)
 
+        # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
+        # instead of scan. state_evolution returns a dist; call it with batched inputs.
+        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
+            obs_values is not None
+        ):
+            numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
+            numpyro.deterministic("y_0", obs_values[0])
+
+            x_prev = obs_values[:-1]
+            x_next = obs_values[1:]
+            u_prev = ctrl_values[:-1] if ctrl_values is not None else None
+            t_now = obs_times[:-1]
+            t_next = obs_times[1:]
+
+            with numpyro.plate("time", T - 1):
+                trans = dynamics.state_evolution(
+                    x=x_prev, u=u_prev, t_now=t_now, t_next=t_next
+                )
+                numpyro.sample("x_next", trans, obs=x_next)
+
+            return {
+                "times": obs_times,
+                "states": obs_values,
+                "observations": obs_values,
+            }
+
+        # Default: scan over time
         # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
+        x_prev = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore[assignment]
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)
