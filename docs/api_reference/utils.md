@@ -1,3 +1,3 @@
 # utils
 
-::: dsx.utils
+::: dynestyx.utils

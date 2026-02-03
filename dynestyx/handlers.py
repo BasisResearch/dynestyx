@@ -7,8 +7,8 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from effectful.ops.semantics import fwd
 import numpyro
 
-from dsx.ops import sample_ds, FunctionOfTime, Context, States
-from dsx.dynamical_models import DynamicalModel
+from dynestyx.ops import sample_ds, FunctionOfTime, Context, States
+from dynestyx.dynamical_models import DynamicalModel
 
 from effectful.ops.semantics import handler
 

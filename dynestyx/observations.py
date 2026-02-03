@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from dsx.dynamical_models import ObservationModel
+from dynestyx.dynamical_models import ObservationModel
 from numpyro import distributions as dist
 
 

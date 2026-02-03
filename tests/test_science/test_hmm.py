@@ -7,7 +7,7 @@ import pytest
 
 from tests.test_utils import get_output_dir
 from tests.fixtures import data_conditioned_hmm  # noqa: F401
-from dsx.plotters import plot_hmm_states_and_observations
+from dynestyx.plotters import plot_hmm_states_and_observations
 
 SAVE_FIG = True
 
