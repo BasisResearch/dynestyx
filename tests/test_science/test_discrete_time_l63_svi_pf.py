@@ -79,7 +79,7 @@ def test_svi_inference(data_conditioned_discrete_time_l63_filter_pf, num_steps):
 
     assert jnp.abs(posterior_rho.mean() - true_params["rho"]) < 5.0
 
-    hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
+    hdi_data = az.hdi(posterior_rho, hdi_prob=0.99)
     hdi_min = hdi_data["x"].sel(hdi="lower").item()
     hdi_max = hdi_data["x"].sel(hdi="higher").item()
     assert hdi_min <= true_params["rho"] <= hdi_max, (

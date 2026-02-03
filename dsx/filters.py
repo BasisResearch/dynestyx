@@ -17,7 +17,7 @@ from cuthbert.gaussian import taylor
 from typing import NamedTuple
 
 from cuthbert.smc import particle_filter
-from dsx.cuthbert_patches import multinomial_resampling
+from dsx.cuthbert_patches import systematic_resampling
 
 SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -288,7 +288,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             propagate_sample=propagate_sample,  # type: ignore
             log_potential=log_potential,  # type: ignore
             n_filter_particles=int(self.filter_kwargs.get("n_filter_particles", 1_000)),
-            resampling_fn=multinomial_resampling.resampling,  # type: ignore
+            resampling_fn=systematic_resampling.resampling,  # type: ignore
             ess_threshold=ess_threshold,
         )
         return pf
