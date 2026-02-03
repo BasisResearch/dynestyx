@@ -64,7 +64,7 @@ def hmm_model():
         observation_model=observation_model,
     )
 
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def discrete_time_l63_model():
@@ -113,7 +113,7 @@ def discrete_time_l63_model():
     # e.g. drift = lambda x: F(x, rho)
 
     # Return a sampled dynamical model, named "f".
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_stochastic_l63_model():
@@ -157,7 +157,7 @@ def continuous_time_stochastic_l63_model():
     # e.g. drift = lambda x: F(x, rho)
 
     # Return a sampled dynamical model, named "f".
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_LTI_gaussian():
@@ -182,7 +182,7 @@ def continuous_time_LTI_gaussian():
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
         ),
     )
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def stochastic_volatility(identity_observation: bool = False):
@@ -212,7 +212,8 @@ def stochastic_volatility(identity_observation: bool = False):
         state_evolution=state_evolution,
         observation_model=observation_model,
     )
-    return dsx.sample_ds("f", dynamics)
+
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_deterministic_l63_model():
@@ -243,4 +244,4 @@ def continuous_time_deterministic_l63_model():
     )
 
     # Return a sampled dynamical model, named "f".
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)

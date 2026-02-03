@@ -3,7 +3,6 @@ import jax.random as jr
 
 from numpyro.infer import Predictive
 
-from effectful.ops.semantics import handler
 from dsx.handlers import Condition
 from dsx.ops import Trajectory, Context
 from dsx.simulators import SDESimulator
@@ -68,8 +67,8 @@ def data_conditioned_hmm(request):
     )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSimulator()):
-        with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     # Prefer indexing rather than squeeze, to keep (T, obs_dim)
@@ -85,8 +84,8 @@ def data_conditioned_hmm(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedHMMMarginalLogLikelihood()):
-            with handler(Condition(context)):
+        with FilterBasedHMMMarginalLogLikelihood():
+            with Condition(context):
                 return hmm_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -133,8 +132,8 @@ def data_conditioned_discrete_time_l63(request):
     )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSimulator()):
-        with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -149,8 +148,8 @@ def data_conditioned_discrete_time_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(DiscreteTimeSimulator()):
-            with handler(Condition(context)):
+        with DiscreteTimeSimulator():
+            with Condition(context):
                 return discrete_time_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -253,8 +252,8 @@ def data_conditioned_continuous_time_l63_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESimulator(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -269,10 +268,10 @@ def data_conditioned_continuous_time_l63_dpf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(
-            FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=1_000)
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="dpf", dpf_num_particles=1_000
         ):
-            with handler(Condition(context)):
+            with Condition(context):
                 return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -315,8 +314,8 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(ODESimulator()):
-        with handler(Condition(context)):
+    with ODESimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -331,8 +330,8 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(ODESimulator()):
-            with handler(Condition(context)):
+        with ODESimulator():
+            with Condition(context):
                 return continuous_time_deterministic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -414,8 +413,8 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESimulator(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -426,8 +425,8 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedMarginalLogLikelihood()):
-            with handler(Condition(context)):
+        with FilterBasedMarginalLogLikelihood():
+            with Condition(context):
                 return continuous_time_LTI_gaussian()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -465,8 +464,8 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESimulator(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -477,10 +476,10 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(
-            FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="dpf", dpf_num_particles=2_500
         ):
-            with handler(Condition(context)):
+            with Condition(context):
                 return continuous_time_LTI_gaussian()
 
     return data_conditioned_model, true_params, synthetic, use_controls
