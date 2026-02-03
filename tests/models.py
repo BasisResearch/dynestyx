@@ -212,7 +212,8 @@ def stochastic_volatility(identity_observation: bool = False):
         state_evolution=state_evolution,
         observation_model=observation_model,
     )
-    return dsx.sample_ds("f", dynamics)
+
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_deterministic_l63_model():
