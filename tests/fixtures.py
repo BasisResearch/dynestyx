@@ -4,7 +4,8 @@ import jax.random as jr
 from numpyro.infer import Predictive
 
 from effectful.ops.semantics import handler
-from dsx.handlers import Condition
+from dsx.handlers import Condition, Discretizer
+from dsx.discretizers import EulerMaruyamaDiscretization
 from dsx.ops import Trajectory, Context
 from dsx.simulators import SDESimulator
 from dsx.simulators import DiscreteTimeSimulator, ODESimulator
@@ -151,6 +152,61 @@ def data_conditioned_discrete_time_l63(request):
         with handler(DiscreteTimeSimulator()):
             with handler(Condition(context)):
                 return discrete_time_l63_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_l63_auto(request):
+    """Uses continuous_time_stochastic_l63_model with Discretize(EulMar) to get
+    a discrete-time transition (Euler-Maruyama over each [t_now, t_next]), then
+    DiscreteTimeSimulator + Condition."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    true_rho = 28.0
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        continuous_time_stochastic_l63_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    # Order: Condition innermost (injects context), then Discretizer (CTE->discrete),
+    # then DiscreteTimeSimulator (simulates with discrete dynamics + context).
+    with handler(DiscreteTimeSimulator()):
+        with handler(Discretizer(EulerMaruyamaDiscretization)):
+            with handler(Condition(context)):
+                synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with handler(DiscreteTimeSimulator()):
+            with handler(Discretizer(EulerMaruyamaDiscretization)):
+                with handler(Condition(context)):
+                    return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
