@@ -266,7 +266,9 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedMarginalLogLikelihood(filter_type="pf")):
+        with handler(
+            FilterBasedMarginalLogLikelihood(filter_type="pf", n_filter_particles=3_000)
+        ):
             with handler(Condition(context)):
                 return discrete_time_l63_model()
 

@@ -46,5 +46,5 @@ dev = [
 
 
 [[tool.mypy.overrides]]
-module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*"]
+module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*"]
 follow_untyped_imports = true
