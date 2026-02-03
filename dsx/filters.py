@@ -41,7 +41,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     """Log factor adder that computes marginal log likelihood via CD-Dynamax filtering."""
 
     key: Optional[jax.Array] = None
-    filter_type: str = "enkf"
+    filter_type: str = "default"
     output_fields = None
     filter_kwargs: dict = dataclasses.field(default_factory=dict)
 
@@ -149,13 +149,13 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         _validate_control_dim(dynamics, ctrl_values)
 
         if self.filter_type.lower() in ["enkf", "default"]:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+            cd_dynamax_model: SSMType = ContDiscreteNonlinearGaussianSSM(
                 state_dim=dynamics.state_dim,
                 emission_dim=dynamics.observation_dim,
                 input_dim=dynamics.control_dim,
             )
         elif self.filter_type.lower() == "dpf":
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
+            cd_dynamax_model = ContDiscreteNonlinearSSM(
                 state_dim=dynamics.state_dim,
                 emission_dim=dynamics.observation_dim,
                 input_dim=dynamics.control_dim,
@@ -248,8 +248,9 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             return dynamics.initial_condition.sample(key)
 
         def propagate_sample(key, x_prev, mi: _CuthbertInputs):
-            dist = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)
-            return dist.sample(key)
+            # TODO: Resolve these types later.
+            dist = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
+            return dist.sample(key)  # type: ignore
 
         def log_potential(x_prev, x, mi: _CuthbertInputs):
             y = mi.y
@@ -271,11 +272,11 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         ess_threshold = float(self.filter_kwargs.get("ess_threshold", 0.7))
 
         pf = particle_filter.build_filter(
-            init_sample=init_sample,
-            propagate_sample=propagate_sample,
-            log_potential=log_potential,
+            init_sample=init_sample,  # type: ignore
+            propagate_sample=propagate_sample,  # type: ignore
+            log_potential=log_potential,  # type: ignore
             n_filter_particles=int(self.filter_kwargs.get("n_filter_particles", 1_000)),
-            resampling_fn=multinomial_resampling.resampling,
+            resampling_fn=multinomial_resampling.resampling,  # type: ignore
             ess_threshold=ess_threshold,
         )
         return pf
@@ -306,10 +307,15 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             x_prev_lin = state.mean
 
             # A decent guess for the x_t linearization point is the conditional mean at x_prev_lin (if available).
-            dist_at_lin = dynamics.state_evolution(
+            dist_at_lin = dynamics.state_evolution(  # type: ignore
                 x_prev_lin, mi.u_prev, mi.time_prev, mi.time
             )
-            x_lin = dist_at_lin.mean
+            try:
+                x_lin = dist_at_lin.mean  # type: ignore
+            except Exception:
+                raise ValueError(
+                    "dist_at_lin.mean is not available. Linearized Kalman filter requires a mean-able distribution."
+                )
 
             return dynamics_log_density, x_prev_lin, x_lin
 
@@ -332,9 +338,9 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             return log_potential, state.mean
 
         kf = taylor.build_filter(
-            get_init_log_density,
-            get_dynamics_log_density,
-            get_observation_func,
+            get_init_log_density,  # type: ignore
+            get_dynamics_log_density,  # type: ignore
+            get_observation_func,  # type: ignore
             associative=False,
             rtol=rtol,
             ignore_nan_dims=True,

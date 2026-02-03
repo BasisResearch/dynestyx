@@ -5,6 +5,7 @@ import dataclasses
 import warnings
 import equinox as eqx
 from typing import Callable, Any
+from numpyro._typing import DistributionT
 
 # ----------------------------------------------------------------------
 # TYPE ALIASES
@@ -13,7 +14,7 @@ State = Union[jax.Array, Dict[str, jax.Array]]
 dState = State
 Observation = jax.Array
 Control = Optional[State]
-Time = float
+Time = Union[jax.Array, float]
 Params = Dict[str, Union[float, jax.Array]]
 Key = jax.Array
 
@@ -30,9 +31,12 @@ class DynamicalModel(eqx.Module):
     state_dim: int
     observation_dim: int
     control_dim: int
-    initial_condition: dist.Distribution
-    state_evolution: Callable[[State, Control, Time], State]
-    observation_model: Callable[[State, Control, Time], dist.Distribution]
+    initial_condition: DistributionT
+    state_evolution: Union[
+        Callable[[State, Control, Time], State],
+        Callable[[State, Control, Time, Time], State],
+    ]
+    observation_model: Callable[[State, Control, Time], DistributionT]
     control_model: Any
     continuous_time: bool
 
@@ -171,7 +175,7 @@ class ControlModel(eqx.Module):
     pass
 
 
-class DiscreteTimeStateEvolution(StateEvolution, DistributionFromStateTimeParams):
+class DiscreteTimeStateEvolution(StateEvolution):
     """
     x_{t+1} ~ p(x_{t+1} | State_t, Control_t, t)
     Return a NumPyro Distribution over next state.
@@ -181,6 +185,7 @@ class DiscreteTimeStateEvolution(StateEvolution, DistributionFromStateTimeParams
         self,
         x: State,
         u: Optional[Control],
-        t: Time,
-    ) -> dist.Distribution:
+        t_now: Time,
+        t_next: Time,
+    ) -> DistributionT:
         raise NotImplementedError()

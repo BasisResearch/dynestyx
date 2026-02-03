@@ -10,7 +10,7 @@ from numpyro import distributions as dist
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 
-from typing import TypeAlias
+from typing import TypeAlias, Any
 
 SSMType: TypeAlias = CDNLGSSM | CDNLSSM
 
@@ -22,7 +22,7 @@ def dsx_to_cd_dynamax(
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
     """
 
-    params = {}
+    params: dict[str, Any] = {}
 
     ## Map state evolution ##
     state_evo = dsx_model.state_evolution

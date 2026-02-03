@@ -3,7 +3,7 @@ import dataclasses
 
 from dsx.handlers import BaseSimulator
 from dsx.ops import States, Context
-from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel, State
 from dsx.utils import (
     dsx_to_cd_dynamax,
     _get_controls,
@@ -147,7 +147,7 @@ class SDESimulator(BaseSimulator):
                 t = obs_times[t_idx]
                 numpyro.sample(
                     f"y_{t_idx}",
-                    dynamics.observation_model(x=states[t_idx], u=u_t, t=t),
+                    dynamics.observation_model(states[t_idx], u_t, t),
                     obs=_get_val_or_None(obs_values, t_idx),
                 )
 
@@ -186,13 +186,13 @@ class DiscreteTimeSimulator(BaseSimulator):
         T = len(obs_times)
 
         # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
+        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)
         y_0 = numpyro.sample(
             "y_0",
-            dynamics.observation_model(x=x_prev, u=u_0, t=obs_times[0]),
+            dynamics.observation_model(x_prev, u_0, obs_times[0]),
             obs=_get_val_or_None(obs_values, 0),
         )
 
@@ -224,7 +224,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         # x_prev is shape (state_dim,) or scalar, scan_states is (T-1, state_dim)
         # y_0 is shape (obs_dim,) or scalar, scan_observations is (T-1, obs_dim)
         # Use expand_dims to ensure proper shape for concatenation
-        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # shape (1, state_dim) or (1,)
+        # shape (1, state_dim) or (1,)
+        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
         y_0_expanded = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
         states = jnp.concatenate(
             [x_0_expanded, scan_states], axis=0

@@ -48,7 +48,9 @@ def test_mcmc_inference(data_conditioned_discrete_time_l63_filter_pf, num_sample
         plt.close()
 
     mcmc_key = jr.PRNGKey(0)
-    barker_kernel = BarkerMH(data_conditioned_model, adapt_step_size=False, adapt_mass_matrix=False)
+    barker_kernel = BarkerMH(
+        data_conditioned_model, adapt_step_size=False, adapt_mass_matrix=False
+    )
     mcmc = MCMC(barker_kernel, num_samples=num_samples, num_warmup=num_samples)
     mcmc.run(mcmc_key)
 
