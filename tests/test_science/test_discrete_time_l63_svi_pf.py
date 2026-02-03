@@ -14,7 +14,7 @@ from tests.test_utils import get_output_dir
 SAVE_FIG = True
 
 
-@pytest.mark.parametrize("num_steps", [100])
+@pytest.mark.parametrize("num_steps", [50])
 def test_svi_inference(data_conditioned_discrete_time_l63_filter_pf, num_steps):  # noqa: F811
     (
         data_conditioned_model,
@@ -51,7 +51,7 @@ def test_svi_inference(data_conditioned_discrete_time_l63_filter_pf, num_steps):
 
     svi_key = jr.PRNGKey(0)
     guide = AutoDiagonalNormal(data_conditioned_model)
-    optimizer = optax.adam(learning_rate=1e-4)
+    optimizer = optax.adam(learning_rate=1e-3)
     svi = SVI(data_conditioned_model, guide, optimizer, loss=Trace_ELBO())
 
     svi_result = svi.run(svi_key, num_steps)

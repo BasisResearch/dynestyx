@@ -16,7 +16,6 @@ from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from typing import NamedTuple
 
-from jax import lax
 from cuthbert.smc import particle_filter
 from dsx.cuthbert_patches import multinomial_resampling
 
@@ -38,7 +37,18 @@ class _CuthbertInputs(NamedTuple):
 
 @dataclasses.dataclass
 class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
-    """Log factor adder that computes marginal log likelihood via CD-Dynamax filtering."""
+    """
+    Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
+
+    There are several different options for the filter method, depending on the type of dynamical model.
+    For discrete-time models, we interface with cuthbert; by default, we use the Taylor linearized Kalman filter (filter_type="taylor_kf"),
+    but the particle filter is also available (filter_type="pf").
+    For continuous-time models, we interface with CD-Dynamax; by default, we use the ensemble Kalman filter (filter_type="enkf"),
+    but the differentiable particle filter is also available (filter_type="dpf").
+
+    The filter_kwargs dictionary can be used to pass additional keyword arguments to the filter.
+    TODO: Document choices available for each filter type.
+    """
 
     key: Optional[jax.Array] = None
     filter_type: str = "default"
@@ -57,6 +67,14 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         dynamics: DynamicalModel,
         context: Context,
     ):
+        """
+        Add the marginal log likelihood as a numpyro factor.
+
+        Args:
+            name: Name of the factor.
+            dynamics: Dynamical model to filter.
+            context: Context containing the observations and controls.
+        """
         if dynamics.continuous_time:
             if self.filter_type.lower() not in _CONTINUOUS_FILTER_TYPES:
                 raise ValueError(
@@ -74,7 +92,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         self, name: str, dynamics: DynamicalModel, context: Context
     ):
         """
-        Discrete-time marginal likelihood via cuthbert.gaussian.taylor (linearized Kalman filter).
+        Discrete-time marginal likelihood via cuthbert.
         """
 
         obs_traj = context.observations
@@ -131,6 +149,14 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     def _filter_continuous_time(
         self, name: str, dynamics: DynamicalModel, context: Context
     ):
+        """Continuous-time marginal likelihood via CD-Dynamax.
+
+        Args:
+            name: Name of the factor.
+            dynamics: Dynamical model to filter.
+            context: Context containing the observations and controls.
+        """
+
         # Pull observed trajectory from context
         obs_traj = context.observations
         if obs_traj.times is None or obs_traj.values is None:
@@ -244,7 +270,6 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
     def _cuthbert_filter_pf(self, dynamics: DynamicalModel):
         def init_sample(key, mi: _CuthbertInputs):
-            # IMPORTANT: use cuthbert's key, not numpyro.prng_key()
             return dynamics.initial_condition.sample(key)
 
         def propagate_sample(key, x_prev, mi: _CuthbertInputs):
@@ -253,21 +278,8 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             return dist.sample(key)  # type: ignore
 
         def log_potential(x_prev, x, mi: _CuthbertInputs):
-            y = mi.y
-
-            missing = jnp.issubdtype(y.dtype, jnp.floating) & jnp.any(jnp.isnan(y))
-
-            def _present(_):
-                edist = dynamics.observation_model(x, mi.u, mi.time)
-                return jnp.asarray(edist.log_prob(y)).sum()  # scalar
-
-            # IMPORTANT: lax.cond short-circuits; jnp.where would still evaluate NaN branch
-            return lax.cond(
-                missing,
-                lambda _: jnp.array(0.0, dtype=y.dtype),
-                _present,
-                operand=None,
-            )
+            edist = dynamics.observation_model(x, mi.u, mi.time)
+            return jnp.asarray(edist.log_prob(mi.y)).sum()
 
         ess_threshold = float(self.filter_kwargs.get("ess_threshold", 0.7))
 
@@ -322,18 +334,9 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         def get_observation_func(
             state: taylor.LinearizedKalmanFilterState, mi: _CuthbertInputs
         ):
-            y_t = mi.y
-
-            missing = jnp.issubdtype(y_t.dtype, jnp.floating) & jnp.any(jnp.isnan(y_t))
-
             def log_potential(x):
-                def _present(_):
-                    edist = dynamics.observation_model(x, mi.u, mi.time)
-                    return jnp.asarray(edist.log_prob(y_t)).sum()
-
-                return lax.cond(
-                    missing, lambda _: jnp.array(0.0, y_t.dtype), _present, operand=None
-                )
+                edist = dynamics.observation_model(x, mi.u, mi.time)
+                return jnp.asarray(edist.log_prob(mi.y)).sum()
 
             return log_potential, state.mean
 

@@ -33,6 +33,10 @@ def resampling(key: Array, logits: ArrayLike, n: int) -> Array:
 
     key_uniforms, key_shuffle = random.split(key)
     sorted_uniforms = _sorted_uniforms(key_uniforms, n)
+
+    # In cuthbert, this may use a jax.pure_callback,
+    # which is incompatible with gradient-based sampling methods.
+    # Here, we use the default resampling function, which is a pure jax function.
     idx = _inverse_cdf_default(sorted_uniforms, logits)
     return random.permutation(key_shuffle, idx)
 
