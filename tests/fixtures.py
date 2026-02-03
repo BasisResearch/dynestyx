@@ -215,6 +215,65 @@ def data_conditioned_discrete_time_l63_filter(request):
 
 
 @pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_l63_filter_pf(request):
+    """Discrete-time L63 model using FilterBasedMarginalLogLikelihood with bootstrap particle filter."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    # Set true parameters for synthetic data generation
+    true_rho = 28.0
+
+    # Generate observations at some times
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    # Generate synthetic data
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        discrete_time_l63_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+
+    with handler(DiscreteTimeSimulator()):
+        with handler(Condition(context)):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+
+    # Build conditioned model
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with handler(FilterBasedMarginalLogLikelihood(filter_type="pf")):
+            with handler(Condition(context)):
+                return discrete_time_l63_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(params=[False, True])
 def data_conditioned_continuous_time_stochastic_l63(request):
     use_controls = request.param
     rng_key = jr.PRNGKey(0)

@@ -6,10 +6,11 @@ the new discrete-time filtering capabilities via bootstrap particle filters.
 """
 
 import jax.random as jr
-from numpyro.infer import MCMC, NUTS
+from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
     data_conditioned_discrete_time_l63_filter,  # noqa: F401
+    data_conditioned_discrete_time_l63_filter_pf,  # noqa: F401
 )
 
 NUM_SAMPLES = 10
@@ -26,6 +27,28 @@ def test_discrete_time_l63_taylor_kf_mcmc_smoke(
     )
     mcmc = MCMC(
         NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "rho" in posterior_samples
+
+
+def test_discrete_time_l63_pf_mcmc_smoke(
+    data_conditioned_discrete_time_l63_filter_pf,  # noqa: F811
+):
+    """Test MCMC inference on discrete-time L63 model using a particle filter."""
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, synthetic, _ = (
+        data_conditioned_discrete_time_l63_filter_pf
+    )
+    mcmc = MCMC(
+        BarkerMH(
+            data_conditioned_model,
+            adapt_step_size=False,
+            adapt_mass_matrix=False,
+        ),
+        num_samples=NUM_SAMPLES,
+        num_warmup=NUM_WARMUP,
     )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
