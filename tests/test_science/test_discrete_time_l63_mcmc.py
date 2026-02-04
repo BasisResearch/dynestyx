@@ -20,7 +20,7 @@ def test_mcmc_inference(data_conditioned_discrete_time_l63_filter, num_samples):
     ) = data_conditioned_discrete_time_l63_filter
 
     # Set output dir based on whether controls are used
-    output_dir_name = "test_discrete_time_l63_pf_mcmc" + (
+    output_dir_name = "test_discrete_time_l63_taylor_kf_mcmc" + (
         "_controlled" if use_controls else ""
     )
     OUTPUT_DIR = get_output_dir(output_dir_name)
