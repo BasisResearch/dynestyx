@@ -1,15 +1,13 @@
+import arviz as az
+import blackjax
+import jax
 import jax.numpy as jnp
 import jax.random as jr
-import jax
-
-import arviz as az
 import pytest
+from numpyro.infer.util import initialize_model
 
 from tests.fixtures import data_conditioned_continuous_time_stochastic_l63  # noqa: F401
 from tests.test_utils import get_output_dir
-
-from numpyro.infer.util import initialize_model
-import blackjax
 
 SAVE_FIG = True
 

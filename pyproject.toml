@@ -44,6 +44,8 @@ dev = [
     "seaborn>=0.13.2",
 ]
 
+[tool.ruff.lint]
+select = ["I"]
 
 [[tool.mypy.overrides]]
 module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*"]

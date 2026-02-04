@@ -1,7 +1,7 @@
 # HMM
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import jax.numpy as jnp
 
 
 def plot_hmm_states_and_observations(

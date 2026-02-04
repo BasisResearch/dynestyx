@@ -7,19 +7,19 @@ This is because the numba version is implemented as a jax.pure_callback, which c
 
 from functools import partial
 
-from jax import random
-
+from cuthbertlib.resampling.multinomial import (
+    _DESCRIPTION,
+    _sorted_uniforms,
+)
+from cuthbertlib.resampling.multinomial import (
+    conditional_resampling as conditional_resampling_original,
+)
 from cuthbertlib.resampling.protocols import (
     resampling_decorator,
 )
 from cuthbertlib.resampling.utils import _inverse_cdf_default
 from cuthbertlib.types import Array, ArrayLike
-
-from cuthbertlib.resampling.multinomial import (
-    _sorted_uniforms,
-    conditional_resampling as conditional_resampling_original,
-    _DESCRIPTION,
-)
+from jax import random
 
 
 @partial(resampling_decorator, name="Multinomial", desc=_DESCRIPTION)

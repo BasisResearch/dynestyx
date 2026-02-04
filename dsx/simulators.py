@@ -1,24 +1,24 @@
-import jax.numpy as jnp
 import dataclasses
-
-from dsx.handlers import BaseSimulator
-from dsx.ops import States, Context
-from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel, State
-from dsx.observations import DiracIdentityObservation
-from dsx.utils import (
-    dsx_to_cd_dynamax,
-    _get_controls,
-    _validate_control_dim,
-    _get_val_or_None,
-)
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
-import diffrax as dfx
-from jax import Array
-import numpyro
-from numpyro.contrib.control_flow import scan as nscan
 import warnings
-
 from typing import TypeAlias
+
+import diffrax as dfx
+import jax.numpy as jnp
+import numpyro
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+from jax import Array
+from numpyro.contrib.control_flow import scan as nscan
+
+from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel, State
+from dsx.handlers import BaseSimulator
+from dsx.observations import DiracIdentityObservation
+from dsx.ops import Context, States
+from dsx.utils import (
+    _get_controls,
+    _get_val_or_None,
+    _validate_control_dim,
+    dsx_to_cd_dynamax,
+)
 
 SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 

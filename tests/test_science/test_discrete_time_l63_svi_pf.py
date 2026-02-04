@@ -1,15 +1,13 @@
+import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
-
-import arviz as az
-from numpyro.infer import SVI, Trace_ELBO
-from numpyro.infer.autoguide import AutoDiagonalNormal
 import optax
 import pytest
+from numpyro.infer import SVI, Trace_ELBO
+from numpyro.infer.autoguide import AutoDiagonalNormal
 
 from tests.fixtures import data_conditioned_discrete_time_l63_filter_pf  # noqa: F401
 from tests.test_utils import get_output_dir
-
 
 SAVE_FIG = True
 

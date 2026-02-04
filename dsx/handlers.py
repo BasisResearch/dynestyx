@@ -3,14 +3,12 @@
 
 from typing import Optional
 
-from effectful.ops.syntax import ObjectInterpretation, implements
-from effectful.ops.semantics import fwd
 import numpyro
+from effectful.ops.semantics import fwd, handler
+from effectful.ops.syntax import ObjectInterpretation, implements
 
-from dsx.ops import sample_ds, FunctionOfTime, Context, States
 from dsx.dynamical_models import DynamicalModel
-
-from effectful.ops.semantics import handler
+from dsx.ops import Context, FunctionOfTime, States, sample_ds
 
 
 class HandlesSelf:

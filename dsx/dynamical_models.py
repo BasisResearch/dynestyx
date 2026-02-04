@@ -1,10 +1,10 @@
-import jax
-from typing import Union, Dict, Protocol, Optional
-import numpyro.distributions as dist
 import dataclasses
 import warnings
+from typing import Any, Callable, Dict, Optional, Protocol, Union
+
 import equinox as eqx
-from typing import Callable, Any
+import jax
+import numpyro.distributions as dist
 from numpyro._typing import DistributionT
 
 # ----------------------------------------------------------------------

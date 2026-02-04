@@ -1,26 +1,23 @@
 import jax.numpy as jnp
 import jax.random as jr
-
+import pytest
 from numpyro.infer import Predictive
 
-from dsx.handlers import Condition
-from dsx.ops import Trajectory, Context
-from dsx.simulators import SDESimulator
-from dsx.simulators import DiscreteTimeSimulator, ODESimulator
 from dsx.filters import (
-    FilterBasedMarginalLogLikelihood,
     FilterBasedHMMMarginalLogLikelihood,
+    FilterBasedMarginalLogLikelihood,
 )
-
+from dsx.handlers import Condition
+from dsx.ops import Context, Trajectory
+from dsx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
 from tests.models import (
+    continuous_time_deterministic_l63_model,
+    continuous_time_LTI_gaussian,
+    continuous_time_stochastic_l63_model,
     discrete_time_l63_model,
     hmm_model,
     stochastic_volatility,
-    continuous_time_stochastic_l63_model,
-    continuous_time_LTI_gaussian,
-    continuous_time_deterministic_l63_model,
 )
-import pytest
 
 
 @pytest.fixture(params=[False, True])
@@ -157,7 +154,7 @@ def data_conditioned_discrete_time_l63(request):
 
 @pytest.fixture(params=[False, True])
 def data_conditioned_discrete_time_l63_filter(request):
-    """Discrete-time L63 model using FilterBasedMarginalLogLikelihood with bootstrap particle filter."""
+    """Discrete-time L63 model using FilterBasedMarginalLogLikelihood with EnKF."""
     use_controls = request.param
     rng_key = jr.PRNGKey(0)
 

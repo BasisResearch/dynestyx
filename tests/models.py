@@ -1,14 +1,13 @@
 import jax.numpy as jnp
-
 import numpyro
 import numpyro.distributions as dist
 
-from dsx.dynamical_models import (
-    DynamicalModel,
-    ContinuousTimeStateEvolution,
-)
-from dsx.observations import LinearGaussianObservation, DiracIdentityObservation
 import dsx
+from dsx.dynamical_models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+)
+from dsx.observations import DiracIdentityObservation, LinearGaussianObservation
 
 
 def hmm_model():

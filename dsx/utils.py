@@ -1,16 +1,14 @@
+from typing import Any, Optional, Tuple, TypeAlias
+
 import jax.numpy as jnp
-from typing import Optional, Tuple
-from jax import Array
-
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
-from dsx.ops import Context
-from numpyro import distributions as dist
-
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
+from jax import Array
+from numpyro import distributions as dist
 
-from typing import TypeAlias, Any
+from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+from dsx.observations import LinearGaussianObservation
+from dsx.ops import Context
 
 SSMType: TypeAlias = CDNLGSSM | CDNLSSM
 

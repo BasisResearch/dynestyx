@@ -1,9 +1,11 @@
+import dataclasses
+from typing import Callable, Dict, Optional, Union
+
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
-from dsx.dynamical_models import DynamicalModel
-from typing import Dict, Callable, Optional, Union
 from jax import Array
-import dataclasses
+
+from dsx.dynamical_models import DynamicalModel
 
 # Type alias for states: dict mapping state names to arrays, or just an array
 Times = Array

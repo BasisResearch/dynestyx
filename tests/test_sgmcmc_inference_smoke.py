@@ -1,12 +1,11 @@
+import blackjax
+import jax
 import jax.numpy as jnp
 import jax.random as jr
-import jax
-
 import pytest
+from numpyro.infer.util import initialize_model
 
 from tests.fixtures import data_conditioned_continuous_time_stochastic_l63  # noqa: F401
-from numpyro.infer.util import initialize_model
-import blackjax
 
 
 @pytest.mark.parametrize("num_samples", [5])
