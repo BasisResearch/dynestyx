@@ -14,13 +14,13 @@ from dynestyx.dynamical_models import (
     State,
 )
 from dynestyx.handlers import BaseSimulator
+from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.ops import Context, States
 from dynestyx.utils import (
     _get_controls,
     _get_val_or_None,
     _validate_control_dim,
-    dsx_to_cd_dynamax,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM

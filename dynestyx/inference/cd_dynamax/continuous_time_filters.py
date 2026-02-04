@@ -4,8 +4,9 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
 from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.ops import Context
-from dynestyx.utils import _get_controls, _validate_control_dim, dsx_to_cd_dynamax
+from dynestyx.utils import _get_controls, _validate_control_dim
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -48,33 +49,21 @@ def _filter_continuous_time(
     # Validate that control_dim is set when controls are present
     _validate_control_dim(dynamics, ctrl_values)
 
-    if filter_type.lower() in ["enkf", "default"]:
+    if filter_type.lower() in ["enkf", "default", "ekf", "ukf"]:
         cd_dynamax_model: SSMType = ContDiscreteNonlinearGaussianSSM(
             state_dim=dynamics.state_dim,
             emission_dim=dynamics.observation_dim,
             input_dim=dynamics.control_dim,
         )
-    elif filter_type.lower() == "dpf":
-        cd_dynamax_model = ContDiscreteNonlinearSSM(
-            state_dim=dynamics.state_dim,
-            emission_dim=dynamics.observation_dim,
-            input_dim=dynamics.control_dim,
-        )
-    else:
-        raise ValueError(
-            f"Invalid filter type: {filter_type}. Valid types: {_CONTINUOUS_FILTER_TYPES}"
-        )
 
-    # Generate a CD-Dynamax-compatible parameter dict using the chosen model
-    params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-
-    # Choose a key
-    key = key if key is not None else jr.PRNGKey(0)
-
-    # Compute the marginal log likelihood via filtering
-    if filter_type.lower() in ["enkf", "default", "ekf", "ukf"]:
         if filter_type.lower() in ["enkf", "default"]:
             filter_type = "EnKF"
+
+        # Generate a CD-Dynamax-compatible parameter dict using the chosen model
+        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
+
+        # Choose a key
+        key = key if key is not None else jr.PRNGKey(0)
 
         filter_kwargs = {
             "params": params,
@@ -102,6 +91,18 @@ def _filter_continuous_time(
             "inputs": ctrl_values,
         }
     elif filter_type.lower() == "dpf":
+        cd_dynamax_model = ContDiscreteNonlinearSSM(
+            state_dim=dynamics.state_dim,
+            emission_dim=dynamics.observation_dim,
+            input_dim=dynamics.control_dim,
+        )
+
+        # Generate a CD-Dynamax-compatible parameter dict using the chosen model
+        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
+
+        # Choose a key
+        key = key if key is not None else jr.PRNGKey(0)
+
         filter_kwargs = {
             "params": params,
             "emissions": obs_values,
