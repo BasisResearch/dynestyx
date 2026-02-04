@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import numpyro.distributions as dist
 
-from dsx.dynamical_models import (
+from dynestyx.dynamical_models import (
     DiscreteTimeStateEvolution,
     ContinuousTimeStateEvolution,
 )
