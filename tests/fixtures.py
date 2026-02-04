@@ -3,11 +3,11 @@ import jax.random as jr
 
 from numpyro.infer import Predictive
 
-from dsx.handlers import Condition, Discretizer
-from dsx.ops import Trajectory, Context
-from dsx.simulators import SDESimulator
-from dsx.simulators import DiscreteTimeSimulator, ODESimulator
-from dsx.filters import (
+from dynestyx.handlers import Condition, Discretizer
+from dynestyx.ops import Trajectory, Context
+from dynestyx.simulators import SDESimulator
+from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator
+from dynestyx.filters import (
     FilterBasedMarginalLogLikelihood,
     FilterBasedHMMMarginalLogLikelihood,
 )

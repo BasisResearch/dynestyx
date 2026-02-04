@@ -40,7 +40,7 @@ Specifying the dynamical model in `dynestyx` follows a simple, unified interface
 
 The resulting constructor is simple, yet quite general:
 ```python 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+from dynestyx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
 
 dynamics = DynamicalModel(
     state_dim=...,
@@ -58,7 +58,7 @@ dynamics = DynamicalModel(
 To sample from the dynamical model, we call `dsx.sample_ds` inside of any `numpyro` model:
 
 ```python
-import dsx
+import dynestyx as dsx
 
 dsx.sample_ds("f", dynamics)
 ```
@@ -75,9 +75,9 @@ In subsequent tutorials, we give concrete examples of defining many different ty
 Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation. To specify how dynamical models are simulated, we must select a simulator from `dsx.simulators`. We then additionally `Condition` on a `Context`, which may include things like times in a trajectory, and potentially, control inputs. For example, to simulate from a continuous-discrete model:
 
 ```python
-from dsx.simulators import SDESimulator
-from dsx.handlers import Condition
-from dsx.ops import Trajectory, Context
+from dynestyx.simulators import SDESimulator
+from dynestyx.handlers import Condition
+from dynestyx.ops import Trajectory, Context
 
 import jax.random as jr
 
@@ -95,7 +95,7 @@ with SDESimulator(key=prng_key): # Specify how the SDE will be simulated/solved
 To instead simulate from a discrete-time system, we would write 
 
 ```python
-from dsx.simulators import DiscreteTimeSimulator
+from dynestyx.simulators import DiscreteTimeSimulator
 
 context = Context(
     observations=Trajectory(times=jnp.arange(0.0, 1.0, 0.1))

@@ -2,9 +2,9 @@ import jax.numpy as jnp
 from typing import Optional, Tuple
 from jax import Array
 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
-from dsx.ops import Context
+from dynestyx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+from dynestyx.observations import LinearGaussianObservation
+from dynestyx.ops import Context
 from numpyro import distributions as dist
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM

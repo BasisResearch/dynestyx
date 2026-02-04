@@ -1,3 +1,3 @@
 # plotters
 
-::: dsx.plotters
+::: dynestyx.plotters
