@@ -1,3 +1,3 @@
 # discretizers
 
-::: dsx.discretizers
+::: dynestyx.discretizers
