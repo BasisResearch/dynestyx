@@ -22,7 +22,11 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         filter_type,
     ) = data_conditioned_continuous_time_stochastic_l63
 
-    output_dir_name = "test_l63_SDE_sgmcmc" + ("_controlled" if use_controls else "") + f"_filter_{filter_type}" 
+    output_dir_name = (
+        "test_l63_SDE_sgmcmc"
+        + ("_controlled" if use_controls else "")
+        + f"_filter_{filter_type}"
+    )
     OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]
