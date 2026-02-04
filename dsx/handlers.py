@@ -9,7 +9,7 @@ import numpyro
 
 from dsx.ops import sample_ds, FunctionOfTime, Context, States
 from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.discretizers import EulerMaruyamaDiscretization
+from dsx.discretizers import euler_maruyama
 
 from effectful.ops.semantics import handler
 
@@ -28,13 +28,14 @@ class HandlesSelf:
 
 class Discretizer(ObjectInterpretation, HandlesSelf):
     """
-    Base class for discretizing continuous-time state evolution.
-    Subclasses implement discretize_state_evolution().
+    Discretize a continuous-time state evolution to a discrete-time state evolution.
+    Args:
+        discretize: Callable (CTSE) -> DTSE. Defaults to euler_maruyama.
     """
 
-    def __init__(self, scheme: type = EulerMaruyamaDiscretization):
+    def __init__(self, discretize=euler_maruyama):
         super().__init__()
-        self.scheme = scheme
+        self.discretize = discretize
 
     @implements(sample_ds)
     def _sample_ds(
@@ -44,9 +45,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         context: Optional[Context] = None,
     ) -> FunctionOfTime:
         if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-            discrete_evolution = self.scheme(
-                continuous_time_evolution=dynamics.state_evolution
-            )
+            discrete_evolution = self.discretize(dynamics.state_evolution)
             dynamics = DynamicalModel(
                 initial_condition=dynamics.initial_condition,
                 state_evolution=discrete_evolution,

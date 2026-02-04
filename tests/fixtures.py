@@ -3,9 +3,7 @@ import jax.random as jr
 
 from numpyro.infer import Predictive
 
-from effectful.ops.semantics import handler
 from dsx.handlers import Condition, Discretizer
-from dsx.discretizers import EulerMaruyamaDiscretization
 from dsx.ops import Trajectory, Context
 from dsx.simulators import SDESimulator
 from dsx.simulators import DiscreteTimeSimulator, ODESimulator
@@ -191,9 +189,9 @@ def data_conditioned_discrete_time_l63_auto(request):
     )
     # Order: Condition innermost (injects context), then Discretizer (CTE->discrete),
     # then DiscreteTimeSimulator (simulates with discrete dynamics + context).
-    with handler(DiscreteTimeSimulator()):
-        with handler(Discretizer(EulerMaruyamaDiscretization)):
-            with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with Condition(context):
                 synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -204,9 +202,9 @@ def data_conditioned_discrete_time_l63_auto(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(DiscreteTimeSimulator()):
-            with handler(Discretizer(EulerMaruyamaDiscretization)):
-                with handler(Condition(context)):
+        with DiscreteTimeSimulator():
+            with Discretizer():
+                with Condition(context):
                     return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
