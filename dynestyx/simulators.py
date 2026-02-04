@@ -1,6 +1,5 @@
 import dataclasses
 import warnings
-from typing import TypeAlias
 
 import diffrax as dfx
 import jax.numpy as jnp
@@ -24,7 +23,7 @@ from dynestyx.utils import (
     dsx_to_cd_dynamax,
 )
 
-SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 class SDESimulator(BaseSimulator):

@@ -1,4 +1,4 @@
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -30,8 +30,8 @@ def _filter_discrete_time(
     filter_type: str,
     dynamics: DynamicalModel,
     context: Context,
-    key: Optional[jax.Array] = None,
-    filter_kwargs: Optional[dict] = None,
+    key: jax.Array | None = None,
+    filter_kwargs: dict | None = None,
 ):
     """
     Discrete-time marginal likelihood via cuthbert.
@@ -91,7 +91,7 @@ def _filter_discrete_time(
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
 
 
-def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: Optional[dict] = None):
+def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
     if filter_kwargs is None:
         filter_kwargs = {}
 
@@ -121,7 +121,7 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: Optional[dict] 
 
 
 def _cuthbert_filter_taylor_kf(
-    dynamics: DynamicalModel, filter_kwargs: Optional[dict] = None
+    dynamics: DynamicalModel, filter_kwargs: dict | None = None
 ):
     if filter_kwargs is None:
         filter_kwargs = {}

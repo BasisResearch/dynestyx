@@ -45,7 +45,12 @@ dev = [
 ]
 
 [tool.ruff.lint]
-select = ["I"]
+select = [
+  "F",       # pyflakes
+  "I",       # isort
+  "PERF",    # performance
+  "UP"       # pyupgrade
+]
 
 [[tool.mypy.overrides]]
 module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*"]

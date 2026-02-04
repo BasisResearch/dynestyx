@@ -1,4 +1,4 @@
-from typing import Any, Optional, Tuple, TypeAlias
+from typing import Any
 
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
@@ -10,12 +10,12 @@ from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalMod
 from dynestyx.observations import LinearGaussianObservation
 from dynestyx.ops import Context
 
-SSMType: TypeAlias = CDNLGSSM | CDNLSSM
+type SSMType = CDNLGSSM | CDNLSSM
 
 
 def dsx_to_cd_dynamax(
-    dsx_model: DynamicalModel, cd_model: Optional[SSMType] = None
-) -> Tuple[dict, bool]:
+    dsx_model: DynamicalModel, cd_model: SSMType | None = None
+) -> tuple[dict, bool]:
     """
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
     """
@@ -110,9 +110,7 @@ def dsx_to_cd_dynamax(
     return cd_dynamax_params, non_gaussian_flag
 
 
-def _validate_control_dim(
-    dynamics: DynamicalModel, ctrl_values: Optional[Array]
-) -> None:
+def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
     """
     Validate that control_dim is set in DynamicalModel when controls are present.
 
@@ -142,7 +140,7 @@ def _validate_control_dim(
 
 def _get_controls(
     context: Context, obs_times: Array
-) -> Tuple[Optional[Array], Optional[Array]]:
+) -> tuple[Array | None, Array | None]:
     """
     Extract and validate controls from context.
 
@@ -196,7 +194,7 @@ def _get_controls(
     return ctrl_times, ctrl_values
 
 
-def _get_val_or_None(values: Optional[Array], t_idx: int) -> Optional[Array]:
+def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
     """
     Safely get value at index t_idx, returning None if values is None.
 

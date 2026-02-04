@@ -1,7 +1,4 @@
-from typing import NamedTuple, Optional, TypeAlias
-
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
@@ -10,17 +7,18 @@ from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.ops import Context
 from dynestyx.utils import _get_controls, _validate_control_dim, dsx_to_cd_dynamax
 
-SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 _CONTINUOUS_FILTER_TYPES: list[str] = ["default", "enkf", "dpf", "ekf", "ukf"]
+
 
 def _filter_continuous_time(
     name: str,
     filter_type: str,
     dynamics: DynamicalModel,
     context: Context,
-    key: Optional[jax.Array] = None,
-    filter_kwargs: Optional[dict] = None,
+    key: jax.Array | None = None,
+    filter_kwargs: dict | None = None,
 ):
     """Continuous-time marginal likelihood via CD-Dynamax.
 

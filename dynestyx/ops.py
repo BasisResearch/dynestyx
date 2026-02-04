@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Callable, Dict, Optional, Union
+from collections.abc import Callable
 
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
@@ -9,7 +9,7 @@ from dynestyx.dynamical_models import DynamicalModel
 
 # Type alias for states: dict mapping state names to arrays, or just an array
 Times = Array
-States = Union[Dict[str, Array], Array]
+States = dict[str, Array] | Array
 FunctionOfTime = Callable[[Times], States]
 
 
@@ -23,8 +23,8 @@ class Trajectory:
       - values is None -> "no values here" (e.g. just a solve grid)
     """
 
-    times: Optional[Times] = None
-    values: Optional[States] = None
+    times: Times | None = None
+    values: States | None = None
 
 
 @dataclasses.dataclass
@@ -43,11 +43,11 @@ class Context:
     controls: Trajectory = dataclasses.field(default_factory=Trajectory)
 
     # Extensible: extra time-indexed series or metadata
-    extras: Dict[str, Trajectory] = dataclasses.field(default_factory=dict)
+    extras: dict[str, Trajectory] = dataclasses.field(default_factory=dict)
 
 
 @defop
 def sample_ds(
-    name: str, dynamics: DynamicalModel, context: Optional[Context] = None
+    name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     raise NotHandled()

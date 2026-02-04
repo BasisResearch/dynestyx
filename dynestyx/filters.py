@@ -1,25 +1,25 @@
 import dataclasses
-from typing import NamedTuple, Optional, TypeAlias
 
 import jax
 import jax.numpy as jnp
-import jax.random as jr
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
-from dynestyx.cuthbert_patches import systematic_resampling
 from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
 from dynestyx.hmm_filter import hmm_filter, hmm_log_components
 from dynestyx.inference.cd_dynamax.continuous_time_filters import (
-    _filter_continuous_time,
     _CONTINUOUS_FILTER_TYPES,
+    _filter_continuous_time,
 )
-from dynestyx.inference.cuthbert.discrete_time_filters import _filter_discrete_time, _DISCRETE_FILTER_TYPES
+from dynestyx.inference.cuthbert.discrete_time_filters import (
+    _DISCRETE_FILTER_TYPES,
+    _filter_discrete_time,
+)
 from dynestyx.ops import Context
-from dynestyx.utils import _get_controls, _validate_control_dim, dsx_to_cd_dynamax
+from dynestyx.utils import _get_controls
 
-SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 @dataclasses.dataclass
@@ -37,7 +37,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     TODO: Document choices available for each filter type.
     """
 
-    key: Optional[jax.Array] = None
+    key: jax.Array | None = None
     filter_type: str = "default"
     output_fields = None
     filter_kwargs: dict = dataclasses.field(default_factory=dict)

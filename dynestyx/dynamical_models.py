@@ -1,6 +1,7 @@
 import dataclasses
 import warnings
-from typing import Any, Callable, Dict, Optional, Protocol, Union
+from collections.abc import Callable
+from typing import Any, Protocol
 
 import equinox as eqx
 import jax
@@ -10,12 +11,12 @@ from numpyro._typing import DistributionT
 # ----------------------------------------------------------------------
 # TYPE ALIASES
 # ----------------------------------------------------------------------
-State = Union[jax.Array, Dict[str, jax.Array]]
+State = jax.Array | dict[str, jax.Array]
 dState = State
 Observation = jax.Array
-Control = Optional[State]
-Time = Union[jax.Array, float]
-Params = Dict[str, Union[float, jax.Array]]
+Control = State | None
+Time = jax.Array | float
+Params = dict[str, float | jax.Array]
 Key = jax.Array
 
 
@@ -32,10 +33,10 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     control_dim: int
     initial_condition: DistributionT
-    state_evolution: Union[
-        Callable[[State, Control, Time], State],
-        Callable[[State, Control, Time, Time], State],
-    ]
+    state_evolution: (
+        Callable[[State, Control, Time], State]
+        | Callable[[State, Control, Time, Time], State]
+    )
     observation_model: Callable[[State, Control, Time], DistributionT]
     control_model: Any
     continuous_time: bool
@@ -46,9 +47,9 @@ class DynamicalModel(eqx.Module):
         state_evolution,
         observation_model,
         control_model=None,
-        state_dim: Optional[int] = None,
-        observation_dim: Optional[int] = None,
-        control_dim: Optional[int] = None,
+        state_dim: int | None = None,
+        observation_dim: int | None = None,
+        control_dim: int | None = None,
         continuous_time: bool = False,
     ):
         if isinstance(state_evolution, ContinuousTimeStateEvolution):
@@ -110,7 +111,7 @@ class Drift(Protocol):
     def __call__(
         self,
         x: State,
-        u: Optional[Control],
+        u: Control | None,
         t: Time,
     ) -> dState:
         raise NotImplementedError()
@@ -122,9 +123,9 @@ class ContinuousTimeStateEvolution(StateEvolution):
     SDE: dx = f(State_t, t) dt + L(State_t, t) dW
     """
 
-    drift: Optional[Drift] = None
-    diffusion_coefficient: Optional[Drift] = None
-    diffusion_covariance: Optional[Drift] = None
+    drift: Drift | None = None
+    diffusion_coefficient: Drift | None = None
+    diffusion_covariance: Drift | None = None
 
     ...
 
@@ -145,7 +146,7 @@ class DistributionFromStateTimeParams(Protocol):
     def __call__(
         self,
         x: State,
-        u: Optional[Control],
+        u: Control | None,
         t: Time,
     ) -> dist.Distribution: ...
 
@@ -184,7 +185,7 @@ class DiscreteTimeStateEvolution(StateEvolution):
     def __call__(
         self,
         x: State,
-        u: Optional[Control],
+        u: Control | None,
         t_now: Time,
         t_next: Time,
     ) -> DistributionT:

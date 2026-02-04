@@ -1,8 +1,6 @@
 # handlers.py
 """Handlers for dsx operations using Interpretation-based style."""
 
-from typing import Optional
-
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -33,7 +31,7 @@ class Condition(ObjectInterpretation, HandlesSelf):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> FunctionOfTime:
         # Ignore any context passed in the call and use the handler's context
         site_ctx = self.context
