@@ -4,11 +4,9 @@ import warnings
 import diffrax as dfx
 import jax
 import jax.numpy as jnp
-import jax.random as jr
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from jax import Array
-from jax.tree_util import tree_map
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.dynamical_models import (
@@ -174,11 +172,9 @@ class SDESimulator(BaseSimulator):
                 # but the state is batched (...,state_dim), broadcast across the
                 # leading batch dims so diffrax can contract with the control.
                 if y.ndim > 1 and combined.ndim == 2:
-                    combined = jnp.broadcast_to(
-                        combined, y.shape[:-1] + combined.shape
-                    )
+                    combined = jnp.broadcast_to(combined, y.shape[:-1] + combined.shape)
                 return combined
-            
+
             # Important: `shape` here specifies the shape of the Brownian increment (control),
             # not the shape of the state.
             #
@@ -187,9 +183,15 @@ class SDESimulator(BaseSimulator):
             # (e.g. when contracting diffusion with the control).
             #
             # We instead use only the trailing (state) dimension(s) as the Brownian shape.
-            bm_shape = initial_state.shape[-1:] if hasattr(initial_state, "shape") else ()
+            bm_shape = (
+                initial_state.shape[-1:] if hasattr(initial_state, "shape") else ()
+            )
             bm = dfx.VirtualBrownianTree(
-                t0=times_scan[0], t1=times_scan[-1], tol=self.tol_vbt, shape=bm_shape, key=self.key
+                t0=times_scan[0],
+                t1=times_scan[-1],
+                tol=self.tol_vbt,
+                shape=bm_shape,
+                key=self.key,
             )
             terms = dfx.MultiTerm(  # type: ignore
                 dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
@@ -216,7 +218,9 @@ class SDESimulator(BaseSimulator):
                 return carry, y_t
 
         states = states_sol
-        _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times_scan)))
+        _, emissions = nscan(
+            _create_observations_step, None, jnp.arange(len(times_scan))
+        )
 
         return {"times": times, "states": states, "observations": emissions}
 
@@ -278,6 +282,7 @@ class DiscreteTimeSimulator(BaseSimulator):
     Instead, it just unrolls the model and adds observed sites
     (which numpyro uses to compute logfactors).
     """
+
     def simulate(
         self,
         context: Context,
