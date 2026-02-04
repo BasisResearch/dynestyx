@@ -1,13 +1,11 @@
+import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
-
+import pytest
 from numpyro.infer import MCMC, NUTS
 
-from tests.test_utils import get_output_dir
-import arviz as az
-import pytest
-
 from tests.fixtures import data_conditioned_discrete_time_l63  # noqa: F401
+from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
 

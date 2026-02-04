@@ -1,7 +1,8 @@
 import jax
 import jax.numpy as jnp
-from dynestyx.dynamical_models import ObservationModel
 from numpyro import distributions as dist
+
+from dynestyx.dynamical_models import ObservationModel
 
 
 class LinearGaussianObservation(ObservationModel):

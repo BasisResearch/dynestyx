@@ -1,26 +1,29 @@
-import jax.numpy as jnp
 import dataclasses
-
-from dynestyx.handlers import BaseSimulator
-from dynestyx.ops import States, Context
-from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.observations import DiracIdentityObservation
-from dynestyx.utils import (
-    dsx_to_cd_dynamax,
-    _get_controls,
-    _validate_control_dim,
-    _get_val_or_None,
-)
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
-import diffrax as dfx
-from jax import Array
-import numpyro
-from numpyro.contrib.control_flow import scan as nscan
 import warnings
 
-from typing import TypeAlias
+import diffrax as dfx
+import jax.numpy as jnp
+import numpyro
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+from jax import Array
+from numpyro.contrib.control_flow import scan as nscan
 
-SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+from dynestyx.dynamical_models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    State,
+)
+from dynestyx.handlers import BaseSimulator
+from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
+from dynestyx.observations import DiracIdentityObservation
+from dynestyx.ops import Context, States
+from dynestyx.utils import (
+    _get_controls,
+    _get_val_or_None,
+    _validate_control_dim,
+)
+
+type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 class SDESimulator(BaseSimulator):
@@ -148,7 +151,7 @@ class SDESimulator(BaseSimulator):
                 t = obs_times[t_idx]
                 numpyro.sample(
                     f"y_{t_idx}",
-                    dynamics.observation_model(x=states[t_idx], u=u_t, t=t),
+                    dynamics.observation_model(states[t_idx], u_t, t),
                     obs=_get_val_or_None(obs_values, t_idx),
                 )
 
@@ -202,9 +205,12 @@ class DiscreteTimeSimulator(BaseSimulator):
 
             with numpyro.plate("time", T - 1):
                 trans = dynamics.state_evolution(
-                    x=x_prev, u=u_prev, t_now=t_now, t_next=t_next
+                    x_prev,
+                    u_prev,
+                    t_now,
+                    t_next,  # type: ignore
                 )
-                numpyro.sample("x_next", trans, obs=x_next)
+                numpyro.sample("x_next", trans, obs=x_next)  # type: ignore
 
             return {
                 "times": obs_times,
@@ -214,13 +220,13 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # Default: scan over time
         # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore[assignment]
+        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)
         y_0 = numpyro.sample(
             "y_0",
-            dynamics.observation_model(x=x_prev, u=u_0, t=obs_times[0]),
+            dynamics.observation_model(x_prev, u_0, obs_times[0]),
             obs=_get_val_or_None(obs_values, 0),
         )
 
@@ -252,7 +258,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         # x_prev is shape (state_dim,) or scalar, scan_states is (T-1, state_dim)
         # y_0 is shape (obs_dim,) or scalar, scan_observations is (T-1, obs_dim)
         # Use expand_dims to ensure proper shape for concatenation
-        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # shape (1, state_dim) or (1,)
+        # shape (1, state_dim) or (1,)
+        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
         y_0_expanded = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
         states = jnp.concatenate(
             [x_0_expanded, scan_states], axis=0

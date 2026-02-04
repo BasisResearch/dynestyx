@@ -1,41 +1,52 @@
-import jax
-import jax.numpy as jnp
-import jax.random as jr
-from typing import Optional, TypeAlias
 import dataclasses
 
-from dynestyx.ops import Context
-from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
-from dynestyx.dynamical_models import DynamicalModel
-from dynestyx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
-from dynestyx.hmm_filter import hmm_log_components, hmm_filter
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+import jax
+import jax.numpy as jnp
 import numpyro
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
-SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
+from dynestyx.hmm_filter import hmm_filter, hmm_log_components
+from dynestyx.inference.cd_dynamax.continuous_time_filters import (
+    _CONTINUOUS_FILTER_TYPES,
+    _filter_continuous_time,
+)
+from dynestyx.inference.cuthbert.discrete_time_filters import (
+    _DISCRETE_FILTER_TYPES,
+    _filter_discrete_time,
+)
+from dynestyx.ops import Context
+from dynestyx.utils import _get_controls
+
+type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 @dataclasses.dataclass
 class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
-    """Log factor adder that computes marginal log likelihood via CD-Dynamax filtering."""
+    """
+    Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
 
-    key: Optional[jax.Array] = None
-    filter_type: str = "EnKF"
-    filter_state_order: str = "first"
-    filter_emission_order: str = "first"
-    filter_num_iter: int = 1
-    filter_state_cov_rescaling: float = 1.0
-    filter_dt_average: float = 0.1
-    dpf_num_particles: int = 100
-    dpf_resampling_type: str = "stop_gradient"
-    enkf_N_particles: int = 25
-    enkf_inflation_delta: float = 0.0
-    diffeqsolve_max_steps: int = 1_000
-    diffeqsolve_dt0: float = 0.01
+    There are several different options for the filter method, depending on the type of dynamical model.
+    For discrete-time models, we interface with cuthbert; by default, we use the Taylor linearized Kalman filter (filter_type="taylor_kf"),
+    but the particle filter is also available (filter_type="pf").
+    For continuous-time models, we interface with CD-Dynamax; by default, we use the ensemble Kalman filter (filter_type="enkf"),
+    but the differentiable particle filter is also available (filter_type="dpf").
+
+    The filter_kwargs dictionary can be used to pass additional keyword arguments to the filter.
+    TODO: Document choices available for each filter type.
+    """
+
+    key: jax.Array | None = None
+    filter_type: str = "default"
     output_fields = None
-    diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
-    extra_filter_kwargs: dict = dataclasses.field(default_factory=dict)
-    warn: bool = True
+    filter_kwargs: dict = dataclasses.field(default_factory=dict)
+
+    def __init__(self, filter_type="default", output_fields=None, **filter_kwargs):
+        super().__init__()
+        self.filter_type = filter_type
+        self.output_fields = output_fields
+        self.filter_kwargs = filter_kwargs if filter_kwargs is not None else {}
 
     def add_log_factors(
         self,
@@ -43,87 +54,35 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         dynamics: DynamicalModel,
         context: Context,
     ):
-        # Pull observed trajectory from context
-        obs_traj = context.observations
-        if obs_traj.times is None or obs_traj.values is None:
-            # No observations → nothing to factor
-            return
+        """
+        Add the marginal log likelihood as a numpyro factor.
 
-        obs_times = obs_traj.times[:, None]  # shape (T, 1)
-        if isinstance(obs_traj.values, dict):
-            raise ValueError("obs_traj.values must be an Array, not a dict")
-        obs_values = obs_traj.values  # shape (T, emission_dim)
-
-        # Pull control trajectory from context and validate
-        ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
-
-        # Validate that control_dim is set when controls are present
-        _validate_control_dim(dynamics, ctrl_values)
-
-        if self.filter_type.lower() == "dpf":
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
+        Args:
+            name: Name of the factor.
+            dynamics: Dynamical model to filter.
+            context: Context containing the observations and controls.
+        """
+        if dynamics.continuous_time:
+            if self.filter_type.lower() not in _CONTINUOUS_FILTER_TYPES:
+                raise ValueError(
+                    f"Invalid filter type: {self.filter_type}. Valid types: {_CONTINUOUS_FILTER_TYPES}"
+                )
+            _filter_continuous_time(
+                name, self.filter_type, dynamics, context, self.key, self.filter_kwargs
             )
         else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
+            if self.filter_type.lower() not in _DISCRETE_FILTER_TYPES:
+                raise ValueError(
+                    f"Invalid filter type: {self.filter_type}. Valid types: {_DISCRETE_FILTER_TYPES}"
+                )
+            _filter_discrete_time(
+                name,
+                self.filter_type,
+                dynamics,
+                context,
+                self.key,
+                self.filter_kwargs,
             )
-
-        # Generate a CD-Dynamax-compatible parameter dict using the chosen model
-        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-
-        # Choose a key
-        key = self.key if self.key is not None else jr.PRNGKey(0)
-
-        # Compute the marginal log likelihood via filtering
-        if self.filter_type.lower() == "dpf":
-            filter_kwargs = {
-                "params": params,
-                "emissions": obs_values,
-                "t_emissions": obs_times,
-                "key": key,
-                "N_particles": self.dpf_num_particles,
-                "extra_filter_kwargs": {"resampling_type": self.dpf_resampling_type},
-                "diffeqsolve_max_steps": self.diffeqsolve_max_steps,
-                "diffeqsolve_dt0": self.diffeqsolve_dt0,
-                "diffeqsolve_kwargs": self.diffeqsolve_kwargs,
-                "output_fields": self.output_fields,
-                "warn": self.warn,
-                "inputs": ctrl_values,
-            }
-            if self.extra_filter_kwargs:
-                filter_kwargs.update(self.extra_filter_kwargs)
-        else:
-            filter_kwargs = {
-                "params": params,
-                "emissions": obs_values,
-                "t_emissions": obs_times,
-                "key": key,
-                "filter_type": self.filter_type,
-                "filter_state_order": self.filter_state_order,
-                "filter_emission_order": self.filter_emission_order,
-                "filter_num_iter": self.filter_num_iter,
-                "filter_state_cov_rescaling": self.filter_state_cov_rescaling,
-                "filter_dt_average": self.filter_dt_average,
-                "enkf_N_particles": self.enkf_N_particles,
-                "enkf_inflation_delta": self.enkf_inflation_delta,
-                "diffeqsolve_max_steps": self.diffeqsolve_max_steps,
-                "diffeqsolve_dt0": self.diffeqsolve_dt0,
-                "diffeqsolve_kwargs": self.diffeqsolve_kwargs,
-                "extra_filter_kwargs": self.extra_filter_kwargs,
-                "output_fields": self.output_fields,
-                "warn": self.warn,
-                "inputs": ctrl_values,
-            }
-
-        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
-
-        # Add the marginal log likelihood as a numpyro factor
-        numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
 
         # numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
         # numpyro.deterministic(f"{name}_filtered_states_cov", filtered.filtered_covariances)

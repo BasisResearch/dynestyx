@@ -1,12 +1,11 @@
+import blackjax
+import jax
 import jax.numpy as jnp
 import jax.random as jr
-import jax
-
 import pytest
+from numpyro.infer.util import initialize_model
 
 from tests.fixtures import data_conditioned_continuous_time_stochastic_l63  # noqa: F401
-from numpyro.infer.util import initialize_model
-import blackjax
 
 
 @pytest.mark.parametrize("num_samples", [5])
@@ -15,7 +14,7 @@ def test_sgmcmc_inference_smoke(
     num_samples,
 ):
     """Smoke test version - minimal samples to verify code runs without errors."""
-    (data_conditioned_model, true_params, synthetic, _) = (
+    (data_conditioned_model, true_params, synthetic, _, _) = (
         data_conditioned_continuous_time_stochastic_l63
     )
 

@@ -1,15 +1,13 @@
+import arviz as az
+import blackjax
+import jax
 import jax.numpy as jnp
 import jax.random as jr
-import jax
-
-import arviz as az
 import pytest
+from numpyro.infer.util import initialize_model
 
 from tests.fixtures import data_conditioned_continuous_time_stochastic_l63  # noqa: F401
 from tests.test_utils import get_output_dir
-
-from numpyro.infer.util import initialize_model
-import blackjax
 
 SAVE_FIG = True
 
@@ -21,9 +19,14 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         true_params,
         synthetic,
         use_controls,
+        filter_type,
     ) = data_conditioned_continuous_time_stochastic_l63
 
-    output_dir_name = "test_l63_SDE_sgmcmc" + ("_controlled" if use_controls else "")
+    output_dir_name = (
+        "test_l63_SDE_sgmcmc"
+        + ("_controlled" if use_controls else "")
+        + f"_filter_{filter_type}"
+    )
     OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]

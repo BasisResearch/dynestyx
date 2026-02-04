@@ -21,6 +21,7 @@ dependencies = [
     "jupyter>=1.1.1",
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
+    "cuthbert>=0.0.2",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -29,6 +30,7 @@ packages = ["dynestyx"]
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax", rev = "dev-numpyro-api" }
+cuthbert = { git = "https://github.com/DanWaxman/cuthbert.git", rev = "dw-fix-install" }
 
 [dependency-groups]
 dev = [
@@ -42,7 +44,14 @@ dev = [
     "seaborn>=0.13.2",
 ]
 
+[tool.ruff.lint]
+select = [
+  "F",       # pyflakes
+  "I",       # isort
+  "PERF",    # performance
+  "UP"       # pyupgrade
+]
 
 [[tool.mypy.overrides]]
-module = ["cd_dynamax.*", "numpyro.*", "blackjax.*"]
+module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*"]
 follow_untyped_imports = true

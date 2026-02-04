@@ -1,17 +1,13 @@
 # handlers.py
 """Handlers for dsx operations using Interpretation-based style."""
 
-from typing import Optional
-
-from effectful.ops.syntax import ObjectInterpretation, implements
-from effectful.ops.semantics import fwd
 import numpyro
+from effectful.ops.semantics import fwd, handler
+from effectful.ops.syntax import ObjectInterpretation, implements
 
-from dynestyx.ops import sample_ds, FunctionOfTime, Context, States
-from dynestyx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
 from dynestyx.discretizers import euler_maruyama
-
-from effectful.ops.semantics import handler
+from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.ops import Context, FunctionOfTime, States, sample_ds
 
 
 class HandlesSelf:
@@ -42,7 +38,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> FunctionOfTime:
         if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             discrete_evolution = self.discretize(dynamics.state_evolution)
@@ -68,7 +64,7 @@ class Condition(ObjectInterpretation, HandlesSelf):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> FunctionOfTime:
         # Ignore any context passed in the call and use the handler's context
         site_ctx = self.context

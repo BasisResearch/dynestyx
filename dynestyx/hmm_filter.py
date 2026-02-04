@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 from jax.scipy.special import logsumexp
+
 from dynestyx.dynamical_models import DynamicalModel
 
 

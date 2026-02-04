@@ -4,26 +4,24 @@ import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS
 
-from tests.fixtures import data_conditioned_continuous_time_lti_gaussian  # noqa: F401
+from tests.fixtures import data_conditioned_discrete_time_l63_filter  # noqa: F401
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
 
 
-@pytest.mark.parametrize("num_samples", [250])
-def test_mcmc_inference(data_conditioned_continuous_time_lti_gaussian, num_samples):  # noqa: F811
+@pytest.mark.parametrize("num_samples", [500])
+def test_mcmc_inference(data_conditioned_discrete_time_l63_filter, num_samples):  # noqa: F811
     (
         data_conditioned_model,
         true_params,
         synthetic,
         use_controls,
-        filter_type,
-    ) = data_conditioned_continuous_time_lti_gaussian
+    ) = data_conditioned_discrete_time_l63_filter
 
-    output_dir_name = (
-        "test_lti_gaussian"
-        + ("_controlled" if use_controls else "")
-        + f"_filter_{filter_type}"
+    # Set output dir based on whether controls are used
+    output_dir_name = "test_discrete_time_l63_taylor_kf_mcmc" + (
+        "_controlled" if use_controls else ""
     )
     OUTPUT_DIR = get_output_dir(output_dir_name)
 
@@ -39,11 +37,6 @@ def test_mcmc_inference(data_conditioned_continuous_time_lti_gaussian, num_sampl
         )
         plt.plot(
             obs_times.squeeze(0),
-            synthetic["states"].squeeze(0)[:, 1],
-            label="x[1]",
-        )
-        plt.plot(
-            obs_times.squeeze(0),
             synthetic["observations"].squeeze(0)[:, 0],
             label="observations",
             linestyle="--",
@@ -53,8 +46,8 @@ def test_mcmc_inference(data_conditioned_continuous_time_lti_gaussian, num_sampl
         plt.close()
 
     mcmc_key = jr.PRNGKey(0)
-    nuts_kernel = NUTS(data_conditioned_model)
-    mcmc = MCMC(nuts_kernel, num_samples=num_samples, num_warmup=num_samples)
+    barker_kernel = NUTS(data_conditioned_model)
+    mcmc = MCMC(barker_kernel, num_samples=num_samples, num_warmup=num_samples)
     mcmc.run(mcmc_key)
 
     posterior_samples = mcmc.get_samples()
@@ -66,11 +59,13 @@ def test_mcmc_inference(data_conditioned_continuous_time_lti_gaussian, num_sampl
     assert not jnp.isinf(posterior_rho).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        az.plot_posterior(posterior_rho, hdi_prob=0.95)
+        az.plot_posterior(
+            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+        )
         plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
         plt.close()
 
-    assert jnp.abs(posterior_rho.mean() - true_params["rho"]) < 2.0
+    assert jnp.abs(posterior_rho.mean() - true_params["rho"]) < 5.0
 
     hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
     hdi_min = hdi_data["x"].sel(hdi="lower").item()

@@ -1,13 +1,13 @@
+import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
-
-import arviz as az
-from numpyro.infer import MCMC, NUTS
 import pytest
+from numpyro.infer import MCMC, NUTS
 
-from tests.fixtures import data_conditioned_continuous_time_deterministic_l63  # noqa: F401
+from tests.fixtures import (
+    data_conditioned_continuous_time_deterministic_l63,  # noqa: F401
+)
 from tests.test_utils import get_output_dir
-
 
 SAVE_FIG = True
 

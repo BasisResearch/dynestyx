@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 
 from dynestyx.dynamical_models import (
-    DiscreteTimeStateEvolution,
     ContinuousTimeStateEvolution,
+    DiscreteTimeStateEvolution,
 )
 
 

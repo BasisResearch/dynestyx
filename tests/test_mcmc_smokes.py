@@ -9,15 +9,15 @@ import jax.random as jr
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
-    data_conditioned_hmm,  # noqa: F401
-    data_conditioned_discrete_time_l63,  # noqa: F401
-    data_conditioned_discrete_time_l63_auto,  # noqa: F401
-    data_conditioned_stochastic_volatility,  # noqa: F401
+    data_conditioned_continuous_time_deterministic_l63,  # noqa: F401
     data_conditioned_continuous_time_l63_dpf,  # noqa: F401
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F401
     data_conditioned_continuous_time_lti_gaussian_dpf,  # noqa: F401
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F401
-    data_conditioned_continuous_time_deterministic_l63,  # noqa: F401
+    data_conditioned_discrete_time_l63,  # noqa: F401
+    data_conditioned_discrete_time_l63_auto,  # noqa: F401
+    data_conditioned_hmm,  # noqa: F401
+    data_conditioned_stochastic_volatility,  # noqa: F401
 )
 
 NUM_SAMPLES = 10
@@ -83,7 +83,7 @@ def test_continuous_time_stochastic_l63_mcmc_smoke(
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F811
 ):
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic, _ = (
+    data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_stochastic_l63
     )
     mcmc = MCMC(
@@ -126,7 +126,7 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F811
 ):
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic, _ = (
+    data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_lti_gaussian
     )
     mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
