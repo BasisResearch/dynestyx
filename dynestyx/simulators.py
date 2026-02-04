@@ -23,7 +23,6 @@ from dynestyx.utils import (
     _get_controls,
     _get_val_or_None,
     _validate_control_dim,
-    diffeqsolve_util,
     infer_batch_shape,
 )
 
@@ -49,9 +48,9 @@ class SDESimulator(BaseSimulator):
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
             "dt0": dt0,
-            "tol_vbt": tol_vbt,
             "max_steps": max_steps,
         }
+        self.tol_vbt = tol_vbt
 
     def simulate(self, context: Context, dynamics) -> States:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
@@ -147,131 +146,77 @@ class SDESimulator(BaseSimulator):
                 ctrl_scan = None
                 u_0 = None
 
+            # Build a diffrax control path so we can evaluate u(t) at solver times.
+            # (Controls have the same time grid as observations, enforced by `_get_controls`.)
+            control_path = (
+                dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
+                if (ctrl_times is not None and ctrl_values is not None)
+                else None
+            )
+
             y_0 = numpyro.sample(
                 "y_0",
                 dynamics.observation_model(x=initial_state, u=u_0, t=times_scan[0]),
             )
             y_0 = _ensure_batch_prefix(y_0)
 
-            def _step(prev_state, args):
-                t_next_idx, t0, t1, inpt = args
+            def _drift(t, y, args):
+                u_t = control_path.evaluate(t) if control_path is not None else None
+                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
 
-                numpyro_key = numpyro.prng_key()
-
-                def integrate_once(key, y0, t0_single, t1_single, inpt_single):
-                    def drift(t, y, args):
-                        return dynamics.state_evolution.drift(y, inpt_single, t)
-
-                    def diffusion(t, y, args):
-                        Qc_t = dynamics.state_evolution.diffusion_covariance(
-                            y, inpt_single, t
-                        )
-                        L_t = dynamics.state_evolution.diffusion_coefficient(
-                            y, inpt_single, t
-                        )
-
-                        Q_sqrt = jnp.linalg.cholesky(Qc_t)
-                        combined = L_t @ Q_sqrt
-                        # If the model provides unbatched diffusion (state_dim,state_dim)
-                        # but the state is batched (...,state_dim), broadcast across the
-                        # leading batch dims so diffrax can contract with the control.
-                        if y.ndim > 1 and combined.ndim == 2:
-                            combined = jnp.broadcast_to(
-                                combined, y.shape[:-1] + combined.shape
-                            )
-                        return combined
-
-                    # If times were broadcast, pick a representative scalar
-                    t0_scalar = t0
-                    t1_scalar = t1
-
-                    return diffeqsolve_util(
-                        key=key,
-                        drift=drift,
-                        diffusion=diffusion,
-                        t0=t0_scalar,
-                        t1=t1_scalar,
-                        y0=y0,
-                        **self.diffeqsolve_settings,
-                    )[0]
-
-                if batch_shape:
-                    # If the drift is a PyTree (e.g. eqx.Module) with batched parameter leaves,
-                    # then vmap over the batch and slice those leaves automatically.
-                    drift_obj = dynamics.state_evolution.drift
-                    if _drift_has_batched_params(drift_obj):
-                        keys = jr.split(numpyro_key, batch_size)
-                        prev_state = _flatten_batch_prefix(prev_state)
-                        inpt_flat = (
-                            _flatten_batch_prefix(inpt) if inpt is not None else None
-                        )
-
-                        def integrate_single(drift_i, key_i, y0_i, inpt_i):
-                            def drift(t, y, args):
-                                return drift_i(y, inpt_i, t)
-
-                            def diffusion(t, y, args):
-                                Qc_t = dynamics.state_evolution.diffusion_covariance(
-                                    y, inpt_i, t
-                                )
-                                L_t = dynamics.state_evolution.diffusion_coefficient(
-                                    y, inpt_i, t
-                                )
-                                Q_sqrt = jnp.linalg.cholesky(Qc_t)
-                                return L_t @ Q_sqrt
-
-                            return diffeqsolve_util(
-                                key=key_i,
-                                drift=drift,
-                                diffusion=diffusion,
-                                t0=t0,
-                                t1=t1,
-                                y0=y0_i,
-                                **self.diffeqsolve_settings,
-                            )[0]
-
-                        if inpt_flat is None:
-                            state = jax.vmap(
-                                lambda drift_i, key_i, y0_i: integrate_single(
-                                    drift_i, key_i, y0_i, None
-                                ),
-                                in_axes=(0, 0, 0),
-                            )(drift_obj, keys, prev_state)
-                        else:
-                            state = jax.vmap(integrate_single, in_axes=(0, 0, 0, 0))(
-                                drift_obj, keys, prev_state, inpt_flat
-                            )
-                        state = state.reshape(batch_shape + state.shape[1:])
-                    else:
-                        state = integrate_once(numpyro_key, prev_state, t0, t1, inpt)
-                else:
-                    state = integrate_once(numpyro_key, prev_state, t0, t1, inpt)
-
-                state = numpyro.deterministic(f"x_{t_next_idx}", state)
-
-                emission = numpyro.sample(
-                    f"y_{t_next_idx}",
-                    dynamics.observation_model(x=state, u=inpt, t=t1),
-                )
-
-                return state, (state, emission)
-
-            num_timesteps = times_scan.shape[0]
-            t0 = times_scan[:-1]
-            t1 = times_scan[1:]
-            next_inputs = ctrl_scan[1:] if ctrl_scan is not None else None
-
-            _, (next_states, next_emissions) = nscan(
-                _step,
-                initial_state,
-                (jnp.arange(1, num_timesteps), t0, t1, next_inputs),
+            def _diffusion(t, y, args):
+                u_t = control_path.evaluate(t) if control_path is not None else None
+                Qc_t = dynamics.state_evolution.diffusion_covariance(x=y, u=u_t, t=t)
+                L_t = dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+                Q_sqrt = jnp.linalg.cholesky(Qc_t)
+                combined = L_t @ Q_sqrt
+                # If the model provides unbatched diffusion (state_dim,state_dim)
+                # but the state is batched (...,state_dim), broadcast across the
+                # leading batch dims so diffrax can contract with the control.
+                if y.ndim > 1 and combined.ndim == 2:
+                    combined = jnp.broadcast_to(
+                        combined, y.shape[:-1] + combined.shape
+                    )
+                return combined
+            
+            # Important: `shape` here specifies the shape of the Brownian increment (control),
+            # not the shape of the state.
+            #
+            # If `y0` is batched (e.g. shape (B, state_dim)), setting `shape=y0.shape` would
+            # create a batched Brownian control and can cause shape mismatches inside diffrax
+            # (e.g. when contracting diffusion with the control).
+            #
+            # We instead use only the trailing (state) dimension(s) as the Brownian shape.
+            bm_shape = initial_state.shape[-1:] if hasattr(initial_state, "shape") else ()
+            bm = dfx.VirtualBrownianTree(
+                t0=times_scan[0], t1=times_scan[-1], tol=self.tol_vbt, shape=bm_shape, key=self.key
             )
+            terms = dfx.MultiTerm(  # type: ignore
+                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
+            )
+            sol = dfx.diffeqsolve(
+                terms,
+                t0=times_scan[0],
+                t1=times_scan[-1],
+                y0=initial_state,
+                args=None,
+                saveat=dfx.SaveAt(ts=times_scan),
+                **self.diffeqsolve_settings,
+            )
+            states_sol = sol.ys  # (T, ..., state_dim)
 
-        def expand_and_cat(x0, x1T):
-            return jnp.concatenate((jnp.expand_dims(x0, 0), x1T))
+            def _create_observations_step(carry, t_idx):
+                x_t = states_sol[t_idx]
+                t = times_scan[t_idx]
+                u_t = _get_val_or_None(ctrl_values, t_idx)
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                )
+                return carry, y_t
 
-        states = tree_map(expand_and_cat, initial_state, next_states)
-        emissions = tree_map(expand_and_cat, y_0, next_emissions)
+        states = states_sol
+        _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times_scan)))
 
         return {"times": times, "states": states, "observations": emissions}
 
@@ -333,7 +278,6 @@ class DiscreteTimeSimulator(BaseSimulator):
     Instead, it just unrolls the model and adds observed sites
     (which numpyro uses to compute logfactors).
     """
-
     def simulate(
         self,
         context: Context,
