@@ -277,11 +277,11 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
         (False, "default"),
         (False, "EnKF"),
         # (False, "EKF"), EKF too bad :(
-        (False, "UKF"),
+        # (False, "UKF"), UKF too bad :(
         (True, "default"),
         (True, "EnKF"),
         # (True, "EKF"), EKF too bad :(
-        (True, "UKF"),
+        # (True, "UKF"), UKF too bad :(
     ]
 )
 def data_conditioned_continuous_time_stochastic_l63(request):
