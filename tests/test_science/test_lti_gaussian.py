@@ -17,9 +17,10 @@ def test_mcmc_inference(data_conditioned_continuous_time_lti_gaussian, num_sampl
         true_params,
         synthetic,
         use_controls,
+        filter_type,
     ) = data_conditioned_continuous_time_lti_gaussian
 
-    output_dir_name = "test_lti_gaussian" + ("_controlled" if use_controls else "")
+    output_dir_name = "test_lti_gaussian" + ("_controlled" if use_controls else "") + f"_filter_{filter_type}"
     OUTPUT_DIR = get_output_dir(output_dir_name)
 
     obs_times = synthetic["times"]

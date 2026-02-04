@@ -272,9 +272,20 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
     return data_conditioned_model, true_params, synthetic, use_controls
 
 
-@pytest.fixture(params=[False, True])
+@pytest.fixture(
+    params=[
+        (False, "default"),
+        (False, "EnKF"),
+        (False, "EKF"),
+        (False, "UKF"),
+        (True, "default"),
+        (True, "EnKF"),
+        (True, "EKF"),
+        (True, "UKF"),
+    ]
+)
 def data_conditioned_continuous_time_stochastic_l63(request):
-    use_controls = request.param
+    use_controls, filter_type = request.param
     rng_key = jr.PRNGKey(0)
 
     # Always split into 5 keys to keep randomness consistent
@@ -325,11 +336,11 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood():
+        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
             with Condition(context):
                 return continuous_time_stochastic_l63_model()
 
-    return data_conditioned_model, true_params, synthetic, use_controls
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
 
 
 @pytest.fixture(params=[False, True])
@@ -498,9 +509,20 @@ def data_conditioned_stochastic_volatility(request):
     return data_conditioned_model, true_params, synthetic, identity_observation
 
 
-@pytest.fixture(params=[False, True])
+@pytest.fixture(
+    params=[
+        (False, "default"),
+        (False, "EnKF"),
+        (False, "EKF"),
+        (False, "UKF"),
+        (True, "default"),
+        (True, "EnKF"),
+        (True, "EKF"),
+        (True, "UKF"),
+    ]
+)
 def data_conditioned_continuous_time_lti_gaussian(request):
-    use_controls = request.param
+    use_controls, filter_type = request.param
     rng_key = jr.PRNGKey(0)
 
     # Always split into 5 keys to keep randomness consistent
@@ -542,11 +564,11 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood():
+        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
             with Condition(context):
                 return continuous_time_LTI_gaussian()
 
-    return data_conditioned_model, true_params, synthetic, use_controls
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
 
 
 @pytest.fixture(params=[False, True])

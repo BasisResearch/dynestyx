@@ -66,7 +66,7 @@ def test_continuous_time_stochastic_l63_mcmc_smoke(
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F811
 ):
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic, _ = (
+    data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_stochastic_l63
     )
     mcmc = MCMC(
@@ -109,7 +109,7 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F811
 ):
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic, _ = (
+    data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_lti_gaussian
     )
     mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
