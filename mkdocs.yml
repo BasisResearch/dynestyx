@@ -20,6 +20,7 @@ nav:
     - dynamical_models: api_reference/dynamical_models.md
     - filters: api_reference/filters.md
     - handlers: api_reference/handlers.md
+    - discretizers: api_reference/discretizers.md
     - hmm_filter: api_reference/hmm_filter.md
     - observations: api_reference/observations.md
     - ops: api_reference/ops.md
