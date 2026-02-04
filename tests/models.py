@@ -144,7 +144,7 @@ def continuous_time_stochastic_l63_model():
             diffusion_covariance=lambda x, u, t: jnp.eye(3),
         ),
         observation_model=LinearGaussianObservation(
-            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[5.0**2]])
+            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
         ),
     )
 

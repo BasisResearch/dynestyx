@@ -5,7 +5,8 @@ import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, implements
 
-from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.discretizers import euler_maruyama
+from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.ops import Context, FunctionOfTime, States, sample_ds
 
 
@@ -19,6 +20,38 @@ class HandlesSelf:
 
     def __exit__(self, exc_type, exc, tb):
         return self._cm.__exit__(exc_type, exc, tb)
+
+
+class Discretizer(ObjectInterpretation, HandlesSelf):
+    """
+    Discretize a continuous-time state evolution to a discrete-time state evolution.
+    Args:
+        discretize: Callable (CTSE) -> DTSE. Defaults to euler_maruyama.
+    """
+
+    def __init__(self, discretize=euler_maruyama):
+        super().__init__()
+        self.discretize = discretize
+
+    @implements(sample_ds)
+    def _sample_ds(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        context: Context | None = None,
+    ) -> FunctionOfTime:
+        if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+            discrete_evolution = self.discretize(dynamics.state_evolution)
+            dynamics = DynamicalModel(
+                initial_condition=dynamics.initial_condition,
+                state_evolution=discrete_evolution,
+                observation_model=dynamics.observation_model,
+                control_model=dynamics.control_model,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
+                control_dim=dynamics.control_dim,
+            )
+        return fwd(name, dynamics, context)
 
 
 class Condition(ObjectInterpretation, HandlesSelf):

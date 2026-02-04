@@ -130,27 +130,6 @@ class ContinuousTimeStateEvolution(StateEvolution):
     ...
 
 
-class DistributionFromStateTimeParams(Protocol):
-    """
-    A callable mapping:
-        (state, time, params) -> numpyro.distributions.Distribution
-
-    Used for:
-        - ObservationModel
-        - DiscreteTimeStateEvolution
-        - ControlModel
-
-    This is a structural type: anything with this __call__ signature is valid.
-    """
-
-    def __call__(
-        self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> dist.Distribution: ...
-
-
 class ObservationModel(eqx.Module):
     """p(y_t | State_t, Control_t, t)"""
 
