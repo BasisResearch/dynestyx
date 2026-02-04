@@ -120,12 +120,12 @@ def diffeqsolve_util(
     y0: jnp.ndarray,
     reverse: bool = False,
     args=None,
-    solver: dfx.AbstractSolver = None,
+    solver: dfx.AbstractSolver | None = None,
     stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
     adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
     dt0: float = 0.01,
     tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
-    max_steps: int = 1e5,
+    max_steps: int = int(1e5),
     diffusion=None,
     key=None,
     debug=False,
@@ -217,7 +217,7 @@ def diffeqsolve_util(
         drift_new = reverse_rhs(drift, t1, y0)
         diffusion_new = reverse_rhs(diffusion, t1, y0)
     else:
-        t0_new = t0
+        t0_new = t0  # type: ignore
         t1_new = t1
         drift_new = drift
         diffusion_new = diffusion
@@ -238,7 +238,7 @@ def diffeqsolve_util(
         bm = dfx.VirtualBrownianTree(
             t0=t0_new, t1=t1_new, tol=tol_vbt, shape=bm_shape, key=key
         )
-        terms = dfx.MultiTerm(
+        terms = dfx.MultiTerm(  # type: ignore
             dfx.ODETerm(drift_new), dfx.ControlTerm(diffusion_new, bm)
         )
 

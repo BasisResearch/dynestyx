@@ -75,10 +75,11 @@ def test_eqx_module_drift_can_vmap_over_parameters():
 
     # Now: run a real dsx simulation where the *model is constructed under the plate*
     # and the drift parameters live inside an `eqx.Module`.
-    import dsx
-    from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-    from dsx.observations import LinearGaussianObservation
     from numpyro.infer import Predictive
+
+    import dynestyx as dsx
+    from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+    from dynestyx.observations import LinearGaussianObservation
 
     # Use strictly increasing times to satisfy diffrax.
     times = jnp.linspace(0.0, 0.2, 5)
@@ -134,7 +135,7 @@ def test_vmap_context_trajectory():
     """Test vmap with Context and Trajectory."""
 
     def f(ctx: Context):
-        return ctx.observations.values.sum()
+        return ctx.observations.values.sum()  # type: ignore
 
     batched_f = jax.vmap(
         f,
@@ -159,8 +160,8 @@ def test_vmap_context_trajectory():
 
 def test_vmapped_add_solved_sites():
     """Test vmapped add_solved_sites."""
-    from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-    from dsx.observations import LinearGaussianObservation
+    from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+    from dynestyx.observations import LinearGaussianObservation
 
     simulator = SDESimulator(key=jr.PRNGKey(0))
 
@@ -218,8 +219,8 @@ def make_lti_gaussian_model(rho=None):
 
     A = A0 + rho[..., None, None] * Ar
 
-    from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-    from dsx.observations import LinearGaussianObservation
+    from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+    from dynestyx.observations import LinearGaussianObservation
 
     dynamics = DynamicalModel(
         state_dim=2,
@@ -246,7 +247,7 @@ def make_lti_gaussian_model(rho=None):
 
 def test_hierarchical_lti_gaussian_model():
     """Test hierarchical LTI Gaussian model with plates."""
-    import dsx
+    import dynestyx as dsx
 
     def hierarchical_model():
         global_mean = numpyro.sample("global_mean", dist.Normal(0.0, 1.0))
@@ -272,8 +273,9 @@ def test_hierarchical_lti_gaussian_model():
 
 def test_hierarchical_lti_gaussian_predictive():
     """Test hierarchical model with Predictive (currently expected to fail)."""
-    import dsx
     from numpyro.infer import Predictive
+
+    import dynestyx as dsx
 
     def hierarchical_model():
         global_mean = numpyro.sample("global_mean", dist.Normal(0.0, 1.0))

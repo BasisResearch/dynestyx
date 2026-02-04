@@ -83,6 +83,6 @@ class plate(numpyro.primitives.plate):
                 return
             raise e
 
-    @property
+    @property  # type: ignore[misc]
     def __class__(self):
         return numpyro.primitives.plate
