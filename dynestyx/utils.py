@@ -1,138 +1,21 @@
-import jax.numpy as jnp
-from typing import Optional, Tuple
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
+from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array
 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
-from dsx.ops import Context
-from numpyro import distributions as dist
+from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.ops import Context
+
+type SSMType = CDNLGSSM | CDNLSSM
+
+
+import diffrax as dfx
+import jax.numpy as jnp
+import jax.random as jr
 import numpyro
 from numpyro.primitives import _PYRO_STACK, CondIndepStackFrame
 
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
-from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 
-from typing import TypeAlias
-
-import jax.random as jr
-import diffrax as dfx
-
-SSMType: TypeAlias = CDNLGSSM | CDNLSSM
-
-
-def infer_batch_shape():
-    """Infer the current plate-induced batch shape, or None if not in a plate."""
-    cond_indep_stack = []
-    for frame in _PYRO_STACK:
-        if isinstance(frame, numpyro.primitives.plate):
-            cond_indep_stack.append(
-                CondIndepStackFrame(frame.name, frame.dim, frame.size)
-            )
-    if cond_indep_stack:
-        return numpyro.primitives.plate._get_batch_shape(cond_indep_stack)
-    return None
-
-
-def dsx_to_cd_dynamax(
-    dsx_model: DynamicalModel, cd_model: Optional[SSMType] = None
-) -> Tuple[dict, bool]:
-    """
-    Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
-    """
-
-    params = {}
-
-    ## Map state evolution ##
-    state_evo = dsx_model.state_evolution
-    if isinstance(state_evo, ContinuousTimeStateEvolution):
-        if state_evo.drift is not None:
-            params.update(
-                {
-                    "drift": state_evo.drift,
-                }
-            )
-        else:
-            raise ValueError(
-                "drift is None; default drift (e.g., ZERO) is not yet handled carefully."
-            )
-        if state_evo.diffusion_coefficient is not None:
-            params.update(
-                {
-                    "diffusion_coeff": state_evo.diffusion_coefficient,
-                }
-            )
-        if state_evo.diffusion_covariance is not None:
-            params.update(
-                {
-                    "diffusion_cov": state_evo.diffusion_covariance,
-                }
-            )
-    else:
-        raise NotImplementedError(
-            f"State evolution of type {type(state_evo)} is not supported yet."
-        )
-
-    ## Map initial condition ##
-    ic = dsx_model.initial_condition
-    if isinstance(ic, dist.MultivariateNormal):
-        params.update(
-            {
-                "initial_mean": ic.loc,  # type: ignore
-                "initial_cov": ic.covariance_matrix,
-            }
-        )
-    elif isinstance(ic, dist.Normal):
-        params.update({"initial_mean": ic.loc, "initial_cov": jnp.square(ic.scale)})  # type: ignore
-    else:
-        raise NotImplementedError(
-            f"Initial condition of type {type(ic)} is not supported yet."
-        )
-
-    ## Map observation model ##
-    obs = dsx_model.observation_model
-    non_gaussian_flag = False
-    if isinstance(obs, LinearGaussianObservation):
-        params.update(
-            {
-                "emission_function": lambda x, u, t: x @ obs.H.T
-                if x.ndim > 1
-                else obs.H @ x,
-                "emission_cov": obs.R,  # type: ignore
-            }
-        )
-    else:
-        # TODO: check for linear-gaussian observation models and extract H, R
-        # TODO: check for Gaussian observation and use CDNLGSSM
-        non_gaussian_flag = True
-        params.update(emission_distribution=dsx_model.observation_model)
-        # raise NotImplementedError(
-        #     f"Observation model of type {type(obs)} is not supported yet."
-        # )
-
-    if cd_model is None:
-        if non_gaussian_flag:
-            model_to_use: SSMType = CDNLSSM(
-                state_dim=dsx_model.state_dim,
-                emission_dim=dsx_model.observation_dim,
-                input_dim=dsx_model.control_dim,
-            )
-        else:
-            model_to_use = CDNLGSSM(
-                state_dim=dsx_model.state_dim,
-                emission_dim=dsx_model.observation_dim,
-                input_dim=dsx_model.control_dim,
-            )
-    else:
-        model_to_use = cd_model
-
-    cd_dynamax_params = model_to_use.build_params(**params)
-
-    return cd_dynamax_params, non_gaussian_flag
-
-
-def _validate_control_dim(
-    dynamics: DynamicalModel, ctrl_values: Optional[Array]
-) -> None:
+def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
     """
     Validate that control_dim is set in DynamicalModel when controls are present.
 
@@ -162,7 +45,7 @@ def _validate_control_dim(
 
 def _get_controls(
     context: Context, obs_times: Array
-) -> Tuple[Optional[Array], Optional[Array]]:
+) -> tuple[Array | None, Array | None]:
     """
     Extract and validate controls from context.
 
@@ -216,7 +99,7 @@ def _get_controls(
     return ctrl_times, ctrl_values
 
 
-def _get_val_or_None(values: Optional[Array], t_idx: int) -> Optional[Array]:
+def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
     """
     Safely get value at index t_idx, returning None if values is None.
 
@@ -398,3 +281,15 @@ def reverse_rhs(rhs, t1, ref_var):
             return -rhs(t1 - s, y, args)
 
     return rev_rhs
+
+
+def infer_batch_shape():
+    """Infer the current plate-induced batch shape, or None if not in a plate."""
+    cond_indep_stack = [
+        CondIndepStackFrame(frame.name, frame.dim, frame.size)
+        for frame in _PYRO_STACK
+        if isinstance(frame, numpyro.primitives.plate)
+    ]
+    if cond_indep_stack:
+        return numpyro.primitives.plate._get_batch_shape(cond_indep_stack)
+    return None

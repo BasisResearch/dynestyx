@@ -1,3 +1,3 @@
 # handlers
 
-::: dsx.handlers
+::: dynestyx.handlers

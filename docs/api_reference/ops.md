@@ -1,3 +1,3 @@
 # ops
 
-::: dsx.ops
+::: dynestyx.ops

@@ -1,26 +1,23 @@
 import jax.numpy as jnp
 import jax.random as jr
-
+import pytest
 from numpyro.infer import Predictive
 
-from effectful.ops.semantics import handler
-from dsx.handlers import Condition
-from dsx.ops import Trajectory, Context
-from dsx.simulators import SDESimulator
-from dsx.simulators import DiscreteTimeSimulator, ODESimulator
-from dsx.filters import (
-    FilterBasedMarginalLogLikelihood,
+from dynestyx.filters import (
     FilterBasedHMMMarginalLogLikelihood,
+    FilterBasedMarginalLogLikelihood,
 )
-
+from dynestyx.handlers import Condition, Discretizer
+from dynestyx.ops import Context, Trajectory
+from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
 from tests.models import (
+    continuous_time_deterministic_l63_model,
+    continuous_time_LTI_gaussian,
+    continuous_time_stochastic_l63_model,
     discrete_time_l63_model,
     hmm_model,
-    continuous_time_stochastic_l63_model,
-    continuous_time_LTI_gaussian,
-    continuous_time_deterministic_l63_model,
+    stochastic_volatility,
 )
-import pytest
 
 
 @pytest.fixture(params=[False, True])
@@ -67,8 +64,8 @@ def data_conditioned_hmm(request):
     )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSimulator()):
-        with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     # Prefer indexing rather than squeeze, to keep (T, obs_dim)
@@ -84,8 +81,8 @@ def data_conditioned_hmm(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedHMMMarginalLogLikelihood()):
-            with handler(Condition(context)):
+        with FilterBasedHMMMarginalLogLikelihood():
+            with Condition(context):
                 return hmm_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -132,8 +129,8 @@ def data_conditioned_discrete_time_l63(request):
     )
 
     # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
-    with handler(DiscreteTimeSimulator()):
-        with handler(Condition(context)):
+    with DiscreteTimeSimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -148,16 +145,147 @@ def data_conditioned_discrete_time_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(DiscreteTimeSimulator()):
-            with handler(Condition(context)):
+        with DiscreteTimeSimulator():
+            with Condition(context):
                 return discrete_time_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
 
 @pytest.fixture(params=[False, True])
-def data_conditioned_continuous_time_stochastic_l63(request):
+def data_conditioned_discrete_time_l63_filter(request):
+    """Discrete-time L63 model using FilterBasedMarginalLogLikelihood with EnKF."""
     use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    # Set true parameters for synthetic data generation
+    true_rho = 28.0
+
+    # Generate observations at some times
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    # Generate synthetic data
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        discrete_time_l63_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+
+    # Build conditioned model
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with FilterBasedMarginalLogLikelihood():
+            with Condition(context):
+                return discrete_time_l63_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_l63_filter_pf(request):
+    """Discrete-time L63 model using FilterBasedMarginalLogLikelihood with bootstrap particle filter."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    # Set true parameters for synthetic data generation
+    true_rho = 28.0
+
+    # Generate observations at some times
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    # Generate synthetic data
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        discrete_time_l63_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+
+    # Build conditioned model
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="pf", n_filter_particles=3_000
+        ):
+            with Condition(context):
+                return discrete_time_l63_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(
+    params=[
+        (False, "default"),
+        (False, "EnKF"),
+        # (False, "EKF"), EKF too bad :(
+        # (False, "UKF"), UKF too bad :(
+        (True, "default"),
+        (True, "EnKF"),
+        # (True, "EKF"), EKF too bad :(
+        # (True, "UKF"), UKF too bad :(
+    ]
+)
+def data_conditioned_continuous_time_stochastic_l63(request):
+    use_controls, filter_type = request.param
     rng_key = jr.PRNGKey(0)
 
     # Always split into 5 keys to keep randomness consistent
@@ -208,11 +336,11 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood():
+        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
             with Condition(context):
                 return continuous_time_stochastic_l63_model()
 
-    return data_conditioned_model, true_params, synthetic, use_controls
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
 
 
 @pytest.fixture(params=[False, True])
@@ -252,8 +380,8 @@ def data_conditioned_continuous_time_l63_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESimulator(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -268,10 +396,10 @@ def data_conditioned_continuous_time_l63_dpf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(
-            FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=1_000)
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="dpf", dpf_num_particles=1_000
         ):
-            with handler(Condition(context)):
+            with Condition(context):
                 return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
@@ -314,8 +442,8 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(ODESimulator()):
-        with handler(Condition(context)):
+    with ODESimulator():
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -330,16 +458,71 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(ODESimulator()):
-            with handler(Condition(context)):
+        with ODESimulator():
+            with Condition(context):
                 return continuous_time_deterministic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
 
 @pytest.fixture(params=[False, True])
+def data_conditioned_stochastic_volatility(request):
+    """Stochastic volatility with DiscreteTimeSimulator; no controls.
+    params: identity_observation (False = noisily observed, True = DiracIdentityObservation)."""
+    identity_observation = request.param
+    rng_key = jr.PRNGKey(0)
+    data_init_key, _mcmc_key, _posterior_pred_key, _ctrl_key = jr.split(rng_key, 4)
+
+    true_phi = 0.9
+    obs_times = jnp.arange(start=0.0, stop=100.0, step=1.0)
+    control_trajectory = Trajectory()
+
+    def model():
+        return stochastic_volatility(identity_observation=identity_observation)
+
+    true_params = {"phi": jnp.array(true_phi)}
+    predictive = Predictive(
+        model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with DiscreteTimeSimulator():
+            with Condition(context):
+                return stochastic_volatility(identity_observation=identity_observation)
+
+    return data_conditioned_model, true_params, synthetic, identity_observation
+
+
+@pytest.fixture(
+    params=[
+        (False, "default"),
+        (False, "EnKF"),
+        (False, "EKF"),
+        (False, "UKF"),
+        (True, "default"),
+        (True, "EnKF"),
+        (True, "EKF"),
+        (True, "UKF"),
+    ]
+)
 def data_conditioned_continuous_time_lti_gaussian(request):
-    use_controls = request.param
+    use_controls, filter_type = request.param
     rng_key = jr.PRNGKey(0)
 
     # Always split into 5 keys to keep randomness consistent
@@ -369,8 +552,8 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESimulator(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -381,11 +564,11 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(FilterBasedMarginalLogLikelihood()):
-            with handler(Condition(context)):
+        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
+            with Condition(context):
                 return continuous_time_LTI_gaussian()
 
-    return data_conditioned_model, true_params, synthetic, use_controls
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
 
 
 @pytest.fixture(params=[False, True])
@@ -420,8 +603,8 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with handler(SDESimulator(key=data_solver_key)):
-        with handler(Condition(context)):
+    with SDESimulator(key=data_solver_key):
+        with Condition(context):
             synthetic = predictive(data_init_key)
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -432,10 +615,65 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with handler(
-            FilterBasedMarginalLogLikelihood(filter_type="dpf", dpf_num_particles=2_500)
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="dpf", dpf_num_particles=2_500
         ):
-            with handler(Condition(context)):
+            with Condition(context):
                 return continuous_time_LTI_gaussian()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_l63_auto(request):
+    """Uses continuous_time_stochastic_l63_model with Discretize(EulMar) to get
+    a discrete-time transition (Euler-Maruyama over each [t_now, t_next]), then
+    DiscreteTimeSimulator + Condition."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    true_rho = 28.0
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        continuous_time_stochastic_l63_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    # Order: Condition innermost (injects context), then Discretizer (CTE->discrete),
+    # then DiscreteTimeSimulator (simulates with discrete dynamics + context).
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with Condition(context):
+                synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with DiscreteTimeSimulator():
+            with Discretizer():
+                with Condition(context):
+                    return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls

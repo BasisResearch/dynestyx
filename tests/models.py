@@ -1,11 +1,13 @@
 import jax.numpy as jnp
-
 import numpyro
 import numpyro.distributions as dist
 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
-from dsx.observations import LinearGaussianObservation
-import dsx
+import dynestyx as dsx
+from dynestyx.dynamical_models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+)
+from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
 
 def hmm_model():
@@ -61,7 +63,7 @@ def hmm_model():
         observation_model=observation_model,
     )
 
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def discrete_time_l63_model():
@@ -79,8 +81,12 @@ def discrete_time_l63_model():
 
     def state_evolution(x, u, t_now, t_next):
         # Add light dependence on u: add small control term to drift
-        u_effect = 10 * u if u is not None else jnp.zeros(3)
-        loc = x + 0.01 * (drift(x) + u_effect)
+        drift_term = drift(x)
+        if u is None or u.shape == (0,):
+            u_effect = jnp.zeros_like(drift_term)
+        else:
+            u_effect = 10 * u
+        loc = x + 0.01 * (drift_term + u_effect)
         cov = 0.01 * jnp.eye(3)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
@@ -110,7 +116,7 @@ def discrete_time_l63_model():
     # e.g. drift = lambda x: F(x, rho)
 
     # Return a sampled dynamical model, named "f".
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_stochastic_l63_model():
@@ -138,7 +144,7 @@ def continuous_time_stochastic_l63_model():
             diffusion_covariance=lambda x, u, t: jnp.eye(3),
         ),
         observation_model=LinearGaussianObservation(
-            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[5.0**2]])
+            H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
         ),
     )
 
@@ -154,7 +160,7 @@ def continuous_time_stochastic_l63_model():
     # e.g. drift = lambda x: F(x, rho)
 
     # Return a sampled dynamical model, named "f".
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_LTI_gaussian():
@@ -179,7 +185,38 @@ def continuous_time_LTI_gaussian():
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
         ),
     )
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)
+
+
+def stochastic_volatility(identity_observation: bool = False):
+    """Discrete-time stochastic volatility: log-variance follows AR(1).
+    One unknown parameter: phi (persistence). No controls.
+    If identity_observation=True, y_t = x_t (DiracIdentityObservation); else noisily observed."""
+    phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0))  # type: ignore[arg-type]
+    sigma_eta = 0.5  # fixed vol-of-vol
+
+    initial_condition = dist.Normal(0.0, 1.0)
+
+    def state_evolution(x, u, t_now, t_next):
+        return dist.Normal(phi * x, sigma_eta)
+
+    if identity_observation:
+        observation_model = DiracIdentityObservation()
+    else:
+
+        def observation_model(x, u, t):  # type: ignore[misc]
+            return dist.Normal(0.0, jnp.exp(x / 2.0))
+
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=0,
+        initial_condition=initial_condition,
+        state_evolution=state_evolution,
+        observation_model=observation_model,
+    )
+
+    dsx.sample_ds("f", dynamics)
 
 
 def continuous_time_deterministic_l63_model():
@@ -210,4 +247,4 @@ def continuous_time_deterministic_l63_model():
     )
 
     # Return a sampled dynamical model, named "f".
-    return dsx.sample_ds("f", dynamics)
+    dsx.sample_ds("f", dynamics)

@@ -1,30 +1,33 @@
+import dataclasses
+import warnings
+
+import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import dataclasses
+import numpyro
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+from jax import Array
+from jax.tree_util import tree_map
+from numpyro.contrib.control_flow import scan as nscan
 
-from dsx.handlers import BaseSimulator
-from dsx.ops import States, Context
-from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-from dsx.utils import (
+from dynestyx.dynamical_models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    State,
+)
+from dynestyx.handlers import BaseSimulator
+from dynestyx.observations import DiracIdentityObservation
+from dynestyx.ops import Context, States
+from dynestyx.utils import (
     _get_controls,
-    _validate_control_dim,
     _get_val_or_None,
+    _validate_control_dim,
+    diffeqsolve_util,
     infer_batch_shape,
 )
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
-import diffrax as dfx
-from jax import Array
-import numpyro
-from numpyro.contrib.control_flow import scan as nscan
-import warnings
 
-from typing import TypeAlias
-
-from dsx.utils import diffeqsolve_util
-from jax.tree_util import tree_map
-
-SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 class SDESimulator(BaseSimulator):
@@ -312,7 +315,7 @@ class SDESimulator(BaseSimulator):
                 t = obs_times[t_idx]
                 numpyro.sample(
                     f"y_{t_idx}",
-                    dynamics.observation_model(x=states[t_idx], u=u_t, t=t),
+                    dynamics.observation_model(states[t_idx], u_t, t),
                     obs=_get_val_or_None(obs_values, t_idx),
                 )
 
@@ -350,14 +353,44 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         T = len(obs_times)
 
+        # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
+        # instead of scan. state_evolution returns a dist; call it with batched inputs.
+        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
+            obs_values is not None
+        ):
+            numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
+            numpyro.deterministic("y_0", obs_values[0])
+
+            x_prev = obs_values[:-1]
+            x_next = obs_values[1:]
+            u_prev = ctrl_values[:-1] if ctrl_values is not None else None
+            t_now = obs_times[:-1]
+            t_next = obs_times[1:]
+
+            with numpyro.plate("time", T - 1):
+                trans = dynamics.state_evolution(
+                    x_prev,
+                    u_prev,
+                    t_now,
+                    t_next,  # type: ignore
+                )
+                numpyro.sample("x_next", trans, obs=x_next)  # type: ignore
+
+            return {
+                "times": obs_times,
+                "states": obs_values,
+                "observations": obs_values,
+            }
+
+        # Default: scan over time
         # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
+        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)
         y_0 = numpyro.sample(
             "y_0",
-            dynamics.observation_model(x=x_prev, u=u_0, t=obs_times[0]),
+            dynamics.observation_model(x_prev, u_0, obs_times[0]),
             obs=_get_val_or_None(obs_values, 0),
         )
 
@@ -389,7 +422,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         # x_prev is shape (state_dim,) or scalar, scan_states is (T-1, state_dim)
         # y_0 is shape (obs_dim,) or scalar, scan_observations is (T-1, obs_dim)
         # Use expand_dims to ensure proper shape for concatenation
-        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # shape (1, state_dim) or (1,)
+        # shape (1, state_dim) or (1,)
+        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
         y_0_expanded = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
         states = jnp.concatenate(
             [x_0_expanded, scan_states], axis=0

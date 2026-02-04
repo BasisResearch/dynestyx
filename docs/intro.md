@@ -6,7 +6,7 @@ If you want to jump directly into code, take a look at the first [tutorial](tuto
 
 ## Dynamical Systems and `dynestyx`
 
-For the purposes of `dynestyx`, a dynamical system is a generative model depending on time. These generally come in the form of *state space models* (SSMs), where some unobserved state \(x_t \in \mathbb{R}^{d_x}\) evolves over time, with occasional observations \(y_t \in \mathbb{R}^{d_y}\). Dynestyx allows the process that evolves \(x_t\), as well as the process that generates observations \(y_t\), to both be extremely general, and, in particular, allows for \(x_t\) to be specified as a continuous-time or discrete-time process. That is, \(x_t\) may be specified by a *stochastic differential equation* (SDE),
+For the purposes of `dynestyx`, a dynamical system is a generative model depending on time. These generally come in the form of *state space models* (SSMs), where some unobserved state \(x_t \in \mathbb{R}^{d_x}\) evolves over time[^1], with occasional observations \(y_t \in \mathbb{R}^{d_y}\). Dynestyx allows the process that evolves \(x_t\), as well as the process that generates observations \(y_t\), to both be extremely general, and, in particular, allows for \(x_t\) to be specified as a continuous-time or discrete-time process. That is, \(x_t\) may be specified by a *stochastic differential equation* (SDE)[^2],
 
 $$
     dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{g_\theta(x, t) \, \mathrm{d}\beta_t}_\text{diffusion},
@@ -18,7 +18,7 @@ $$
     x_t \sim \underbrace{p_\theta(x_t \,|\, x_{t-1})}_{\text{transition density}}.
 $$
 
-In either case, the dynamics are specified with a parameter $\theta$. Various names for the process $x_t \mapsto x_{t+1}$ are used, including *transition model*, *dynamics*, *state transition*, and *transition kernel*, but we will collectively call this our *state evolution*.
+In either case, the dynamics are specified with a parameter $\theta$, as well as the parameters of the Brownian motion $\beta_t$ and the initial state distrbution $p(x_0)$. Various names for the process $x_t \mapsto x_{t+1}$ are used, including *transition model*, *dynamics*, *state transition*, and *transition kernel*, but we will collectively call this our *state evolution*.
 
 We also assume that observations are also generated probabilistically -- depending only on the state \(x_t\) -- via some process
 
@@ -40,7 +40,7 @@ Specifying the dynamical model in `dynestyx` follows a simple, unified interface
 
 The resulting constructor is simple, yet quite general:
 ```python 
-from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+from dynestyx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
 
 dynamics = DynamicalModel(
     state_dim=...,
@@ -58,27 +58,26 @@ dynamics = DynamicalModel(
 To sample from the dynamical model, we call `dsx.sample_ds` inside of any `numpyro` model:
 
 ```python
-import dsx
+import dynestyx as dsx
 
 dsx.sample_ds("f", dynamics)
 ```
 
 In subsequent tutorials, we give concrete examples of defining many different types of dynamical models in `dynestyx`. Some examples include:
 
-- A linear, Gaussian SDE-driven dynamical system.
-- A nonlinear SDE with a linear, Gaussian observation model.
-- A discrete-time dynamical system, with discrete states $x_t \in \{0, 1, \dots, K\}$, i.e., a Hidden Markov Model (HMM).
-- A nonlinear discrete-time dynnamical system with a linear, Gaussian observation model.
-- A nonlinear SDE with a nonlinear, non-Gaussian observation model.
+- A linear, Gaussian SDE-driven dynamical system ([Quickstart tutorial](tutorials/quickstart/)).
+- A discrete-time dynamical system with discrete states $x_t \in \{0, 1, \dots, K\}$, i.e., a Hidden Markov Model (HMM) ([HMM tutorial](tutorials/hmm_inference/)).
+- A nonlinear discrete-time dynamical system with Gaussian observations ([Discrete-time inference tutorial](tutorials/discrete_time_inference/)).
+- A linear SDE with non-Gaussian (Poisson) observations ([Non-Gaussian observations tutorial](tutorials/sde_non_gaussian_observations/)).
 
 ### Simulation of Dynamical Systems
 
 Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation. To specify how dynamical models are simulated, we must select a simulator from `dsx.simulators`. We then additionally `Condition` on a `Context`, which may include things like times in a trajectory, and potentially, control inputs. For example, to simulate from a continuous-discrete model:
 
 ```python
-from dsx.simulators import SDESimulator
-from dsx.handlers import Condition
-from dsx.ops import Trajectory, Context
+from dynestyx.simulators import SDESimulator
+from dynestyx.handlers import Condition
+from dynestyx.ops import Trajectory, Context
 
 import jax.random as jr
 
@@ -90,21 +89,21 @@ context = Context(
 
 with SDESimulator(key=prng_key): # Specify how the SDE will be simulated/solved
     with Condition(context): # Specify the context in which to simulate
-        sampled_trajectory = contrinuous_discrete_model() # Obtain samples
+        sampled_trajectory = continuous_discrete_model() # Obtain samples
 ```
 
 To instead simulate from a discrete-time system, we would write 
 
 ```python
-from dsx.simulators import DiscreteTimeSimulator
+from dynestyx.simulators import DiscreteTimeSimulator
 
 context = Context(
     observations=Trajectory(times=jnp.arange(0.0, 1.0, 0.1))
 )
 
-with DiscreteTimeSimulator(key=prng_key): # Specify how the SDE will be simulated/solved
+with DiscreteTimeSimulator(key=prng_key): # Specify how the discrete-time system will be simulated
     with Condition(context): # Specify the context in which to simulate
-        sampled_trajectory = contrinuous_discrete_model() # Obtain samples
+        sampled_trajectory = discrete_time_model() # Obtain samples
 ```
 
 Simulating from a dynamical model essentially "unrolls" it into a standard `numpyro` probabilistic program. For Bayesian inference of dynamical systems, however, this is a rather inefficient way to do things; in the next section, we review Bayesian inference of dynamical systems, and discuss the way we perform inference more efficiently in `dynestyx`.
@@ -139,10 +138,20 @@ One goal in `dynestyx` is to make the resulting inference problem as simple as p
 - Particle Hamiltonian Monte Carlo (unbiased, but slow for nontrivial problems)
 - Stochastic Variational Inference using the EnKF or particle filter for marginal likelihood estimates (approximate, but extremely fast)
 
+For concrete examples of these methods, please see the [tutorials](tutorials/quickstart/).
+
 ## Tutorials
 
+A comprehensive collection of tutorials is available to help you get started with `dynestyx` and learn different inference methods for dynamical systems. The tutorials range from introductory material to advanced techniques for handling complex observation models and different types of dynamics. Visit the [tutorials page](tutorials.md) to explore all available guides.
+
 ## API Reference
+
+Detailed API documentation is available for all modules, classes, and functions in `dynestyx`. The API reference provides comprehensive information about function signatures, parameters, return values, and usage examples. Visit the [API reference page](api_reference.md) to browse the complete documentation.
 
 ## References
 
 [1] Särkkä, S., & Svensson, L. (2023). Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press. [[Available Online]](https://users.aalto.fi/~ssarkka/pub/cup_book_online_20131111.pdf)
+
+[^1]: We also allow for some more general state space models than are described here. For example, the state need not be real (see, for example, the Hidden Markov Model tutorials).
+
+[^2]: As another example of support for general models, we also allow for deterministic dynamical systems (i.e., ODEs).

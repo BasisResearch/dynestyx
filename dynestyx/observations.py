@@ -1,6 +1,7 @@
 import jax
-from dsx.dynamical_models import ObservationModel
 from numpyro import distributions as dist
+
+from dynestyx.dynamical_models import ObservationModel
 
 
 class LinearGaussianObservation(ObservationModel):
@@ -23,3 +24,12 @@ class LinearGaussianObservation(ObservationModel):
 
     def __call__(self, x, u, t):
         return dist.MultivariateNormal(loc=x @ self.H.T, covariance_matrix=self.R)
+
+
+class DiracIdentityObservation(ObservationModel):
+    """
+    y_t | x_t ~ DiracDelta(x_t)
+    """
+
+    def __call__(self, x, u, t):
+        return dist.Delta(x)

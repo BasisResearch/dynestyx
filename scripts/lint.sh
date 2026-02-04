@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euxo pipefail
 
-SRC="tests/ dsx/"
+SRC="tests/ dynestyx/"
 
 mypy $SRC
 ruff check $SRC

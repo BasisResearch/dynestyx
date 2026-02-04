@@ -1,30 +1,16 @@
 """Tests for plate functionality and batching."""
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
-from numpyro.primitives import _PYRO_STACK, CondIndepStackFrame
-import equinox as eqx
 
-from dsx.ops import plate, Context, Trajectory
-from dsx.simulators import SDESimulator
-from dsx.handlers import Condition
-
-
-def infer_batch_shape():
-    """Helper to infer batch shape from current plate stack."""
-    cond_indep_stack = []
-    for frame in _PYRO_STACK:
-        if isinstance(frame, numpyro.primitives.plate):
-            cond_indep_stack.append(
-                CondIndepStackFrame(frame.name, frame.dim, frame.size)
-            )
-
-    if cond_indep_stack:
-        return numpyro.primitives.plate._get_batch_shape(cond_indep_stack)
-    return None
+from dynestyx.handlers import Condition
+from dynestyx.ops import Context, Trajectory, plate
+from dynestyx.simulators import SDESimulator
+from dynestyx.utils import infer_batch_shape
 
 
 class LinearDrift(eqx.Module):
@@ -90,7 +76,7 @@ def test_eqx_module_drift_can_vmap_over_parameters():
     # Now: run a real dsx simulation where the *model is constructed under the plate*
     # and the drift parameters live inside an `eqx.Module`.
     import dsx
-    from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+    from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
     from dsx.observations import LinearGaussianObservation
     from numpyro.infer import Predictive
 
@@ -173,7 +159,7 @@ def test_vmap_context_trajectory():
 
 def test_vmapped_add_solved_sites():
     """Test vmapped add_solved_sites."""
-    from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+    from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
     from dsx.observations import LinearGaussianObservation
 
     simulator = SDESimulator(key=jr.PRNGKey(0))
@@ -232,7 +218,7 @@ def make_lti_gaussian_model(rho=None):
 
     A = A0 + rho[..., None, None] * Ar
 
-    from dsx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+    from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
     from dsx.observations import LinearGaussianObservation
 
     dynamics = DynamicalModel(

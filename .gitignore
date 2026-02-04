@@ -178,3 +178,5 @@ dist/
 
 # Test output directories
 .output/
+
+*.ttf

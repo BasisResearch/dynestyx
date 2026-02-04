@@ -1,28 +1,29 @@
+import dataclasses
+import warnings
+from collections.abc import Callable
+
+import jax
+import numpyro
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
-from dsx.dynamical_models import DynamicalModel
-from typing import Dict, Callable, Optional, Union
 from jax import Array
-import dataclasses
-import jax
-import jax.numpy as jnp
 from numpyro.primitives import (
     Message,
 )
-import warnings
-import numpyro
+
+from dynestyx.dynamical_models import DynamicalModel
 
 # Type alias for states: dict mapping state names to arrays, or just an array
 Times = Array
-States = Union[Dict[str, Array], Array]
+States = dict[str, Array] | Array
 FunctionOfTime = Callable[[Times], States]
 
 
 @jax.tree_util.register_pytree_node_class
 @dataclasses.dataclass
 class Trajectory:
-    times: Optional[jnp.ndarray] = None
-    values: Optional[jnp.ndarray] = None
+    times: Times | None = None
+    values: States | None = None
 
     def tree_flatten(self):
         # None is allowed as a leaf; JAX treats it as static-ish leaf
@@ -40,7 +41,9 @@ class Context:
     solve: Trajectory = dataclasses.field(default_factory=Trajectory)
     observations: Trajectory = dataclasses.field(default_factory=Trajectory)
     controls: Trajectory = dataclasses.field(default_factory=Trajectory)
-    extras: Dict[str, Trajectory] = dataclasses.field(default_factory=dict)
+
+    # Extensible: extra time-indexed series or metadata
+    extras: dict[str, Trajectory] = dataclasses.field(default_factory=dict)
 
     def tree_flatten(self):
         return (self.solve, self.observations, self.controls, self.extras), None
@@ -55,7 +58,7 @@ class Context:
 
 @defop
 def sample_ds(
-    name: str, dynamics: DynamicalModel, context: Optional[Context] = None
+    name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     raise NotHandled()
 
