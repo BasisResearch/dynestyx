@@ -14,7 +14,7 @@ def test_sgmcmc_inference_smoke(
     num_samples,
 ):
     """Smoke test version - minimal samples to verify code runs without errors."""
-    (data_conditioned_model, true_params, synthetic, _) = (
+    (data_conditioned_model, true_params, synthetic, _, _) = (
         data_conditioned_continuous_time_stochastic_l63
     )
 

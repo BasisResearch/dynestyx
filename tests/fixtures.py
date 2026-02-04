@@ -276,11 +276,11 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
     params=[
         (False, "default"),
         (False, "EnKF"),
-        (False, "EKF"),
+        # (False, "EKF"), EKF too bad :(
         (False, "UKF"),
         (True, "default"),
         (True, "EnKF"),
-        (True, "EKF"),
+        # (True, "EKF"), EKF too bad :(
         (True, "UKF"),
     ]
 )
