@@ -35,6 +35,7 @@ nav:
     - HMM Inference: tutorials/hmm_inference.ipynb
     - SDE with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - ODE Inference: tutorials/ode_inference.ipynb
+    - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
 
 theme:
   name: "material"
