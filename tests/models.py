@@ -2,12 +2,12 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
-import dsx
-from dsx.dynamical_models import (
+import dynestyx as dsx
+from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
 )
-from dsx.observations import DiracIdentityObservation, LinearGaussianObservation
+from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
 
 def hmm_model():

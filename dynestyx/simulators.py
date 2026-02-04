@@ -9,11 +9,15 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSS
 from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
-from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel, State
-from dsx.handlers import BaseSimulator
-from dsx.observations import DiracIdentityObservation
-from dsx.ops import Context, States
-from dsx.utils import (
+from dynestyx.dynamical_models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    State,
+)
+from dynestyx.handlers import BaseSimulator
+from dynestyx.observations import DiracIdentityObservation
+from dynestyx.ops import Context, States
+from dynestyx.utils import (
     _get_controls,
     _get_val_or_None,
     _validate_control_dim,

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euxo pipefail
 
-SRC="dsx tests"
+SRC="dynestyx/ tests/"
 ruff check --fix $SRC
 ruff format $SRC

@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["dsx"]
+packages = ["dynestyx"]
 
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }

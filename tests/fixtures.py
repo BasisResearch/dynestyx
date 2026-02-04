@@ -3,13 +3,13 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
-from dsx.filters import (
+from dynestyx.filters import (
     FilterBasedHMMMarginalLogLikelihood,
     FilterBasedMarginalLogLikelihood,
 )
-from dsx.handlers import Condition
-from dsx.ops import Context, Trajectory
-from dsx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
+from dynestyx.handlers import Condition
+from dynestyx.ops import Context, Trajectory
+from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,

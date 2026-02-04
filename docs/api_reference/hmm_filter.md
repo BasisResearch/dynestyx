@@ -1,3 +1,3 @@
 # hmm_filter
 
-::: dsx.hmm_filter
+::: dynestyx.hmm_filter

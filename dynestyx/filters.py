@@ -10,12 +10,12 @@ from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
 
-from dsx.cuthbert_patches import systematic_resampling
-from dsx.dynamical_models import DynamicalModel
-from dsx.handlers import BaseCDDynamaxLogFactorAdder
-from dsx.hmm_filter import hmm_filter, hmm_log_components
-from dsx.ops import Context
-from dsx.utils import _get_controls, _validate_control_dim, dsx_to_cd_dynamax
+from dynestyx.cuthbert_patches import systematic_resampling
+from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
+from dynestyx.hmm_filter import hmm_filter, hmm_log_components
+from dynestyx.ops import Context
+from dynestyx.utils import _get_controls, _validate_control_dim, dsx_to_cd_dynamax
 
 SSMType: TypeAlias = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 

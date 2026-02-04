@@ -1,3 +1,3 @@
 # simulators
 
-::: dsx.simulators
+::: dynestyx.simulators

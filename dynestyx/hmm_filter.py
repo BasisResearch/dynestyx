@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from jax import lax
 from jax.scipy.special import logsumexp
 
-from dsx.dynamical_models import DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:

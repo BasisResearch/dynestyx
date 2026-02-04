@@ -5,7 +5,7 @@ from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
 from jax import Array
 
-from dsx.dynamical_models import DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 
 # Type alias for states: dict mapping state names to arrays, or just an array
 Times = Array
