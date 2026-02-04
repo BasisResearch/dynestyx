@@ -1,11 +1,11 @@
 import jax.numpy as jnp
 import dataclasses
 
-from dsx.handlers import BaseSimulator
-from dsx.ops import States, Context
-from dsx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-from dsx.observations import DiracIdentityObservation
-from dsx.utils import (
+from dynestyx.handlers import BaseSimulator
+from dynestyx.ops import States, Context
+from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.observations import DiracIdentityObservation
+from dynestyx.utils import (
     dsx_to_cd_dynamax,
     _get_controls,
     _validate_control_dim,

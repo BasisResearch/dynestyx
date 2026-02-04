@@ -4,11 +4,11 @@ import jax.random as jr
 from typing import Optional, TypeAlias
 import dataclasses
 
-from dsx.ops import Context
-from dsx.handlers import BaseCDDynamaxLogFactorAdder
-from dsx.dynamical_models import DynamicalModel
-from dsx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
-from dsx.hmm_filter import hmm_log_components, hmm_filter
+from dynestyx.ops import Context
+from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
+from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.utils import dsx_to_cd_dynamax, _get_controls, _validate_control_dim
+from dynestyx.hmm_filter import hmm_log_components, hmm_filter
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 import numpyro
 

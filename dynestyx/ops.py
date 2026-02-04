@@ -1,6 +1,6 @@
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
-from dsx.dynamical_models import DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from typing import Dict, Callable, Optional, Union
 from jax import Array
 import dataclasses

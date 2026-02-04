@@ -1,3 +1,3 @@
 # dynamical_models
 
-::: dsx.dynamical_models
+::: dynestyx.dynamical_models
