@@ -55,12 +55,12 @@ dynamics = DynamicalModel(
 )
 ```
 
-To sample from the dynamical model, we call `dsx.sample_ds` inside of any `numpyro` model:
+To sample from the dynamical model, we call `dsx.sample` inside of any `numpyro` model:
 
 ```python
 import dynestyx as dsx
 
-dsx.sample_ds("f", dynamics)
+dsx.sample("f", dynamics)
 ```
 
 In subsequent tutorials, we give concrete examples of defining many different types of dynamical models in `dynestyx`. Some examples include:
