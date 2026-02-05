@@ -30,7 +30,7 @@ class Trajectory:
 @dataclasses.dataclass
 class Context:
     """
-    All time-indexed info for a single sample_ds site.
+    All time-indexed info for a single sample site.
     """
 
     # Where to solve the dynamics
@@ -47,7 +47,7 @@ class Context:
 
 
 @defop
-def sample_ds(
+def sample(
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     raise NotHandled()
