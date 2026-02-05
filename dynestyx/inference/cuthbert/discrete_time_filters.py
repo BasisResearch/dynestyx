@@ -90,6 +90,15 @@ def _filter_discrete_time(
 
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
 
+    if filter_type.lower() in ["taylor_kf", "default"]:
+        _add_sites_taylor_kf(name, states)
+    elif filter_type.lower() == "pf":
+        _add_sites_pf(name, states)
+    else:
+        raise ValueError(
+            f"Invalid filter type: {filter_type}. Valid types: {_DISCRETE_FILTER_TYPES}"
+        )
+
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
     if filter_kwargs is None:
@@ -180,3 +189,43 @@ def _cuthbert_filter_taylor_kf(
     )
 
     return kf
+
+
+def _add_sites_pf(name: str, states: particle_filter.ParticleFilterState):
+    # Add the marginal log likelihood as a deterministic site for easy access.
+    numpyro.deterministic(
+        f"{name}_marginal_loglik", states.log_normalizing_constant[-1]
+    )
+
+    # Compute filtered means and covariances from the particles using the weights.
+    # particles (T+1, n_particles, state_dim), log_weights (T+1, n_particles)
+    log_weights = states.log_weights
+    particles = states.particles
+    w = jnp.exp(log_weights)[..., None]  # (T+1, n_particles, 1) for broadcasting
+
+    filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
+    # Weighted covariance: E[xx'] - E[x]E[x]'
+    second_mom = jnp.einsum(
+        "tnj,tnk,tn->tjk", particles, particles, jnp.exp(log_weights)
+    )
+    filtered_covariances = second_mom - jnp.einsum(
+        "tj,tk->tjk", filtered_means, filtered_means
+    )
+
+    numpyro.deterministic(f"{name}_filtered_states_mean", filtered_means)
+    numpyro.deterministic(f"{name}_filtered_states_cov", filtered_covariances)
+
+
+def _add_sites_taylor_kf(name: str, states: taylor.LinearizedKalmanFilterState):
+    # Add the marginal log likelihood as a deterministic site for easy access.
+    numpyro.deterministic(
+        f"{name}_marginal_loglik", states.log_normalizing_constant[-1]
+    )
+
+    # Add the filtered states and their covariances as deterministic sites for easy access.
+    # chol_cov is (T+1, state_dim, state_dim); batch matmul L @ L.T over time axis.
+    chol_T = jnp.transpose(states.chol_cov, (0, 2, 1))
+    filtered_cov = jnp.matmul(states.chol_cov, chol_T)
+    numpyro.deterministic(f"{name}_filtered_states_mean", states.mean)
+    numpyro.deterministic(f"{name}_filtered_states_chol_cov", states.chol_cov)
+    numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
