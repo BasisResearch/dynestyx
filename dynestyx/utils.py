@@ -6,12 +6,11 @@ from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.ops import Context
 
 type SSMType = CDNLGSSM | CDNLSSM
-from effectful.ops.semantics import handler
-
 import diffrax as dfx
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
+from effectful.ops.semantics import handler
 from numpyro.primitives import _PYRO_STACK, CondIndepStackFrame
 
 

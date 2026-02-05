@@ -12,6 +12,7 @@ from dynestyx.ops import Context, Trajectory
 from dynestyx.simulators import SDESimulator
 from dynestyx.utils import infer_batch_shape
 
+
 class LinearDrift(eqx.Module):
     """Example eqx.Module drift that can be vmapped over its parameters."""
 

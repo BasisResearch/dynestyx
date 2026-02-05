@@ -1,17 +1,17 @@
 # handlers.py
 """Handlers for dsx operations using Interpretation-based style."""
 
+import warnings
+
 import numpyro
-from effectful.ops.semantics import handler
+from effectful.ops.semantics import fwd
+from effectful.ops.syntax import ObjectInterpretation, implements
+from numpyro.primitives import Message
 
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.ops import Context, FunctionOfTime, States, sample_ds
 from dynestyx.utils import HandlesSelf
-from effectful.ops.semantics import fwd, handler
-from effectful.ops.syntax import implements, ObjectInterpretation
-from numpyro.primitives import Message
-import warnings
 
 
 class Discretizer(ObjectInterpretation, HandlesSelf):
@@ -136,12 +136,16 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
         # Inheritors should implement this method.
         raise NotImplementedError()
 
+
 class plate(numpyro.primitives.plate, ObjectInterpretation, HandlesSelf):
     """
     Wrapper around a `numpyro.primitives.plate` primitive.
     """
+
     @implements(sample_ds)
-    def _sample_ds(self, name: str, dynamics: DynamicalModel, context: Context | None = None) -> FunctionOfTime:
+    def _sample_ds(
+        self, name: str, dynamics: DynamicalModel, context: Context | None = None
+    ) -> FunctionOfTime:
         fwd(name, dynamics, context)
 
     def process_message(self, msg: Message) -> None:

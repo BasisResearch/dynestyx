@@ -1,13 +1,10 @@
 import dataclasses
-import warnings
 from collections.abc import Callable
 
 import jax
-import numpyro
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
 from jax import Array
-
 
 from dynestyx.dynamical_models import DynamicalModel
 
