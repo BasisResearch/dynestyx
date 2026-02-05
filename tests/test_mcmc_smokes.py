@@ -70,7 +70,7 @@ def test_discrete_time_l63_auto_mcmc_smoke(
 
 # This test is expected to fail currently due to broadcasting issues in the discretizer/simulator interaction.
 @pytest.mark.skipif(
-    True,
+    False,
     reason=(
         "Expected to fail currently: exposes broadcasting interaction between "
         "Discretizer, DiracIdentityObservation, and DiscreteTimeSimulator."

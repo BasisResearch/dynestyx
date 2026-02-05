@@ -197,20 +197,42 @@ class DiscreteTimeSimulator(BaseSimulator):
             numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
             numpyro.deterministic("y_0", obs_values[0])
 
-            x_prev = obs_values[:-1]
-            x_next = obs_values[1:]
-            u_prev = ctrl_values[:-1] if ctrl_values is not None else None
+            # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
+            if obs_values.ndim == 1:
+                x_prev = obs_values[:-1][:, None]
+                x_next = obs_values[1:][:, None]
+            else:
+                x_prev = obs_values[:-1]
+                x_next = obs_values[1:]
+            if ctrl_values is not None:
+                if ctrl_values.ndim == 1:
+                    u_prev = ctrl_values[:-1][:, None]
+                else:
+                    u_prev = ctrl_values[:-1]
+            else:
+                u_prev = None
             t_now = obs_times[:-1]
             t_next = obs_times[1:]
 
+            # Pass state (and controls) with batch as last axis so drift can use
+            # naive indexing (x[0], x[1], ...) and discretizer broadcasts correctly.
+            x_prev_batch_last = jnp.swapaxes(x_prev, 0, 1)
+            x_next_batch_last = jnp.swapaxes(x_next, 0, 1)
+            u_prev_batch_last = (
+                jnp.swapaxes(u_prev, 0, 1) if u_prev is not None else None
+            )
+
             with numpyro.plate("time", T - 1):
                 trans = dynamics.state_evolution(
-                    x_prev,
-                    u_prev,
+                    x_prev_batch_last,
+                    u_prev_batch_last,
                     t_now,
                     t_next,  # type: ignore
                 )
-                numpyro.sample("x_next", trans, obs=x_next)  # type: ignore
+                # obs shape must match trans.batch_shape + trans.event_shape: use
+                # time-first (T-1, state_dim) for e.g. discretizer; batch-last (state_dim, T-1) for scalar.
+                obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
+                numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
 
             return {
                 "times": obs_times,
