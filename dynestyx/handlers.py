@@ -2,24 +2,16 @@
 """Handlers for dsx operations using Interpretation-based style."""
 
 import numpyro
-from effectful.ops.semantics import fwd, handler
-from effectful.ops.syntax import ObjectInterpretation, implements
+from effectful.ops.semantics import handler
 
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.ops import Context, FunctionOfTime, States, sample_ds
-
-
-class HandlesSelf:
-    _cm = None
-
-    def __enter__(self):
-        self._cm = handler(self)
-        self._cm.__enter__()
-        return self._cm
-
-    def __exit__(self, exc_type, exc, tb):
-        return self._cm.__exit__(exc_type, exc, tb)
+from dynestyx.utils import HandlesSelf
+from effectful.ops.semantics import fwd, handler
+from effectful.ops.syntax import implements, ObjectInterpretation
+from numpyro.primitives import Message
+import warnings
 
 
 class Discretizer(ObjectInterpretation, HandlesSelf):
@@ -143,3 +135,30 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
     ):
         # Inheritors should implement this method.
         raise NotImplementedError()
+
+class plate(numpyro.primitives.plate, ObjectInterpretation, HandlesSelf):
+    """
+    Wrapper around a `numpyro.primitives.plate` primitive.
+    """
+    @implements(sample_ds)
+    def _sample_ds(self, name: str, dynamics: DynamicalModel, context: Context | None = None) -> FunctionOfTime:
+        fwd(name, dynamics, context)
+
+    def process_message(self, msg: Message) -> None:
+        if msg["type"] not in ("param", "sample", "plate", "deterministic"):
+            if msg["type"] == "control_flow":
+                warnings.warn(
+                    "numpyro cannot use control flow primitives under a `plate` primitive. "
+                    "There are internal reasons why this may occur in dsx, but you should not do this."
+                )
+            return
+        try:
+            return super().process_message(msg)
+        except NotImplementedError as e:
+            if "Cannot use control flow primitive under a `plate` primitive." in str(e):
+                return
+            raise e
+
+    @property  # type: ignore[misc]
+    def __class__(self):
+        return numpyro.primitives.plate

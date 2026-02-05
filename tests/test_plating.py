@@ -7,11 +7,10 @@ import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 
-from dynestyx.handlers import Condition
-from dynestyx.ops import Context, Trajectory, plate
+from dynestyx.handlers import Condition, plate
+from dynestyx.ops import Context, Trajectory
 from dynestyx.simulators import SDESimulator
 from dynestyx.utils import infer_batch_shape
-
 
 class LinearDrift(eqx.Module):
     """Example eqx.Module drift that can be vmapped over its parameters."""

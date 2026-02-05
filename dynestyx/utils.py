@@ -6,7 +6,7 @@ from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.ops import Context
 
 type SSMType = CDNLGSSM | CDNLSSM
-
+from effectful.ops.semantics import handler
 
 import diffrax as dfx
 import jax.numpy as jnp
@@ -293,3 +293,15 @@ def infer_batch_shape():
     if cond_indep_stack:
         return numpyro.primitives.plate._get_batch_shape(cond_indep_stack)
     return None
+
+
+class HandlesSelf:
+    _cm = None
+
+    def __enter__(self):
+        self._cm = handler(self)
+        self._cm.__enter__()
+        return self._cm
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._cm.__exit__(exc_type, exc, tb)

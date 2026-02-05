@@ -7,9 +7,7 @@ import numpyro
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
 from jax import Array
-from numpyro.primitives import (
-    Message,
-)
+
 
 from dynestyx.dynamical_models import DynamicalModel
 
@@ -61,28 +59,3 @@ def sample_ds(
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     raise NotHandled()
-
-
-class plate(numpyro.primitives.plate):
-    """
-    Wrapper around a `numpyro.primitives.plate` primitive.
-    """
-
-    def process_message(self, msg: Message) -> None:
-        if msg["type"] not in ("param", "sample", "plate", "deterministic"):
-            if msg["type"] == "control_flow":
-                warnings.warn(
-                    "numpyro cannot use control flow primitives under a `plate` primitive. "
-                    "There are internal reasons why this may occur in dsx, but you should not do this."
-                )
-            return
-        try:
-            return super().process_message(msg)
-        except NotImplementedError as e:
-            if "Cannot use control flow primitive under a `plate` primitive." in str(e):
-                return
-            raise e
-
-    @property  # type: ignore[misc]
-    def __class__(self):
-        return numpyro.primitives.plate
