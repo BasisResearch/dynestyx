@@ -227,5 +227,4 @@ def _add_sites_taylor_kf(name: str, states: taylor.LinearizedKalmanFilterState):
     chol_T = jnp.transpose(states.chol_cov, (0, 2, 1))
     filtered_cov = jnp.matmul(states.chol_cov, chol_T)
     numpyro.deterministic(f"{name}_filtered_states_mean", states.mean)
-    numpyro.deterministic(f"{name}_filtered_states_chol_cov", states.chol_cov)
     numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
