@@ -6,7 +6,7 @@ ensuring that all MCMC inference pipelines can run with minimal parameters.
 """
 
 import jax.random as jr
-import pytest
+import pytest  # noqa: F401
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
