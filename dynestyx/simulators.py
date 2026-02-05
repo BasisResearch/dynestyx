@@ -2,6 +2,7 @@ import dataclasses
 import warnings
 
 import diffrax as dfx
+import jax
 import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
@@ -14,13 +15,13 @@ from dynestyx.dynamical_models import (
     State,
 )
 from dynestyx.handlers import BaseSimulator
-from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.ops import Context, States
 from dynestyx.utils import (
     _get_controls,
     _get_val_or_None,
     _validate_control_dim,
+    infer_batch_shape,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -45,9 +46,9 @@ class SDESimulator(BaseSimulator):
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
             "dt0": dt0,
-            "tol_vbt": tol_vbt,
             "max_steps": max_steps,
         }
+        self.tol_vbt = tol_vbt
 
     def simulate(self, context: Context, dynamics) -> States:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
@@ -69,44 +70,156 @@ class SDESimulator(BaseSimulator):
         # Extract times from context
         if context.observations is None or context.observations.times is None:
             raise ValueError("context.observations.times must be provided")
-        times = context.observations.times
+        raw_times = jnp.asarray(context.observations.times)
 
-        # Extract controls from context if available
-        ctrl_times, ctrl_values = _get_controls(context, times)
+        # Detect batch shape from surrounding plates (if any)
+        batch_shape = infer_batch_shape() or ()
+        batch_size = int(jnp.prod(jnp.array(batch_shape))) if batch_shape else 0
 
-        # Validate that control_dim is set when controls are present
-        _validate_control_dim(dynamics, ctrl_values)
+        def _ensure_batch_prefix(x):
+            if x is None or not batch_shape:
+                return x
+            if tuple(x.shape[: len(batch_shape)]) == tuple(batch_shape):
+                return x
+            return jnp.broadcast_to(x, batch_shape + x.shape)
 
-        # Generate a CD-Dynamax-compatible parameter dict
-        # Works for both stochastic and deterministic dynamics
-        params, non_gaussian_flag = dsx_to_cd_dynamax(dynamics)
+        def _flatten_batch_prefix(x):
+            if x is None or not batch_shape:
+                return x
+            if tuple(x.shape[: len(batch_shape)]) != tuple(batch_shape):
+                return x
+            return x.reshape((batch_size,) + x.shape[len(batch_shape) :])
 
-        # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        if non_gaussian_flag:
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-                diffeqsolve_settings=self.diffeqsolve_settings,
+        def _drift_has_batched_params(drift_obj) -> bool:
+            if not batch_shape:
+                return False
+            for leaf in jax.tree.leaves(drift_obj):
+                if hasattr(leaf, "shape") and getattr(leaf, "ndim", 0) >= 1:
+                    if leaf.shape[0] == batch_size:
+                        return True
+            return False
+
+        def _extract_time_vector(ts: Array) -> Array:
+            """Return a 1D time vector of shape (T,) from any array shaped (..., T)."""
+            if ts.ndim == 1:
+                return ts
+            # Treat the last axis as time and pick the first leading index.
+            return ts.reshape((-1, ts.shape[-1]))[0]
+
+        def _extract_control_trajectory(us: Array) -> Array:
+            """
+            Return a control trajectory shaped (T, control_dim) from any array shaped (..., T, control_dim).
+            """
+            if us.ndim == 2:
+                return us
+            return us.reshape((-1,) + us.shape[-2:])[0]
+
+        def _move_control_time_first(us: Array) -> Array:
+            # Controls are assumed shaped (..., T, control_dim) after extraction/broadcast.
+            return jnp.moveaxis(us, -2, 0)
+
+        with numpyro.handlers.seed(rng_seed=self.key):
+            # Extract controls from context if available
+            times = _extract_time_vector(raw_times)
+            ctrl_times, ctrl_values = _get_controls(context, times)
+
+            # Validate that control_dim is set when controls are present
+            _validate_control_dim(dynamics, ctrl_values)
+
+            # Diffrax expects scalar times; keep the integration time grid unbatched.
+            # (If callers provide batched times, we pick the first time grid.)
+            times_scan = times
+
+            initial_state = numpyro.sample("x_0", dynamics.initial_condition)
+            initial_state = _ensure_batch_prefix(initial_state)
+
+            if ctrl_values is not None:
+                ctrl_values = _extract_control_trajectory(ctrl_values)
+                ctrl_values = _ensure_batch_prefix(ctrl_values)
+                ctrl_scan = _move_control_time_first(
+                    ctrl_values
+                )  # (T, ..., control_dim)
+                u_0 = ctrl_scan[0]
+            else:
+                ctrl_scan = None
+                u_0 = None
+
+            # Build a diffrax control path so we can evaluate u(t) at solver times.
+            # (Controls have the same time grid as observations, enforced by `_get_controls`.)
+            control_path = (
+                dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
+                if (ctrl_times is not None and ctrl_values is not None)
+                else None
             )
-        else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
 
-        # Sample states and emissions from the model using solver settings defined above.
-        # ensure that times has shape (num_timesteps, 1)
-        if times.ndim == 1:
-            times = times[:, None]
-        states, emissions = cd_dynamax_model.sample(
-            params=params,
-            key=self.key,
-            num_timesteps=len(times),
-            t_emissions=times,
-            inputs=ctrl_values,
-            transition_type="path",
+            y_0 = numpyro.sample(
+                "y_0",
+                dynamics.observation_model(x=initial_state, u=u_0, t=times_scan[0]),
+            )
+            y_0 = _ensure_batch_prefix(y_0)
+
+            def _drift(t, y, args):
+                u_t = control_path.evaluate(t) if control_path is not None else None
+                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+
+            def _diffusion(t, y, args):
+                u_t = control_path.evaluate(t) if control_path is not None else None
+                Qc_t = dynamics.state_evolution.diffusion_covariance(x=y, u=u_t, t=t)
+                L_t = dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+                Q_sqrt = jnp.linalg.cholesky(Qc_t)
+                combined = L_t @ Q_sqrt
+                # If the model provides unbatched diffusion (state_dim,state_dim)
+                # but the state is batched (...,state_dim), broadcast across the
+                # leading batch dims so diffrax can contract with the control.
+                if y.ndim > 1 and combined.ndim == 2:
+                    combined = jnp.broadcast_to(combined, y.shape[:-1] + combined.shape)
+                return combined
+
+            # Important: `shape` here specifies the shape of the Brownian increment (control),
+            # not the shape of the state.
+            #
+            # If `y0` is batched (e.g. shape (B, state_dim)), setting `shape=y0.shape` would
+            # create a batched Brownian control and can cause shape mismatches inside diffrax
+            # (e.g. when contracting diffusion with the control).
+            #
+            # We instead use only the trailing (state) dimension(s) as the Brownian shape.
+            bm_shape = (
+                initial_state.shape[-1:] if hasattr(initial_state, "shape") else ()
+            )
+            bm = dfx.VirtualBrownianTree(
+                t0=times_scan[0],
+                t1=times_scan[-1],
+                tol=self.tol_vbt,
+                shape=bm_shape,
+                key=self.key,
+            )
+            terms = dfx.MultiTerm(  # type: ignore
+                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
+            )
+            sol = dfx.diffeqsolve(
+                terms,
+                t0=times_scan[0],
+                t1=times_scan[-1],
+                y0=initial_state,
+                args=None,
+                saveat=dfx.SaveAt(ts=times_scan),
+                **self.diffeqsolve_settings,
+            )
+            states_sol = sol.ys  # (T, ..., state_dim)
+
+            def _create_observations_step(carry, t_idx):
+                x_t = states_sol[t_idx]
+                t = times_scan[t_idx]
+                u_t = _get_val_or_None(ctrl_values, t_idx)
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                )
+                return carry, y_t
+
+        states = states_sol
+        _, emissions = nscan(
+            _create_observations_step, None, jnp.arange(len(times_scan))
         )
 
         return {"times": times, "states": states, "observations": emissions}

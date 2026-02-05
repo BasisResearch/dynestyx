@@ -6,6 +6,12 @@ from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.ops import Context
 
 type SSMType = CDNLGSSM | CDNLSSM
+import diffrax as dfx
+import jax.numpy as jnp
+import jax.random as jr
+import numpyro
+from effectful.ops.semantics import handler
+from numpyro.primitives import _PYRO_STACK, CondIndepStackFrame
 
 
 def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
@@ -104,3 +110,197 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
         Value at index t_idx, or None if values is None
     """
     return values[t_idx] if values is not None else None
+
+
+def diffeqsolve_util(
+    drift,
+    t0: float,
+    t1: float,
+    y0: jnp.ndarray,
+    reverse: bool = False,
+    args=None,
+    solver: dfx.AbstractSolver | None = None,
+    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+    dt0: float = 0.01,
+    tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
+    max_steps: int = int(1e5),
+    diffusion=None,
+    key=None,
+    debug=False,
+    **kwargs,
+) -> jnp.ndarray:
+    """
+    The CD-dynamax [1] wrapper for solving differential equations, with some automatic default choices.
+
+    Choosing solvers and adjoints based on diffrax website's recommendation for training neural ODEs.
+        See: https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/
+        See: https://docs.kidger.site/diffrax/api/adjoints/
+
+        Note that choosing RecursionCheckpointAdjoint requires usage of reverse-mode auto-differentiation.
+        Can use DirectAdjoint for flexible forward-mode + reverse-mode auto-differentiation.
+
+        Defaults are chosen to be decent low-cost options for forward solves and backpropagated gradients.
+
+        If you want high-fidelity solutions (and their gradients), it is recommended
+        - for ODEs: choose a higher-order solver (Tsit5) and an adaptive stepsize controller (PIDController).
+        - for SDEs: follow diffrax website advice (definitely can choose dt0 very small with constant stepsize controller).
+
+        Things to pay attention to (that we have incomplete understanding of):
+        - checkpoints in RecursiveCheckpointAdjoint: this is used to save memory during backpropagation.
+        - max_steps: reducing this can speed things up. But it is also used to set default number of checkpoints.
+        ... unclear the optimal way to set these parameters.
+
+    [1] https://github.com/hd-UQ/cd_dynamax/blob/633373e11322a4f875cfb0ad7a1817f82ad6787b/cd_dynamax/src/utils/diffrax_utils.py
+    """
+
+    max_steps = int(max_steps)
+
+    if debug:
+        # run hand-written Euler and/or Euler-Maruyama using a for loop with fixed step size dt0
+        N = 200  # if this is too small, then the error will be too large and covariances can be very non-SPD.
+        dt = (t1 - t0) / N
+        if key is None:
+            key = jr.PRNGKey(0)
+        keys = jr.split(key, N)
+
+        for i in range(N):
+            drift_i = drift(t0 + i * dt, y0, None)
+            if isinstance(y0, tuple):
+                # If y0 and drift_i are tuples, update each component
+                y0 = tuple(
+                    y0_component + dt * drift_component
+                    for y0_component, drift_component in zip(y0, drift_i)
+                )
+                if diffusion is not None:
+                    diff = diffusion(t0 + i * dt, y0, None)
+                    rnd = tuple(
+                        jr.normal(key=keys[i], shape=y0_component.shape)
+                        for y0_component in y0
+                    )
+                    y0 = tuple(
+                        y0_component + jnp.sqrt(dt) * diff_component * rnd_component
+                        for y0_component, diff_component, rnd_component in zip(
+                            y0, diff, rnd
+                        )
+                    )
+            else:
+                # If y0 and drift_i are vectors, update directly
+                y0 = y0 + dt * drift_i
+                if diffusion is not None:
+                    diff = diffusion(t0 + i * dt, y0, None)
+                    rnd = jr.normal(key=keys[i], shape=y0.shape)
+                    y0 = y0 + jnp.sqrt(dt) * diff * rnd
+
+        # return the final state y0 with an additional first dimension
+        if isinstance(y0, tuple):
+            # Reshape to match the expected output of the solver
+            return tuple(jnp.expand_dims(y0_component, axis=0) for y0_component in y0)
+        else:
+            return y0
+
+    # set solver to default if not provided
+    if solver is None:
+        if diffusion is None:
+            solver = dfx.Dopri5()
+            # Tsit5 may be another slightly better default method.
+        else:
+            solver = dfx.Heun()
+            # sometimes called the improved Euler method
+
+    # allow for reverse-time integration
+    # if t1 < t0, we assume that initial condition y0 is at t1
+    if reverse:
+        t0_new = 0
+        t1_new = t1 - t0
+        drift_new = reverse_rhs(drift, t1, y0)
+        diffusion_new = reverse_rhs(diffusion, t1, y0)
+    else:
+        t0_new = t0  # type: ignore
+        t1_new = t1
+        drift_new = drift
+        diffusion_new = diffusion
+
+    # set DE terms
+    if diffusion_new is None:
+        terms = dfx.ODETerm(drift_new)
+    else:
+        # Important: `shape` here specifies the shape of the Brownian increment (control),
+        # not the shape of the state.
+        #
+        # If `y0` is batched (e.g. shape (B, state_dim)), setting `shape=y0.shape` would
+        # create a batched Brownian control and can cause shape mismatches inside diffrax
+        # (e.g. when contracting diffusion with the control).
+        #
+        # We instead use only the trailing (state) dimension(s) as the Brownian shape.
+        bm_shape = y0.shape[-1:] if hasattr(y0, "shape") else ()
+        bm = dfx.VirtualBrownianTree(
+            t0=t0_new, t1=t1_new, tol=tol_vbt, shape=bm_shape, key=key
+        )
+        terms = dfx.MultiTerm(  # type: ignore
+            dfx.ODETerm(drift_new), dfx.ControlTerm(diffusion_new, bm)
+        )
+
+    # return a specific solver
+    sol = dfx.diffeqsolve(
+        terms,
+        solver=solver,
+        stepsize_controller=stepsize_controller,
+        t0=t0_new,
+        t1=t1_new,
+        y0=y0,
+        args=args,
+        dt0=dt0,
+        saveat=dfx.SaveAt(t1=True),
+        adjoint=adjoint,
+        max_steps=max_steps,
+        **kwargs,
+    ).ys
+
+    return sol
+
+
+def reverse_rhs(rhs, t1, ref_var):
+    """
+    Utility from CD-dynamax [1] for a time-reversed right-hand-side of a differential equation.
+
+    [1] https://github.com/hd-UQ/cd_dynamax/blob/633373e11322a4f875cfb0ad7a1817f82ad6787b/cd_dynamax/src/utils/diffrax_utils.py
+    """
+    if rhs is None:
+        return None
+
+    if isinstance(ref_var, tuple):
+
+        def rev_rhs(s, y, args):
+            foo = rhs(t1 - s, y, args)
+            return tuple(-f for f in foo)
+    else:
+
+        def rev_rhs(s, y, args):
+            return -rhs(t1 - s, y, args)
+
+    return rev_rhs
+
+
+def infer_batch_shape():
+    """Infer the current plate-induced batch shape, or None if not in a plate."""
+    cond_indep_stack = [
+        CondIndepStackFrame(frame.name, frame.dim, frame.size)
+        for frame in _PYRO_STACK
+        if isinstance(frame, numpyro.primitives.plate)
+    ]
+    if cond_indep_stack:
+        return numpyro.primitives.plate._get_batch_shape(cond_indep_stack)
+    return None
+
+
+class HandlesSelf:
+    _cm = None
+
+    def __enter__(self):
+        self._cm = handler(self)
+        self._cm.__enter__()
+        return self._cm
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._cm.__exit__(exc_type, exc, tb)

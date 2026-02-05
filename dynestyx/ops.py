@@ -1,6 +1,7 @@
 import dataclasses
 from collections.abc import Callable
 
+import jax
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
 from jax import Array
@@ -13,37 +14,41 @@ States = dict[str, Array] | Array
 FunctionOfTime = Callable[[Times], States]
 
 
+@jax.tree_util.register_pytree_node_class
 @dataclasses.dataclass
 class Trajectory:
-    """
-    A 1D time axis and values living on that axis.
-
-    Semantics:
-      - times is None  -> times are implicit / inferred / shared with some other grid
-      - values is None -> "no values here" (e.g. just a solve grid)
-    """
-
     times: Times | None = None
     values: States | None = None
 
+    def tree_flatten(self):
+        # None is allowed as a leaf; JAX treats it as static-ish leaf
+        return (self.times, self.values), None
 
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        times, values = children
+        return cls(times=times, values=values)
+
+
+@jax.tree_util.register_pytree_node_class
 @dataclasses.dataclass
 class Context:
-    """
-    All time-indexed info for a single sample_ds site.
-    """
-
-    # Where to solve the dynamics
     solve: Trajectory = dataclasses.field(default_factory=Trajectory)
-
-    # Observations
     observations: Trajectory = dataclasses.field(default_factory=Trajectory)
-
-    # Controls u(t), if any
     controls: Trajectory = dataclasses.field(default_factory=Trajectory)
 
     # Extensible: extra time-indexed series or metadata
     extras: dict[str, Trajectory] = dataclasses.field(default_factory=dict)
+
+    def tree_flatten(self):
+        return (self.solve, self.observations, self.controls, self.extras), None
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        solve, observations, controls, extras = children
+        return cls(
+            solve=solve, observations=observations, controls=controls, extras=extras
+        )
 
 
 @defop
