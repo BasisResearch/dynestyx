@@ -7,7 +7,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.ops import Context, FunctionOfTime, States, sample_ds
+from dynestyx.ops import Context, FunctionOfTime, States, sample
 
 
 class HandlesSelf:
@@ -33,7 +33,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         super().__init__()
         self.discretize = discretize
 
-    @implements(sample_ds)
+    @implements(sample)
     def _sample_ds(
         self,
         name: str,
@@ -59,7 +59,7 @@ class Condition(ObjectInterpretation, HandlesSelf):
         super().__init__()
         self.context = context
 
-    @implements(sample_ds)
+    @implements(sample)
     def _sample_ds(
         self,
         name: str,
@@ -78,7 +78,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     override `add_solved_sites` if they need custom behavior.
     """
 
-    @implements(sample_ds)
+    @implements(sample)
     def _sample_ds(
         self,
         name: str,
@@ -122,7 +122,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
 
 class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
-    @implements(sample_ds)
+    @implements(sample)
     def _sample_ds(
         self,
         name: str,

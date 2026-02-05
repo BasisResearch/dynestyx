@@ -1,5 +1,5 @@
 """Dynestyx package."""
 
-from dynestyx.ops import sample_ds
+from dynestyx.ops import sample
 
-__all__ = ["sample_ds"]
+__all__ = ["sample"]
