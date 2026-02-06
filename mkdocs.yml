@@ -23,8 +23,7 @@ nav:
     - discretizers: api_reference/discretizers.md
     - hmm_filter: api_reference/hmm_filter.md
     - observations: api_reference/observations.md
-    - ops: api_reference/ops.md
-    - plotters: api_reference/plotters.md
+    - diagnostics: api_reference/diagnostics.md
     - simulators: api_reference/simulators.md
     - utils: api_reference/utils.md
   - Tutorials:
