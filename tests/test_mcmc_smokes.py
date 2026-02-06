@@ -6,7 +6,6 @@ ensuring that all MCMC inference pipelines can run with minimal parameters.
 """
 
 import jax.random as jr
-import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
@@ -72,14 +71,6 @@ def test_discrete_time_l63_auto_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-# This test is expected to fail currently due to broadcasting issues in the discretizer/simulator interaction.
-@pytest.mark.skipif(
-    True,
-    reason=(
-        "Expected to fail currently: exposes broadcasting interaction between "
-        "Discretizer, DiracIdentityObservation, and DiscreteTimeSimulator."
-    ),
-)
 def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
     data_conditioned_discrete_time_l63_auto_dirac_obs,  # noqa: F811
 ) -> None:

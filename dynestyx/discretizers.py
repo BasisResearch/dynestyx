@@ -1,7 +1,5 @@
-"""Discretization schemes for converting continuous-time state evolution to discrete-time."""
-
-import jax.numpy as jnp
 import numpyro.distributions as dist
+from jax import vmap
 
 from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
@@ -16,19 +14,57 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
         self.cte = cte
 
     def __call__(self, x, u, t_now, t_next):
-        delta_t = t_next - t_now
-        drift = self.cte.drift(x, u, t_now)
-        L_fn = getattr(self.cte, "diffusion_coefficient", None)
-        if L_fn is None:
-            raise AttributeError(
-                "ContinuousTimeStateEvolution must define diffusion_coefficient."
-            )
-        L = L_fn(x, u, t_now) if callable(L_fn) else L_fn
-        Q_fn = getattr(self.cte, "diffusion_covariance", jnp.eye(x.shape[-1]))
-        Q = Q_fn(x, u, t_now) if callable(Q_fn) else Q_fn
-        mean = x + drift * delta_t
-        cov = (L @ Q @ L.T) * delta_t
-        return dist.MultivariateNormal(loc=mean, covariance_matrix=cov)
+        """
+        Discretize continuous-time state evolution via Euler-Maruyama. (CTSE) -> DTSE.
+
+        We step from t_now to t_next for each timepoint provided (optionally just 1 timepoint provided).
+        The main use case of providing multiple timepoints is when paired with DiracDeltaObservation that
+        allows temporal independence between observations, which allows us to step through all timepoints at once (creating big speedups).
+
+            Args:
+                x: (dim_state,) or (dim_state, num_timepoints)
+                u: (dim_control,) or (dim_control, num_timepoints)
+                t_now: (1,) or (num_timepoints,)
+                t_next: (1,) or (num_timepoints,)
+
+            Returns:
+                dist: MultivariateNormal distribution
+                    - loc: (dim_state, num_timepoints) or (dim_state)
+                    - covariance_matrix: (dim_state, dim_state, num_timepoints) or (dim_state, dim_state)
+        """
+
+        squeezed = False
+        if x.ndim == 1:
+            squeezed = True
+            x = x[:, None]  # (dim_state, 1) state
+        if u is not None:
+            if u.ndim == 1:
+                u = u[:, None]  # (dim_control, 1) control
+        if t_now.ndim == 0:
+            t_now = t_now[None]  # (1,) timepoint
+        if t_next.ndim == 0:
+            t_next = t_next[None]  # (1,) timepoint
+
+        def _step(_x, _u, _t_now, _t_next):
+            _dt = _t_next - _t_now
+            drift = self.cte.drift(_x, _u, _t_now)
+            x_pred_mean = _x + drift * _dt
+            L = self.cte.diffusion_coefficient(_x, _u, _t_now)
+            Q = self.cte.diffusion_covariance(_x, _u, _t_now)
+            x_pred_cov = L @ Q @ L.T * _dt
+            return x_pred_mean, x_pred_cov
+
+        if u is None:
+            loc, cov = vmap(_step, in_axes=(1, None, 0, 0))(x, None, t_now, t_next)
+        else:
+            loc, cov = vmap(_step, in_axes=(1, 1, 0, 0))(x, u, t_now, t_next)
+
+        # If we lifted from unbatched, return unbatched dist shapes
+        if squeezed:
+            loc = loc[0]
+            cov = cov[0]
+
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
 
 def euler_maruyama(cte: ContinuousTimeStateEvolution) -> DiscreteTimeStateEvolution:
