@@ -23,8 +23,7 @@ nav:
     - discretizers: api_reference/discretizers.md
     - hmm_filter: api_reference/hmm_filter.md
     - observations: api_reference/observations.md
-    - ops: api_reference/ops.md
-    - plotters: api_reference/plotters.md
+    - diagnostics: api_reference/diagnostics.md
     - simulators: api_reference/simulators.md
     - utils: api_reference/utils.md
   - Tutorials:
@@ -36,6 +35,8 @@ nav:
     - HMM Inference: tutorials/hmm_inference.ipynb
     - SDE with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - ODE Inference: tutorials/ode_inference.ipynb
+  - Deep Dives:
+    - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
 
 theme:
   name: "material"
