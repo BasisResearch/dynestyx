@@ -17,7 +17,7 @@ from dynestyx.inference.cuthbert.discrete_time_filters import (
     _filter_discrete_time,
 )
 from dynestyx.ops import Context
-from dynestyx.utils import _get_controls
+from dynestyx.utils import _get_controls, _should_add_site
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -40,12 +40,13 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     key: jax.Array | None = None
     filter_type: str = "default"
     filter_kwargs: dict = dataclasses.field(default_factory=dict)
-    record_filtered_states_mean: bool = False
-    record_filtered_states_cov: bool = False
-    record_filtered_states_cov_diag: bool = False
-    record_filtered_particles: bool = False
-    record_filtered_log_weights: bool = False
-    record_filtered_states_chol_cov: bool = False
+    record_filtered_states_mean: bool = True
+    record_filtered_states_cov: bool = True
+    record_filtered_states_cov_diag: bool = True
+    record_filtered_particles: bool = True
+    record_filtered_log_weights: bool = True
+    record_filtered_states_chol_cov: bool = True
+    record_max_elems: int = 100_000
 
     def __init__(self, filter_type="default", **filter_kwargs):
         super().__init__()
@@ -58,6 +59,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             "record_filtered_particles": self.record_filtered_particles,
             "record_filtered_log_weights": self.record_filtered_log_weights,
             "record_filtered_states_chol_cov": self.record_filtered_states_chol_cov,
+            "record_max_elems": self.record_max_elems,
         }
 
     def add_log_factors(
@@ -114,6 +116,7 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
     record_filtered: bool = False
     record_log_filtered: bool = False
+    record_max_elems: int = 100_000
 
     def add_log_factors(
         self,
@@ -156,13 +159,17 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             loglik,
         )
 
-        if self.record_log_filtered:
+        if self.record_log_filtered and _should_add_site(
+            log_filt_seq.shape, self.record_max_elems
+        ):
             numpyro.deterministic(
                 f"{name}_log_filtered_states",
                 log_filt_seq,  # (T, K)
             )
 
-        if self.record_filtered:
+        if self.record_filtered and _should_add_site(
+            log_filt_seq.shape, self.record_max_elems
+        ):
             numpyro.deterministic(
                 f"{name}_filtered_states",
                 jnp.exp(log_filt_seq),  # (T, K)

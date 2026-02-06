@@ -1,3 +1,5 @@
+import math
+
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array
@@ -6,6 +8,11 @@ from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.ops import Context
 
 type SSMType = CDNLGSSM | CDNLSSM
+
+
+def _should_add_site(shape: tuple[int, ...], max_elems: int) -> bool:
+    """Return True iff the array with given shape has <= max_elems elements."""
+    return math.prod(shape) <= max_elems
 
 
 def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
