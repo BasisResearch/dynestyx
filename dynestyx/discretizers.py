@@ -1,14 +1,10 @@
-import jax.numpy as jnp
 import numpyro.distributions as dist
+from jax import vmap
 
 from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
 )
-
-
-def _as_array(x):
-    return x if isinstance(x, jnp.ndarray) else jnp.asarray(x)
 
 
 class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
@@ -17,61 +13,57 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
 
     def __init__(self, cte: ContinuousTimeStateEvolution):
         self.cte = cte
-        L_fn = getattr(cte, "diffusion_coefficient", None)
-        if L_fn is None:
-            raise AttributeError(
-                "ContinuousTimeStateEvolution must define diffusion_coefficient."
-            )
-        self._L_fn = L_fn
-        self._Q_fn = getattr(cte, "diffusion_covariance", None)
-        if self._Q_fn is None:
-            raise AttributeError(
-                "ContinuousTimeStateEvolution must define diffusion_covariance."
-            )
 
     def __call__(self, x, u, t_now, t_next):
-        x = _as_array(x)
-        t_now = _as_array(t_now)
-        t_next = _as_array(t_next)
+        """
+        Discretize continuous-time state evolution via Euler-Maruyama. (CTSE) -> DTSE.
 
-        # Canonicalize to batched "batch last": x -> (D,B), dt -> (B,)
-        # comments use D for state_dim, B for batch_dim
+        We step from t_now to t_next for each timepoint provided (optionally just 1 timepoint provided).
+        The main use case of providing multiple timepoints is when paired with DiracDeltaObservation that
+        allows temporal independence between observations, which allows us to step through all timepoints at once (creating big speedups).
+
+            Args:
+                x: (dim_state,) or (dim_state, num_timepoints)
+                u: (dim_control,) or (dim_control, num_timepoints)
+                t_now: (1,) or (num_timepoints,)
+                t_next: (1,) or (num_timepoints,)
+
+            Returns:
+                dist: MultivariateNormal distribution
+                    - loc: (dim_state, num_timepoints) or (dim_state)
+                    - covariance_matrix: (dim_state, dim_state, num_timepoints) or (dim_state, dim_state)
+        """
+
         squeezed = False
         if x.ndim == 1:
             squeezed = True
-            x = x[:, None]  # (D,1)
-            if u is not None:
-                u = _as_array(u)
-                # Optional: if you ever pass unbatched controls with shape (U,)
-                if u.ndim == 1:
-                    u = u[:, None]  # (U,1)
-            if t_now.ndim == 0:
-                t_now = t_now[None]  # (1,)
-            if t_next.ndim == 0:
-                t_next = t_next[None]  # (1,)
+            x = x[:, None]  # (dim_state, 1) state
+        if u is not None:
+            if u.ndim == 1:
+                u = u[:, None]  # (dim_control, 1) control
+        if t_now.ndim == 0:
+            t_now = t_now[None]  # (1,) timepoint
+        if t_next.ndim == 0:
+            t_next = t_next[None]  # (1,) timepoint
 
-        dt = t_next - t_now  # (B,)
+        def _step(_x, _u, _t_now, _t_next):
+            _dt = _t_next - _t_now
+            drift = self.cte.drift(_x, _u, _t_now)
+            x_pred_mean = _x + drift * _dt
+            L = self.cte.diffusion_coefficient(_x, _u, _t_now)
+            Q = self.cte.diffusion_covariance(_x, _u, _t_now)
+            x_pred_cov = L @ Q @ L.T * _dt
+            return x_pred_mean, x_pred_cov
 
-        drift = self.cte.drift(x, u, t_now)  # (D,B) under your convention
-
-        # L: (D,D) or (B,D,D)
-        L = self._L_fn(x, u, t_now) if callable(self._L_fn) else self._L_fn
-        L = _as_array(L)
-
-        # Q: (D,D) or (B,D,D), default I
-        Q = self._Q_fn(x, u, t_now) if callable(self._Q_fn) else self._Q_fn
-        Q = _as_array(Q)
-
-        mean = x + drift * dt[None, :]  # (D,B)
-
-        cov0 = jnp.einsum("...ik,...kl,...jl->...ij", L, Q, L)  # (...,D,D)
-        cov = cov0 * dt[..., None, None]  # (B,D,D) if batched; (D,D) if not
-
-        loc = jnp.swapaxes(mean, 0, 1)  # (B,D)
-
+        if u is None:
+            loc, cov = vmap(_step, in_axes=(1, None, 0, 0))(x, None, t_now, t_next)
+        else:
+            loc, cov = vmap(_step, in_axes=(1, 1, 0, 0))(x, u, t_now, t_next)
+        
         # If we lifted from unbatched, return unbatched dist shapes
         if squeezed:
-            return dist.MultivariateNormal(loc=loc[0], covariance_matrix=cov[0])
+            loc = loc[0]
+            cov = cov[0]
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
