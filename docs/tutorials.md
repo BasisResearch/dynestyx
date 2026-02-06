@@ -4,7 +4,8 @@ Welcome to the `dynestyx` tutorials! These guides walk you through different use
 
 ## Getting Started
 
-- [Quickstart](tutorials/quickstart.ipynb) - A gentle introduction to building models in `dynestyx` and performing inference
+- [Quickstart](tutorials/quickstart.ipynb) - Minimal introduction to building models in `dynestyx` and performing inference
+- [A Gentle Introduction to Dynestyx](tutorials/gentle_intro/00_index.ipynb) - Multi-part tutorial: NumPyro and Bayesian workflow → discrete-time dynestyx → filtering and MLL → pseudomarginal inference → SVI → continuous-time (SDE, L63) → HMMs and multiple trajectories
 
 ## Inference Methods
 

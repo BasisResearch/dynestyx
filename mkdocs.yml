@@ -30,6 +30,7 @@ nav:
   - Tutorials:
     - tutorials.md
     - Quickstart: tutorials/quickstart.ipynb
+    - Gentle Introduction: tutorials/gentle_intro/00_index.ipynb
     - Discrete Time Inference: tutorials/discrete_time_inference.ipynb
     - SDE Inference: tutorials/sde_inference.ipynb
     - HMM Inference: tutorials/hmm_inference.ipynb
