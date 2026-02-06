@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
-from dynestyx.dynamical_models import DynamicalModel
-from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
+from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.handlers import BaseCDDynamaxLogFactorAdder, FunctionOfTime, handles
 from dynestyx.hmm_filter import hmm_filter, hmm_log_components
 from dynestyx.inference.cd_dynamax.continuous_time_filters import (
     _CONTINUOUS_FILTER_TYPES,
@@ -16,14 +16,13 @@ from dynestyx.inference.cuthbert.discrete_time_filters import (
     _DISCRETE_FILTER_TYPES,
     _filter_discrete_time,
 )
-from dynestyx.ops import Context
 from dynestyx.utils import _get_controls, _should_add_site
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 @dataclasses.dataclass
-class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     """
     Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
 
@@ -106,8 +105,15 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
             )
 
 
+@handles(FilterBasedMarginalLogLikelihoodObjIntp)
+def FilterBasedMarginalLogLikelihood(  # type: ignore[empty-body]
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass
+
+
 @dataclasses.dataclass
-class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     """
     Exact HMM marginal log-likelihood via forward filtering.
 
@@ -174,3 +180,10 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 f"{name}_filtered_states",
                 jnp.exp(log_filt_seq),  # (T, K)
             )
+
+
+@handles(FilterBasedHMMMarginalLogLikelihoodObjIntp)
+def FilterBasedHMMMarginalLogLikelihood(  # type: ignore[empty-body]
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass

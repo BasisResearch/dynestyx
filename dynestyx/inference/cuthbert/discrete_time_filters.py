@@ -8,8 +8,7 @@ from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
 
 from dynestyx.cuthbert_patches import systematic_resampling
-from dynestyx.dynamical_models import DynamicalModel
-from dynestyx.ops import Context
+from dynestyx.dynamical_models import Context, DynamicalModel
 from dynestyx.utils import _get_controls, _should_add_site, _validate_control_dim
 
 _DISCRETE_FILTER_TYPES: list[str] = ["default", "taylor_kf", "pf"]
