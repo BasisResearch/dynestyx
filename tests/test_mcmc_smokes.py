@@ -6,6 +6,7 @@ ensuring that all MCMC inference pipelines can run with minimal parameters.
 """
 
 import jax.random as jr
+import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
@@ -16,6 +17,7 @@ from tests.fixtures import (
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F401
     data_conditioned_discrete_time_l63,  # noqa: F401
     data_conditioned_discrete_time_l63_auto,  # noqa: F401
+    data_conditioned_discrete_time_l63_auto_dirac_obs,  # noqa: F401
     data_conditioned_hmm,  # noqa: F401
     data_conditioned_stochastic_volatility,  # noqa: F401
 )
@@ -57,6 +59,30 @@ def test_discrete_time_l63_auto_mcmc_smoke(
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_discrete_time_l63_auto
+    )
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "rho" in posterior_samples
+
+
+# This test is expected to fail currently due to broadcasting issues in the discretizer/simulator interaction.
+@pytest.mark.skipif(
+    True,
+    reason=(
+        "Expected to fail currently: exposes broadcasting interaction between "
+        "Discretizer, DiracIdentityObservation, and DiscreteTimeSimulator."
+    ),
+)
+def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
+    data_conditioned_discrete_time_l63_auto_dirac_obs,  # noqa: F811
+):
+    """Smoke test: L63 SDE + Dirac full-state obs, with and without controls (parametrized)."""
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, synthetic, _ = (
+        data_conditioned_discrete_time_l63_auto_dirac_obs
     )
     mcmc = MCMC(
         NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
