@@ -12,9 +12,10 @@ from dynestyx.dynamical_models import (
     Context,
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    FunctionOfTime,
     State,
 )
-from dynestyx.handlers import BaseSimulator
+from dynestyx.handlers import BaseSimulatorObjIntp, handles
 from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.utils import (
@@ -26,7 +27,7 @@ from dynestyx.utils import (
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
-class SDESimulator(BaseSimulator):
+class SDESimulatorObjIntp(BaseSimulatorObjIntp):
     """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics."""
 
     def __init__(
@@ -156,8 +157,15 @@ class SDESimulator(BaseSimulator):
                 )
 
 
+@handles(SDESimulatorObjIntp)
+def SDESimulator(
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass
+
+
 @dataclasses.dataclass
-class DiscreteTimeSimulator(BaseSimulator):
+class DiscreteTimeSimulatorObjIntp(BaseSimulatorObjIntp):
     """Simulator for discrete-time dynamical models.
 
     Assumes we have ic, transition, and observation distributions,
@@ -271,8 +279,15 @@ class DiscreteTimeSimulator(BaseSimulator):
         return {"times": obs_times, "states": states, "observations": observations}
 
 
+@handles(DiscreteTimeSimulatorObjIntp)
+def DiscreteTimeSimulator(
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass
+
+
 @dataclasses.dataclass
-class ODESimulator(BaseSimulator):
+class ODESimulatorObjIntp(BaseSimulatorObjIntp):
     """Simulator for continuous-time deterministic (ODE) dynamical models.
 
     Assumes we have ic, transition, and observation distributions,
@@ -360,3 +375,10 @@ class ODESimulator(BaseSimulator):
         observations = scan_observations  # shape (T, obs_dim)
 
         return {"times": obs_times, "states": x_sol, "observations": observations}
+
+
+@handles(ODESimulatorObjIntp)
+def ODESimulator(
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass

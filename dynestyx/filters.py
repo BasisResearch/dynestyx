@@ -6,7 +6,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
 from dynestyx.dynamical_models import Context, DynamicalModel
-from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
+from dynestyx.handlers import BaseCDDynamaxLogFactorAdder, FunctionOfTime, handles
 from dynestyx.hmm_filter import hmm_filter, hmm_log_components
 from dynestyx.inference.cd_dynamax.continuous_time_filters import (
     _CONTINUOUS_FILTER_TYPES,
@@ -22,7 +22,7 @@ type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 @dataclasses.dataclass
-class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     """
     Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
 
@@ -89,8 +89,15 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         # numpyro.deterministic(f"{name}_predicted_states_cov", filtered.predicted_covariances)
 
 
+@handles(FilterBasedMarginalLogLikelihoodObjIntp)
+def FilterBasedMarginalLogLikelihood(
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass
+
+
 @dataclasses.dataclass
-class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     """
     Exact HMM marginal log-likelihood via forward filtering.
 
@@ -146,3 +153,10 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                 f"{name}_filtered_states",
                 jnp.exp(log_filt_seq),  # (T, K)
             )
+
+
+@handles(FilterBasedHMMMarginalLogLikelihoodObjIntp)
+def FilterBasedHMMMarginalLogLikelihood(
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass
