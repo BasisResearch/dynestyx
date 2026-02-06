@@ -244,10 +244,10 @@ def _add_sites_pf(
     if add_filtered_states_cov or add_filtered_states_cov_diag:
         # Weighted covariance: E[xx'] - E[x]E[x]'
         second_mom = jnp.einsum(
-            "tnj,tnk,tn->tjk", particles, particles, jnp.exp(log_weights)
+            "...tnj,...tnk,...tn->...tjk", particles, particles, jnp.exp(log_weights)
         )
         filtered_covariances = second_mom - jnp.einsum(
-            "tj,tk->tjk", filtered_means, filtered_means
+            "...tj,...tk->...tjk", filtered_means, filtered_means
         )
 
     if add_particles:
