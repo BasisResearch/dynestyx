@@ -9,7 +9,10 @@ from dynestyx.filters import (
     FilterBasedMarginalLogLikelihood,
 )
 from dynestyx.handlers import Condition, Discretizer
-from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
+from dynestyx.simulators import (
+    DiscreteTimeSimulator,
+    Simulator,
+)
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,
@@ -321,7 +324,7 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -381,7 +384,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -443,7 +446,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with ODESimulator():
+    with Simulator():
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -459,7 +462,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with ODESimulator():
+        with Simulator():
             with Condition(context):
                 return continuous_time_deterministic_l63_model()
 
@@ -553,7 +556,7 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -604,7 +607,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -710,7 +713,7 @@ def data_conditioned_discrete_time_l63_auto(request):
     )
     # Order: Condition innermost (injects context), then Discretizer (CTE->discrete),
     # then DiscreteTimeSimulator (simulates with discrete dynamics + context).
-    with DiscreteTimeSimulator():
+    with Simulator():
         with Discretizer():
             with Condition(context):
                 synthetic = predictive(data_init_key)
@@ -723,7 +726,7 @@ def data_conditioned_discrete_time_l63_auto(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with DiscreteTimeSimulator():
+        with Simulator():
             with Discretizer():
                 with Condition(context):
                     return continuous_time_stochastic_l63_model()

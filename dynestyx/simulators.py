@@ -11,6 +11,7 @@ from numpyro.contrib.control_flow import scan as nscan
 from dynestyx.dynamical_models import (
     Context,
     ContinuousTimeStateEvolution,
+    DiscreteTimeStateEvolution,
     DynamicalModel,
     FunctionOfTime,
     State,
@@ -382,3 +383,47 @@ def ODESimulator(
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     pass
+
+
+class SimulatorObjIntp(BaseSimulatorObjIntp):
+    """Simulator for dynamical models.
+
+    This is a wrapper class that selects the appropriate simulator based on the type of dynamical model.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+        self.simulator = None
+
+    def simulate(self, context: Context, dynamics: DynamicalModel) -> State:
+        if self.simulator is None:
+            raise ValueError("Simulator not initialized. This shouldn't happen.")
+
+        return self.simulator.simulate(context, dynamics)
+
+    def add_solved_sites(self, name: str, dynamics: DynamicalModel, context: Context):
+        if self.simulator is None:
+            if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+                if (
+                    dynamics.state_evolution.diffusion_coefficient is None
+                    or dynamics.state_evolution.diffusion_covariance is None
+                ):
+                    self.simulator = ODESimulatorObjIntp(*self.args, **self.kwargs)
+                else:
+                    self.simulator = SDESimulatorObjIntp(*self.args, **self.kwargs)
+            elif isinstance(dynamics.state_evolution, DiscreteTimeStateEvolution):
+                self.simulator = DiscreteTimeSimulatorObjIntp(*self.args, **self.kwargs)
+            else:
+                raise ValueError(
+                    f"Unsupported state evolution type: {type(dynamics.state_evolution)}."
+                    + "If using a generic function as a state evolution, you must specify the type of simulator manually."
+                )
+
+        return self.simulator.add_solved_sites(name, dynamics, context)
+
+
+@handles(SimulatorObjIntp)
+def Simulator(*args, **kwargs) -> FunctionOfTime:
+    return SimulatorObjIntp(*args, **kwargs)
