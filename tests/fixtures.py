@@ -3,17 +3,21 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
+from dynestyx.dynamical_models import Context, Trajectory
 from dynestyx.filters import (
     FilterBasedHMMMarginalLogLikelihood,
     FilterBasedMarginalLogLikelihood,
 )
 from dynestyx.handlers import Condition, Discretizer
-from dynestyx.ops import Context, Trajectory
-from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
+from dynestyx.simulators import (
+    DiscreteTimeSimulator,
+    Simulator,
+)
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,
     continuous_time_stochastic_l63_model,
+    continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,
     hmm_model,
     stochastic_volatility,
@@ -320,7 +324,7 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -380,7 +384,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -442,7 +446,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with ODESimulator():
+    with Simulator():
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -458,7 +462,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with ODESimulator():
+        with Simulator():
             with Condition(context):
                 return continuous_time_deterministic_l63_model()
 
@@ -552,7 +556,7 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -603,7 +607,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with SDESimulator(key=data_solver_key):
+    with Simulator(key=data_solver_key):
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -620,6 +624,57 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
         ):
             with Condition(context):
                 return continuous_time_LTI_gaussian()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
+    """Like data_conditioned_discrete_time_l63_auto but with Dirac full-state obs (L63)."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    true_rho = 28.0
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        continuous_time_stochastic_l63_model_dirac_obs,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with Condition(context):
+                synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with DiscreteTimeSimulator():
+            with Discretizer():
+                with Condition(context):
+                    return continuous_time_stochastic_l63_model_dirac_obs()
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -658,7 +713,7 @@ def data_conditioned_discrete_time_l63_auto(request):
     )
     # Order: Condition innermost (injects context), then Discretizer (CTE->discrete),
     # then DiscreteTimeSimulator (simulates with discrete dynamics + context).
-    with DiscreteTimeSimulator():
+    with Simulator():
         with Discretizer():
             with Condition(context):
                 synthetic = predictive(data_init_key)
@@ -671,7 +726,7 @@ def data_conditioned_discrete_time_l63_auto(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with DiscreteTimeSimulator():
+        with Simulator():
             with Discretizer():
                 with Condition(context):
                     return continuous_time_stochastic_l63_model()

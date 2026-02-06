@@ -1,3 +1,0 @@
-# plotters
-
-::: dynestyx.plotters

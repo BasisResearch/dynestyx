@@ -19,7 +19,7 @@ NUM_WARMUP = 10
 
 def test_discrete_time_l63_taylor_kf_mcmc_smoke(
     data_conditioned_discrete_time_l63_filter,  # noqa: F811
-):
+) -> None:
     """Test MCMC inference on discrete-time L63 model using Taylor-linearized Kalman filter."""
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
@@ -35,7 +35,7 @@ def test_discrete_time_l63_taylor_kf_mcmc_smoke(
 
 def test_discrete_time_l63_pf_mcmc_smoke(
     data_conditioned_discrete_time_l63_filter_pf,  # noqa: F811
-):
+) -> None:
     """Test MCMC inference on discrete-time L63 model using a particle filter."""
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (

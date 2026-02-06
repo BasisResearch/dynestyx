@@ -5,7 +5,6 @@ from typing import Any, Protocol
 
 import equinox as eqx
 import jax
-import numpyro.distributions as dist
 from numpyro._typing import DistributionT
 
 # ----------------------------------------------------------------------
@@ -15,18 +14,19 @@ State = jax.Array | dict[str, jax.Array]
 dState = State
 Observation = jax.Array
 Control = State | None
-Time = jax.Array | float
+Time = jax.Array
 Params = dict[str, float | jax.Array]
 Key = jax.Array
+FunctionOfTime = Callable[[Time], State]
 
 
 class DynamicalModel(eqx.Module):
     """
     Unified interface:
-        - initial_condition: InitialCondition
-        - state_evolution: StateEvolution (CT/DT/SDE/ODE)
-        - observation_model: ObservationModel
-        - control_model: optional
+        - initial_condition: DistributionT
+        - state_evolution: Callable[[State, Control, Time], State] | Callable[[State, Control, Time, Time], State]
+        - observation_model: Callable[[State, Control, Time], DistributionT]
+        - control_model: Any
     """
 
     state_dim: int
@@ -81,27 +81,6 @@ class DynamicalModel(eqx.Module):
         self.control_dim: int = control_dim
 
 
-class InitialCondition(dist.Distribution):
-    """
-    The initial-condition is a distribution over State.
-    """
-
-    pass
-
-
-class StateEvolution:
-    """
-    Base class: DT or CT or SDE.
-    Contains only:
-        - drift / transition functions
-        - diffusion for SDE
-    No stepping. No sampling.
-    """
-
-    pass
-    ...
-
-
 class Drift(Protocol):
     """
     A callable mapping:
@@ -118,7 +97,7 @@ class Drift(Protocol):
 
 
 @dataclasses.dataclass
-class ContinuousTimeStateEvolution(StateEvolution):
+class ContinuousTimeStateEvolution:
     """
     SDE: dx = f(State_t, t) dt + L(State_t, t) dW
     """
@@ -145,17 +124,7 @@ class ObservationModel(eqx.Module):
         return dist.sample(*args, **kwargs)
 
 
-# Control Model
-class ControlModel(eqx.Module):
-    """
-    u_t ~ p(u_t | State_t, t)
-    Deterministic controls should use dist.Delta.
-    """
-
-    pass
-
-
-class DiscreteTimeStateEvolution(StateEvolution):
+class DiscreteTimeStateEvolution:
     """
     x_{t+1} ~ p(x_{t+1} | State_t, Control_t, t)
     Return a NumPyro Distribution over next state.
@@ -169,3 +138,36 @@ class DiscreteTimeStateEvolution(StateEvolution):
         t_next: Time,
     ) -> DistributionT:
         raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class Trajectory:
+    """
+    A 1D time axis and values living on that axis.
+
+    Semantics:
+      - times is None  -> times are implicit / inferred / shared with some other grid
+      - values is None -> "no values here" (e.g. just a solve grid)
+    """
+
+    times: Time | None = None
+    values: State | None = None
+
+
+@dataclasses.dataclass
+class Context:
+    """
+    All time-indexed info for a single sample site.
+    """
+
+    # Where to solve the dynamics
+    solve: Trajectory = dataclasses.field(default_factory=Trajectory)
+
+    # Observations
+    observations: Trajectory = dataclasses.field(default_factory=Trajectory)
+
+    # Controls u(t), if any
+    controls: Trajectory = dataclasses.field(default_factory=Trajectory)
+
+    # Extensible: extra time-indexed series or metadata
+    extras: dict[str, Trajectory] = dataclasses.field(default_factory=dict)

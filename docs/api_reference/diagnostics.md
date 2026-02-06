@@ -1,0 +1,3 @@
+# plotters
+
+::: dynestyx.diagnostics
