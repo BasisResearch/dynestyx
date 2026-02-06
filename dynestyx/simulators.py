@@ -9,14 +9,16 @@ from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.dynamical_models import (
+    Context,
     ContinuousTimeStateEvolution,
+    DiscreteTimeStateEvolution,
     DynamicalModel,
+    FunctionOfTime,
     State,
 )
-from dynestyx.handlers import BaseSimulator
+from dynestyx.handlers import BaseSimulatorObjIntp, handles
 from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
-from dynestyx.ops import Context, States
 from dynestyx.utils import (
     _get_controls,
     _get_val_or_None,
@@ -26,7 +28,7 @@ from dynestyx.utils import (
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
-class SDESimulator(BaseSimulator):
+class SDESimulatorObjIntp(BaseSimulatorObjIntp):
     """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics."""
 
     def __init__(
@@ -49,7 +51,7 @@ class SDESimulator(BaseSimulator):
             "max_steps": max_steps,
         }
 
-    def simulate(self, context: Context, dynamics) -> States:
+    def simulate(self, context: Context, dynamics) -> State:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -156,8 +158,21 @@ class SDESimulator(BaseSimulator):
                 )
 
 
+@handles(SDESimulatorObjIntp)
+def SDESimulator(  # type: ignore[empty-body]
+    key: Array,
+    solver: dfx.AbstractSolver = dfx.Heun(),
+    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+    dt0: float = 0.01,
+    tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
+    max_steps: int = int(1e5),
+):
+    pass
+
+
 @dataclasses.dataclass
-class DiscreteTimeSimulator(BaseSimulator):
+class DiscreteTimeSimulatorObjIntp(BaseSimulatorObjIntp):
     """Simulator for discrete-time dynamical models.
 
     Assumes we have ic, transition, and observation distributions,
@@ -174,7 +189,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         self,
         context: Context,
         dynamics: DynamicalModel,
-    ) -> States:
+    ) -> State:
         # Pull observed trajectory from context
         obs_traj = context.observations
         obs_times = obs_traj.times
@@ -293,8 +308,15 @@ class DiscreteTimeSimulator(BaseSimulator):
         return {"times": obs_times, "states": states, "observations": observations}
 
 
+@handles(DiscreteTimeSimulatorObjIntp)
+def DiscreteTimeSimulator(  # type: ignore[empty-body]
+    *args, **kwargs
+):
+    pass
+
+
 @dataclasses.dataclass
-class ODESimulator(BaseSimulator):
+class ODESimulatorObjIntp(BaseSimulatorObjIntp):
     """Simulator for continuous-time deterministic (ODE) dynamical models.
 
     Assumes we have ic, transition, and observation distributions,
@@ -311,11 +333,25 @@ class ODESimulator(BaseSimulator):
     dt0: float = 0.01
     max_steps: int = 10_000
 
+    def __init__(
+        self,
+        solver: dfx.AbstractSolver = dfx.Tsit5(),
+        adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+        stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+        dt0: float = 0.01,
+        max_steps: int = 10_000,
+    ):
+        self.solver = solver
+        self.adjoint = adjoint
+        self.stepsize_controller = stepsize_controller
+        self.dt0 = dt0
+        self.max_steps = max_steps
+
     def simulate(
         self,
         context: Context,
         dynamics: DynamicalModel,
-    ) -> States:
+    ) -> State:
         # Pull observed trajectory from context
         obs_traj = context.observations
         obs_times = obs_traj.times
@@ -382,3 +418,60 @@ class ODESimulator(BaseSimulator):
         observations = scan_observations  # shape (T, obs_dim)
 
         return {"times": obs_times, "states": x_sol, "observations": observations}
+
+
+@handles(ODESimulatorObjIntp)
+def ODESimulator(  # type: ignore[empty-body]
+    solver: dfx.AbstractSolver = dfx.Tsit5(),
+    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+    dt0: float = 0.01,
+    max_steps: int = 10_000,
+):
+    pass
+
+
+class SimulatorObjIntp(BaseSimulatorObjIntp):
+    """Simulator for dynamical models.
+
+    This is a wrapper class that selects the appropriate simulator based on the type of dynamical model.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+        self.simulator = None
+
+    def simulate(self, context: Context, dynamics: DynamicalModel) -> State:
+        if self.simulator is None:
+            raise ValueError("Simulator not initialized. This shouldn't happen.")
+
+        return self.simulator.simulate(context, dynamics)
+
+    def add_solved_sites(self, name: str, dynamics: DynamicalModel, context: Context):
+        if self.simulator is None:
+            if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+                if (
+                    dynamics.state_evolution.diffusion_coefficient is None
+                    or dynamics.state_evolution.diffusion_covariance is None
+                ):
+                    self.simulator = ODESimulatorObjIntp(*self.args, **self.kwargs)
+                else:
+                    self.simulator = SDESimulatorObjIntp(*self.args, **self.kwargs)
+            elif isinstance(dynamics.state_evolution, DiscreteTimeStateEvolution):
+                self.simulator = DiscreteTimeSimulatorObjIntp(*self.args, **self.kwargs)
+            else:
+                raise ValueError(
+                    f"Unsupported state evolution type: {type(dynamics.state_evolution)}."
+                    + "If using a generic function as a state evolution, you must specify the type of simulator manually."
+                )
+
+        return self.simulator.add_solved_sites(name, dynamics, context)
+
+
+@handles(SimulatorObjIntp)
+def Simulator(  # type: ignore[empty-body]
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass
