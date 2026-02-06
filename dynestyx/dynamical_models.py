@@ -17,6 +17,7 @@ Control = State | None
 Time = jax.Array | float
 Params = dict[str, float | jax.Array]
 Key = jax.Array
+FunctionOfTime = Callable[[Time], State]
 
 
 class DynamicalModel(eqx.Module):
@@ -137,3 +138,36 @@ class DiscreteTimeStateEvolution:
         t_next: Time,
     ) -> DistributionT:
         raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class Trajectory:
+    """
+    A 1D time axis and values living on that axis.
+
+    Semantics:
+      - times is None  -> times are implicit / inferred / shared with some other grid
+      - values is None -> "no values here" (e.g. just a solve grid)
+    """
+
+    times: Time | None = None
+    values: State | None = None
+
+
+@dataclasses.dataclass
+class Context:
+    """
+    All time-indexed info for a single sample site.
+    """
+
+    # Where to solve the dynamics
+    solve: Trajectory = dataclasses.field(default_factory=Trajectory)
+
+    # Observations
+    observations: Trajectory = dataclasses.field(default_factory=Trajectory)
+
+    # Controls u(t), if any
+    controls: Trajectory = dataclasses.field(default_factory=Trajectory)
+
+    # Extensible: extra time-indexed series or metadata
+    extras: dict[str, Trajectory] = dataclasses.field(default_factory=dict)

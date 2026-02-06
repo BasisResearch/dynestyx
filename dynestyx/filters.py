@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
-from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.dynamical_models import Context, DynamicalModel
 from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
 from dynestyx.hmm_filter import hmm_filter, hmm_log_components
 from dynestyx.inference.cd_dynamax.continuous_time_filters import (
@@ -16,7 +16,6 @@ from dynestyx.inference.cuthbert.discrete_time_filters import (
     _DISCRETE_FILTER_TYPES,
     _filter_discrete_time,
 )
-from dynestyx.ops import Context
 from dynestyx.utils import _get_controls
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM

@@ -3,11 +3,24 @@
 
 import numpyro
 from effectful.ops.semantics import fwd, handler
-from effectful.ops.syntax import ObjectInterpretation, implements
+from effectful.ops.syntax import ObjectInterpretation, defop, implements
+from effectful.ops.types import NotHandled
 
 from dynestyx.discretizers import euler_maruyama
-from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.ops import Context, FunctionOfTime, States, sample
+from dynestyx.dynamical_models import (
+    Context,
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    FunctionOfTime,
+    State,
+)
+
+
+@defop
+def sample(
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    raise NotHandled()
 
 
 class HandlesSelf:
@@ -110,7 +123,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             # If it's just an array (shouldn't happen for simulate() but handle it)
             numpyro.deterministic("value", simulated)
 
-    def simulate(self, context: Context, dynamics: DynamicalModel) -> States:
+    def simulate(self, context: Context, dynamics: DynamicalModel) -> State:
         """
         Args:
             context (Context): Context containing times and potentially controls.

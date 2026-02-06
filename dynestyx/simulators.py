@@ -9,6 +9,7 @@ from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.dynamical_models import (
+    Context,
     ContinuousTimeStateEvolution,
     DynamicalModel,
     State,
@@ -16,7 +17,6 @@ from dynestyx.dynamical_models import (
 from dynestyx.handlers import BaseSimulator
 from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
-from dynestyx.ops import Context, States
 from dynestyx.utils import (
     _get_controls,
     _get_val_or_None,
@@ -49,7 +49,7 @@ class SDESimulator(BaseSimulator):
             "max_steps": max_steps,
         }
 
-    def simulate(self, context: Context, dynamics) -> States:
+    def simulate(self, context: Context, dynamics) -> State:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -174,7 +174,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         self,
         context: Context,
         dynamics: DynamicalModel,
-    ) -> States:
+    ) -> State:
         # Pull observed trajectory from context
         obs_traj = context.observations
         obs_times = obs_traj.times
@@ -293,7 +293,7 @@ class ODESimulator(BaseSimulator):
         self,
         context: Context,
         dynamics: DynamicalModel,
-    ) -> States:
+    ) -> State:
         # Pull observed trajectory from context
         obs_traj = context.observations
         obs_times = obs_traj.times
