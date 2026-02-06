@@ -8,8 +8,7 @@ from dynestyx.dynamical_models import (
 
 
 class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
-    """x_{t+1} ~ N(x + drift*dt, (L@Q@L.T)*dt).
-    Batch-last convention: x is (state_dim,batch_dim (T-1))."""
+    """x_{t+1} ~ N(x + drift*dt, (L@Q@L.T)*dt)."""
 
     def __init__(self, cte: ContinuousTimeStateEvolution):
         self.cte = cte
