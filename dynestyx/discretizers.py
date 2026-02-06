@@ -59,7 +59,7 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
             loc, cov = vmap(_step, in_axes=(1, None, 0, 0))(x, None, t_now, t_next)
         else:
             loc, cov = vmap(_step, in_axes=(1, 1, 0, 0))(x, u, t_now, t_next)
-        
+
         # If we lifted from unbatched, return unbatched dist shapes
         if squeezed:
             loc = loc[0]
