@@ -40,12 +40,12 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
     key: jax.Array | None = None
     filter_type: str = "default"
     filter_kwargs: dict = dataclasses.field(default_factory=dict)
-    record_filtered_states_mean: bool = True
-    record_filtered_states_cov: bool = True
-    record_filtered_states_cov_diag: bool = True
-    record_filtered_particles: bool = True
-    record_filtered_log_weights: bool = True
-    record_filtered_states_chol_cov: bool = True
+    record_filtered_states_mean: bool = False
+    record_filtered_states_cov: bool = False
+    record_filtered_states_cov_diag: bool = False
+    record_filtered_particles: bool = False
+    record_filtered_log_weights: bool = False
+    record_filtered_states_chol_cov: bool = False
 
     def __init__(self, filter_type="default", **filter_kwargs):
         super().__init__()
