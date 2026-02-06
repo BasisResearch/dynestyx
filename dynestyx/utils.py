@@ -2,8 +2,7 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array
 
-from dynestyx.dynamical_models import DynamicalModel
-from dynestyx.ops import Context
+from dynestyx.dynamical_models import Context, DynamicalModel
 
 type SSMType = CDNLGSSM | CDNLSSM
 

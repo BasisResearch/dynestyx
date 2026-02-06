@@ -26,7 +26,9 @@ NUM_SAMPLES = 10
 NUM_WARMUP = 10
 
 
-def test_hmm_mcmc_smoke(data_conditioned_hmm):  # noqa: F811
+def test_hmm_mcmc_smoke(
+    data_conditioned_hmm,  # noqa: F811
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = data_conditioned_hmm
     mcmc = MCMC(
@@ -39,7 +41,9 @@ def test_hmm_mcmc_smoke(data_conditioned_hmm):  # noqa: F811
     assert "sigma" in posterior_samples
 
 
-def test_discrete_time_l63_mcmc_smoke(data_conditioned_discrete_time_l63):  # noqa: F811
+def test_discrete_time_l63_mcmc_smoke(
+    data_conditioned_discrete_time_l63,  # noqa: F811
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_discrete_time_l63
@@ -54,7 +58,7 @@ def test_discrete_time_l63_mcmc_smoke(data_conditioned_discrete_time_l63):  # no
 
 def test_discrete_time_l63_auto_mcmc_smoke(
     data_conditioned_discrete_time_l63_auto,  # noqa: F811
-):
+) -> None:
     """Smoke test: continuous_time_stochastic_l63_model + Discretize(EulMar) + DiscreteTimeSimulator."""
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
@@ -78,7 +82,7 @@ def test_discrete_time_l63_auto_mcmc_smoke(
 )
 def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
     data_conditioned_discrete_time_l63_auto_dirac_obs,  # noqa: F811
-):
+) -> None:
     """Smoke test: L63 SDE + Dirac full-state obs, with and without controls (parametrized)."""
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
@@ -92,7 +96,9 @@ def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-def test_stochastic_volatility_mcmc_smoke(data_conditioned_stochastic_volatility):  # noqa: F811
+def test_stochastic_volatility_mcmc_smoke(
+    data_conditioned_stochastic_volatility,  # noqa: F811
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_stochastic_volatility
@@ -107,7 +113,7 @@ def test_stochastic_volatility_mcmc_smoke(data_conditioned_stochastic_volatility
 
 def test_continuous_time_stochastic_l63_mcmc_smoke(
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F811
-):
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_stochastic_l63
@@ -122,7 +128,7 @@ def test_continuous_time_stochastic_l63_mcmc_smoke(
 
 def test_continuous_time_deterministic_l63_mcmc_smoke(
     data_conditioned_continuous_time_deterministic_l63,  # noqa: F811
-):
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_deterministic_l63
@@ -137,7 +143,7 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
 
 def test_continuous_time_stochastic_l63_dpf_mcmc_smoke(
     data_conditioned_continuous_time_l63_dpf,  # noqa: F811
-):
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_l63_dpf
@@ -150,7 +156,7 @@ def test_continuous_time_stochastic_l63_dpf_mcmc_smoke(
 
 def test_continuous_time_lti_gaussian_mcmc_smoke(
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F811
-):
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_lti_gaussian
@@ -163,7 +169,7 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
 
 def test_continuous_time_lti_gaussian_dpf_mcmc_smoke(
     data_conditioned_continuous_time_lti_gaussian_dpf,  # noqa: F811
-):
+) -> None:
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_lti_gaussian_dpf
