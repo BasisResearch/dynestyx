@@ -32,10 +32,20 @@ def _filter_discrete_time(
     context: Context,
     key: jax.Array | None = None,
     filter_kwargs: dict | None = None,
+    record_kwargs: dict = {},
 ):
+    """Discrete-time marginal likelihood via cuthbert.
+
+    Args:
+        name: Name of the factor.
+        filter_type: Type of filter to use.
+        dynamics: Dynamical model to filter.
+        context: Context containing the observations and controls.
+        key: Random key for the filter.
+        filter_kwargs: Keyword arguments for the filter.
+        record_kwargs: Keyword arguments for recording the filtered states and their covariances.
     """
-    Discrete-time marginal likelihood via cuthbert.
-    """
+
     if filter_kwargs is None:
         filter_kwargs = {}
 
@@ -88,12 +98,17 @@ def _filter_discrete_time(
 
     marginal_loglik = states.log_normalizing_constant[-1]
 
+    # Add the marginal log likelihood as a numpyro factor
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
 
+    # Add the marginal log likelihood as a deterministic site for easy access.
+    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
+
+    # Optionally record the filtered states and their covariances as deterministic sites for easy access.
     if filter_type.lower() in ["taylor_kf", "default"]:
-        _add_sites_taylor_kf(name, states)
+        _add_sites_taylor_kf(name, states, record_kwargs)
     elif filter_type.lower() == "pf":
-        _add_sites_pf(name, states)
+        _add_sites_pf(name, states, record_kwargs)
     else:
         raise ValueError(
             f"Invalid filter type: {filter_type}. Valid types: {_DISCRETE_FILTER_TYPES}"
@@ -191,40 +206,66 @@ def _cuthbert_filter_taylor_kf(
     return kf
 
 
-def _add_sites_pf(name: str, states: particle_filter.ParticleFilterState):
-    # Add the marginal log likelihood as a deterministic site for easy access.
-    numpyro.deterministic(
-        f"{name}_marginal_loglik", states.log_normalizing_constant[-1]
-    )
-
+def _add_sites_pf(
+    name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
+):
     # Compute filtered means and covariances from the particles using the weights.
     # particles (T+1, n_particles, state_dim), log_weights (T+1, n_particles)
     log_weights = states.log_weights
     particles = states.particles
     w = jnp.exp(log_weights)[..., None]  # (T+1, n_particles, 1) for broadcasting
-
     filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
-    # Weighted covariance: E[xx'] - E[x]E[x]'
-    second_mom = jnp.einsum(
-        "tnj,tnk,tn->tjk", particles, particles, jnp.exp(log_weights)
-    )
-    filtered_covariances = second_mom - jnp.einsum(
-        "tj,tk->tjk", filtered_means, filtered_means
-    )
 
-    numpyro.deterministic(f"{name}_filtered_states_mean", filtered_means)
-    numpyro.deterministic(f"{name}_filtered_states_cov", filtered_covariances)
-
-
-def _add_sites_taylor_kf(name: str, states: taylor.LinearizedKalmanFilterState):
-    # Add the marginal log likelihood as a deterministic site for easy access.
-    numpyro.deterministic(
-        f"{name}_marginal_loglik", states.log_normalizing_constant[-1]
-    )
+    return_cov = record_kwargs.get(
+        "record_filtered_states_cov", False
+    ) or record_kwargs.get("record_filtered_states_cov_diag", False)
+    if return_cov:
+        # Weighted covariance: E[xx'] - E[x]E[x]'
+        second_mom = jnp.einsum(
+            "tnj,tnk,tn->tjk", particles, particles, jnp.exp(log_weights)
+        )
+        filtered_covariances = second_mom - jnp.einsum(
+            "tj,tk->tjk", filtered_means, filtered_means
+        )
 
     # Add the filtered states and their covariances as deterministic sites for easy access.
-    # chol_cov is (T+1, state_dim, state_dim); batch matmul L @ L.T over time axis.
-    chol_T = jnp.transpose(states.chol_cov, (0, 2, 1))
-    filtered_cov = jnp.matmul(states.chol_cov, chol_T)
-    numpyro.deterministic(f"{name}_filtered_states_mean", states.mean)
-    numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
+    if record_kwargs.get("record_filtered_particles", False):
+        numpyro.deterministic(f"{name}_filtered_particles", particles)
+
+    if record_kwargs.get("record_filtered_log_weights", False):
+        numpyro.deterministic(f"{name}_filtered_log_weights", log_weights)
+
+    if record_kwargs.get("record_filtered_states_mean", False):
+        numpyro.deterministic(f"{name}_filtered_states_mean", filtered_means)
+
+    if record_kwargs.get("record_filtered_states_cov", False):
+        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_covariances)
+
+    if record_kwargs.get("record_filtered_states_cov_diag", False):
+        diag_cov = jnp.diagonal(filtered_covariances, axis1=1, axis2=2)
+        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+
+
+def _add_sites_taylor_kf(
+    name: str, states: taylor.LinearizedKalmanFilterState, record_kwargs: dict
+):
+    # Optionally record the filtered states and their covariances as deterministic sites for easy access.
+    if record_kwargs.get("record_filtered_states_mean", False):
+        numpyro.deterministic(f"{name}_filtered_states_mean", states.mean)
+
+    if record_kwargs.get("record_filtered_states_chol_cov", False):
+        numpyro.deterministic(f"{name}_filtered_states_chol_cov", states.chol_cov)
+
+    return_cov = record_kwargs.get(
+        "record_filtered_states_cov", False
+    ) or record_kwargs.get("record_filtered_states_cov_diag", False)
+    if return_cov:
+        chol_T = jnp.transpose(states.chol_cov, (0, 2, 1))
+        filtered_cov = jnp.matmul(states.chol_cov, chol_T)
+
+    if record_kwargs.get("record_filtered_states_cov", False):
+        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
+
+    if record_kwargs.get("record_filtered_states_cov_diag", False):
+        diag_cov = jnp.diagonal(filtered_cov, axis1=1, axis2=2)
+        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
