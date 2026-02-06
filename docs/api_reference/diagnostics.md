@@ -1,3 +1,5 @@
-# plotters
+# Diagnostics
 
-::: dynestyx.diagnostics
+## Plotting Utilities
+
+::: dynestyx.diagnostics.plotting_utils
