@@ -159,9 +159,15 @@ class SDESimulatorObjIntp(BaseSimulatorObjIntp):
 
 
 @handles(SDESimulatorObjIntp)
-def SDESimulator(
-    name: str, dynamics: DynamicalModel, context: Context | None = None
-) -> FunctionOfTime:
+def SDESimulator(  # type: ignore[empty-body]
+    key: Array,
+    solver: dfx.AbstractSolver = dfx.Heun(),
+    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+    dt0: float = 0.01,
+    tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
+    max_steps: int = int(1e5),
+):
     pass
 
 
@@ -281,9 +287,9 @@ class DiscreteTimeSimulatorObjIntp(BaseSimulatorObjIntp):
 
 
 @handles(DiscreteTimeSimulatorObjIntp)
-def DiscreteTimeSimulator(
-    name: str, dynamics: DynamicalModel, context: Context | None = None
-) -> FunctionOfTime:
+def DiscreteTimeSimulator(  # type: ignore[empty-body]
+    *args, **kwargs
+):
     pass
 
 
@@ -304,6 +310,20 @@ class ODESimulatorObjIntp(BaseSimulatorObjIntp):
     stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
     dt0: float = 0.01
     max_steps: int = 10_000
+
+    def __init__(
+        self,
+        solver: dfx.AbstractSolver = dfx.Tsit5(),
+        adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+        stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+        dt0: float = 0.01,
+        max_steps: int = 10_000,
+    ):
+        self.solver = solver
+        self.adjoint = adjoint
+        self.stepsize_controller = stepsize_controller
+        self.dt0 = dt0
+        self.max_steps = max_steps
 
     def simulate(
         self,
@@ -379,9 +399,13 @@ class ODESimulatorObjIntp(BaseSimulatorObjIntp):
 
 
 @handles(ODESimulatorObjIntp)
-def ODESimulator(
-    name: str, dynamics: DynamicalModel, context: Context | None = None
-) -> FunctionOfTime:
+def ODESimulator(  # type: ignore[empty-body]
+    solver: dfx.AbstractSolver = dfx.Tsit5(),
+    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
+    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
+    dt0: float = 0.01,
+    max_steps: int = 10_000,
+):
     pass
 
 
@@ -425,5 +449,7 @@ class SimulatorObjIntp(BaseSimulatorObjIntp):
 
 
 @handles(SimulatorObjIntp)
-def Simulator(*args, **kwargs) -> FunctionOfTime:
-    return SimulatorObjIntp(*args, **kwargs)
+def Simulator(  # type: ignore[empty-body]
+    name: str, dynamics: DynamicalModel, context: Context | None = None
+) -> FunctionOfTime:
+    pass

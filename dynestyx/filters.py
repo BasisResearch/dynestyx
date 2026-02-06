@@ -90,7 +90,7 @@ class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
 
 
 @handles(FilterBasedMarginalLogLikelihoodObjIntp)
-def FilterBasedMarginalLogLikelihood(
+def FilterBasedMarginalLogLikelihood(  # type: ignore[empty-body]
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     pass
@@ -156,7 +156,7 @@ class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
 
 
 @handles(FilterBasedHMMMarginalLogLikelihoodObjIntp)
-def FilterBasedHMMMarginalLogLikelihood(
+def FilterBasedHMMMarginalLogLikelihood(  # type: ignore[empty-body]
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     pass

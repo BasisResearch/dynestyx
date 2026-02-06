@@ -46,9 +46,7 @@ def handles[T](
         def wrapped(*args: Any, **kwargs: Any) -> AbstractContextManager[Any]:
             @contextmanager
             def cm():
-                # create the instance from the decorator-specified class
                 obj = cls(*args, **kwargs)
-                # delegate to your existing handler/context-manager
                 with handler(obj):
                     yield
 
@@ -92,7 +90,7 @@ class DiscretizerObjIntp(ObjectInterpretation):
 
 
 @handles(DiscretizerObjIntp)
-def Discretizer(
+def Discretizer(  # type: ignore[empty-body]
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     pass
@@ -116,7 +114,7 @@ class ConditionObjIntp(ObjectInterpretation):
 
 
 @handles(ConditionObjIntp)
-def Condition(
+def Condition(  # type: ignore[empty-body]
     name: str, dynamics: DynamicalModel, context: Context | None = None
 ) -> FunctionOfTime:
     pass
