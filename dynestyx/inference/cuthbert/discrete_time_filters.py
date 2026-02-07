@@ -9,7 +9,11 @@ from cuthbert.smc import particle_filter
 
 from dynestyx.cuthbert_patches import systematic_resampling
 from dynestyx.dynamical_models import Context, DynamicalModel
-from dynestyx.utils import _get_controls, _should_add_site, _validate_control_dim
+from dynestyx.utils import (
+    _get_controls,
+    _should_record_field,
+    _validate_control_dim,
+)
 
 _DISCRETE_FILTER_TYPES: list[str] = ["default", "taylor_kf", "pf"]
 
@@ -212,26 +216,26 @@ def _add_sites_pf(
     # particles (T+1, n_particles, state_dim), log_weights (T+1, n_particles)
     log_weights = states.log_weights
     particles = states.particles
-    max_elems = record_kwargs.get("record_max_elems", 100_000)
-
+    max_elems = record_kwargs["record_max_elems"]
     T1, n_particles, state_dim = particles.shape
 
-    # Check dims before computing for efficiency.
-    add_particles = record_kwargs.get(
-        "record_filtered_particles", False
-    ) and _should_add_site(particles.shape, max_elems)
-    add_log_weights = record_kwargs.get(
-        "record_filtered_log_weights", False
-    ) and _should_add_site(log_weights.shape, max_elems)
-    add_mean = record_kwargs.get(
-        "record_filtered_states_mean", False
-    ) and _should_add_site((T1, state_dim), max_elems)
-    add_filtered_states_cov = record_kwargs.get(
-        "record_filtered_states_cov", False
-    ) and _should_add_site((T1, state_dim, state_dim), max_elems)
-    add_filtered_states_cov_diag = record_kwargs.get(
-        "record_filtered_states_cov_diag", False
-    ) and _should_add_site((T1, state_dim), max_elems)
+    add_particles = _should_record_field(
+        record_kwargs.get("record_filtered_particles"), particles.shape, max_elems
+    )
+    add_log_weights = _should_record_field(
+        record_kwargs.get("record_filtered_log_weights"), log_weights.shape, max_elems
+    )
+    add_mean = _should_record_field(
+        record_kwargs.get("record_filtered_states_mean"), (T1, state_dim), max_elems
+    )
+    add_filtered_states_cov = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov"),
+        (T1, state_dim, state_dim),
+        max_elems,
+    )
+    add_filtered_states_cov_diag = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov_diag"), (T1, state_dim), max_elems
+    )
 
     need_filtered_means = (
         add_mean or add_filtered_states_cov or add_filtered_states_cov_diag
@@ -266,22 +270,25 @@ def _add_sites_pf(
 def _add_sites_taylor_kf(
     name: str, states: taylor.LinearizedKalmanFilterState, record_kwargs: dict
 ):
-    # Check dims before computing for efficiency.
     max_elems = record_kwargs.get("record_max_elems", 100_000)
     T1, state_dim, _ = states.chol_cov.shape
 
-    add_mean = record_kwargs.get(
-        "record_filtered_states_mean", False
-    ) and _should_add_site(states.mean.shape, max_elems)
-    add_chol_cov = record_kwargs.get(
-        "record_filtered_states_chol_cov", False
-    ) and _should_add_site(states.chol_cov.shape, max_elems)
-    add_filtered_states_cov = record_kwargs.get(
-        "record_filtered_states_cov", False
-    ) and _should_add_site((T1, state_dim, state_dim), max_elems)
-    add_filtered_states_cov_diag = record_kwargs.get(
-        "record_filtered_states_cov_diag", False
-    ) and _should_add_site((T1, state_dim), max_elems)
+    add_mean = _should_record_field(
+        record_kwargs.get("record_filtered_states_mean"), states.mean.shape, max_elems
+    )
+    add_chol_cov = _should_record_field(
+        record_kwargs.get("record_filtered_states_chol_cov"),
+        states.chol_cov.shape,
+        max_elems,
+    )
+    add_filtered_states_cov = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov"),
+        (T1, state_dim, state_dim),
+        max_elems,
+    )
+    add_filtered_states_cov_diag = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov_diag"), (T1, state_dim), max_elems
+    )
 
     if add_mean:
         numpyro.deterministic(f"{name}_filtered_states_mean", states.mean)
