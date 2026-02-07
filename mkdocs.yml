@@ -23,8 +23,8 @@ nav:
     - Filtering and marginal likelihood: tutorials/gentle_intro/03_filtering_mll.ipynb
     - Filtering for pseudo-marginal MCMC: tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb
     - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
-    - Continuous-time dynamics: tutorials/gentle_intro/06_continuous_time_dynamics.ipynb
-    - Hidden Markov models: tutorials/gentle_intro/07_hmm_and_multi_trajectory.ipynb
+    - Continuous-time dynamics: tutorials/gentle_intro/06_continuous_time.ipynb
+    - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
   - API Reference:
     - api_reference.md
     - dynamical_models: api_reference/dynamical_models.md
