@@ -20,8 +20,8 @@ from tests.models import (
     continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,
     hmm_model,
-    stochastic_volatility,
     jumpy_controls_model,
+    stochastic_volatility,
 )
 
 
@@ -734,6 +734,7 @@ def data_conditioned_discrete_time_l63_auto(request):
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
+
 def data_conditioned_jumpy_controls():
     rng_key = jr.PRNGKey(0)
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
@@ -751,7 +752,8 @@ def data_conditioned_jumpy_controls():
         controls = controls.at[i].set(-controls[i])
 
     context = Context(
-        observations=Trajectory(times=obs_times), controls=Trajectory(times=obs_times, values=controls)
+        observations=Trajectory(times=obs_times),
+        controls=Trajectory(times=obs_times, values=controls),
     )
     with DiscreteTimeSimulator():
         with Condition(context):
@@ -762,9 +764,12 @@ def data_conditioned_jumpy_controls():
 
     def data_conditioned_model():
         context = Context(
-            observations=observation_trajectory, controls=Trajectory(times=obs_times, values=controls)
+            observations=observation_trajectory,
+            controls=Trajectory(times=obs_times, values=controls),
         )
-        with FilterBasedMarginalLogLikelihood(filter_type="default", record_kwargs={"record_filtered_states_mean": True}):
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="default", record_kwargs={"record_filtered_states_mean": True}
+        ):
             with Condition(context):
                 return jumpy_controls_model()
 

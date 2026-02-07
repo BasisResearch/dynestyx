@@ -1,7 +1,9 @@
-from tests.fixtures import data_conditioned_jumpy_controls
-import jax.random as jr
-from numpyro.handlers import trace, seed
 import jax.numpy as jnp
+import jax.random as jr
+from numpyro.handlers import seed, trace
+
+from tests.fixtures import data_conditioned_jumpy_controls
+
 
 def test_jumpy_controls():
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls()
