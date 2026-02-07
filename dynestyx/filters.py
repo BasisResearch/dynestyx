@@ -16,7 +16,7 @@ from dynestyx.inference.cuthbert.discrete_time_filters import (
     _DISCRETE_FILTER_TYPES,
     _filter_discrete_time,
 )
-from dynestyx.utils import _get_controls
+from dynestyx.utils import _get_controls, _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -38,14 +38,28 @@ class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
 
     key: jax.Array | None = None
     filter_type: str = "default"
-    output_fields = None
     filter_kwargs: dict = dataclasses.field(default_factory=dict)
+    record_filtered_states_mean: bool | None = None
+    record_filtered_states_cov: bool | None = None
+    record_filtered_states_cov_diag: bool | None = None
+    record_filtered_particles: bool | None = None
+    record_filtered_log_weights: bool | None = None
+    record_filtered_states_chol_cov: bool | None = None
+    record_max_elems: int = 100_000
 
-    def __init__(self, filter_type="default", output_fields=None, **filter_kwargs):
+    def __init__(self, filter_type="default", **filter_kwargs):
         super().__init__()
         self.filter_type = filter_type
-        self.output_fields = output_fields
         self.filter_kwargs = filter_kwargs if filter_kwargs is not None else {}
+        self.record_kwargs = {
+            "record_filtered_states_mean": self.record_filtered_states_mean,
+            "record_filtered_states_cov": self.record_filtered_states_cov,
+            "record_filtered_states_cov_diag": self.record_filtered_states_cov_diag,
+            "record_filtered_particles": self.record_filtered_particles,
+            "record_filtered_log_weights": self.record_filtered_log_weights,
+            "record_filtered_states_chol_cov": self.record_filtered_states_chol_cov,
+            "record_max_elems": self.record_max_elems,
+        }
 
     def add_log_factors(
         self,
@@ -67,7 +81,13 @@ class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
                     f"Invalid filter type: {self.filter_type}. Valid types: {_CONTINUOUS_FILTER_TYPES}"
                 )
             _filter_continuous_time(
-                name, self.filter_type, dynamics, context, self.key, self.filter_kwargs
+                name,
+                self.filter_type,
+                dynamics,
+                context,
+                self.key,
+                self.filter_kwargs,
+                self.record_kwargs,
             )
         else:
             if self.filter_type.lower() not in _DISCRETE_FILTER_TYPES:
@@ -81,12 +101,8 @@ class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
                 context,
                 self.key,
                 self.filter_kwargs,
+                self.record_kwargs,
             )
-
-        # numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
-        # numpyro.deterministic(f"{name}_filtered_states_cov", filtered.filtered_covariances)
-        # numpyro.deterministic(f"{name}_predicted_states_mean", filtered.predicted_means)
-        # numpyro.deterministic(f"{name}_predicted_states_cov", filtered.predicted_covariances)
 
 
 @handles(FilterBasedMarginalLogLikelihoodObjIntp)
@@ -101,11 +117,14 @@ class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     """
     Exact HMM marginal log-likelihood via forward filtering.
 
-    Optionally, (log-)filtered states are recorded if `record_(log_)filtered == True`.
+    Optionally, (log-)filtered states are recorded. If record_filtered/record_log_filtered
+    is explicitly True or False, that is obeyed. If unspecified (None), recording is
+    done only when the array passes the size check (record_max_elems).
     """
 
-    record_filtered: bool = False
-    record_log_filtered: bool = False
+    record_filtered: bool | None = None
+    record_log_filtered: bool | None = None
+    record_max_elems: int = 100_000
 
     def add_log_factors(
         self,
@@ -138,17 +157,27 @@ class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
         )
 
         numpyro.factor(
+            f"{name}_marginal_log_likelihood",
+            loglik,
+        )
+
+        # For use in predictive sampling
+        numpyro.deterministic(
             f"{name}_marginal_loglik",
             loglik,
         )
 
-        if self.record_log_filtered:
+        if _should_record_field(
+            self.record_log_filtered, log_filt_seq.shape, self.record_max_elems
+        ):
             numpyro.deterministic(
                 f"{name}_log_filtered_states",
                 log_filt_seq,  # (T, K)
             )
 
-        if self.record_filtered:
+        if _should_record_field(
+            self.record_filtered, log_filt_seq.shape, self.record_max_elems
+        ):
             numpyro.deterministic(
                 f"{name}_filtered_states",
                 jnp.exp(log_filt_seq),  # (T, K)

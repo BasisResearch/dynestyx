@@ -276,3 +276,20 @@ def continuous_time_deterministic_l63_model():
 
     # Return a sampled dynamical model, named "f".
     dsx.sample("f", dynamics)
+
+
+def jumpy_controls_model():
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=1,
+        initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
+        state_evolution=lambda x, u, t_now, t_next: dist.MultivariateNormal(
+            x + u, 0.01 * jnp.eye(1)
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]), R=jnp.array([[0.1**2]])
+        ),
+    )
+
+    dsx.sample("f", dynamics)

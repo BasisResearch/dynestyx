@@ -1,11 +1,16 @@
 import jax
+import jax.numpy as jnp
 import jax.random as jr
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
 from dynestyx.dynamical_models import Context, DynamicalModel
 from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
-from dynestyx.utils import _get_controls, _validate_control_dim
+from dynestyx.utils import (
+    _get_controls,
+    _should_record_field,
+    _validate_control_dim,
+)
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -19,6 +24,7 @@ def _filter_continuous_time(
     context: Context,
     key: jax.Array | None = None,
     filter_kwargs: dict | None = None,
+    record_kwargs: dict = {},
 ):
     """Continuous-time marginal likelihood via CD-Dynamax.
 
@@ -26,6 +32,9 @@ def _filter_continuous_time(
         name: Name of the factor.
         dynamics: Dynamical model to filter.
         context: Context containing the observations and controls.
+        key: Random key for the filter.
+        filter_kwargs: Keyword arguments for the filter.
+        record_kwargs: Keyword arguments for recording the filtered states and their covariances.
     """
 
     if filter_kwargs is None:
@@ -127,3 +136,34 @@ def _filter_continuous_time(
 
     # Add the marginal log likelihood as a numpyro factor
     numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
+
+    # Add the marginal log likelihood as a deterministic site for easy access.
+    numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
+
+    # Optionally record the filtered states and their covariances as deterministic sites for easy access.
+    max_elems = record_kwargs["record_max_elems"]
+
+    means_shape = filtered.filtered_means.shape
+    cov_shape = filtered.filtered_covariances.shape
+
+    add_mean = _should_record_field(
+        record_kwargs.get("record_filtered_states_mean"), means_shape, max_elems
+    )
+    add_cov = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov"), cov_shape, max_elems
+    )
+    add_cov_diag = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov_diag"),
+        (cov_shape[0], cov_shape[1]),
+        max_elems,
+    )
+
+    if add_mean:
+        numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
+    if add_cov:
+        numpyro.deterministic(
+            f"{name}_filtered_states_cov", filtered.filtered_covariances
+        )
+    if add_cov_diag:
+        diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
+        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)

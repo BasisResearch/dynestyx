@@ -20,6 +20,7 @@ from tests.models import (
     continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,
     hmm_model,
+    jumpy_controls_model,
     stochastic_volatility,
 )
 
@@ -732,3 +733,44 @@ def data_conditioned_discrete_time_l63_auto(request):
                     return continuous_time_stochastic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
+
+
+def data_conditioned_jumpy_controls():
+    rng_key = jr.PRNGKey(0)
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+    predictive = Predictive(
+        jumpy_controls_model,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    controls = jnp.ones((len(obs_times),)) * 100
+    for i in range(1, len(controls), 2):
+        controls = controls.at[i].set(-controls[i])
+
+    context = Context(
+        observations=Trajectory(times=obs_times),
+        controls=Trajectory(times=obs_times, values=controls),
+    )
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory,
+            controls=Trajectory(times=obs_times, values=controls),
+        )
+        with FilterBasedMarginalLogLikelihood(
+            filter_type="default", record_filtered_states_mean=True
+        ):
+            with Condition(context):
+                return jumpy_controls_model()
+
+    return data_conditioned_model, synthetic
