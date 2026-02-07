@@ -768,7 +768,7 @@ def data_conditioned_jumpy_controls():
             controls=Trajectory(times=obs_times, values=controls),
         )
         with FilterBasedMarginalLogLikelihood(
-            filter_type="default", record_kwargs={"record_filtered_states_mean": True}
+            filter_type="default", record_filtered_states_mean=True
         ):
             with Condition(context):
                 return jumpy_controls_model()

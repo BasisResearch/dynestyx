@@ -16,7 +16,7 @@ from dynestyx.inference.cuthbert.discrete_time_filters import (
     _DISCRETE_FILTER_TYPES,
     _filter_discrete_time,
 )
-from dynestyx.utils import _get_controls, _should_add_site
+from dynestyx.utils import _get_controls, _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -39,12 +39,12 @@ class FilterBasedMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     key: jax.Array | None = None
     filter_type: str = "default"
     filter_kwargs: dict = dataclasses.field(default_factory=dict)
-    record_filtered_states_mean: bool = True
-    record_filtered_states_cov: bool = True
-    record_filtered_states_cov_diag: bool = True
-    record_filtered_particles: bool = True
-    record_filtered_log_weights: bool = True
-    record_filtered_states_chol_cov: bool = True
+    record_filtered_states_mean: bool | None = None
+    record_filtered_states_cov: bool | None = None
+    record_filtered_states_cov_diag: bool | None = None
+    record_filtered_particles: bool | None = None
+    record_filtered_log_weights: bool | None = None
+    record_filtered_states_chol_cov: bool | None = None
     record_max_elems: int = 100_000
 
     def __init__(self, filter_type="default", **filter_kwargs):
@@ -117,11 +117,13 @@ class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
     """
     Exact HMM marginal log-likelihood via forward filtering.
 
-    Optionally, (log-)filtered states are recorded if `record_(log_)filtered == True`.
+    Optionally, (log-)filtered states are recorded. If record_filtered/record_log_filtered
+    is explicitly True or False, that is obeyed. If unspecified (None), recording is
+    done only when the array passes the size check (record_max_elems).
     """
 
-    record_filtered: bool = False
-    record_log_filtered: bool = False
+    record_filtered: bool | None = None
+    record_log_filtered: bool | None = None
     record_max_elems: int = 100_000
 
     def add_log_factors(
@@ -165,16 +167,16 @@ class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
             loglik,
         )
 
-        if self.record_log_filtered and _should_add_site(
-            log_filt_seq.shape, self.record_max_elems
+        if _should_record_field(
+            self.record_log_filtered, log_filt_seq.shape, self.record_max_elems
         ):
             numpyro.deterministic(
                 f"{name}_log_filtered_states",
                 log_filt_seq,  # (T, K)
             )
 
-        if self.record_filtered and _should_add_site(
-            log_filt_seq.shape, self.record_max_elems
+        if _should_record_field(
+            self.record_filtered, log_filt_seq.shape, self.record_max_elems
         ):
             numpyro.deterministic(
                 f"{name}_filtered_states",

@@ -6,7 +6,11 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSS
 
 from dynestyx.dynamical_models import Context, DynamicalModel
 from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
-from dynestyx.utils import _get_controls, _should_add_site, _validate_control_dim
+from dynestyx.utils import (
+    _get_controls,
+    _should_record_field,
+    _validate_control_dim,
+)
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -137,20 +141,22 @@ def _filter_continuous_time(
     numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
 
     # Optionally record the filtered states and their covariances as deterministic sites for easy access.
-    # Check dims before adding to protect against large arrays.
-    max_elems = record_kwargs.get("max_elems", 100_000)
+    max_elems = record_kwargs["record_max_elems"]
+
     means_shape = filtered.filtered_means.shape
     cov_shape = filtered.filtered_covariances.shape
 
-    add_mean = record_kwargs.get(
-        "record_filtered_states_mean", False
-    ) and _should_add_site(means_shape, max_elems)
-    add_cov = record_kwargs.get(
-        "record_filtered_states_cov", False
-    ) and _should_add_site(cov_shape, max_elems)
-    add_cov_diag = record_kwargs.get(
-        "record_filtered_states_cov_diag", False
-    ) and _should_add_site((cov_shape[0], cov_shape[1]), max_elems)
+    add_mean = _should_record_field(
+        record_kwargs.get("record_filtered_states_mean"), means_shape, max_elems
+    )
+    add_cov = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov"), cov_shape, max_elems
+    )
+    add_cov_diag = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov_diag"),
+        (cov_shape[0], cov_shape[1]),
+        max_elems,
+    )
 
     if add_mean:
         numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
