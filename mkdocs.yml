@@ -14,6 +14,15 @@ repo_url: https://github.com/BasisResearch/dynestyx
 
 nav:
   - Welcome: index.md
+  - A gentle introduction: 
+    - A gentle introduction: tutorials/gentle_intro/00_index.ipynb
+    - NumPyro and Bayesian workflow: tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
+    - NumPyro + dynamical systems = Dynestyx: tutorials/gentle_intro/02_dynestyx_discrete_intro.ipynb
+    - Filtering and marginal likelihood: tutorials/gentle_intro/03_filtering_mll.ipynb
+    - Filtering for pseudo-marginal MCMC: tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb
+    - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
+    - Continuous-time dynamics: tutorials/gentle_intro/06_continuous_time_dynamics.ipynb
+    - Hidden Markov models: tutorials/gentle_intro/07_hmm_and_multi_trajectory.ipynb
   - Introduction: intro.md
   - API Reference:
     - api_reference.md
@@ -29,7 +38,6 @@ nav:
   - Tutorials:
     - tutorials.md
     - Quickstart: tutorials/quickstart.ipynb
-    - Gentle Introduction: tutorials/gentle_intro/00_index.ipynb
     - Discrete Time Inference: tutorials/discrete_time_inference.ipynb
     - SDE Inference: tutorials/sde_inference.ipynb
     - HMM Inference: tutorials/hmm_inference.ipynb
