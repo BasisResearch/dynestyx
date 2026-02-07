@@ -15,6 +15,7 @@ repo_url: https://github.com/BasisResearch/dynestyx
 nav:
   - Welcome: index.md
   - Quick Example: quick_example.ipynb
+  - A mathematical introduction: intro.md
   - A gentle introduction: 
     - A gentle introduction: tutorials/gentle_intro/00_index.ipynb
     - NumPyro and Bayesian workflow: tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
@@ -24,7 +25,6 @@ nav:
     - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
     - Continuous-time dynamics: tutorials/gentle_intro/06_continuous_time_dynamics.ipynb
     - Hidden Markov models: tutorials/gentle_intro/07_hmm_and_multi_trajectory.ipynb
-  - A mathematical introduction: intro.md
   - API Reference:
     - api_reference.md
     - dynamical_models: api_reference/dynamical_models.md
