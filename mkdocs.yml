@@ -24,7 +24,7 @@ nav:
     - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
     - Continuous-time dynamics: tutorials/gentle_intro/06_continuous_time_dynamics.ipynb
     - Hidden Markov models: tutorials/gentle_intro/07_hmm_and_multi_trajectory.ipynb
-  - Introduction: intro.md
+  - A mathematical introduction: intro.md
   - API Reference:
     - api_reference.md
     - dynamical_models: api_reference/dynamical_models.md

@@ -55,6 +55,7 @@ If you use dynestyx in your research, please cite:
 ## Next Steps
 
 - **[A gentle introduction](tutorials/gentle_intro/00_index.ipynb)** — Multi-part tutorial from NumPyro and Bayesian workflow → discrete-time dynestyx → filtering and MLL → pseudomarginal inference → SVI → continuous-time (SDEs) → HMMs
+- **[A mathematical introduction](intro.md)** — Clearly defines the mathematical and statistical problems that `dynestyx` allows you to address. It maps concepts/algorithms to relevant pieces of code.
 - **[Tutorials](tutorials.md)** — Quickstart, discrete-time inference, SDE inference, HMM inference, ODE inference, and more
 
 ## See also
