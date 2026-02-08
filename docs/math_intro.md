@@ -2,7 +2,7 @@
 
 In this introduction, we discuss some goals of `dynestyx`, and an overview of the types of problems it aims to solve. 
 
-If you want to jump directly into code, take a look at the first [tutorial](tutorials/quickstart/), which shows how to build models in `dynestyx` and perform inference using observed data!
+If you want to jump directly into code, take a look at the [Quick Example](tutorials/quickstart.ipynb), which shows how to build models in `dynestyx` and perform inference using observed data!
 
 ## Dynamical Systems and `dynestyx`
 
@@ -65,10 +65,10 @@ dsx.sample("f", dynamics)
 
 In subsequent tutorials, we give concrete examples of defining many different types of dynamical models in `dynestyx`. Some examples include:
 
-- A linear, Gaussian SDE-driven dynamical system ([Quickstart tutorial](tutorials/quickstart/)).
-- A discrete-time dynamical system with discrete states $x_t \in \{0, 1, \dots, K\}$, i.e., a Hidden Markov Model (HMM) ([HMM tutorial](tutorials/hmm_inference/)).
-- A nonlinear discrete-time dynamical system with Gaussian observations ([Discrete-time inference tutorial](tutorials/discrete_time_inference/)).
-- A linear SDE with non-Gaussian (Poisson) observations ([Non-Gaussian observations tutorial](tutorials/sde_non_gaussian_observations/)).
+- A linear, Gaussian SDE-driven dynamical system ([Quickstart tutorial](tutorials/quickstart.ipynb)).
+- A discrete-time dynamical system with discrete states $x_t \in \{0, 1, \dots, K\}$, i.e., a Hidden Markov Model (HMM) ([HMM tutorial](tutorials/hmm_inference.ipynb)).
+- A nonlinear discrete-time dynamical system with Gaussian observations ([Discrete-time inference tutorial](tutorials/discrete_time_inference.ipynb)).
+- A linear SDE with non-Gaussian (Poisson) observations ([Non-Gaussian observations tutorial](tutorials/sde_non_gaussian_observations.ipynb)).
 
 ### Simulation of Dynamical Systems
 
@@ -138,7 +138,7 @@ One goal in `dynestyx` is to make the resulting inference problem as simple as p
 - Particle Hamiltonian Monte Carlo (unbiased, but slow for nontrivial problems)
 - Stochastic Variational Inference using the EnKF or particle filter for marginal likelihood estimates (approximate, but extremely fast)
 
-For concrete examples of these methods, please see the [tutorials](tutorials/quickstart/).
+For concrete examples of these methods, please see the [tutorials](tutorials/quickstart.ipynb).
 
 ## Tutorials
 

@@ -15,7 +15,7 @@ repo_url: https://github.com/BasisResearch/dynestyx
 nav:
   - Welcome: index.md
   - Quick Example: quick_example.ipynb
-  - A mathematical introduction: intro.md
+  - A mathematical introduction: math_intro.md
   - A gentle introduction: 
     - A gentle introduction: tutorials/gentle_intro/00_index.ipynb
     - NumPyro and Bayesian workflow: tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
