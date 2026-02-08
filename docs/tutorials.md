@@ -9,7 +9,6 @@ Welcome to the `dynestyx` tutorials! These guides walk you through different use
 
 ## Inference Methods
 
-- [Inference in SDE-Driven (Continuous-Discrete) State Space Models](tutorials/sde_inference.ipynb) - Inference methods for stochastic differential equation-driven systems
 - [Discrete Time Inference Via Simulation](tutorials/discrete_time_inference.ipynb) - Learn how to perform inference in discrete-time dynamical systems using simulation
 - [Inference in Hidden Markov Models](tutorials/hmm_inference.ipynb) - Inference in discrete-state Hidden Markov Models
 - [Inference in SDE-Driven (Continuous-Discrete) State Space Models with Non-Gaussian Observations](tutorials/sde_non_gaussian_observations.ipynb) - Handling non-Gaussian observation models in SDE-driven systems
