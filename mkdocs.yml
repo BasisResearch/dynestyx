@@ -47,6 +47,7 @@ nav:
   - Deep Dives:
     - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
     - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
+  - FAQ: faq.md
 
 theme:
   name: "material"
