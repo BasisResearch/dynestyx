@@ -2,7 +2,7 @@
 
 ![dynestyx logo](logo/dynestyx.gif)
 
-`dynestyx` is a library for Bayesian modeling and inference of dynamical systems. It extends [NumPyro](https://num.pyro.ai/en/stable/) to provides state-of-the-art inference methods for state space models—with a clear separation between *what* the model is and *how* you simulate or infer it.
+`dynestyx` is a library for Bayesian modeling and inference of dynamical systems. It extends [NumPyro](https://num.pyro.ai/en/stable/) to provide state-of-the-art inference methods for state space models—with a clear separation between *what* the model is and *how* you simulate or infer it.
 
 Why `dynestyx`? It seamlessly wraps our favorite ways to learn dynamics from messy time-series data (and there are many!) in a principled NumPyro Bayesian workflow. The engines under-the-hood address noise, partial observations, irregular samples, uncertainties, and just about any model class you want to try out! Support for multiple trajectories and hierarchical inference coming soon! Don't see your favorite methods? Tell us about it---or better, contribute by submitting a Pull Request!
 
@@ -31,13 +31,58 @@ Or with `pip`:
 pip install git+https://github.com/BasisResearch/dynestyx.git
 ```
 
-## Quick Example
+## Quick Example: Simulation
 
-**[Lorenz 63 with partial noisy observations](quick_example.ipynb)** — A notebook that:
+Define a dynamical model, wrap it with a simulator and context, and generate synthetic trajectories:
 
-1. Defines the Lorenz 63 SDE with parameters $\rho$, state noise $\sigma_{\text{diff}}$, and observation noise $\sigma_{\text{obs}}$
-2. Simulates trajectories with `SDESimulator` (observing only $x_1$ with Gaussian noise)
-3. Runs NUTS + EnKF inference to recover all 3 parameters
+```python
+import jax.numpy as jnp
+import jax.random as jr
+import numpyro
+import numpyro.distributions as dist
+import dynestyx as dsx
+from dynestyx import DynamicalModel, DiscreteTimeSimulator, Condition, Context, Trajectory
+from numpyro.infer import Predictive
+
+def model(phi=None):
+    phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
+    dynamics = DynamicalModel(
+        state_dim=1, observation_dim=1, control_dim=0,
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_n, t_next: dist.Normal(phi * x, 0.5),
+        observation_model=lambda x, u, t: dist.Normal(0.0, jnp.exp(x / 2.0)),
+    )
+    return dsx.sample("f", dynamics)
+
+obs_times = jnp.arange(0.0, 100.0, 1.0)
+context = Context(observations=Trajectory(times=obs_times), controls=Trajectory())
+with DiscreteTimeSimulator():
+    with Condition(context):
+        samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), phi=0.9)
+```
+
+## Quick Example: Inference
+
+Using the simulated `samples` and `obs_times` from above, condition on the data and infer parameters with a filter plus NUTS (no explicit state sampling):
+
+```python
+from dynestyx import FilterBasedMarginalLogLikelihood
+from numpyro.infer import MCMC, NUTS
+
+observation_trajectory = Trajectory(times=obs_times, values=samples["observations"][0])
+context = Context(observations=observation_trajectory, controls=Trajectory())
+
+def inference_model():
+    with FilterBasedMarginalLogLikelihood(filter_type="EnKF", enkf_N_particles=25):
+        with Condition(context):
+            return model()
+
+mcmc = MCMC(NUTS(inference_model), num_warmup=100, num_samples=100)
+mcmc.run(jr.PRNGKey(1))
+posterior = mcmc.get_samples()
+```
+
+See the [Lorenz 63 notebook](quick_example.ipynb) for a full SDE example with partial noisy observations.
 
 ## Citation
 
