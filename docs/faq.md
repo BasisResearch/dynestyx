@@ -17,7 +17,7 @@ def model(...):
 and data `context = Context(observations=Trajectory(times=times, values=values), controls=...)`.
 
 
-- **HMM**: Use the HMM filter (`FilterBasedHMMMarginalLogLikelihood`). See [HMM inference](tutorials/hmm_inference.ipynb).
+- **HMM**: Use the HMM filter (`FilterBasedHMMMarginalLogLikelihood`). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
 ```python
 with FilterBasedHMMMarginalLogLikelihood():
     with Condition(context):
@@ -56,7 +56,7 @@ with DiscreteTimeSimulator():
             return model(dirac_observation=True)
 ```
 
-- **Continuous-time ordinary differential equation**: You can use a **Simulator** or a **Filter**. The simulator simply rolls out solutions from the initial conditions and checks fit to data; see tutorial on [ODE inference](tutorials/ode_inference.ipynb).
+- **Continuous-time ordinary differential equation**: You can use a **Simulator** or a **Filter**. The simulator simply rolls out solutions from the initial conditions and checks fit to data; see tutorial on [ODE inference](tutorials/gentle_intro/06b_odes.ipynb).
 ```python
 with ODESimulator():
     with Condition(context):

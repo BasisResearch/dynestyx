@@ -66,8 +66,7 @@ dsx.sample("f", dynamics)
 In subsequent tutorials, we give concrete examples of defining many different types of dynamical models in `dynestyx`. Some examples include:
 
 - A linear, Gaussian SDE-driven dynamical system ([Quickstart tutorial](tutorials/quickstart.ipynb)).
-- A discrete-time dynamical system with discrete states $x_t \in \{0, 1, \dots, K\}$, i.e., a Hidden Markov Model (HMM) ([HMM tutorial](tutorials/hmm_inference.ipynb)).
-- A nonlinear discrete-time dynamical system with Gaussian observations ([Discrete-time inference tutorial](tutorials/discrete_time_inference.ipynb)).
+- A discrete-time dynamical system with discrete states $x_t \in \{0, 1, \dots, K\}$, i.e., a Hidden Markov Model (HMM) ([HMM tutorial](tutorials/gentle_intro/07_hmm.ipynb)).
 - A linear SDE with non-Gaussian (Poisson) observations ([Non-Gaussian observations tutorial](tutorials/sde_non_gaussian_observations.ipynb)).
 
 ### Simulation of Dynamical Systems
