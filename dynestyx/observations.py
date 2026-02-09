@@ -1,8 +1,10 @@
+from collections.abc import Callable
+
 import jax
 import jax.numpy as jnp
 from numpyro import distributions as dist
 
-from dynestyx.dynamical_models import ObservationModel
+from dynestyx.dynamical_models import Control, ObservationModel, State, Time
 
 
 class LinearGaussianObservation(ObservationModel):
@@ -39,6 +41,25 @@ class LinearGaussianObservation(ObservationModel):
             loc += jnp.dot(self.D, u)
         if self.bias is not None:
             loc += self.bias
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
+
+
+class GaussianObservation(ObservationModel):
+    """
+    y_t | x_t, u_t, t ~ Normal(h(x_t, u_t, t), R)
+    where h is a callable mapping (State, Control, Time) -> State
+    and R is the observation noise covariance.
+    """
+
+    h: Callable[[State, Control, Time], jax.Array]
+    R: jax.Array
+
+    def __init__(self, h: Callable[[State, Control, Time], jax.Array], R: jax.Array):
+        self.h = h
+        self.R = R
+
+    def __call__(self, x, u, t):
+        loc = self.h(x, u, t)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
 
 

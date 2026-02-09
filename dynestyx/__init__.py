@@ -6,6 +6,7 @@ from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    GaussianStateEvolution,
     LinearGaussianStateEvolution,
     ObservationModel,
     Trajectory,
@@ -15,7 +16,11 @@ from dynestyx.filters import (
     FilterBasedMarginalLogLikelihood,
 )
 from dynestyx.handlers import Condition, Discretizer, sample
-from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
+from dynestyx.observations import (
+    DiracIdentityObservation,
+    GaussianObservation,
+    LinearGaussianObservation,
+)
 from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
 
 __all__ = [
@@ -24,6 +29,7 @@ __all__ = [
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
     "LinearGaussianStateEvolution",
+    "GaussianStateEvolution",
     "Discretizer",
     "ObservationModel",
     "Trajectory",
@@ -33,6 +39,7 @@ __all__ = [
     "sample",
     "DiracIdentityObservation",
     "LinearGaussianObservation",
+    "GaussianObservation",
     "DiscreteTimeSimulator",
     "ODESimulator",
     "SDESimulator",
