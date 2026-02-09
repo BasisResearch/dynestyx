@@ -121,3 +121,6 @@ Other probabilistic programming languages with support for dynamical systems:
     - [SDEs in NumPyro](https://num.pyro.ai/en/stable/distributions.html#eulermaruyama) — `dist.EulerMaruyama` infers every Gaussian increment from an Euler–Maruyama solver
 - **[ChiRho](https://basisresearch.github.io/chirho/)** — Probabilistic programming with causal tooling
     - [ODEs in ChiRho](https://basisresearch.github.io/chirho/dynamical_multi.html) — Hierarchical parameter inference in ODEs
+- **[PyMC](https://www.pymc.io/welcome.html) - Probabilistic programming in Python
+    - [SSMs in PyMC](https://www.pymc.io/projects/extras/en/latest/statespace/generated/pymc_extras.statespace.core.PyMCStateSpace.html) - doc page in `pymc_extras`.
+    - [Hurricane forecasting example in PyMC](https://www.pymc.io/projects/examples/en/latest/case_studies/ssm_hurricane_tracking.html) - Requires manual discretization of continuous-time systems, and limited support for non-linear systems. They write "Hopefully, someday the `StateSpace` module in `pymc-extras` may support non-linear state space specifications with either the Extended Kalman Filter or with the Unscented Kalman Filter."
