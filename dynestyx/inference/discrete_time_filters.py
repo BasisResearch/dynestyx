@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import NamedTuple
 
 import jax
@@ -9,6 +10,13 @@ from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     PosteriorGSSMFiltered,
     lgssm_filter,
 )
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
+    extended_kalman_filter,
+)
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
+    UKFHyperParams,
+    unscented_kalman_filter,
+)
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
@@ -19,6 +27,7 @@ from dynestyx.dynamical_models import (
     DynamicalModel,
     LinearGaussianStateEvolution,
 )
+from dynestyx.inference.cd_dynamax.utils import lti_to_nlgssm_params
 from dynestyx.observations import LinearGaussianObservation
 from dynestyx.utils import (
     _get_controls,
@@ -26,7 +35,7 @@ from dynestyx.utils import (
     _validate_control_dim,
 )
 
-_DISCRETE_FILTER_TYPES: list[str] = ["default", "taylor_kf", "pf", "kf"]
+_DISCRETE_FILTER_TYPES: list[str] = ["default", "taylor_kf", "pf", "kf", "ekf", "ukf"]
 
 
 class _CuthbertInputs(NamedTuple):
@@ -113,6 +122,72 @@ def _filter_discrete_time_dynamax_kf(
     _add_kf_sites(name, posterior, record_kwargs)
 
 
+def _run_nlgssm_filter(
+    name: str,
+    dynamics: DynamicalModel,
+    context: Context,
+    record_kwargs: dict,
+    run_filter: Callable,
+) -> None:
+    """Common setup for EKF/UKF: get emissions/inputs, run filter, add factor + sites."""
+    obs_traj = context.observations
+    if obs_traj.values is None or obs_traj.times is None:
+        return
+    if isinstance(obs_traj.values, dict):
+        raise ValueError("obs_traj.values must be an Array, not a dict")
+    emissions = obs_traj.values
+    times = jnp.asarray(obs_traj.times)
+    T1 = emissions.shape[0]
+    _, ctrl_values = _get_controls(context, times)
+    _validate_control_dim(dynamics, ctrl_values)
+    control_dim = dynamics.control_dim
+    inputs = ctrl_values if ctrl_values is not None else jnp.zeros((T1, control_dim))
+
+    params_nl = lti_to_nlgssm_params(dynamics)
+    posterior = run_filter(params_nl, emissions, inputs)
+
+    marginal_loglik = posterior.marginal_loglik
+    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
+    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
+    _add_kf_sites(name, posterior, record_kwargs)
+
+
+def _filter_discrete_time_dynamax_ekf(
+    name: str,
+    dynamics: DynamicalModel,
+    context: Context,
+    record_kwargs: dict,
+    num_iter: int = 1,
+) -> None:
+    """Run dynamax EKF for LTI and add factor + sites."""
+
+    def run_filter(params_nl, emissions, inputs):
+        return extended_kalman_filter(
+            params_nl, emissions, num_iter=num_iter, inputs=inputs
+        )
+
+    _run_nlgssm_filter(name, dynamics, context, record_kwargs, run_filter)
+
+
+def _filter_discrete_time_dynamax_ukf(
+    name: str,
+    dynamics: DynamicalModel,
+    context: Context,
+    record_kwargs: dict,
+    hyperparams: UKFHyperParams | None = None,
+) -> None:
+    """Run dynamax UKF for LTI and add factor + sites."""
+    if hyperparams is None:
+        hyperparams = UKFHyperParams()
+
+    def run_filter(params_nl, emissions, inputs):
+        return unscented_kalman_filter(
+            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
+        )
+
+    _run_nlgssm_filter(name, dynamics, context, record_kwargs, run_filter)
+
+
 def _add_kf_sites(
     name: str, posterior: PosteriorGSSMFiltered, record_kwargs: dict
 ) -> None:
@@ -169,6 +244,18 @@ def _filter_discrete_time(
     if filter_type.lower() == "kf":
         _filter_discrete_time_dynamax_kf(name, dynamics, context, record_kwargs)
         return
+    if filter_type.lower() == "ekf":
+        num_iter = filter_kwargs.get("num_iter", 1)
+        _filter_discrete_time_dynamax_ekf(
+            name, dynamics, context, record_kwargs, num_iter=num_iter
+        )
+        return
+    if filter_type.lower() == "ukf":
+        hyperparams = filter_kwargs.get("ukf_hyperparams")
+        _filter_discrete_time_dynamax_ukf(
+            name, dynamics, context, record_kwargs, hyperparams=hyperparams
+        )
+        return
 
     obs_traj = context.observations
     if obs_traj.values is None:
@@ -192,7 +279,8 @@ def _filter_discrete_time(
     _validate_control_dim(dynamics, ctrl_values)
 
     if ctrl_values is None:
-        ctrl_values = jnp.zeros((T1, 0), dtype=ys.dtype)
+        control_dim = dynamics.control_dim
+        ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
 
     dt0 = times[1] - times[0]
 

@@ -777,10 +777,15 @@ def data_conditioned_jumpy_controls():
     return data_conditioned_model, synthetic
 
 
-@pytest.fixture(params=[False, True])
+@pytest.fixture(
+    params=[
+        (uc, ft) for uc in [False, True] for ft in ["kf", "taylor_kf", "ekf", "ukf"]
+    ],
+    ids=lambda p: f"controls={p[0]},filter={p[1]}",
+)
 def data_conditioned_discrete_time_lti_kf(request):
-    """Discrete-time LTI model using FilterBasedMarginalLogLikelihood with KF."""
-    use_controls = request.param
+    """Discrete-time LTI model using FilterBasedMarginalLogLikelihood (kf, taylor_kf, ekf, ukf)."""
+    use_controls, filter_type = request.param
     rng_key = jr.PRNGKey(0)
 
     # Always split into 5 keys to keep randomness consistent
@@ -829,7 +834,7 @@ def data_conditioned_discrete_time_lti_kf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood(filter_type="kf"):
+        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
             with Condition(context):
                 return discrete_time_lti_model()
 

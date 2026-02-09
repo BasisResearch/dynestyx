@@ -3,8 +3,13 @@ from typing import Any
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 
-from dynestyx.dynamical_models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.dynamical_models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    LinearGaussianStateEvolution,
+)
 from dynestyx.observations import LinearGaussianObservation
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -114,3 +119,62 @@ def dsx_to_cd_dynamax(
     cd_dynamax_params = model_to_use.build_params(**params)
 
     return cd_dynamax_params, non_gaussian_flag
+
+
+def lti_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
+    """Build ParamsNLGSSM from an LTI DynamicalModel (LinearGaussianStateEvolution + LinearGaussianObservation).
+
+    Used by EKF/UKF in discrete_time_filters. Dynamics f(x,u) = A@x + b + B@u, emissions h(x,u) = H@x + d + D@u.
+    When control_dim is 0, u has shape (0,) and the B@u / D@u terms are omitted.
+    """
+    if not isinstance(
+        dynamics.state_evolution, LinearGaussianStateEvolution
+    ) or not isinstance(dynamics.observation_model, LinearGaussianObservation):
+        raise TypeError(
+            "lti_to_nlgssm_params expects DynamicalModel with "
+            "LinearGaussianStateEvolution and LinearGaussianObservation."
+        )
+    if not isinstance(dynamics.initial_condition, dist.MultivariateNormal):
+        raise TypeError(
+            "lti_to_nlgssm_params expects initial_condition to be MultivariateNormal."
+        )
+    evo = dynamics.state_evolution
+    obs = dynamics.observation_model
+    ic = dynamics.initial_condition
+    state_dim = dynamics.state_dim
+    control_dim = dynamics.control_dim
+
+    F = evo.A
+    Q = evo.cov
+    b = evo.bias if evo.bias is not None else jnp.zeros(state_dim)
+    B = evo.B if evo.B is not None else jnp.zeros((state_dim, control_dim))
+
+    H = obs.H
+    R = obs.R
+    d = obs.bias if obs.bias is not None else jnp.zeros(dynamics.observation_dim)
+    D = (
+        obs.D
+        if obs.D is not None
+        else jnp.zeros((dynamics.observation_dim, control_dim))
+    )
+
+    def dynamics_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
+        out = F @ x + b
+        if control_dim > 0 and u.size > 0:
+            out = out + (B @ jnp.reshape(u, (-1, 1))).ravel()
+        return out
+
+    def emission_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
+        out = H @ x + d
+        if control_dim > 0 and u.size > 0:
+            out = out + (D @ jnp.reshape(u, (-1, 1))).ravel()
+        return out
+
+    return ParamsNLGSSM(
+        initial_mean=ic.loc,  # type: ignore[attr-defined]
+        initial_covariance=ic.covariance_matrix,  # type: ignore[attr-defined]
+        dynamics_function=dynamics_function,
+        dynamics_covariance=Q,
+        emission_function=emission_function,
+        emission_covariance=R,
+    )
