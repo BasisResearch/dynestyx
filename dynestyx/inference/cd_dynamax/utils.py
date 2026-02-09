@@ -69,11 +69,20 @@ def dsx_to_cd_dynamax(
     obs = dsx_model.observation_model
     non_gaussian_flag = False
     if isinstance(obs, LinearGaussianObservation):
+
+        def emission_function(x, u, t):
+            if x.ndim > 1:
+                return x @ obs.H.T + (
+                    obs.D @ u if obs.D is not None and u is not None else 0
+                )
+            else:
+                return obs.H @ x + (
+                    obs.D @ u if obs.D is not None and u is not None else 0
+                )
+
         params.update(
             {
-                "emission_function": lambda x, u, t: x @ obs.H.T
-                if x.ndim > 1
-                else obs.H @ x,
+                "emission_function": emission_function,
                 "emission_cov": obs.R,  # type: ignore
             }
         )

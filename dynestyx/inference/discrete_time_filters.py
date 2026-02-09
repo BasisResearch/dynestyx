@@ -3,19 +3,30 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
+from cd_dynamax.dynamax.linear_gaussian_ssm.builders import build_params
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
+    PosteriorGSSMFiltered,
+    lgssm_filter,
+)
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
 
 from dynestyx.cuthbert_patches import systematic_resampling
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import (
+    Context,
+    DynamicalModel,
+    LinearGaussianStateEvolution,
+)
+from dynestyx.observations import LinearGaussianObservation
 from dynestyx.utils import (
     _get_controls,
     _should_record_field,
     _validate_control_dim,
 )
 
-_DISCRETE_FILTER_TYPES: list[str] = ["default", "taylor_kf", "pf"]
+_DISCRETE_FILTER_TYPES: list[str] = ["default", "taylor_kf", "pf", "kf"]
 
 
 class _CuthbertInputs(NamedTuple):
@@ -28,6 +39,110 @@ class _CuthbertInputs(NamedTuple):
     time_prev: jax.Array  # (T+1,)
 
 
+def _lti_to_lgssm_params(dynamics: DynamicalModel):
+    """Build dynamax ParamsLGSSM via builders.build_params from an LTI model.
+
+    Supports either:
+    - An LTI_discretetime (or any model with .F, .Q, .H, .R, .initial_mean, .initial_cov, [.B, .b, .D, .d]), or
+    - A DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation (A, Q, B, b -> F,Q,B,b; H, R, D, d).
+    """
+    state_dim = dynamics.state_dim
+    emission_dim = dynamics.observation_dim
+    control_dim = dynamics.control_dim
+
+    if (
+        isinstance(dynamics.state_evolution, LinearGaussianStateEvolution)
+        and isinstance(dynamics.observation_model, LinearGaussianObservation)
+        and isinstance(dynamics.initial_condition, dist.MultivariateNormal)
+    ):
+        evo = dynamics.state_evolution
+        obs = dynamics.observation_model
+        ic = dynamics.initial_condition
+        return build_params(
+            state_dim=state_dim,
+            emission_dim=emission_dim,
+            input_dim=control_dim,
+            dynamics_weights=evo.A,
+            has_dynamics_bias=evo.bias is not None,
+            dynamics_bias=evo.bias,
+            dynamics_input_weights=evo.B,
+            dynamics_cov=evo.cov,
+            emission_weights=obs.H,
+            emission_input_weights=obs.D,
+            has_emissions_bias=obs.bias is not None,
+            emission_bias=obs.bias,
+            emission_cov=obs.R,
+            x0_mean=ic.loc,
+            x0_cov=ic.covariance_matrix,
+        )
+    else:
+        raise TypeError(
+            "filter_type='kf' expects a DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation and initial_condition as MultivariateNormal."
+        )
+
+
+def _filter_discrete_time_dynamax_kf(
+    name: str,
+    dynamics: DynamicalModel,
+    context: Context,
+    record_kwargs: dict,
+) -> None:
+    """Run dynamax Kalman filter for LTI_discretetime and add factor + sites."""
+    obs_traj = context.observations
+    if obs_traj.values is None or obs_traj.times is None:
+        return
+    if isinstance(obs_traj.values, dict):
+        raise ValueError("obs_traj.values must be an Array, not a dict")
+    emissions = obs_traj.values
+    times = jnp.asarray(obs_traj.times)
+    T1 = emissions.shape[0]
+    _, ctrl_values = _get_controls(context, times)
+    _validate_control_dim(dynamics, ctrl_values)
+    control_dim = dynamics.control_dim
+    if ctrl_values is not None:
+        inputs = ctrl_values
+    else:
+        inputs = jnp.zeros((T1, control_dim))
+
+    params = _lti_to_lgssm_params(dynamics)
+    posterior = lgssm_filter(params, emissions, inputs=inputs)
+
+    marginal_loglik = posterior.marginal_loglik
+    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
+    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
+    _add_kf_sites(name, posterior, record_kwargs)
+
+
+def _add_kf_sites(
+    name: str, posterior: PosteriorGSSMFiltered, record_kwargs: dict
+) -> None:
+    """Add filtered means/covariances as deterministic sites (dynamax KF posterior)."""
+    max_elems = record_kwargs.get("record_max_elems", 100_000)
+    if posterior.filtered_means is None:
+        return
+    means = posterior.filtered_means
+    covs = posterior.filtered_covariances
+    T1, state_dim = means.shape
+    add_mean = _should_record_field(
+        record_kwargs.get("record_filtered_states_mean"), means.shape, max_elems
+    )
+    add_cov = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov"),
+        (T1, state_dim, state_dim),
+        max_elems,
+    )
+    add_cov_diag = _should_record_field(
+        record_kwargs.get("record_filtered_states_cov_diag"), (T1, state_dim), max_elems
+    )
+    if add_mean:
+        numpyro.deterministic(f"{name}_filtered_states_mean", means)
+    if add_cov and covs is not None:
+        numpyro.deterministic(f"{name}_filtered_states_cov", covs)
+    if add_cov_diag and covs is not None:
+        diag_cov = jnp.diagonal(covs, axis1=1, axis2=2)
+        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+
+
 def _filter_discrete_time(
     name: str,
     filter_type: str,
@@ -37,20 +152,23 @@ def _filter_discrete_time(
     filter_kwargs: dict | None = None,
     record_kwargs: dict = {},
 ):
-    """Discrete-time marginal likelihood via cuthbert.
+    """Discrete-time marginal likelihood via cuthbert or dynamax (kf).
 
     Args:
         name: Name of the factor.
-        filter_type: Type of filter to use.
+        filter_type: Type of filter to use (taylor_kf, pf, kf).
         dynamics: Dynamical model to filter.
         context: Context containing the observations and controls.
         key: Random key for the filter.
         filter_kwargs: Keyword arguments for the filter.
         record_kwargs: Keyword arguments for recording the filtered states and their covariances.
     """
-
     if filter_kwargs is None:
         filter_kwargs = {}
+
+    if filter_type.lower() == "kf":
+        _filter_discrete_time_dynamax_kf(name, dynamics, context, record_kwargs)
+        return
 
     obs_traj = context.observations
     if obs_traj.values is None:

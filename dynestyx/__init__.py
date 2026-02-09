@@ -6,6 +6,7 @@ from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    LinearGaussianStateEvolution,
     ObservationModel,
     Trajectory,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "ContinuousTimeStateEvolution",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
+    "LinearGaussianStateEvolution",
     "Discretizer",
     "ObservationModel",
     "Trajectory",
