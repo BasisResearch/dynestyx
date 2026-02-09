@@ -137,11 +137,11 @@ One goal in `dynestyx` is to make the resulting inference problem as simple as p
 - Particle Hamiltonian Monte Carlo (unbiased, but slow for nontrivial problems)
 - Stochastic Variational Inference using the EnKF or particle filter for marginal likelihood estimates (approximate, but extremely fast)
 
-For concrete examples of these methods, please see the [tutorials](tutorials/quickstart.ipynb).
+For concrete examples of these methods, please see the [tutorials](tutorials/gentle_intro/00_index.ipynb).
 
 ## Tutorials
 
-A comprehensive collection of tutorials is available to help you get started with `dynestyx` and learn different inference methods for dynamical systems. The tutorials range from introductory material to advanced techniques for handling complex observation models and different types of dynamics. Visit the [tutorials page](tutorials.md) to explore all available guides.
+A comprehensive collection of tutorials is available to help you get started with `dynestyx` and learn different inference methods for dynamical systems. The tutorials range from introductory material to advanced techniques for handling complex observation models and different types of dynamics. Visit the [tutorials page](tutorials/gentle_intro/00_index.ipynb) to explore all available guides.
 
 ## API Reference
 
