@@ -3,6 +3,7 @@ import json
 import os
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
+from xml.sax.saxutils import escape as xml_escape
 from typing import Callable
 
 import equinox as eqx
@@ -32,6 +33,14 @@ SCORECARD_PATH = os.getenv(
 PREDICTIVE_SCORECARD_PATH = os.getenv(
     "DYNESTYX_PREDICTIVE_SCORECARD_PATH",
     ".pytest_cache/dynestyx_predictive_scorecard.json",
+)
+SCORECARD_XLS_PATH = os.getenv(
+    "DYNESTYX_COMBINATORIAL_SCORECARD_XLS_PATH",
+    ".pytest_cache/dynestyx_combinatorial_scorecard.xls",
+)
+PREDICTIVE_SCORECARD_XLS_PATH = os.getenv(
+    "DYNESTYX_PREDICTIVE_SCORECARD_XLS_PATH",
+    ".pytest_cache/dynestyx_predictive_scorecard.xls",
 )
 
 _USE_COLOR = os.getenv("NO_COLOR") is None
@@ -197,10 +206,11 @@ def _make_observation_model(
         return dsx.LinearGaussianObservation(H=H, R=R), obs_dim
 
     def poisson_obs(x, u, t):
-        x = jnp.asarray(x, dtype=jnp.float32)
-        if categorical_state:
-            x = x.astype(jnp.float32)
-        flat = jnp.atleast_1d(x)
+        # x = jnp.asarray(x, dtype=jnp.float32)
+        # if categorical_state:
+        #     x = x.astype(jnp.float32)
+        # flat = jnp.atleast_1d(x)
+        flat = x
         if obs_dim == 1:
             rate = jnp.exp(0.1 + 0.05 * jnp.sum(flat))
         else:
@@ -514,6 +524,61 @@ def _write_predictive_scorecard(payload: list[dict]):
         json.dump(payload, fh, indent=2)
 
 
+def _write_xls_scorecard(
+    path: str,
+    sheet_name: str,
+    headers: list[str],
+    rows: list[list[str]],
+    mismatch_flags: list[bool],
+    expected_col: str = "expected",
+    actual_col: str = "actual",
+):
+    """Write a SpreadsheetML 2003 .xls file with mismatch highlighting."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    expected_idx = headers.index(expected_col)
+    actual_idx = headers.index(actual_col)
+
+    xml_lines = [
+        '<?xml version="1.0"?>',
+        '<?mso-application progid="Excel.Sheet"?>',
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '
+        'xmlns:o="urn:schemas-microsoft-com:office:office" '
+        'xmlns:x="urn:schemas-microsoft-com:office:excel" '
+        'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" '
+        'xmlns:html="http://www.w3.org/TR/REC-html40">',
+        "<Styles>",
+        '<Style ss:ID="header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1F4E78" ss:Pattern="Solid"/></Style>',
+        '<Style ss:ID="normal"/>',
+        '<Style ss:ID="mismatch"><Interior ss:Color="#FFF2CC" ss:Pattern="Solid"/></Style>',
+        '<Style ss:ID="pass"><Font ss:Color="#006100"/><Interior ss:Color="#C6EFCE" ss:Pattern="Solid"/></Style>',
+        '<Style ss:ID="fail"><Font ss:Color="#9C0006"/><Interior ss:Color="#FFC7CE" ss:Pattern="Solid"/></Style>',
+        "</Styles>",
+        f'<Worksheet ss:Name="{xml_escape(sheet_name)}">',
+        "<Table>",
+        "<Row>",
+    ]
+    for h in headers:
+        xml_lines.append(
+            f'<Cell ss:StyleID="header"><Data ss:Type="String">{xml_escape(h)}</Data></Cell>'
+        )
+    xml_lines.append("</Row>")
+
+    for row, is_mismatch in zip(rows, mismatch_flags, strict=True):
+        xml_lines.append("<Row>")
+        for col_idx, cell in enumerate(row):
+            style = "mismatch" if is_mismatch else "normal"
+            if col_idx in {expected_idx, actual_idx}:
+                style = "pass" if str(cell).strip().lower() == "pass" else "fail"
+            xml_lines.append(
+                f'<Cell ss:StyleID="{style}"><Data ss:Type="String">{xml_escape(str(cell))}</Data></Cell>'
+            )
+        xml_lines.append("</Row>")
+
+    xml_lines.extend(["</Table>", "</Worksheet>", "</Workbook>"])
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(xml_lines))
+
+
 def _predictive_scorecard_table(results: list[dict]):
     def _paint(text: str, color: str) -> str:
         if not _USE_COLOR:
@@ -692,6 +757,48 @@ def test_forward_pass_combinatorial_scorecard(capsys):
         )
         results.append(result)
     _write_scorecard(results)
+    xls_headers = [
+        "flag",
+        "case_id",
+        "model_family",
+        "transition_kind",
+        "observation_kind",
+        "runner",
+        "filter_type",
+        "discretizer",
+        "expected",
+        "actual",
+        "expected_error",
+        "actual_error",
+    ]
+    xls_rows = []
+    xls_mismatch_flags = []
+    for r in results:
+        mismatch = r.expected_pass != r.actual_pass
+        xls_mismatch_flags.append(mismatch)
+        xls_rows.append(
+            [
+                "MISMATCH" if mismatch else "ok",
+                r.case_id,
+                r.model.family,
+                r.model.transition_kind,
+                r.model.observation_kind,
+                r.inference.runner,
+                r.inference.filter_type or "-",
+                r.inference.discretizer,
+                "pass" if r.expected_pass else "fail",
+                "pass" if r.actual_pass else "fail",
+                r.expected_error or "-",
+                r.actual_error or "-",
+            ]
+        )
+    _write_xls_scorecard(
+        path=SCORECARD_XLS_PATH,
+        sheet_name="Combinatorial",
+        headers=xls_headers,
+        rows=xls_rows,
+        mismatch_flags=xls_mismatch_flags,
+    )
     expected_vs_actual_mismatches = [
         r for r in results if (r.expected_pass and not r.actual_pass) or (not r.expected_pass and r.actual_pass)
     ]
@@ -818,6 +925,42 @@ def test_predictive_context_matrix(capsys):
         )
 
     _write_predictive_scorecard(results)
+    xls_headers = [
+        "flag",
+        "case_id",
+        "model_family",
+        "transition_kind",
+        "context_mode",
+        "expected",
+        "actual",
+        "expected_error",
+        "actual_error",
+    ]
+    xls_rows = []
+    xls_mismatch_flags = []
+    for row in results:
+        mismatch = row["expected_pass"] != row["actual_pass"]
+        xls_mismatch_flags.append(mismatch)
+        xls_rows.append(
+            [
+                "MISMATCH" if mismatch else "ok",
+                str(row["case_id"]),
+                row["model_family"],
+                row["transition_kind"],
+                row["context_mode"],
+                "pass" if row["expected_pass"] else "fail",
+                "pass" if row["actual_pass"] else "fail",
+                row["expected_error"] or "-",
+                row["actual_error"] or "-",
+            ]
+        )
+    _write_xls_scorecard(
+        path=PREDICTIVE_SCORECARD_XLS_PATH,
+        sheet_name="Predictive",
+        headers=xls_headers,
+        rows=xls_rows,
+        mismatch_flags=xls_mismatch_flags,
+    )
     summary_line = (
         "Predictive scorecard summary: "
         f"cases={len(results)} "
