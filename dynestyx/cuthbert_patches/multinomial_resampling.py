@@ -19,7 +19,9 @@ from cuthbertlib.resampling.protocols import (
 )
 from cuthbertlib.resampling.utils import _inverse_cdf_default
 from cuthbertlib.types import Array, ArrayLike
+from jax import numpy as jnp
 from jax import random
+from jax.scipy.special import logsumexp
 
 
 @partial(resampling_decorator, name="Multinomial", desc=_DESCRIPTION)
@@ -37,7 +39,8 @@ def resampling(key: Array, logits: ArrayLike, n: int) -> Array:
     # In cuthbert, this may use a jax.pure_callback,
     # which is incompatible with gradient-based sampling methods.
     # Here, we use the default resampling function, which is a pure jax function.
-    idx = _inverse_cdf_default(sorted_uniforms, logits)
+    weights = jnp.exp(jnp.asarray(logits) - logsumexp(logits))
+    idx = _inverse_cdf_default(sorted_uniforms, weights)
     return random.permutation(key_shuffle, idx)
 
 
