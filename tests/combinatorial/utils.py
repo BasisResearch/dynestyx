@@ -70,14 +70,11 @@ class PoissonObservation(ObservationModel):
     rate_scale: float = eqx.field(static=True, default=1.0)
 
     def __call__(self, x, u, t):
-        x_vec = _as_vector(x)
-        if x_vec.size == self.bias.size:
-            x_obs = x_vec
-        elif x_vec.size == 1:
-            x_obs = jnp.broadcast_to(x_vec, self.bias.shape)
-        else:
-            x_obs = x_vec[: self.bias.size]
-        rate = self.rate_scale * jnp.exp(x_obs + self.bias)
+        x_scalar = (
+            jnp.sum(x) if x.ndim == 0 else jnp.sum(x, axis=-1, keepdims=True)
+        )
+        loc = x_scalar + self.bias
+        rate = self.rate_scale * jnp.exp(loc)
         return dist.Poisson(rate=rate).to_event(1)
 
 
