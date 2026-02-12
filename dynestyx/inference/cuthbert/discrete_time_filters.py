@@ -213,10 +213,20 @@ def _add_sites_pf(
     name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
 ):
     # Compute filtered means and covariances from the particles using the weights.
-    # particles (T+1, n_particles, state_dim), log_weights (T+1, n_particles)
+    # particles can be:
+    #   - (T+1, n_particles) for scalar/categorical states
+    #   - (T+1, n_particles, state_dim) for vector-valued states
+    # log_weights is (T+1, n_particles)
     log_weights = states.log_weights
     particles = states.particles
     max_elems = record_kwargs["record_max_elems"]
+    if particles.ndim == 2:
+        particles = particles[..., None]
+    elif particles.ndim != 3:
+        raise ValueError(
+            f"Expected particles to have ndim 2 or 3, got shape={particles.shape}"
+        )
+
     T1, n_particles, state_dim = particles.shape
 
     add_particles = _should_record_field(
