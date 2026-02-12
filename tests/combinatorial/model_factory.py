@@ -174,10 +174,11 @@ def _make_discrete_transition(transition_kind: str, uses_control: bool):
 
 def _make_continuous_transition(
     uses_control: bool,
-    _transition_kind: str,
+    transition_kind: str,
     diffusion_coeff: str,
     diffusion_cov: str,
 ):
+    _ = transition_kind
     drift = ContinuousZeroDriftTransition(uses_control=uses_control)
 
     dcoeff = None
