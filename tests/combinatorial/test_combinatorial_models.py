@@ -118,6 +118,8 @@ def _maybe_thin_cases(cases, config):
 
 def _expected_outcome_for_filter(case, effective_kind: str):
     filter_type = (case.filter_type or "default").lower()
+    if case.observation_kind == "perfect":
+        return "fail", "TypeError: dirac_obs_unsupported"
     if effective_kind == "continuous":
         if filter_type not in ["default", "enkf", "ekf", "ukf", "dpf"]:
             return "fail", "ValueError: invalid filter_type"
