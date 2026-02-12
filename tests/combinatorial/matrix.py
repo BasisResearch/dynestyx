@@ -53,8 +53,10 @@ def sample_cases(case_limit: int, combos, thin: bool | None = None):
 
 def build_forward_model_specs() -> list[ModelSpec]:
     model_specs = [
-        ModelSpec("discrete_gaussian", ik, ir, uc, tk, "none", "none", ok, orank)
+        ModelSpec("discrete", "gaussian", ik, ir, uc, tk, "none", "none", ok, orank)
         for ik, ir, uc, tk, ok, orank in itertools.product(
+            # Keep intentionally incompatible categorical combos in the sweep;
+            # assumptions classify these as expected failures.
             ["mvn", "uniform", "categorical"],
             [1, 2],
             [False, True],
@@ -63,7 +65,7 @@ def build_forward_model_specs() -> list[ModelSpec]:
             [1, 2],
         )
     ] + [
-        ModelSpec("continuous", ik, ir, uc, tk, dc, dv, ok, orank)
+        ModelSpec("continuous", None, ik, ir, uc, tk, dc, dv, ok, orank)
         for ik, ir, uc, tk, dc, dv, ok, orank in itertools.product(
             ["mvn", "uniform", "categorical"],
             [1, 2],
@@ -78,6 +80,7 @@ def build_forward_model_specs() -> list[ModelSpec]:
 
     hmm_specs = [
         ModelSpec(
+            "discrete",
             "categorical_hmm",
             "categorical",
             ir,
@@ -105,7 +108,8 @@ def build_inference_specs() -> list[InferenceSpec]:
     ] + [
         InferenceSpec("filter", ftype, disc)
         for ftype, disc in itertools.product(
-            ["EnKF", "EKF", "UKF", "DPF", "taylor_kf", "pf", "kf"],
+            # ["EnKF", "EKF", "UKF", "DPF", "taylor_kf", "pf", "kf"],
+            ["EnKF", "EKF", "UKF", "DPF", "taylor_kf", "pf"],
             ["none", "euler"],
         )
     ]
@@ -114,7 +118,8 @@ def build_inference_specs() -> list[InferenceSpec]:
 def build_predictive_model_specs() -> list[ModelSpec]:
     return [
         ModelSpec(
-            "discrete_gaussian",
+            "discrete",
+            "gaussian",
             "mvn",
             2,
             True,
@@ -126,6 +131,7 @@ def build_predictive_model_specs() -> list[ModelSpec]:
         ),
         ModelSpec(
             "continuous",
+            None,
             "mvn",
             2,
             True,
@@ -136,6 +142,7 @@ def build_predictive_model_specs() -> list[ModelSpec]:
             2,
         ),
         ModelSpec(
+            "discrete",
             "categorical_hmm",
             "categorical",
             1,

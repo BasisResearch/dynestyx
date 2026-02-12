@@ -10,7 +10,8 @@ class DataSpec:
 
 @dataclass(frozen=True)
 class ModelSpec:
-    family: str  # "discrete_gaussian", "categorical_hmm", "continuous"
+    family: str  # "discrete", "continuous"
+    discrete_kind: str | None  # discrete only: "gaussian", "categorical_hmm"
     initial_kind: str  # mvn, uniform, categorical
     init_rank: int  # 1 or 2
     uses_control: bool
@@ -48,6 +49,7 @@ class PredictiveCaseResult:
     timesteps: int
     control_rank: int
     model_family: str
+    model_discrete_kind: str | None
     initial_kind: str
     init_rank: int
     observation_kind: str

@@ -219,6 +219,7 @@ def test_predictive_context_matrix(capsys, request):
                     timesteps=forward_case.timesteps,
                     control_rank=2 if model_spec.uses_control else 0,
                     model_family=model_spec.family,
+                    model_discrete_kind=model_spec.discrete_kind,
                     initial_kind=model_spec.initial_kind,
                     init_rank=model_spec.init_rank,
                     observation_kind=model_spec.observation_kind,

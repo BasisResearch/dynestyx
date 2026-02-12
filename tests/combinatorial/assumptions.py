@@ -19,11 +19,23 @@ def is_continuous_filter(filter_type: str | None) -> bool:
 
 def expected_outcome(model: ModelSpec, inf: InferenceSpec) -> tuple[bool, str | None]:
     """Expected pass/fail + expected error tag for each forward-pass case."""
+    is_discrete = model.family == "discrete"
+    is_hmm_discrete = is_discrete and model.discrete_kind == "categorical_hmm"
+
+    transition_is_categorical = model.transition_kind == "categorical"
+    ic_is_categorical = model.initial_kind == "categorical"
+    if ic_is_categorical and not transition_is_categorical:
+        return False, "categorical_ic_requires_categorical_transition"
+    if transition_is_categorical and not ic_is_categorical:
+        return False, "categorical_transition_requires_categorical_ic"
+
+    if is_hmm_discrete and inf.runner != "filter_hmm":
+        return False, "hmm_filter_required"
     if model.observation_kind == "perfect" and model.observation_rank != model.init_rank:
         return False, "shape_mismatch"
 
     if inf.runner == "filter_hmm":
-        ok = model.family == "categorical_hmm"
+        ok = is_hmm_discrete
         return ok, None if ok else "hmm_required"
 
     if inf.runner == "sde_sim":
