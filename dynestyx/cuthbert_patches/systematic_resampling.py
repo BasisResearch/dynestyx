@@ -23,12 +23,14 @@ from cuthbertlib.resampling.utils import _inverse_cdf_default
 from cuthbertlib.types import Array, ArrayLike
 from jax import numpy as jnp
 from jax import random
+from jax.scipy.special import logsumexp
 
 
 @partial(resampling_decorator, name="Systematic", desc=_DESCRIPTION)
 def resampling(key: Array, logits: ArrayLike, n: int) -> Array:
     us = (random.uniform(key, ()) + jnp.arange(n)) / n
-    return _inverse_cdf_default(us, logits)
+    weights = jnp.exp(jnp.asarray(logits) - logsumexp(logits))
+    return _inverse_cdf_default(us, weights)
 
 
 conditional_resampling = conditional_resampling_original
