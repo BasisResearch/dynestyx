@@ -56,8 +56,7 @@ class CategoricalTransition(eqx.Module):
     use_controls: bool
 
     def __call__(self, x, u, t_now, t_next):
-        x_idx = int(jnp.squeeze(jnp.asarray(x)))
-        probs = self.probs[x_idx]
+        probs = self.probs[x]
         if self.use_controls and u is not None:
             u_effect = jnp.sum(_as_vector(u))
             probs = probs + u_effect * (1.0 / self.probs.shape[0] - probs)
@@ -227,8 +226,7 @@ def _build_discrete_state_evolution(
             return CategoricalTransition(probs=probs, use_controls=use_controls)
 
         def transition(x, u, t_now, t_next):
-            x_idx = int(jnp.squeeze(jnp.asarray(x)))
-            row = probs[x_idx]
+            row = probs[x]
             if use_controls and u is not None:
                 u_effect = jnp.sum(_as_vector(u))
                 row = row + u_effect * (1.0 / dim - row)
