@@ -304,7 +304,7 @@ css = [
 [[package]]
 name = "cd-dynamax"
 version = "0.2.6"
-source = { git = "https://github.com/hd-UQ/cd_dynamax?rev=dev-numpyro-api#31e558b01431bfea97d05bb577cb1ad2a9b731e7" }
+source = { git = "https://github.com/hd-UQ/cd_dynamax?rev=dev-numpyro-api#2e2f7b44160189ea5ec738c5deab2c7d181a5993" }
 dependencies = [
     { name = "blackjax" },
     { name = "chex" },
