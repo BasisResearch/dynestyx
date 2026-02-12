@@ -16,6 +16,7 @@ from dynestyx.simulators import (
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,
+    continuous_time_potential_dynamics_model,
     continuous_time_stochastic_l63_model,
     continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,
@@ -469,6 +470,44 @@ def data_conditioned_continuous_time_deterministic_l63(request):
                 return continuous_time_deterministic_l63_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(params=["drift_only", "grad_only", "both"])
+def data_conditioned_continuous_time_potential_dynamics(request):
+    mode = request.param
+    rng_key = jr.PRNGKey(0)
+    data_init_key, _solver_key, _mcmc_key, _pred_key = jr.split(rng_key, 4)
+
+    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    control_trajectory = Trajectory()
+
+    true_params = {"alpha": jnp.array(0.8), "beta": jnp.array(0.6)}
+    predictive = Predictive(
+        lambda: continuous_time_potential_dynamics_model(mode=mode),
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    with Simulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with Simulator():
+            with Condition(context):
+                return continuous_time_potential_dynamics_model(mode=mode)
+
+    return data_conditioned_model, true_params, synthetic, mode
 
 
 @pytest.fixture(params=[False, True])

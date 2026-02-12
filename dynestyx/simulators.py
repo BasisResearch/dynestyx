@@ -372,11 +372,11 @@ class ODESimulatorObjIntp(BaseSimulatorObjIntp):
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
                 u_t = control_path.evaluate(t)
-                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+                return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
         else:
 
             def f(t, y, args):
-                return dynamics.state_evolution.drift(x=y, u=None, t=t)
+                return dynamics.state_evolution.total_drift(x=y, u=None, t=t)
 
         # Solve ODE at all observation times using diffrax
         sol = dfx.diffeqsolve(
