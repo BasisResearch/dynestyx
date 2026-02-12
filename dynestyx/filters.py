@@ -136,8 +136,6 @@ class FilterBasedHMMMarginalLogLikelihoodObjIntp(BaseCDDynamaxLogFactorAdder):
         if obs.times is None or obs.values is None:
             return
 
-        if isinstance(obs.values, dict):
-            raise ValueError("obs.values must be an Array, not a dict")
         obs_values = obs.values
 
         # Pull control trajectory from context and validate

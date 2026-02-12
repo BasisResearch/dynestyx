@@ -47,8 +47,6 @@ def _filter_continuous_time(
         return
 
     obs_times = obs_traj.times[:, None]  # shape (T, 1)
-    if isinstance(obs_traj.values, dict):
-        raise ValueError("obs_traj.values must be an Array, not a dict")
     obs_values = obs_traj.values  # shape (T, emission_dim)
 
     # Pull control trajectory from context and validate

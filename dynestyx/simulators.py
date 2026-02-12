@@ -51,7 +51,7 @@ class SDESimulatorObjIntp(BaseSimulatorObjIntp):
             "max_steps": max_steps,
         }
 
-    def simulate(self, context: Context, dynamics) -> State:
+    def simulate(self, context: Context, dynamics) -> dict[str, State]:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -125,8 +125,6 @@ class SDESimulatorObjIntp(BaseSimulatorObjIntp):
             raise ValueError("context.observations.times must be provided")
         obs_times = obs_traj.times
         obs_values = obs_traj.values if obs_traj is not None else None
-        if isinstance(obs_values, dict):
-            raise ValueError("obs_values must be an Array or None, not a dict")
 
         # Controls aligned with observed times
         _, ctrl_values = _get_controls(context, obs_times)
@@ -189,14 +187,12 @@ class DiscreteTimeSimulatorObjIntp(BaseSimulatorObjIntp):
         self,
         context: Context,
         dynamics: DynamicalModel,
-    ) -> State:
+    ) -> dict[str, State]:
         # Pull observed trajectory from context
         obs_traj = context.observations
         obs_times = obs_traj.times
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
-        if isinstance(obs_traj.values, dict):
-            raise ValueError("obs_traj.values must be an Array or None, not a dict")
         obs_values = obs_traj.values
 
         # Pull control trajectory from context and validate
@@ -351,15 +347,13 @@ class ODESimulatorObjIntp(BaseSimulatorObjIntp):
         self,
         context: Context,
         dynamics: DynamicalModel,
-    ) -> State:
+    ) -> dict[str, State]:
         # Pull observed trajectory from context
         obs_traj = context.observations
         obs_times = obs_traj.times
         obs_values = obs_traj.values
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
-        if isinstance(obs_values, dict):
-            raise ValueError("obs_values must be an Array or None, not a dict")
 
         # Pull control trajectory from context and validate
         ctrl_times, ctrl_values = _get_controls(context, obs_times)
@@ -443,7 +437,7 @@ class SimulatorObjIntp(BaseSimulatorObjIntp):
 
         self.simulator = None
 
-    def simulate(self, context: Context, dynamics: DynamicalModel) -> State:
+    def simulate(self, context: Context, dynamics: DynamicalModel) -> dict[str, State]:
         if self.simulator is None:
             raise ValueError("Simulator not initialized. This shouldn't happen.")
 

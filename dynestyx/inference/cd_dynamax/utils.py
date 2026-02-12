@@ -200,15 +200,21 @@ def lti_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     else:
         # GaussianObservation: y_t ~ N(h(x_t, u_t, t), R) with arbitrary h.
         def emission_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
-            return obs.h(x, u, None)  # warning: time is ignored
+            _t = jnp.array(0.0, dtype=x.dtype)
+            return obs.h(x, u, _t)  # warning: time is ignored
 
     if isinstance(ic, dist.MultivariateNormal):
-        initial_mean = ic.loc  # type: ignore[attr-defined]
-        initial_covariance = ic.covariance_matrix  # type: ignore[attr-defined]
-    else:
+        initial_mean = jnp.asarray(ic.loc)
+        initial_covariance = jnp.asarray(ic.covariance_matrix)
+    elif isinstance(ic, dist.Normal):
         # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
-        initial_mean = ic.loc  # type: ignore[attr-defined]
-        initial_covariance = jnp.square(ic.scale)  # type: ignore[attr-defined]
+        initial_mean = jnp.atleast_1d(jnp.asarray(ic.loc))
+        initial_covariance = jnp.atleast_2d(jnp.square(jnp.asarray(ic.scale)))
+    else:
+        raise NotImplementedError(
+            f"Initial condition of type {type(ic)} is not supported in a nonlinear Gaussian SSM."
+            "Use a non-linear SSM instead."
+        )
 
     return ParamsNLGSSM(
         initial_mean=initial_mean,

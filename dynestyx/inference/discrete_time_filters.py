@@ -81,8 +81,8 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
             has_emissions_bias=obs.bias is not None,
             emission_bias=obs.bias,
             emission_cov=obs.R,
-            x0_mean=ic.loc,
-            x0_cov=ic.covariance_matrix,
+            x0_mean=jnp.asarray(ic.loc),
+            x0_cov=jnp.asarray(ic.covariance_matrix),
         )
     else:
         raise TypeError(
@@ -100,8 +100,6 @@ def _filter_discrete_time_dynamax_kf(
     obs_traj = context.observations
     if obs_traj.values is None or obs_traj.times is None:
         return
-    if isinstance(obs_traj.values, dict):
-        raise ValueError("obs_traj.values must be an Array, not a dict")
     emissions = obs_traj.values
     times = jnp.asarray(obs_traj.times)
     T1 = emissions.shape[0]
@@ -133,8 +131,6 @@ def _run_nlgssm_filter(
     obs_traj = context.observations
     if obs_traj.values is None or obs_traj.times is None:
         return
-    if isinstance(obs_traj.values, dict):
-        raise ValueError("obs_traj.values must be an Array, not a dict")
     emissions = obs_traj.values
     times = jnp.asarray(obs_traj.times)
     T1 = emissions.shape[0]
@@ -260,8 +256,6 @@ def _filter_discrete_time(
     obs_traj = context.observations
     if obs_traj.values is None:
         return
-    if isinstance(obs_traj.values, dict):
-        raise ValueError("obs_traj.values must be an Array, not a dict")
 
     ys = obs_traj.values
     T1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention

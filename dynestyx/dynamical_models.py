@@ -12,7 +12,7 @@ from numpyro._typing import DistributionT
 # ----------------------------------------------------------------------
 # TYPE ALIASES
 # ----------------------------------------------------------------------
-State = jax.Array | dict[str, jax.Array]
+State = jax.Array
 dState = State
 Observation = jax.Array
 Control = State | None
@@ -157,9 +157,9 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     def __init__(
         self,
         A: jax.Array,
+        cov: jax.Array,
         B: jax.Array | None = None,
         bias: jax.Array | None = None,
-        cov: jax.Array | None = None,
     ):
         self.A = A
         self.B = B
@@ -190,7 +190,7 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
     def __init__(
         self,
         F: Callable[[State, Control, Time, Time], State],
-        cov: jax.Array | None = None,
+        cov: jax.Array,
     ):
         self.F = F
         self.cov = cov

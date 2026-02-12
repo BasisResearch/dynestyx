@@ -4,7 +4,13 @@ import jax
 import jax.numpy as jnp
 from numpyro import distributions as dist
 
-from dynestyx.dynamical_models import Control, ObservationModel, State, Time
+from dynestyx.dynamical_models import (
+    Control,
+    Observation,
+    ObservationModel,
+    State,
+    Time,
+)
 
 
 class LinearGaussianObservation(ObservationModel):
@@ -51,7 +57,7 @@ class GaussianObservation(ObservationModel):
     and R is the observation noise covariance.
     """
 
-    h: Callable[[State, Control, Time], jax.Array]
+    h: Callable[[State, Control, Time], Observation]
     R: jax.Array
 
     def __init__(self, h: Callable[[State, Control, Time], jax.Array], R: jax.Array):
