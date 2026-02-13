@@ -1,4 +1,3 @@
-from collections import _T1
 from typing import NamedTuple
 
 import jax
