@@ -146,20 +146,25 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             "LinearGaussianObservation or GaussianObservation."
         )
 
-    if not isinstance(
-        dynamics.initial_condition, (dist.MultivariateNormal, dist.Normal)
-    ):
-        raise TypeError(
-            "KF, EKF, and UKF require a Gaussian initial condition "
-            "(MultivariateNormal or Normal) because they propagate mean and covariance. "
-            "For non-Gaussian initial conditions, use filter_type='pf' (particle filter)."
-        )
-
     evo = dynamics.state_evolution
     obs = dynamics.observation_model
     ic = dynamics.initial_condition
     state_dim = dynamics.state_dim
     control_dim = dynamics.control_dim
+
+    if isinstance(ic, dist.MultivariateNormal):
+        initial_mean = jnp.asarray(ic.loc)
+        initial_covariance = jnp.asarray(ic.covariance_matrix)
+    elif isinstance(ic, dist.Normal):
+        # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
+        initial_mean = jnp.atleast_1d(jnp.asarray(ic.loc))
+        initial_covariance = jnp.atleast_2d(jnp.square(jnp.asarray(ic.scale)))
+    else:
+        raise TypeError(
+            "KF, EKF, and UKF require a Gaussian initial condition "
+            "(MultivariateNormal or Normal) because they propagate mean and covariance. "
+            "For non-Gaussian initial conditions, use filter_type='pf' (particle filter)."
+        )
 
     # ----- Dynamics function -----
     if isinstance(evo, LinearGaussianStateEvolution):
@@ -202,19 +207,6 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         def emission_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
             _t = jnp.array(0.0, dtype=x.dtype)
             return obs.h(x, u, _t)  # warning: time is ignored
-
-    if isinstance(ic, dist.MultivariateNormal):
-        initial_mean = jnp.asarray(ic.loc)
-        initial_covariance = jnp.asarray(ic.covariance_matrix)
-    elif isinstance(ic, dist.Normal):
-        # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
-        initial_mean = jnp.atleast_1d(jnp.asarray(ic.loc))
-        initial_covariance = jnp.atleast_2d(jnp.square(jnp.asarray(ic.scale)))
-    else:
-        raise NotImplementedError(
-            f"Initial condition of type {type(ic)} is not supported in a nonlinear Gaussian SSM."
-            "Use a non-linear SSM instead."
-        )
 
     return ParamsNLGSSM(
         initial_mean=initial_mean,
