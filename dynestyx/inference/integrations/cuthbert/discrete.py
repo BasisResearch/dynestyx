@@ -8,6 +8,13 @@ from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
 from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.inference.filter_configs import (
+    BaseFilterConfig,
+    EKFConfig,
+    EnKFConfig,
+    PFConfig,
+    config_to_record_kwargs,
+)
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
 from dynestyx.utils import _get_controls, _should_record_field, _validate_control_dim
 
@@ -22,19 +29,25 @@ class CuthbertInputs(NamedTuple):
     time_prev: jax.Array  # (T+1,)
 
 
+def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
+    """Build filter_kwargs dict from config dataclass."""
+    kwargs = dict(config.extra_filter_kwargs)
+    if isinstance(config, PFConfig):
+        kwargs["n_filter_particles"] = config.n_particles
+        kwargs["ess_threshold"] = config.ess_threshold_ratio
+    return kwargs
+
+
 def run_discrete_filter(
     name: str,
-    filter_type: str,
     dynamics: DynamicalModel,
     context: Context,
+    filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
-    filter_kwargs: dict | None = None,
-    record_kwargs: dict | None = None,
 ) -> None:
-    if filter_kwargs is None:
-        filter_kwargs = {}
-    if record_kwargs is None:
-        record_kwargs = {}
+    """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
+    filter_kwargs = _config_to_filter_kwargs(filter_config)
+    record_kwargs = config_to_record_kwargs(filter_config)
 
     obs_traj = context.observations
     if obs_traj.values is None:
@@ -68,13 +81,14 @@ def run_discrete_filter(
         y=ys, u=ctrl_values, u_prev=u_prev, time=times, time_prev=time_prev
     )
 
-    if filter_type.lower() in ["taylor_kf", "default"]:
-        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
-    elif filter_type.lower() == "pf":
+    if isinstance(filter_config, PFConfig):
         filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, (EKFConfig, EnKFConfig)):
+        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
     else:
         raise ValueError(
-            f"Unsupported cuthbert filter type: {filter_type}. Expected one of ['default', 'taylor_kf', 'pf']."
+            f"Unsupported cuthbert config: {type(filter_config).__name__}. "
+            "Expected EKFConfig, PFConfig, or EnKFConfig."
         )
 
     states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
@@ -83,10 +97,10 @@ def run_discrete_filter(
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
 
-    if filter_type.lower() in ["taylor_kf", "default"]:
-        _add_sites_taylor_kf(name, states, record_kwargs)
-    elif filter_type.lower() == "pf":
+    if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
+    else:
+        _add_sites_taylor_kf(name, states, record_kwargs)
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
@@ -184,25 +198,25 @@ def _add_sites_pf(
     particles = states.particles
     if particles.ndim == 2:
         particles = jnp.expand_dims(particles, axis=-1)  # (T+1, n_particles, 1)
-    max_elems = record_kwargs.get("record_max_elems", 100_000)
+    max_elems = record_kwargs["record_max_elems"]
     t1, _, state_dim = particles.shape
 
     add_particles = _should_record_field(
-        record_kwargs.get("record_filtered_particles"), particles.shape, max_elems
+        record_kwargs["record_filtered_particles"], particles.shape, max_elems
     )
     add_log_weights = _should_record_field(
-        record_kwargs.get("record_filtered_log_weights"), log_weights.shape, max_elems
+        record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
     )
     add_mean = _should_record_field(
-        record_kwargs.get("record_filtered_states_mean"), (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_mean"], (t1, state_dim), max_elems
     )
     add_filtered_states_cov = _should_record_field(
-        record_kwargs.get("record_filtered_states_cov"),
+        record_kwargs["record_filtered_states_cov"],
         (t1, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs.get("record_filtered_states_cov_diag"), (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (t1, state_dim), max_elems
     )
 
     need_filtered_means = (
@@ -237,24 +251,24 @@ def _add_sites_pf(
 def _add_sites_taylor_kf(
     name: str, states: taylor.LinearizedKalmanFilterState, record_kwargs: dict
 ):
-    max_elems = record_kwargs.get("record_max_elems", 100_000)
+    max_elems = record_kwargs["record_max_elems"]
     t1, state_dim, _ = states.chol_cov.shape
 
     add_mean = _should_record_field(
-        record_kwargs.get("record_filtered_states_mean"), states.mean.shape, max_elems
+        record_kwargs["record_filtered_states_mean"], states.mean.shape, max_elems
     )
     add_chol_cov = _should_record_field(
-        record_kwargs.get("record_filtered_states_chol_cov"),
+        record_kwargs["record_filtered_states_chol_cov"],
         states.chol_cov.shape,
         max_elems,
     )
     add_filtered_states_cov = _should_record_field(
-        record_kwargs.get("record_filtered_states_cov"),
+        record_kwargs["record_filtered_states_cov"],
         (t1, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs.get("record_filtered_states_cov_diag"), (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (t1, state_dim), max_elems
     )
 
     if add_mean:

@@ -1,9 +1,14 @@
+"""HMM filter: exact forward filtering for discrete-state models."""
+
 import jax
 import jax.numpy as jnp
+import numpyro
 from jax import lax
 from jax.scipy.special import logsumexp
 
-from dynestyx.dynamical_models import DynamicalModel
+from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.inference.filter_configs import HMMConfig
+from dynestyx.utils import _get_controls, _should_record_field
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
@@ -166,3 +171,59 @@ def hmm_filter(
     log_filt_seq = jnp.vstack([log_filt0[None, :], log_filt_rest])
 
     return loglik, log_filt_seq
+
+
+def _filter_hmm(
+    name: str,
+    dynamics: DynamicalModel,
+    context: Context,
+    filter_config: HMMConfig,
+) -> None:
+    """Exact HMM marginal likelihood via forward filtering.
+
+    Args:
+        name: Name of the factor.
+        dynamics: Dynamical model (HMM with finite discrete state space).
+        context: Context containing the observations and controls.
+        filter_config: HMMConfig with record_filtered, record_log_filtered, record_max_elems.
+    """
+    obs = context.observations
+    if obs.times is None or obs.values is None:
+        return
+
+    obs_values = obs.values
+    ctrl_times, ctrl_values = _get_controls(context, obs.times)
+
+    log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+        dynamics,
+        obs.times,
+        obs_values,
+        ctrl_values=ctrl_values,
+    )
+
+    loglik, log_filt_seq = hmm_filter(
+        log_pi,
+        log_A_seq,
+        log_emit_seq,
+    )
+
+    numpyro.factor(f"{name}_marginal_log_likelihood", loglik)
+    numpyro.deterministic(f"{name}_marginal_loglik", loglik)
+
+    record_max_elems = filter_config.record_max_elems
+
+    if _should_record_field(
+        filter_config.record_log_filtered, log_filt_seq.shape, record_max_elems
+    ):
+        numpyro.deterministic(
+            f"{name}_log_filtered_states",
+            log_filt_seq,  # (T, K)
+        )
+
+    if _should_record_field(
+        filter_config.record_filtered, log_filt_seq.shape, record_max_elems
+    ):
+        numpyro.deterministic(
+            f"{name}_filtered_states",
+            jnp.exp(log_filt_seq),  # (T, K)
+        )

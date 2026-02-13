@@ -4,11 +4,19 @@ import pytest
 from numpyro.infer import Predictive
 
 from dynestyx.dynamical_models import Context, Trajectory
-from dynestyx.filters import (
-    FilterBasedHMMMarginalLogLikelihood,
-    FilterBasedMarginalLogLikelihood,
-)
+from dynestyx.filters import FilterBasedMarginalLogLikelihood
 from dynestyx.handlers import Condition, Discretizer
+from dynestyx.inference.filter_configs import (
+    ContinuousTimeDPFConfig,
+    ContinuousTimeEKFConfig,
+    ContinuousTimeEnKFConfig,
+    ContinuousTimeUKFConfig,
+    EKFConfig,
+    KFConfig,
+    PFConfig,
+    UKFConfig,
+)
+from dynestyx.inference.hmm_filters import HMMConfig
 from dynestyx.simulators import (
     DiscreteTimeSimulator,
     Simulator,
@@ -87,7 +95,7 @@ def data_conditioned_hmm(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedHMMMarginalLogLikelihood():
+        with FilterBasedMarginalLogLikelihood(filter_config=HMMConfig()):
             with Condition(context):
                 return hmm_model()
 
@@ -270,7 +278,7 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
             observations=observation_trajectory, controls=control_trajectory
         )
         with FilterBasedMarginalLogLikelihood(
-            filter_type="pf", n_filter_particles=3_000
+            filter_config=PFConfig(n_particles=3_000)
         ):
             with Condition(context):
                 return discrete_time_l63_model()
@@ -342,7 +350,8 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
+        config = ContinuousTimeEnKFConfig()  # "default" and "EnKF" both use EnKF
+        with FilterBasedMarginalLogLikelihood(filter_config=config):
             with Condition(context):
                 return continuous_time_stochastic_l63_model()
 
@@ -403,7 +412,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
             observations=observation_trajectory, controls=control_trajectory
         )
         with FilterBasedMarginalLogLikelihood(
-            filter_type="dpf", dpf_num_particles=1_000
+            filter_config=ContinuousTimeDPFConfig(n_particles=1_000)
         ):
             with Condition(context):
                 return continuous_time_stochastic_l63_model()
@@ -570,7 +579,13 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
+        config = {
+            "default": ContinuousTimeEnKFConfig(),
+            "EnKF": ContinuousTimeEnKFConfig(),
+            "EKF": ContinuousTimeEKFConfig(),
+            "UKF": ContinuousTimeUKFConfig(),
+        }[filter_type]
+        with FilterBasedMarginalLogLikelihood(filter_config=config):
             with Condition(context):
                 return continuous_time_LTI_gaussian()
 
@@ -622,7 +637,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
             observations=observation_trajectory, controls=control_trajectory
         )
         with FilterBasedMarginalLogLikelihood(
-            filter_type="dpf", dpf_num_particles=2_500
+            filter_config=ContinuousTimeDPFConfig(n_particles=2_500)
         ):
             with Condition(context):
                 return continuous_time_LTI_gaussian()
@@ -769,7 +784,7 @@ def data_conditioned_jumpy_controls():
             controls=Trajectory(times=obs_times, values=controls),
         )
         with FilterBasedMarginalLogLikelihood(
-            filter_type="default", record_filtered_states_mean=True
+            filter_config=ContinuousTimeEnKFConfig(record_filtered_states_mean=True)
         ):
             with Condition(context):
                 return jumpy_controls_model()
@@ -834,7 +849,13 @@ def data_conditioned_discrete_time_lti_kf(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
+        config = {
+            "kf": KFConfig(),
+            "taylor_kf": EKFConfig(filter_source="cuthbert"),
+            "ekf": EKFConfig(filter_source="cd_dynamax"),
+            "ukf": UKFConfig(),
+        }[filter_type]
+        with FilterBasedMarginalLogLikelihood(filter_config=config):
             with Condition(context):
                 return discrete_time_lti_model()
 
