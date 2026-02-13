@@ -2,9 +2,9 @@ from typing import Any
 
 import jax.numpy as jnp
 import numpyro.distributions as dist
+
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
-
 from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
@@ -122,18 +122,17 @@ def dsx_to_cd_dynamax(
     return cd_dynamax_params, non_gaussian_flag
 
 
-def lti_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
+def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     """Build ParamsNLGSSM from a Gaussian discrete-time DynamicalModel.
 
-    Supports:
-    - `LinearGaussianStateEvolution` (LTI: linear dynamics with Gaussian noise), and
-    - `GaussianStateEvolution` (nonlinear dynamics `F(x, u, t_now, t_next)` with Gaussian noise),
-    - with either `LinearGaussianObservation` or `GaussianObservation`.
+    Supports linear or nonlinear dynamics:
+    - `LinearGaussianStateEvolution` (LTI: f(x,u) = A@x + b + B@u with Gaussian noise),
+    - `GaussianStateEvolution` (nonlinear: F(x, u, t_now, t_next) with Gaussian noise),
+    with either `LinearGaussianObservation` (H x + d + D u) or `GaussianObservation`
+    (arbitrary h(x,u,t) with Gaussian noise).
 
-    Used by EKF/UKF in discrete_time_filters. Dynamics f(x,u) = A@x + b + B@u, or a
-    general Gaussian evolution F(x,u,t_now,t_next); emissions h(x,u) are either linear
-    (H x + d + D u) or a general Gaussian observation h(x,u,t).
-    When control_dim is 0, u has shape (0,) and the B@u / D@u terms are omitted.
+    Used by EKF/UKF in discrete filters. When control_dim is 0, u has shape (0,)
+    and the B@u / D@u terms are omitted.
     """
     if not isinstance(
         dynamics.state_evolution, (LinearGaussianStateEvolution, GaussianStateEvolution)
@@ -141,7 +140,7 @@ def lti_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         dynamics.observation_model, (LinearGaussianObservation, GaussianObservation)
     ):
         raise TypeError(
-            "lti_to_nlgssm_params expects a Gaussian DynamicalModel with "
+            "gaussian_to_nlgssm_params expects a Gaussian DynamicalModel with "
             "state_evolution either LinearGaussianStateEvolution or "
             "GaussianStateEvolution, and observation_model either "
             "LinearGaussianObservation or GaussianObservation."
@@ -151,8 +150,9 @@ def lti_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         dynamics.initial_condition, (dist.MultivariateNormal, dist.Normal)
     ):
         raise TypeError(
-            "lti_to_nlgssm_params expects initial_condition to be "
-            "MultivariateNormal or Normal."
+            "KF, EKF, and UKF require a Gaussian initial condition "
+            "(MultivariateNormal or Normal) because they propagate mean and covariance. "
+            "For non-Gaussian initial conditions, use filter_type='pf' (particle filter)."
         )
 
     evo = dynamics.state_evolution
