@@ -16,7 +16,6 @@ from dynestyx.dynamical_models import (
     State,
 )
 from dynestyx.handlers import BaseSimulator
-from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.utils import (
     _get_controls,
@@ -46,9 +45,9 @@ class SDESimulator(BaseSimulator):
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
             "dt0": dt0,
-            "tol_vbt": tol_vbt,
             "max_steps": max_steps,
         }
+        self.tol_vbt = tol_vbt
 
     def simulate(self, context: Context, dynamics) -> State:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
@@ -78,37 +77,65 @@ class SDESimulator(BaseSimulator):
         # Validate that control_dim is set when controls are present
         _validate_control_dim(dynamics, ctrl_values)
 
-        # Generate a CD-Dynamax-compatible parameter dict
-        # Works for both stochastic and deterministic dynamics
-        params, non_gaussian_flag = dsx_to_cd_dynamax(dynamics)
+        with numpyro.handlers.seed(rng_seed=self.key):
+            initial_state = numpyro.sample("x_0", dynamics.initial_condition)
 
-        # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        if non_gaussian_flag:
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-                diffeqsolve_settings=self.diffeqsolve_settings,
-            )
-        else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
+            if ctrl_times is not None and ctrl_values is not None:
+                # We use rectilinear interpolation, to match cd_dynamax
+                _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
+                control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
+                control_path_eval = control_path.evaluate
+            else:
+                control_path_eval = lambda t: None
+
+            def _drift(t, y, args):
+                u_t = control_path_eval(t)
+                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+
+            def _diffusion(t, y, args):
+                u_t = control_path_eval(t)
+                Qc_t = dynamics.state_evolution.diffusion_covariance(x=y, u=u_t, t=t)
+                L_t = dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+                Q_sqrt = jnp.linalg.cholesky(Qc_t)
+                combined = L_t @ Q_sqrt
+
+                return combined
+
+            bm = dfx.VirtualBrownianTree(
+                t0=times[0],
+                t1=times[-1],
+                tol=self.tol_vbt,
+                shape=(dynamics.state_dim,),
+                key=numpyro.prng_key(),
             )
 
-        # Sample states and emissions from the model using solver settings defined above.
-        # ensure that times has shape (num_timesteps, 1)
-        if times.ndim == 1:
-            times = times[:, None]
-        states, emissions = cd_dynamax_model.sample(
-            params=params,
-            key=self.key,
-            num_timesteps=len(times),
-            t_emissions=times,
-            inputs=ctrl_values,
-            transition_type="path",
-        )
+            terms = dfx.MultiTerm(  # type: ignore
+                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
+            )
+
+            sol = dfx.diffeqsolve(
+                terms,
+                t0=times[0],
+                t1=times[-1],
+                y0=initial_state,
+                args=None,
+                saveat=dfx.SaveAt(ts=times),
+                **self.diffeqsolve_settings,
+            )
+            states_sol = sol.ys  # (T, ..., state_dim)
+
+            def _create_observations_step(carry, t_idx):
+                x_t = states_sol[t_idx]
+                t = times[t_idx]
+                u_t = _get_val_or_None(ctrl_values, t_idx)
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                )
+                return carry, y_t
+
+        states = states_sol
+        _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))
 
         return {"times": times, "states": states, "observations": emissions}
 
@@ -358,10 +385,11 @@ class ODESimulator(BaseSimulator):
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
         # Create drift function that interpolates controls
-        # For now, use piecewise constant (nearest neighbor) interpolation
         if ctrl_times is not None and ctrl_values is not None:
             # Create LinearInterpolation for controls using diffrax
-            control_path = dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
+            # We use rectilinear interpolation, to match cd_dynamax
+            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
+            control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
