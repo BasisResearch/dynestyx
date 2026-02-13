@@ -16,7 +16,7 @@ from dynestyx.dynamical_models import (
     State,
 )
 from dynestyx.handlers import BaseSimulator
-from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
+from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.utils import (
     _get_controls,

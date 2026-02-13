@@ -24,7 +24,7 @@ from dynestyx.dynamical_models import (
     DynamicalModel,
     LinearGaussianStateEvolution,
 )
-from dynestyx.inference.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
 from dynestyx.observations import LinearGaussianObservation
 from dynestyx.utils import (
     _get_controls,

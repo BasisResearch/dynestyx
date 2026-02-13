@@ -7,7 +7,7 @@ import numpyro
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from dynestyx.dynamical_models import Context, DynamicalModel
-from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
+from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.utils import (
     _get_controls,
     _should_record_field,

@@ -3,10 +3,10 @@
 import jax
 
 from dynestyx.dynamical_models import Context, DynamicalModel
-from dynestyx.inference.cd_dynamax.discrete import (
+from dynestyx.inference.integrations.cd_dynamax.discrete import (
     run_discrete_filter as run_cd_dynamax_discrete,
 )
-from dynestyx.inference.cuthbert.discrete import (
+from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
 

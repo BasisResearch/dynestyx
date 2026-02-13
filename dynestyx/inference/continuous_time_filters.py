@@ -3,7 +3,7 @@
 import jax
 
 from dynestyx.dynamical_models import Context, DynamicalModel
-from dynestyx.inference.cd_dynamax.continuous import (
+from dynestyx.inference.integrations.cd_dynamax.continuous import (
     _CONTINUOUS_FILTER_TYPES,
     run_continuous_filter,
 )

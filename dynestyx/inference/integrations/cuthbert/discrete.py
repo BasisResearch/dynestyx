@@ -7,8 +7,8 @@ import numpyro
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
-from dynestyx.cuthbert_patches import systematic_resampling
 from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
 from dynestyx.utils import _get_controls, _should_record_field, _validate_control_dim
 
 
