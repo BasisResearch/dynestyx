@@ -1,5 +1,6 @@
 import dataclasses
 import warnings
+from collections.abc import Callable
 
 import diffrax as dfx
 import jax.numpy as jnp
@@ -84,9 +85,11 @@ class SDESimulator(BaseSimulator):
                 # We use rectilinear interpolation, to match cd_dynamax
                 _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
                 control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
-                control_path_eval = control_path.evaluate
+                control_path_eval: Callable[[Array], Array] = control_path.evaluate
             else:
-                control_path_eval = lambda t: None
+                control_path_eval = lambda t: jnp.zeros(
+                    0,
+                )
 
             def _drift(t, y, args):
                 u_t = control_path_eval(t)
