@@ -1,10 +1,7 @@
 # handlers.py
 """Handlers for dsx operations using Interpretation-based style."""
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager, contextmanager
-from functools import wraps
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import numpyro
 from effectful.ops.semantics import fwd, handler
@@ -30,34 +27,27 @@ def sample(
     raise NotHandled()
 
 
-def handles[T](
-    cls: type[T],
-) -> Callable[[Callable[..., Any]], Callable[..., AbstractContextManager[Any]]]:
-    """
-    @handles(SomeClass)
-    def f(...): ...
+class HandlesSelf:
+    """Mixin class that allows an object to act as an interpretation and its own handler.
 
-    Then: with f(*args, **kwargs): ...
-    will do: handle(SomeClass(*args, **kwargs))
+    Note: this is unidiomatic for `effectful` code, but it simplifies our documentation and development process.
+
+    In particular, it is not straightforward to define a decorator that automates interpretation handling whilst
+    keeping IDE-friendly docstrings.
     """
 
-    def decorator(fn: Callable[..., Any]) -> Callable[..., AbstractContextManager[Any]]:
-        @wraps(fn)
-        def wrapped(*args: Any, **kwargs: Any) -> AbstractContextManager[Any]:
-            @contextmanager
-            def cm():
-                obj = cls(*args, **kwargs)
-                with handler(obj):
-                    yield
+    _cm = None
 
-            return cm()
+    def __enter__(self):
+        self._cm = handler(self)
+        self._cm.__enter__()
+        return self._cm
 
-        return wrapped
-
-    return decorator
+    def __exit__(self, exc_type, exc, tb):
+        return self._cm.__exit__(exc_type, exc, tb)
 
 
-class DiscretizerObjIntp(ObjectInterpretation):
+class Discretizer(ObjectInterpretation, HandlesSelf):
     """
     Discretize a continuous-time state evolution to a discrete-time state evolution.
     Args:
@@ -89,14 +79,7 @@ class DiscretizerObjIntp(ObjectInterpretation):
         return fwd(name, dynamics, context)
 
 
-@handles(DiscretizerObjIntp)
-def Discretizer(  # type: ignore[empty-body]
-    name: str, dynamics: DynamicalModel, context: Context | None = None
-) -> FunctionOfTime:
-    pass
-
-
-class ConditionObjIntp(ObjectInterpretation):
+class Condition(ObjectInterpretation, HandlesSelf):
     def __init__(self, context: Context):
         super().__init__()
         self.context = context
@@ -113,14 +96,7 @@ class ConditionObjIntp(ObjectInterpretation):
         return fwd(name, dynamics, site_ctx)
 
 
-@handles(ConditionObjIntp)
-def Condition(  # type: ignore[empty-body]
-    name: str, dynamics: DynamicalModel, context: Context | None = None
-) -> FunctionOfTime:
-    pass
-
-
-class BaseSimulatorObjIntp(ObjectInterpretation):
+class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulators/unrollers.
 
     Concrete simulators implement `simulate(context, dynamics)` and optionally
@@ -165,7 +141,7 @@ class BaseSimulatorObjIntp(ObjectInterpretation):
         raise NotImplementedError()
 
 
-class BaseCDDynamaxLogFactorAdder(ObjectInterpretation):
+class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
     @implements(sample)
     def _sample_ds(
         self,
