@@ -19,6 +19,7 @@ from tests.models import (
     continuous_time_stochastic_l63_model,
     continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,
+    discrete_time_lti_model,
     hmm_model,
     jumpy_controls_model,
     stochastic_volatility,
@@ -774,3 +775,67 @@ def data_conditioned_jumpy_controls():
                 return jumpy_controls_model()
 
     return data_conditioned_model, synthetic
+
+
+@pytest.fixture(
+    params=[
+        (uc, ft) for uc in [False, True] for ft in ["kf", "taylor_kf", "ekf", "ukf"]
+    ],
+    ids=lambda p: f"controls={p[0]},filter={p[1]}",
+)
+def data_conditioned_discrete_time_lti_kf(request):
+    """Discrete-time LTI model using FilterBasedMarginalLogLikelihood (kf, taylor_kf, ekf, ukf)."""
+    use_controls, filter_type = request.param
+    rng_key = jr.PRNGKey(0)
+
+    # Always split into 5 keys to keep randomness consistent
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+
+    # Set true parameters for synthetic data generation
+    true_alpha = 0.4
+
+    # Generate observations at some times
+    obs_times = jnp.arange(start=0.0, stop=20.0, step=1.0)
+
+    # Always generate control trajectory to keep randomness consistent
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    # Generate synthetic data
+    true_params = {"alpha": jnp.array(true_alpha)}
+    predictive = Predictive(
+        discrete_time_lti_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+
+    # Build conditioned model
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with FilterBasedMarginalLogLikelihood(filter_type=filter_type):
+            with Condition(context):
+                return discrete_time_lti_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls

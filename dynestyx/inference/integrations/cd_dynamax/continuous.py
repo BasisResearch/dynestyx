@@ -1,11 +1,13 @@
+"""Continuous-time filters via CD-Dynamax: EnKF, DPF, EKF, UKF."""
+
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from dynestyx.dynamical_models import Context, DynamicalModel
-from dynestyx.inference.cd_dynamax.utils import dsx_to_cd_dynamax
+from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.utils import (
     _get_controls,
     _should_record_field,
@@ -17,7 +19,7 @@ type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 _CONTINUOUS_FILTER_TYPES: list[str] = ["default", "enkf", "dpf", "ekf", "ukf"]
 
 
-def _filter_continuous_time(
+def run_continuous_filter(
     name: str,
     filter_type: str,
     dynamics: DynamicalModel,
@@ -25,36 +27,28 @@ def _filter_continuous_time(
     key: jax.Array | None = None,
     filter_kwargs: dict | None = None,
     record_kwargs: dict = {},
-):
-    """Continuous-time marginal likelihood via CD-Dynamax.
+) -> None:
+    """Run continuous-time filter via CD-Dynamax.
 
     Args:
         name: Name of the factor.
+        filter_type: Type of filter (enkf, dpf, ekf, ukf, default).
         dynamics: Dynamical model to filter.
         context: Context containing the observations and controls.
         key: Random key for the filter.
         filter_kwargs: Keyword arguments for the filter.
-        record_kwargs: Keyword arguments for recording the filtered states and their covariances.
+        record_kwargs: Keyword arguments for recording filtered states.
     """
-
     if filter_kwargs is None:
         filter_kwargs = {}
 
-    # Pull observed trajectory from context
     obs_traj = context.observations
     if obs_traj.times is None or obs_traj.values is None:
-        # No observations → nothing to factor
         return
 
-    obs_times = obs_traj.times[:, None]  # shape (T, 1)
-    if isinstance(obs_traj.values, dict):
-        raise ValueError("obs_traj.values must be an Array, not a dict")
-    obs_values = obs_traj.values  # shape (T, emission_dim)
-
-    # Pull control trajectory from context and validate
+    obs_times = obs_traj.times[:, None]
+    obs_values = obs_traj.values
     ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
-
-    # Validate that control_dim is set when controls are present
     _validate_control_dim(dynamics, ctrl_values)
 
     if filter_type.lower() in ["enkf", "default", "ekf", "ukf"]:
@@ -67,10 +61,7 @@ def _filter_continuous_time(
         if filter_type.lower() in ["enkf", "default"]:
             filter_type = "EnKF"
 
-        # Generate a CD-Dynamax-compatible parameter dict using the chosen model
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-
-        # Choose a key
         key = key if key is not None else jr.PRNGKey(0)
 
         filter_kwargs = {
@@ -105,10 +96,7 @@ def _filter_continuous_time(
             input_dim=dynamics.control_dim,
         )
 
-        # Generate a CD-Dynamax-compatible parameter dict using the chosen model
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-
-        # Choose a key
         key = key if key is not None else jr.PRNGKey(0)
 
         filter_kwargs = {
@@ -134,15 +122,10 @@ def _filter_continuous_time(
 
     filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
-    # Add the marginal log likelihood as a numpyro factor
     numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
-
-    # Add the marginal log likelihood as a deterministic site for easy access.
     numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
 
-    # Optionally record the filtered states and their covariances as deterministic sites for easy access.
-    max_elems = record_kwargs["record_max_elems"]
-
+    max_elems = record_kwargs.get("record_max_elems", 100_000)
     means_shape = filtered.filtered_means.shape
     cov_shape = filtered.filtered_covariances.shape
 
