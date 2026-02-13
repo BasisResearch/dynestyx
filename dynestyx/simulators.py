@@ -203,6 +203,8 @@ class DiscreteTimeSimulatorObjIntp(BaseSimulatorObjIntp):
         ctrl_times, ctrl_values = _get_controls(context, obs_times)
 
         T = len(obs_times)
+        if T < 1:
+            raise ValueError("obs_times must contain at least one timepoint")
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
@@ -211,6 +213,13 @@ class DiscreteTimeSimulatorObjIntp(BaseSimulatorObjIntp):
         ):
             numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
             numpyro.deterministic("y_0", obs_values[0])
+            if T == 1:
+                # No transitions exist for a single-timepoint trajectory.
+                return {
+                    "times": obs_times,
+                    "states": obs_values,
+                    "observations": obs_values,
+                }
 
             # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
             if obs_values.ndim == 1:
