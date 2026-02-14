@@ -79,6 +79,9 @@ class SDESimulator(BaseSimulator):
         times = obs_traj.times
         obs_values = obs_traj.values
 
+        if times is None:
+            raise ValueError("times must be provided")
+
         # Extract controls from context if available
         ctrl_times, ctrl_values = _get_controls(context, times)
 

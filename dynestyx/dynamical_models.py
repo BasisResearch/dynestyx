@@ -83,7 +83,7 @@ class DynamicalModel(eqx.Module):
         if isinstance(state_evolution, ContinuousTimeStateEvolution):
             if state_evolution.diffusion_coefficient is not None:
                 if state_evolution.bm_dim is None:
-                    self.state_evolution.bm_dim = state_dim
+                    self.state_evolution.bm_dim = state_dim  # type: ignore[union-attr]
 
 
 class Drift(Protocol):
