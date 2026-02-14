@@ -46,6 +46,9 @@ def run_discrete_filter(
     key: jax.Array | None = None,
 ) -> None:
     """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
+
+    key = key if key is not None else numpyro.prng_key()
+
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = config_to_record_kwargs(filter_config)
 
