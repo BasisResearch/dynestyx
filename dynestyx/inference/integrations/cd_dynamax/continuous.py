@@ -46,7 +46,9 @@ def _config_to_cd_dynamax_filter_kwargs(
         "inputs": ctrl_values,
         "key": key,
         "filter_state_order": config.filter_state_order,
-        "filter_state_cov_rescaling": config.filter_state_cov_rescaling,
+        "filter_state_cov_rescaling": config.cov_rescaling
+        if config.cov_rescaling is not None
+        else 1.0,
         "diffeqsolve_max_steps": config.diffeqsolve_max_steps,
         "diffeqsolve_dt0": config.diffeqsolve_dt0,
         "diffeqsolve_kwargs": config.diffeqsolve_kwargs,
@@ -59,12 +61,22 @@ def _config_to_cd_dynamax_filter_kwargs(
         base["enkf_inflation_delta"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
         )
+        base["extra_filter_kwargs"] = {
+            "perturb_measurements": config.perturb_measurements
+            if config.perturb_measurements is not None
+            else True
+        }
     elif isinstance(config, ContinuousTimeEKFConfig):
         base["filter_type"] = "EKF"
         base["filter_emission_order"] = config.filter_emission_order
         base["filter_num_iter"] = 1
     elif isinstance(config, ContinuousTimeUKFConfig):
         base["filter_type"] = "UKF"
+        base["extra_filter_kwargs"] = {
+            "alpha": config.alpha,
+            "beta": config.beta,
+            "kappa": config.kappa,
+        }
     elif isinstance(config, ContinuousTimeDPFConfig):
         if config.resampling_method.base_method != "multinomial":
             raise ValueError(

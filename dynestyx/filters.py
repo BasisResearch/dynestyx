@@ -8,16 +8,23 @@ from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
 from dynestyx.inference.continuous_time_filters import (
     _filter_continuous_time,
 )
-from dynestyx.inference.discrete_time_filters import (
-    BaseFilterConfig,
-    _filter_discrete_time,
-)
+from dynestyx.inference.discrete_time_filters import _filter_discrete_time
 from dynestyx.inference.filter_configs import (
+    BaseFilterConfig,
     ContinuousTimeConfigs,
+    ContinuousTimeDPFConfig,
+    ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
+    ContinuousTimeUKFConfig,
     DiscreteTimeConfigs,
     EKFConfig,
+    EnKFConfig,
+    HMMConfig,
     HMMConfigs,
+    KFConfig,
+    PFConfig,
+    PFResamplingConfig,
+    UKFConfig,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm
 
@@ -94,3 +101,20 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                     f"Invalid filter config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
+
+
+__all__ = [
+    "ContinuousTimeDPFConfig",
+    "ContinuousTimeEnKFConfig",
+    "ContinuousTimeEKFConfig",
+    "ContinuousTimeUKFConfig",
+    "EKFConfig",
+    "EnKFConfig",
+    "FilterBasedMarginalLogLikelihood",
+    "HMMConfig",
+    "HMMConfigs",
+    "KFConfig",
+    "PFConfig",
+    "PFResamplingConfig",
+    "UKFConfig",
+]

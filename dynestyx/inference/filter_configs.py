@@ -23,13 +23,13 @@ class BaseFilterConfig:
     record_filtered_states_chol_cov: bool | None = None
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
+    cov_rescaling: float | None = None
 
 
 @dataclasses.dataclass
 class EnKFConfig(BaseFilterConfig):
     n_particles: int = 100
     perturb_measurements: bool | None = None
-    cov_rescaling: float | None = None
     inflation_delta: float | None = None
     filter_source: FilterSource = "cd_dynamax"
 
@@ -73,7 +73,6 @@ class UKFConfig(BaseFilterConfig):
 @dataclasses.dataclass
 class ContinuousTimeConfig:
     filter_state_order: FilterStateOrder = "first"
-    filter_state_cov_rescaling: float = 1.0
     diffeqsolve_max_steps: int = 1_000
     diffeqsolve_dt0: float = 0.01
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
