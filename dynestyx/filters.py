@@ -8,11 +8,11 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSS
 from dynestyx.dynamical_models import Context, DynamicalModel
 from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
 from dynestyx.hmm_filter import hmm_filter, hmm_log_components
-from dynestyx.inference.cd_dynamax.continuous_time_filters import (
+from dynestyx.inference.continuous_time_filters import (
     _CONTINUOUS_FILTER_TYPES,
     _filter_continuous_time,
 )
-from dynestyx.inference.cuthbert.discrete_time_filters import (
+from dynestyx.inference.discrete_time_filters import (
     _DISCRETE_FILTER_TYPES,
     _filter_discrete_time,
 )
@@ -129,8 +129,6 @@ class FilterBasedHMMMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
         if obs.times is None or obs.values is None:
             return
 
-        if isinstance(obs.values, dict):
-            raise ValueError("obs.values must be an Array, not a dict")
         obs_values = obs.values
 
         # Pull control trajectory from context and validate

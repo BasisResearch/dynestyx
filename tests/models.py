@@ -6,6 +6,7 @@ import dynestyx as dsx
 from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    LinearGaussianStateEvolution,
 )
 from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
@@ -275,6 +276,35 @@ def continuous_time_deterministic_l63_model():
     )
 
     # Return a sampled dynamical model, named "f".
+    dsx.sample("f", dynamics)
+
+
+def discrete_time_lti_model():
+    """Discrete-time LTI with one sampled parameter alpha (F[0,0]); for use with filter_type='kf'.
+    Supports controls: when control_trajectory is provided in context, B and D are used (state_dim=2, control_dim=1).
+    """
+    alpha = numpyro.sample("alpha", dist.Uniform(-0.7, 0.7))
+    state_dim = 2
+    emission_dim = 1
+    control_dim = 1
+    A = jnp.array([[alpha, 0.0], [0.0, 0.8]])
+    Q = 0.1 * jnp.eye(state_dim)
+    H = jnp.array([[1.0, 0.0]])
+    R = jnp.array([[0.5**2]])
+    initial_mean = jnp.zeros(state_dim)
+    initial_cov = jnp.eye(state_dim)
+    B = jnp.array([[0.1], [0.0]])
+    b = jnp.zeros(state_dim)
+    D = jnp.array([[0.01]])
+    d = jnp.zeros(emission_dim)
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(initial_mean, initial_cov),
+        state_evolution=LinearGaussianStateEvolution(A=A, B=B, bias=b, cov=Q),
+        observation_model=LinearGaussianObservation(H=H, D=D, bias=d, R=R),
+        state_dim=state_dim,
+        observation_dim=emission_dim,
+        control_dim=control_dim,
+    )
     dsx.sample("f", dynamics)
 
 

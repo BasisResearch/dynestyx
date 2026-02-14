@@ -127,15 +127,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         simulated = self.simulate(context, dynamics)
 
         # Add the results from the simulator as deterministic sites
-        if isinstance(simulated, dict):
-            for site_name, trajectory in simulated.items():
-                # TODO: dw: check this type ignore. I think it has a point...
-                numpyro.deterministic(site_name, trajectory)  # type: ignore
-        else:
-            # If it's just an array (shouldn't happen for simulate() but handle it)
-            numpyro.deterministic("value", simulated)
+        for site_name, trajectory in simulated.items():
+            numpyro.deterministic(site_name, trajectory)
 
-    def simulate(self, context: Context, dynamics: DynamicalModel) -> State:
+    def simulate(self, context: Context, dynamics: DynamicalModel) -> dict[str, State]:
         """
         Args:
             context (Context): Context containing times and potentially controls.

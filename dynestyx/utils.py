@@ -103,10 +103,6 @@ def _get_controls(
     # Controls are provided (have times), extract and validate
     ctrl_values = ctrl_traj.values
 
-    # Validate ctrl_values is not a dict
-    if isinstance(ctrl_values, dict):
-        raise ValueError("ctrl_values must be an Array or None, not a dict")
-
     return ctrl_times, ctrl_values
 
 

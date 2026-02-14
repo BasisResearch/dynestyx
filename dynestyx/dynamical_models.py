@@ -5,12 +5,14 @@ from typing import Any, Protocol
 
 import equinox as eqx
 import jax
+import jax.numpy as jnp
+import numpyro.distributions as dist
 from numpyro._typing import DistributionT
 
 # ----------------------------------------------------------------------
 # TYPE ALIASES
 # ----------------------------------------------------------------------
-State = jax.Array | dict[str, jax.Array]
+State = jax.Array
 dState = State
 Observation = jax.Array
 Control = State | None
@@ -143,6 +145,65 @@ class DiscreteTimeStateEvolution:
         t_next: Time,
     ) -> DistributionT:
         raise NotImplementedError()
+
+
+class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
+    """
+    x_t_next | x_t_now, u_t_now, t_now, t_next ~ Normal( A x_t_now + B u_t_now + bias, cov )
+
+    where A is the observation matrix, B is the control matrix, bias is the bias, and cov is the state noise covariance.
+    """
+
+    A: jax.Array
+    B: jax.Array | None = None
+    bias: jax.Array | None = None
+    cov: jax.Array
+
+    def __init__(
+        self,
+        A: jax.Array,
+        cov: jax.Array,
+        B: jax.Array | None = None,
+        bias: jax.Array | None = None,
+    ):
+        self.A = A
+        self.B = B
+        self.bias = bias
+        self.cov = cov
+
+    def __call__(self, x, u, t_now, t_next):
+        loc = jnp.dot(self.A, x)
+        if self.bias is not None:
+            loc += self.bias
+        if self.B is not None and u is not None:
+            loc += jnp.dot(self.B, u)
+
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
+
+
+class GaussianStateEvolution(DiscreteTimeStateEvolution):
+    """
+    x_t_next | x_t_now, u_t_now, t_now, t_next ~ Normal( F(x_t_now, u_t_now, t_now, t_next), cov )
+
+    where F is a callable mapping (State, Control, Time) -> State
+    and cov is the state noise covariance.
+    """
+
+    F: Callable[[State, Control, Time, Time], State]
+    cov: jax.Array
+
+    def __init__(
+        self,
+        F: Callable[[State, Control, Time, Time], State],
+        cov: jax.Array,
+    ):
+        self.F = F
+        self.cov = cov
+
+    def __call__(self, x, u, t_now, t_next):
+        loc = self.F(x, u, t_now, t_next)
+
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
 
 
 @dataclasses.dataclass
