@@ -75,7 +75,6 @@ def run_discrete_filter(
     dt0 = times[1] - times[0]
     time_prev = jnp.concatenate([times[:1] - dt0, times[:-1]], axis=0)
     u_prev = jnp.concatenate([ctrl_values[:1], ctrl_values[:-1]], axis=0)
-    key = key if key is not None else numpyro.prng_key()
 
     cuthbert_inputs = CuthbertInputs(
         y=ys, u=ctrl_values, u_prev=u_prev, time=times, time_prev=time_prev

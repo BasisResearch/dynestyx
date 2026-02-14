@@ -89,12 +89,12 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
                     f"Invalid filter config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
-            _filter_continuous_time(*filter_inputs, key)
+            _filter_continuous_time(*filter_inputs, key=key)
         else:
             if isinstance(config, HMMConfigs):
                 _filter_hmm(*filter_inputs)  # type: ignore[arg-type]
             elif isinstance(config, DiscreteTimeConfigs):
-                _filter_discrete_time(*filter_inputs)
+                _filter_discrete_time(*filter_inputs, key=key)
             else:
                 valid = [c.__name__ for c in HMMConfigs + DiscreteTimeConfigs]
                 raise ValueError(
