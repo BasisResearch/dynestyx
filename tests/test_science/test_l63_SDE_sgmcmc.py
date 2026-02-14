@@ -92,10 +92,7 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         k: jnp.stack([positions[i][k] for i in range(len(positions))])
         for k in positions[0].keys()
     }
-    # Postprocess each sample separately: the model's drift uses rho in the closure,
-    # and constrain_fn runs the full model trace. Passing batched params (1, 250) causes
-    # rho to have shape (1, 250) in the drift, leading to "Cannot concatenate arrays
-    # with different numbers of dimensions" when building the SDE terms.
+
     _postprocess = postprocess_fn()
 
     def _postprocess_single(i):
