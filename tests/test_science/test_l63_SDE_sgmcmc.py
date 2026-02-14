@@ -102,9 +102,7 @@ def test_mcmc_inference(data_conditioned_continuous_time_stochastic_l63, num_sam
         return _postprocess({k: v[i] for k, v in positions.items()})
 
     postprocessed = jax.vmap(_postprocess_single)(jnp.arange(num_samples))
-    posterior_samples = {
-        k: v[None, ...] for k, v in postprocessed.items()
-    }
+    posterior_samples = {k: v[None, ...] for k, v in postprocessed.items()}
 
     assert "rho" in posterior_samples
     posterior_rho = posterior_samples["rho"]
