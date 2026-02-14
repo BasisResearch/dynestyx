@@ -110,7 +110,7 @@ def discrete_time_l63_model():
     # In the future, we will build internal logic to identify linear-gaussian observation models
     # and extract H, R automatically.
 
-    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
+    # TODO: Functions for drift, diffusion_coefficient should not
     # require (x, u, t) arguments if they are not used. We can wrap them internally.
     # e.g. diffusion_coefficient=jnp.eye(3)
     # e.g. drift = lambda x: F(x, rho)
@@ -141,7 +141,7 @@ def continuous_time_stochastic_l63_model():
             )
             + (10 * u if u is not None else jnp.zeros(3)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3),
+            bm_dim=3,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
@@ -154,7 +154,7 @@ def continuous_time_stochastic_l63_model():
     # In the future, we will build internal logic to identify linear-gaussian observation models
     # and extract H, R automatically.
 
-    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
+    # TODO: Functions for drift, diffusion_coefficient should not
     # require (x, u, t) arguments if they are not used. We can wrap them internally.
     # e.g. diffusion_coefficient=jnp.eye(3)
     # e.g. drift = lambda x: F(x, rho)
@@ -184,7 +184,7 @@ def continuous_time_stochastic_l63_model_dirac_obs():
             )
             + (10 * u if u is not None else jnp.zeros_like(x)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3),
+            bm_dim=3,
         ),
         observation_model=DiracIdentityObservation(),
     )
@@ -207,7 +207,7 @@ def continuous_time_LTI_gaussian():
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: A @ x + (10 * u if u is not None else jnp.zeros(2)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(2),
-            diffusion_covariance=lambda x, u, t: jnp.eye(2),
+            bm_dim=2,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])

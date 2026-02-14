@@ -36,9 +36,9 @@ class SDESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-        dt0: float = 0.01,
-        tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
-        max_steps: int = int(1e5),
+        dt0: float = 1e-2,
+        tol_vbt: float | None = None,
+        max_steps: int | None = None,
     ):
         self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
         self.diffeqsolve_settings = {
@@ -48,7 +48,11 @@ class SDESimulator(BaseSimulator):
             "dt0": dt0,
             "max_steps": max_steps,
         }
-        self.tol_vbt = tol_vbt
+
+        if tol_vbt is None:
+            self.tol_vbt = dt0 / 2.0
+        else:
+            self.tol_vbt = tol_vbt
 
     def simulate(self, context: Context, dynamics) -> State:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
@@ -58,19 +62,22 @@ class SDESimulator(BaseSimulator):
 
         if (
             dynamics.state_evolution.diffusion_coefficient is None
-            or dynamics.state_evolution.diffusion_covariance is None
+            or dynamics.state_evolution.bm_dim is None
         ):
             raise ValueError(
-                "SDESimulator requires both diffusion_coefficient and diffusion_covariance to be "
+                "SDESimulator requires both diffusion_coefficient and bm_dim to be "
                 f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
-                f"cov={dynamics.state_evolution.diffusion_covariance}). "
+                f"bm_dim={dynamics.state_evolution.bm_dim}). "
                 "Use ODESimulator for deterministic dynamics."
             )
 
         # Extract times from context
         if context.observations is None or context.observations.times is None:
             raise ValueError("context.observations.times must be provided")
-        times = context.observations.times
+
+        obs_traj = context.observations
+        times = obs_traj.times
+        obs_values = obs_traj.values
 
         # Extract controls from context if available
         ctrl_times, ctrl_values = _get_controls(context, times)
@@ -97,18 +104,13 @@ class SDESimulator(BaseSimulator):
 
             def _diffusion(t, y, args):
                 u_t = control_path_eval(t)
-                Qc_t = dynamics.state_evolution.diffusion_covariance(x=y, u=u_t, t=t)
-                L_t = dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
-                Q_sqrt = jnp.linalg.cholesky(Qc_t)
-                combined = L_t @ Q_sqrt
-
-                return combined
+                return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
             bm = dfx.VirtualBrownianTree(
                 t0=times[0],
                 t1=times[-1],
                 tol=self.tol_vbt,
-                shape=(dynamics.state_dim,),
+                shape=(dynamics.state_evolution.bm_dim,),
                 key=numpyro.prng_key(),
             )
 
@@ -134,6 +136,7 @@ class SDESimulator(BaseSimulator):
                 y_t = numpyro.sample(
                     f"y_{t_idx}",
                     dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, t_idx),
                 )
                 return carry, y_t
 
@@ -462,7 +465,7 @@ class Simulator(BaseSimulator):
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
                 if (
                     dynamics.state_evolution.diffusion_coefficient is None
-                    or dynamics.state_evolution.diffusion_covariance is None
+                    or dynamics.state_evolution.bm_dim is None
                 ):
                     self.simulator = ODESimulator(*self.args, **self.kwargs)
                 else:

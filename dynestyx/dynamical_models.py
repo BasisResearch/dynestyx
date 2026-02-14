@@ -80,6 +80,11 @@ class DynamicalModel(eqx.Module):
         self.observation_dim: int = observation_dim
         self.control_dim: int = control_dim
 
+        if isinstance(state_evolution, ContinuousTimeStateEvolution):
+            if state_evolution.diffusion_coefficient is not None:
+                if state_evolution.bm_dim is None:
+                    self.state_evolution.bm_dim = state_dim
+
 
 class Drift(Protocol):
     """
@@ -104,7 +109,7 @@ class ContinuousTimeStateEvolution:
 
     drift: Drift | None = None
     diffusion_coefficient: Drift | None = None
-    diffusion_covariance: Drift | None = None
+    bm_dim: int | None = None
 
     ...
 
