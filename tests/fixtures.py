@@ -350,7 +350,10 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         context = Context(
             observations=observation_trajectory, controls=control_trajectory
         )
-        config = ContinuousTimeEnKFConfig()  # "default" and "EnKF" both use EnKF
+        config = {
+            "default": ContinuousTimeEnKFConfig(),
+            "EnKF": ContinuousTimeEnKFConfig(),
+        }[filter_type]
         with FilterBasedMarginalLogLikelihood(filter_config=config):
             with Condition(context):
                 return continuous_time_stochastic_l63_model()
