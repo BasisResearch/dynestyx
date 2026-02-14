@@ -784,7 +784,7 @@ def data_conditioned_jumpy_controls():
             controls=Trajectory(times=obs_times, values=controls),
         )
         with FilterBasedMarginalLogLikelihood(
-            filter_config=ContinuousTimeEnKFConfig(record_filtered_states_mean=True)
+            filter_config=EKFConfig(record_filtered_states_mean=True)
         ):
             with Condition(context):
                 return jumpy_controls_model()

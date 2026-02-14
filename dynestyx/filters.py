@@ -30,7 +30,7 @@ def _default_filter_config(dynamics: DynamicalModel):
         return ContinuousTimeEnKFConfig()
 
     # default to particle filter in discrete time
-    return EKFConfig(filter_source="cd_dynamax")
+    return EKFConfig(filter_source="cuthbert")
 
 
 @dataclasses.dataclass
