@@ -32,7 +32,7 @@ class BaseFilterConfig:
 
 @dataclasses.dataclass
 class EnKFConfig(BaseFilterConfig):
-    n_particles: int = 100
+    n_particles: int = 30
     crn_seed: jax.Array | None = dataclasses.field(
         default_factory=lambda: jr.PRNGKey(0)
     )
