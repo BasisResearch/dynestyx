@@ -110,11 +110,16 @@ def run_continuous_filter(
         key: Random key (optional).
     """
 
-    key = key if key is not None else numpyro.prng_key()
-
     obs_traj = context.observations
     if obs_traj.times is None or obs_traj.values is None:
         return
+
+    if isinstance(filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)):
+        if key is None:
+            raise ValueError(
+                f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
 
     obs_times = obs_traj.times[:, None]
     obs_values = obs_traj.values

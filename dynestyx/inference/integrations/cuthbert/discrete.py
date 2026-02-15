@@ -47,8 +47,6 @@ def run_discrete_filter(
 ) -> None:
     """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
 
-    key = key if key is not None else numpyro.prng_key()
-
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = config_to_record_kwargs(filter_config)
 
@@ -84,6 +82,11 @@ def run_discrete_filter(
     )
 
     if isinstance(filter_config, PFConfig):
+        if key is None:
+            raise ValueError(
+                "Particle filter requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
         filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
     elif isinstance(filter_config, (EKFConfig, EnKFConfig)):
         filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)

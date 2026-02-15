@@ -80,7 +80,7 @@ class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
 
         filter_inputs = (name, dynamics, context, config)
 
-        key = numpyro.prng_key()
+        key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
 
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):

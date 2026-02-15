@@ -4,6 +4,9 @@ import dataclasses
 import math
 from typing import Literal
 
+import jax
+import jax.random as jr
+
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterSource = Literal["cuthbert", "cd_dynamax", "dynestyx"]
@@ -24,11 +27,15 @@ class BaseFilterConfig:
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
     cov_rescaling: float | None = None
+    crn_seed: jax.Array | None = None
 
 
 @dataclasses.dataclass
 class EnKFConfig(BaseFilterConfig):
     n_particles: int = 100
+    crn_seed: jax.Array | None = dataclasses.field(
+        default_factory=lambda: jr.PRNGKey(0)
+    )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
     filter_source: FilterSource = "cd_dynamax"
