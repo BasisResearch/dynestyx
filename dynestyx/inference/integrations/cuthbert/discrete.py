@@ -192,7 +192,7 @@ def _add_sites_pf(
     if particles.ndim == 2:
         particles = particles[..., None]  # (T+1, n_particles) -> (T+1, n_particles, 1)
     max_elems = record_kwargs["record_max_elems"]
-    t1, _, n_particles, state_dim = particles.shape
+    t1, n_particles, state_dim = particles.shape
 
     add_particles = _should_record_field(
         record_kwargs.get("record_filtered_particles"), particles.shape, max_elems
