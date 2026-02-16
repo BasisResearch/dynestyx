@@ -11,10 +11,7 @@ from dynestyx.dynamical_models import (
     ObservationModel,
     Trajectory,
 )
-from dynestyx.filters import (
-    FilterBasedHMMMarginalLogLikelihood,
-    FilterBasedMarginalLogLikelihood,
-)
+from dynestyx.filters import FilterBasedMarginalLogLikelihood
 from dynestyx.handlers import Condition, Discretizer, sample
 from dynestyx.observations import (
     DiracIdentityObservation,
@@ -33,7 +30,6 @@ __all__ = [
     "Discretizer",
     "ObservationModel",
     "Trajectory",
-    "FilterBasedHMMMarginalLogLikelihood",
     "FilterBasedMarginalLogLikelihood",
     "Condition",
     "sample",
