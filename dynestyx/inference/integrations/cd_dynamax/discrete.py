@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 
-import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
@@ -24,6 +23,13 @@ from dynestyx.dynamical_models import (
     DynamicalModel,
     LinearGaussianStateEvolution,
 )
+from dynestyx.inference.filter_configs import (
+    BaseFilterConfig,
+    EKFConfig,
+    KFConfig,
+    UKFConfig,
+    config_to_record_kwargs,
+)
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
 from dynestyx.observations import LinearGaussianObservation
 from dynestyx.utils import (
@@ -31,8 +37,6 @@ from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,
 )
-
-_CD_DYNAMAX_DISCRETE_FILTER_TYPES: list[str] = ["kf", "ekf", "ukf"]
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
@@ -175,22 +179,22 @@ def _add_kf_sites(
     name: str, posterior: PosteriorGSSMFiltered, record_kwargs: dict
 ) -> None:
     """Add filtered means/covariances as deterministic sites (dynamax KF posterior)."""
-    max_elems = record_kwargs.get("record_max_elems", 100_000)
+    max_elems = record_kwargs["record_max_elems"]
     if posterior.filtered_means is None:
         return
     means = posterior.filtered_means
     covs = posterior.filtered_covariances
     T1, state_dim = means.shape
     add_mean = _should_record_field(
-        record_kwargs.get("record_filtered_states_mean"), means.shape, max_elems
+        record_kwargs["record_filtered_states_mean"], means.shape, max_elems
     )
     add_cov = _should_record_field(
-        record_kwargs.get("record_filtered_states_cov"),
+        record_kwargs["record_filtered_states_cov"],
         (T1, state_dim, state_dim),
         max_elems,
     )
     add_cov_diag = _should_record_field(
-        record_kwargs.get("record_filtered_states_cov_diag"), (T1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (T1, state_dim), max_elems
     )
     if add_mean:
         numpyro.deterministic(f"{name}_filtered_states_mean", means)
@@ -203,34 +207,36 @@ def _add_kf_sites(
 
 def run_discrete_filter(
     name: str,
-    filter_type: str,
     dynamics: DynamicalModel,
     context: Context,
-    key: jax.Array | None = None,
-    filter_kwargs: dict | None = None,
-    record_kwargs: dict | None = None,
+    filter_config: BaseFilterConfig,
 ) -> None:
-    """Run discrete-time filter via cd-dynamax (KF, EKF, UKF)."""
-    if filter_kwargs is None:
-        filter_kwargs = {}
-    if record_kwargs is None:
-        record_kwargs = {}
+    """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).
 
-    ft = filter_type.lower()
-    if ft == "kf":
+    Args:
+        name: Name of the factor.
+        dynamics: Dynamical model to filter.
+        context: Context containing observations and controls.
+        filter_config: KFConfig, EKFConfig, or UKFConfig.
+    """
+
+    record_kwargs = config_to_record_kwargs(filter_config)
+
+    if isinstance(filter_config, KFConfig):
         _filter_discrete_time_dynamax_kf(name, dynamics, context, record_kwargs)
-    elif ft == "ekf":
-        num_iter = filter_kwargs.get("num_iter", 1)
-        _filter_discrete_time_dynamax_ekf(
-            name, dynamics, context, record_kwargs, num_iter=num_iter
+    elif isinstance(filter_config, EKFConfig):
+        _filter_discrete_time_dynamax_ekf(name, dynamics, context, record_kwargs)
+    elif isinstance(filter_config, UKFConfig):
+        hyperparams = UKFHyperParams(
+            alpha=filter_config.alpha,
+            beta=filter_config.beta,
+            kappa=filter_config.kappa,
         )
-    elif ft == "ukf":
-        hyperparams = filter_kwargs.get("ukf_hyperparams")
         _filter_discrete_time_dynamax_ukf(
             name, dynamics, context, record_kwargs, hyperparams=hyperparams
         )
     else:
         raise ValueError(
-            f"Unsupported cd-dynamax discrete filter type: {filter_type}. "
-            f"Expected one of {_CD_DYNAMAX_DISCRETE_FILTER_TYPES}."
+            f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
+            "Expected KFConfig, EKFConfig, or UKFConfig."
         )
