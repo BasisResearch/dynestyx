@@ -1,5 +1,4 @@
 import dataclasses
-import warnings
 from collections.abc import Callable
 
 import diffrax as dfx
@@ -147,48 +146,6 @@ class SDESimulator(BaseSimulator):
         _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))
 
         return {"times": times, "states": states, "observations": emissions}
-
-    def add_solved_sites(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        context: Context,
-    ):
-        # Extract observed trajectory (original 1D times)
-        obs_traj = context.observations
-        if obs_traj is None or obs_traj.times is None:
-            raise ValueError("context.observations.times must be provided")
-        obs_times = obs_traj.times
-        obs_values = obs_traj.values if obs_traj is not None else None
-
-        # Controls aligned with observed times
-        _, ctrl_values = _get_controls(context, obs_times)
-
-        # Run the simulator to obtain states/emissions (times reshaped as needed for cd-dynamax)
-        simulated = self.simulate(context, dynamics)
-        states = simulated["states"]
-        emissions = simulated["observations"]
-
-        # Deterministic sites for times, states, emissions
-        numpyro.deterministic("times", obs_times)
-        numpyro.deterministic("states", states)
-        numpyro.deterministic("observations", emissions)
-
-        # Observation sample sites using the model's observation distribution only when obs values are provided.
-        # If obs_values is None and emissions were produced, we avoid resampling to keep consistency with cd-dynamax.
-        if obs_values is not None:
-            T = len(obs_times)
-            warnings.warn(
-                "Adding observation sample sites in the SDESimulator will not result in proper state inference. While it provides a technically unbiased estimate of the marginal likelihood for system identification, it is highly inefficient and is not recommended."
-            )
-            for t_idx in range(T):
-                u_t = _get_val_or_None(ctrl_values, t_idx)
-                t = obs_times[t_idx]
-                numpyro.sample(
-                    f"y_{t_idx}",
-                    dynamics.observation_model(states[t_idx], u_t, t),
-                    obs=_get_val_or_None(obs_values, t_idx),
-                )
 
 
 @dataclasses.dataclass
@@ -398,6 +355,7 @@ class ODESimulator(BaseSimulator):
                 # Evaluate control at time t using interpolation
                 u_t = control_path.evaluate(t)
                 return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+
         else:
 
             def f(t, y, args):
