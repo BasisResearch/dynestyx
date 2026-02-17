@@ -16,7 +16,7 @@ SAVE_FIG = True
 
 
 @pytest.mark.profile_likelihood
-def test_profile_hmm():
+def test_profile_hmm(data_conditioned_hmm):
     data_conditioned_model, true_params, synthetic, use_controls = data_conditioned_hmm
     output_dir_name = "profile_hmm_filter_hmm" + ("_controlled" if use_controls else "")
     output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
@@ -32,7 +32,7 @@ def test_profile_hmm():
 
 
 @pytest.mark.profile_likelihood
-def test_profile_discrete_time_l63():
+def test_profile_discrete_time_l63(data_conditioned_discrete_time_l63_filter):
     (
         data_conditioned_model,
         true_params,
@@ -55,7 +55,7 @@ def test_profile_discrete_time_l63():
 
 
 @pytest.mark.profile_likelihood
-def test_profile_discrete_time_l63_pf():
+def test_profile_discrete_time_l63_pf(data_conditioned_discrete_time_l63_filter_pf):
     (
         data_conditioned_model,
         true_params,
@@ -78,7 +78,9 @@ def test_profile_discrete_time_l63_pf():
 
 
 @pytest.mark.profile_likelihood
-def test_profile_continuous_time_l63_sde():
+def test_profile_continuous_time_l63_sde(
+    data_conditioned_continuous_time_stochastic_l63,
+):
     (
         data_conditioned_model,
         true_params,
@@ -104,7 +106,7 @@ def test_profile_continuous_time_l63_sde():
 
 
 @pytest.mark.profile_likelihood
-def test_profile_continuous_time_lti():
+def test_profile_continuous_time_lti(data_conditioned_continuous_time_lti_gaussian):
     (
         data_conditioned_model,
         true_params,
@@ -130,7 +132,7 @@ def test_profile_continuous_time_lti():
 
 
 @pytest.mark.profile_likelihood
-def test_profile_discrete_time_lti():
+def test_profile_discrete_time_lti(data_conditioned_discrete_time_lti_kf):
     (
         data_conditioned_model,
         true_params,
