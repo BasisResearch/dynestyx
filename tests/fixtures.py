@@ -862,4 +862,4 @@ def data_conditioned_discrete_time_lti_kf(request):
             with Condition(context):
                 return discrete_time_lti_model()
 
-    return data_conditioned_model, true_params, synthetic, use_controls
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
