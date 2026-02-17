@@ -35,7 +35,7 @@ class SDESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-        dt0: float = 1e-2,
+        dt0: float = 1e-4,
         tol_vbt: float | None = None,
         max_steps: int | None = None,
     ):
