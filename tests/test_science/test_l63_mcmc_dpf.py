@@ -8,7 +8,6 @@ from tests.fixtures import data_conditioned_continuous_time_l63_dpf  # noqa: F40
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
-OUTPUT_DIR = get_output_dir("test_l63_mcmc_dpf")
 
 
 @pytest.mark.parametrize("num_samples", [250])
