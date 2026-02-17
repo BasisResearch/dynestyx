@@ -6,8 +6,8 @@ on:
   pull_request:
     branches:
       - main
-      - 'staging-*'
-      - '*'
+      - "staging-*"
+      - "*"
   workflow_dispatch:
 
 jobs:
@@ -21,7 +21,6 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -34,3 +33,7 @@ jobs:
 
       - name: Lint
         run: uv run ./scripts/lint.sh
+
+      - name: Build docs
+        run: |
+          source .venv/bin/activate && mkdocs build
