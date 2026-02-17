@@ -1,7 +1,5 @@
 """Profile likelihood tests for all filter-based models. Tests each system with all available filters from fixture params."""
 
-import pytest
-
 from tests.fixtures import (
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F401
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F401
