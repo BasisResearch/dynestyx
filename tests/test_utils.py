@@ -107,10 +107,6 @@ def run_profile_likelihood(
     return param_grid, profile
 
 
-# Lazy-initialized master directory so all test_science runs in a session share the same timestamped root
-_test_science_master_dir: Path | None = None
-
-
 def get_output_dir(test_name: str) -> Path:
     """Create and return an output directory for a test within the master output directory.
 
@@ -123,19 +119,16 @@ def get_output_dir(test_name: str) -> Path:
     Returns:
         Path to the output directory (e.g., ".output/20260217_102927/test_discreteTime_generic")
     """
-    global _test_science_master_dir
-
-    # Use env var if set (e.g. by test runner script)
     master_dir_str = os.environ.get("TEST_OUTPUT_MASTER_DIR", None)
     if master_dir_str is not None:
         master_dir = Path(master_dir_str)
-    elif _test_science_master_dir is not None:
-        master_dir = _test_science_master_dir
     else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        master_dir = Path(".output") / timestamp
-        master_dir.mkdir(parents=True, exist_ok=True)
-        _test_science_master_dir = master_dir
+        if not hasattr(get_output_dir, "_master_dir"):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            master_dir = Path(".output") / timestamp
+            master_dir.mkdir(parents=True, exist_ok=True)
+            get_output_dir._master_dir = master_dir  # type: ignore[attr-defined]
+        master_dir = get_output_dir._master_dir  # type: ignore[attr-defined]
 
     output_dir = master_dir / test_name
     output_dir.mkdir(parents=True, exist_ok=True)
