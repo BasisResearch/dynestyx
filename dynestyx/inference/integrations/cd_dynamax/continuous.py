@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpyro
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -15,9 +15,9 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.utils import (
-    _get_controls,
     _should_record_field,
     _validate_control_dim,
+    _validate_controls,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -95,23 +95,30 @@ def _config_to_cd_dynamax_filter_kwargs(
 def run_continuous_filter(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: ContinuousTimeFilterConfig,
     key: jax.Array | None = None,
+    *,
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Run continuous-time filter via CD-Dynamax.
 
     Args:
         name: Name of the factor.
         dynamics: Dynamical model to filter.
-        context: Context containing the observations and controls.
         filter_config: ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig,
             ContinuousTimeEKFConfig, or ContinuousTimeUKFConfig.
         key: Random key (optional).
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
     """
 
-    obs_traj = context.observations
-    if obs_traj.times is None or obs_traj.values is None:
+    if obs_times is None or obs_values is None:
         return
 
     if isinstance(filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)):
@@ -121,10 +128,17 @@ def run_continuous_filter(
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
             )
 
-    obs_times = obs_traj.times[:, None]
-    obs_values = obs_traj.values
-    ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
+    obs_times_arr = jnp.asarray(obs_times)
+    if obs_times_arr.ndim == 1:
+        obs_times_arr = obs_times_arr[:, None]
+    _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
+
+    control_dim = dynamics.control_dim
+    if ctrl_values is not None:
+        ctrl_vals = ctrl_values
+    else:
+        ctrl_vals = jnp.zeros((obs_times_arr.shape[0], control_dim))
 
     if isinstance(filter_config, ContinuousTimeDPFConfig):
         cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
@@ -141,7 +155,7 @@ def run_continuous_filter(
 
     params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
     filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-        filter_config, params, obs_values, obs_times, ctrl_values, key
+        filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
     )
 
     filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore

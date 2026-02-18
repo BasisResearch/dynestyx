@@ -11,7 +11,12 @@ from dynestyx.dynamical_models import (
 from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
 
-def hmm_model():
+def hmm_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     K = 3  # number of discrete states
 
     # -------------------------------------------------
@@ -64,10 +69,22 @@ def hmm_model():
         observation_model=observation_model,
     )
 
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def discrete_time_l63_model():
+def discrete_time_l63_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
 
@@ -117,10 +134,22 @@ def discrete_time_l63_model():
     # e.g. drift = lambda x: F(x, rho)
 
     # Return a sampled dynamical model, named "f".
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def continuous_time_stochastic_l63_model():
+def continuous_time_stochastic_l63_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
 
@@ -151,22 +180,22 @@ def continuous_time_stochastic_l63_model():
         ),
     )
 
-    # TODO: observation_model should simply be dist.MultivariateNormal(...) here,
-    # but for now we wrap it in LinearGaussianObservation for so that we can extract
-    # H and R later for CD-Dynamax conversion (structure exploiting algorithms).
-    # In the future, we will build internal logic to identify linear-gaussian observation models
-    # and extract H, R automatically.
-
-    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
-    # require (x, u, t) arguments if they are not used. We can wrap them internally.
-    # e.g. diffusion_coefficient=jnp.eye(3)
-    # e.g. drift = lambda x: F(x, rho)
-
-    # Return a sampled dynamical model, named "f".
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def continuous_time_stochastic_l63_model_dirac_obs():
+def continuous_time_stochastic_l63_model_dirac_obs(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """L63 SDE with full-state Dirac observations (observation_dim=state_dim=3)."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
 
@@ -193,10 +222,22 @@ def continuous_time_stochastic_l63_model_dirac_obs():
         ),
         observation_model=DiracIdentityObservation(),
     )
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def continuous_time_LTI_gaussian():
+def continuous_time_LTI_gaussian(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """2D linear SDE with a sampled coupling."""
     rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
 
@@ -218,10 +259,23 @@ def continuous_time_LTI_gaussian():
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
         ),
     )
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def stochastic_volatility(identity_observation: bool = False):
+def stochastic_volatility(
+    identity_observation: bool = False,
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """Discrete-time stochastic volatility: log-variance follows AR(1).
     One unknown parameter: phi (persistence). No controls.
     If identity_observation=True, y_t = x_t (DiracIdentityObservation); else noisily observed."""
@@ -249,10 +303,22 @@ def stochastic_volatility(identity_observation: bool = False):
         observation_model=observation_model,
     )
 
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def continuous_time_deterministic_l63_model():
+def continuous_time_deterministic_l63_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """Model that samples drift parameter rho and uses it in dynamics (ODE, no diffusion)."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
 
@@ -282,10 +348,22 @@ def continuous_time_deterministic_l63_model():
     )
 
     # Return a sampled dynamical model, named "f".
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def discrete_time_lti_model():
+def discrete_time_lti_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     """Discrete-time LTI with one sampled parameter alpha (F[0,0]); for use with filter_type='kf'.
     Supports controls: when control_trajectory is provided in context, B and D are used (state_dim=2, control_dim=1).
     """
@@ -311,10 +389,22 @@ def discrete_time_lti_model():
         observation_dim=emission_dim,
         control_dim=control_dim,
     )
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
 
 
-def jumpy_controls_model():
+def jumpy_controls_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
     dynamics = DynamicalModel(
         state_dim=1,
         observation_dim=1,
@@ -328,4 +418,11 @@ def jumpy_controls_model():
         ),
     )
 
-    dsx.sample("f", dynamics)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )

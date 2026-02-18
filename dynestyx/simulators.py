@@ -9,7 +9,6 @@ from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.dynamical_models import (
-    Context,
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
@@ -19,9 +18,9 @@ from dynestyx.handlers import BaseSimulator
 from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.utils import (
-    _get_controls,
     _get_val_or_None,
     _validate_control_dim,
+    _validate_controls,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -50,7 +49,16 @@ class SDESimulator(BaseSimulator):
             "max_steps": max_steps,
         }
 
-    def simulate(self, context: Context, dynamics) -> dict[str, State]:
+    def simulate(
+        self,
+        dynamics,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> dict[str, State]:
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -67,15 +75,11 @@ class SDESimulator(BaseSimulator):
                 "Use ODESimulator for deterministic dynamics."
             )
 
-        # Extract times from context
-        if context.observations is None or context.observations.times is None:
-            raise ValueError("context.observations.times must be provided")
-        times = context.observations.times
+        if obs_times is None:
+            raise ValueError("obs_times must be provided")
+        times = obs_times
 
-        # Extract controls from context if available
-        ctrl_times, ctrl_values = _get_controls(context, times)
-
-        # Validate that control_dim is set when controls are present
+        _validate_controls(times, ctrl_times, ctrl_values)
         _validate_control_dim(dynamics, ctrl_values)
 
         # Generate a CD-Dynamax-compatible parameter dict
@@ -101,12 +105,18 @@ class SDESimulator(BaseSimulator):
         # ensure that times has shape (num_timesteps, 1)
         if times.ndim == 1:
             times = times[:, None]
+        control_dim = dynamics.control_dim
+        inputs = (
+            ctrl_values
+            if ctrl_values is not None
+            else jnp.zeros((len(times), control_dim))
+        )
         states, emissions = cd_dynamax_model.sample(
             params=params,
             key=self.key,
             num_timesteps=len(times),
             t_emissions=times,
-            inputs=ctrl_values,
+            inputs=inputs,
             transition_type="path",
         )
 
@@ -116,20 +126,25 @@ class SDESimulator(BaseSimulator):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ):
-        # Extract observed trajectory (original 1D times)
-        obs_traj = context.observations
-        if obs_traj is None or obs_traj.times is None:
-            raise ValueError("context.observations.times must be provided")
-        obs_times = obs_traj.times
-        obs_values = obs_traj.values if obs_traj is not None else None
-
-        # Controls aligned with observed times
-        _, ctrl_values = _get_controls(context, obs_times)
+        if obs_times is None:
+            raise ValueError("obs_times must be provided")
 
         # Run the simulator to obtain states/emissions (times reshaped as needed for cd-dynamax)
-        simulated = self.simulate(context, dynamics)
+        simulated = self.simulate(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
         states = simulated["states"]
         emissions = simulated["observations"]
 
@@ -171,18 +186,18 @@ class DiscreteTimeSimulator(BaseSimulator):
 
     def simulate(
         self,
-        context: Context,
         dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ) -> dict[str, State]:
-        # Pull observed trajectory from context
-        obs_traj = context.observations
-        obs_times = obs_traj.times
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
-        obs_values = obs_traj.values
 
-        # Pull control trajectory from context and validate
-        ctrl_times, ctrl_values = _get_controls(context, obs_times)
+        _validate_controls(obs_times, ctrl_times, ctrl_values)
 
         T = len(obs_times)
         if T < 1:
@@ -333,18 +348,18 @@ class ODESimulator(BaseSimulator):
 
     def simulate(
         self,
-        context: Context,
         dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ) -> dict[str, State]:
-        # Pull observed trajectory from context
-        obs_traj = context.observations
-        obs_times = obs_traj.times
-        obs_values = obs_traj.values
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
 
-        # Pull control trajectory from context and validate
-        ctrl_times, ctrl_values = _get_controls(context, obs_times)
+        _validate_controls(obs_times, ctrl_times, ctrl_values)
 
         T = len(obs_times)
 
@@ -414,13 +429,39 @@ class Simulator(BaseSimulator):
 
         self.simulator = None
 
-    def simulate(self, context: Context, dynamics: DynamicalModel) -> dict[str, State]:
+    def simulate(
+        self,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> dict[str, State]:
         if self.simulator is None:
             raise ValueError("Simulator not initialized. This shouldn't happen.")
 
-        return self.simulator.simulate(context, dynamics)
+        return self.simulator.simulate(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
 
-    def add_solved_sites(self, name: str, dynamics: DynamicalModel, context: Context):
+    def add_solved_sites(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ):
         if self.simulator is None:
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
                 if (
@@ -438,4 +479,12 @@ class Simulator(BaseSimulator):
                     + "If using a generic function as a state evolution, you must specify the type of simulator manually."
                 )
 
-        return self.simulator.add_solved_sites(name, dynamics, context)
+        return self.simulator.add_solved_sites(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )

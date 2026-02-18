@@ -3,7 +3,7 @@ import dataclasses
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
 from dynestyx.inference.continuous_time_filters import (
     _filter_continuous_time,
@@ -62,7 +62,12 @@ class Filter(BaseCDDynamaxLogFactorAdder):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ):
         """
         Add the marginal log likelihood as a numpyro factor.
@@ -70,15 +75,16 @@ class Filter(BaseCDDynamaxLogFactorAdder):
         Args:
             name: Name of the factor.
             dynamics: Dynamical model to filter.
-            context: Context containing the observations and controls.
+            obs_times: Observation times.
+            obs_values: Observed values.
+            ctrl_times: Control times (optional).
+            ctrl_values: Control values (optional).
         """
         config = (
             self.filter_config
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
-
-        filter_inputs = (name, dynamics, context, config)
 
         key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
 
@@ -89,12 +95,41 @@ class Filter(BaseCDDynamaxLogFactorAdder):
                     f"Invalid filter config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
-            _filter_continuous_time(*filter_inputs, key=key)
+            _filter_continuous_time(
+                name,
+                dynamics,
+                config,  # type: ignore[arg-type]
+                key=key,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                **kwargs,
+            )
         else:
             if isinstance(config, HMMConfigs):
-                _filter_hmm(*filter_inputs)  # type: ignore[arg-type]
+                _filter_hmm(
+                    name,
+                    dynamics,
+                    config,  # type: ignore[arg-type]
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                    **kwargs,
+                )
             elif isinstance(config, DiscreteTimeConfigs):
-                _filter_discrete_time(*filter_inputs, key=key)
+                _filter_discrete_time(
+                    name,
+                    dynamics,
+                    config,  # type: ignore[arg-type]
+                    key=key,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                    **kwargs,
+                )
             else:
                 valid = [c.__name__ for c in HMMConfigs + DiscreteTimeConfigs]
                 raise ValueError(

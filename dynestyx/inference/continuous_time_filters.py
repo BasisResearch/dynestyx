@@ -2,7 +2,7 @@
 
 import jax
 
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import BaseFilterConfig
 from dynestyx.inference.integrations.cd_dynamax.continuous import run_continuous_filter
 
@@ -10,9 +10,14 @@ from dynestyx.inference.integrations.cd_dynamax.continuous import run_continuous
 def _filter_continuous_time(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
+    *,
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Continuous-time marginal likelihood via CD-Dynamax.
 
@@ -21,7 +26,20 @@ def _filter_continuous_time(
     Args:
         name: Name of the factor.
         dynamics: Dynamical model to filter.
-        context: Context containing the observations and controls.
         filter_config: Configuration for the filter.
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
     """
-    run_continuous_filter(name, dynamics, context, filter_config, key)  # type: ignore[arg-type]
+    run_continuous_filter(
+        name,
+        dynamics,
+        filter_config,  # type: ignore[arg-type]
+        key=key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        **kwargs,
+    )

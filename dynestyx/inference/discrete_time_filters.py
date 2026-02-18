@@ -2,7 +2,7 @@
 
 import jax
 
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import BaseFilterConfig
 from dynestyx.inference.integrations.cd_dynamax.discrete import (
     run_discrete_filter as run_cd_dynamax_discrete,
@@ -15,9 +15,14 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 def _filter_discrete_time(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
+    *,
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
@@ -27,13 +32,35 @@ def _filter_discrete_time(
     Args:
         name: Name of the factor.
         dynamics: Dynamical model to filter.
-        context: Context containing the observations and controls.
         filter_config: Configuration for the filter.
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
     """
 
     if filter_config.filter_source == "cd_dynamax":
-        run_cd_dynamax_discrete(name, dynamics, context, filter_config)
+        run_cd_dynamax_discrete(
+            name,
+            dynamics,
+            filter_config,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
     elif filter_config.filter_source == "cuthbert":
-        run_cuthbert_discrete(name, dynamics, context, filter_config, key)
+        run_cuthbert_discrete(
+            name,
+            dynamics,
+            filter_config,
+            key=key,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
     else:
         raise ValueError(f"Unknown filter source: {filter_config.filter_source}")
