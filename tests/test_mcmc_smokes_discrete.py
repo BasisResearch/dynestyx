@@ -61,7 +61,7 @@ def test_discrete_time_lti_kf_mcmc_smoke(
 ) -> None:
     """Test MCMC inference on discrete-time LTI model using Kalman filter (filter_type='kf')."""
     mcmc_key = jr.PRNGKey(0)
-    data_conditioned_model, true_params, synthetic, _ = (
+    data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_discrete_time_lti_kf
     )
     mcmc = MCMC(
