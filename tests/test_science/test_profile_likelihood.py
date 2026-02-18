@@ -15,8 +15,8 @@ SAVE_FIG = True
 
 def test_profile_hmm(data_conditioned_hmm):  # noqa: F811
     data_conditioned_model, true_params, synthetic, use_controls = data_conditioned_hmm
-    output_dir_name = "profile_hmm_filter_hmm" + ("_controlled" if use_controls else "")
-    output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
+    output_name = "profile_hmm_filter_hmm" + ("_controlled" if use_controls else "") + ".png"
+    output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
         param_name="sigma",
@@ -25,6 +25,7 @@ def test_profile_hmm(data_conditioned_hmm):  # noqa: F811
         param_max=1.0,
         n_grid=11,
         output_dir=output_dir,
+        output_name=output_name,
     )
 
 
@@ -35,10 +36,12 @@ def test_profile_discrete_time_l63(data_conditioned_discrete_time_l63_filter):  
         synthetic,
         use_controls,
     ) = data_conditioned_discrete_time_l63_filter
-    output_dir_name = "profile_discrete_time_l63_filter_default" + (
-        "_controlled" if use_controls else ""
+    output_name = (
+        "profile_discrete_time_l63_filter_default"
+        + ("_controlled" if use_controls else "")
+        + ".png"
     )
-    output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
+    output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
         param_name="rho",
@@ -47,6 +50,7 @@ def test_profile_discrete_time_l63(data_conditioned_discrete_time_l63_filter):  
         param_max=36.0,
         n_grid=11,
         output_dir=output_dir,
+        output_name=output_name,
     )
 
 
@@ -57,10 +61,10 @@ def test_profile_discrete_time_l63_pf(data_conditioned_discrete_time_l63_filter_
         synthetic,
         use_controls,
     ) = data_conditioned_discrete_time_l63_filter_pf
-    output_dir_name = "profile_discrete_time_l63_filter_pf" + (
-        "_controlled" if use_controls else ""
+    output_name = (
+        "profile_discrete_time_l63_filter_pf" + ("_controlled" if use_controls else "") + ".png"
     )
-    output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
+    output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
         param_name="rho",
@@ -69,6 +73,7 @@ def test_profile_discrete_time_l63_pf(data_conditioned_discrete_time_l63_filter_
         param_max=36.0,
         n_grid=11,
         output_dir=output_dir,
+        output_name=output_name,
     )
 
 
@@ -82,12 +87,12 @@ def test_profile_continuous_time_l63_sde(
         use_controls,
         filter_type,
     ) = data_conditioned_continuous_time_stochastic_l63
-    output_dir_name = (
+    output_name = (
         "profile_l63_sde"
         + ("_controlled" if use_controls else "")
-        + f"_filter_{filter_type}"
+        + f"_filter_{filter_type}.png"
     )
-    output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
+    output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
         param_name="rho",
@@ -96,6 +101,7 @@ def test_profile_continuous_time_l63_sde(
         param_max=36.0,
         n_grid=11,
         output_dir=output_dir,
+        output_name=output_name,
     )
 
 
@@ -107,12 +113,12 @@ def test_profile_continuous_time_lti(data_conditioned_continuous_time_lti_gaussi
         use_controls,
         filter_type,
     ) = data_conditioned_continuous_time_lti_gaussian
-    output_dir_name = (
+    output_name = (
         "profile_lti_gaussian"
         + ("_controlled" if use_controls else "")
-        + f"_filter_{filter_type}"
+        + f"_filter_{filter_type}.png"
     )
-    output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
+    output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
         param_name="rho",
@@ -121,6 +127,7 @@ def test_profile_continuous_time_lti(data_conditioned_continuous_time_lti_gaussi
         param_max=3.5,
         n_grid=11,
         output_dir=output_dir,
+        output_name=output_name,
     )
 
 
@@ -132,12 +139,12 @@ def test_profile_discrete_time_lti(data_conditioned_discrete_time_lti_kf):  # no
         use_controls,
         filter_type,
     ) = data_conditioned_discrete_time_lti_kf
-    output_dir_name = (
+    output_name = (
         "profile_discrete_time_lti"
         + ("_controlled" if use_controls else "")
-        + f"_filter_{filter_type}"
+        + f"_filter_{filter_type}.png"
     )
-    output_dir = get_output_dir(output_dir_name) if SAVE_FIG else None
+    output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
         param_name="alpha",
@@ -146,4 +153,5 @@ def test_profile_discrete_time_lti(data_conditioned_discrete_time_lti_kf):  # no
         param_max=0.7,
         n_grid=11,
         output_dir=output_dir,
+        output_name=output_name,
     )
