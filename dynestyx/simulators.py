@@ -31,7 +31,6 @@ class SDESimulator(BaseSimulator):
 
     def __init__(
         self,
-        key: Array,
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
@@ -39,7 +38,6 @@ class SDESimulator(BaseSimulator):
         tol_vbt: float | None = None,
         max_steps: int | None = None,
     ):
-        self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
@@ -87,60 +85,57 @@ class SDESimulator(BaseSimulator):
         # Validate that control_dim is set when controls are present
         _validate_control_dim(dynamics, ctrl_values)
 
-        with numpyro.handlers.seed(rng_seed=self.key):
-            initial_state = numpyro.sample("x_0", dynamics.initial_condition)
+        initial_state = numpyro.sample("x_0", dynamics.initial_condition)
 
-            if ctrl_times is not None and ctrl_values is not None:
-                # We use rectilinear interpolation, to match cd_dynamax
-                _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
-                control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
-                control_path_eval: Callable[[Array], Array | None] = (
-                    control_path.evaluate
-                )
-            else:
-                control_path_eval = lambda t: None
+        if ctrl_times is not None and ctrl_values is not None:
+            # We use rectilinear interpolation, to match cd_dynamax
+            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
+            control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
+            control_path_eval: Callable[[Array], Array | None] = control_path.evaluate
+        else:
+            control_path_eval = lambda t: None
 
-            def _drift(t, y, args):
-                u_t = control_path_eval(t)
-                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+        def _drift(t, y, args):
+            u_t = control_path_eval(t)
+            return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
 
-            def _diffusion(t, y, args):
-                u_t = control_path_eval(t)
-                return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+        def _diffusion(t, y, args):
+            u_t = control_path_eval(t)
+            return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
-            bm = dfx.VirtualBrownianTree(
-                t0=times[0],
-                t1=times[-1],
-                tol=self.tol_vbt,
-                shape=(dynamics.state_evolution.bm_dim,),
-                key=numpyro.prng_key(),
+        bm = dfx.VirtualBrownianTree(
+            t0=times[0],
+            t1=times[-1],
+            tol=self.tol_vbt,
+            shape=(dynamics.state_evolution.bm_dim,),
+            key=numpyro.prng_key(),
+        )
+
+        terms = dfx.MultiTerm(  # type: ignore
+            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
+        )
+
+        sol = dfx.diffeqsolve(
+            terms,
+            t0=times[0],
+            t1=times[-1],
+            y0=initial_state,
+            args=None,
+            saveat=dfx.SaveAt(ts=times),
+            **self.diffeqsolve_settings,
+        )
+        states_sol = sol.ys  # (T, ..., state_dim)
+
+        def _create_observations_step(carry, t_idx):
+            x_t = states_sol[t_idx]
+            t = times[t_idx]
+            u_t = _get_val_or_None(ctrl_values, t_idx)
+            y_t = numpyro.sample(
+                f"y_{t_idx}",
+                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                obs=_get_val_or_None(obs_values, t_idx),
             )
-
-            terms = dfx.MultiTerm(  # type: ignore
-                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-            )
-
-            sol = dfx.diffeqsolve(
-                terms,
-                t0=times[0],
-                t1=times[-1],
-                y0=initial_state,
-                args=None,
-                saveat=dfx.SaveAt(ts=times),
-                **self.diffeqsolve_settings,
-            )
-            states_sol = sol.ys  # (T, ..., state_dim)
-
-            def _create_observations_step(carry, t_idx):
-                x_t = states_sol[t_idx]
-                t = times[t_idx]
-                u_t = _get_val_or_None(ctrl_values, t_idx)
-                y_t = numpyro.sample(
-                    f"y_{t_idx}",
-                    dynamics.observation_model(x=x_t, u=u_t, t=t),
-                    obs=_get_val_or_None(obs_values, t_idx),
-                )
-                return carry, y_t
+            return carry, y_t
 
         states = states_sol
         _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))

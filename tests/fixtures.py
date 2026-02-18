@@ -334,7 +334,7 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with Simulator(key=data_solver_key):
+    with Simulator():
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -398,7 +398,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with Simulator(key=data_solver_key):
+    with Simulator():
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -570,7 +570,7 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with Simulator(key=data_solver_key):
+    with Simulator():
         with Condition(context):
             synthetic = predictive(data_init_key)
 
@@ -627,7 +627,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     context = Context(
         observations=Trajectory(times=obs_times), controls=control_trajectory
     )
-    with Simulator(key=data_solver_key):
+    with Simulator():
         with Condition(context):
             synthetic = predictive(data_init_key)
 

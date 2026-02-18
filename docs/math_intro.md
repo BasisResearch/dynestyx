@@ -80,13 +80,11 @@ from dynestyx.ops import Trajectory, Context
 
 import jax.random as jr
 
-prng_key = jr.PRNGKey(0)
-
 context = Context(
     observations=Trajectory(times=jnp.arange(0.0, 1.0, 0.1))
 )
 
-with SDESimulator(key=prng_key): # Specify how the SDE will be simulated/solved
+with SDESimulator(): # Specify how the SDE will be simulated/solved
     with Condition(context): # Specify the context in which to simulate
         sampled_trajectory = continuous_discrete_model() # Obtain samples
 ```
