@@ -25,9 +25,13 @@ from dynestyx.utils import (
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
+TIME_EPSILON = 1e-8
+
 
 class SDESimulator(BaseSimulator):
-    """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics."""
+    """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics.
+
+    Simulation occurs via the stochastic adjoint method, as provided by diffrax."""
 
     def __init__(
         self,
@@ -38,6 +42,16 @@ class SDESimulator(BaseSimulator):
         tol_vbt: float | None = None,
         max_steps: int | None = None,
     ):
+        """Create an SDESimulator, which forms a generative model for a continuous-time SDE.
+
+        Parameters:
+        - solver: The solver to use for the SDE. Defaults to dfx.Heun().
+        - stepsize_controller: The stepsize controller to use for the SDE. Defaults to dfx.ConstantStepSize().
+        - adjoint: The adjoint to use for the SDE. Defaults to dfx.RecursiveCheckpointAdjoint().
+        - dt0: The initial stepsize for the SDE. Defaults to 1e-4.
+        - tol_vbt: The tolerance for the virtual Brownian tree. If None, defaults to dt0 / 2.0.
+        - max_steps: The maximum number of steps for the SDE. Defaults to None.
+        """
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
@@ -51,7 +65,20 @@ class SDESimulator(BaseSimulator):
         else:
             self.tol_vbt = tol_vbt
 
+        assert self.tol_vbt < dt0, (
+            "tol_vbt must be smaller than dt0 for statistically correct simulation."
+        )
+
     def simulate(self, context: Context, dynamics) -> dict[str, State]:
+        """
+        Simulates a continuous-time SDE from a given dynamical model, using diffrax
+        and the settings provided in the `__init__` method.
+
+        To handle controls, we use a rectilinear interpolation that is right-continuous,
+        i.e., if ctrl_times = [0.0, 1.0, 2.0] and ctrl_values = [0.0, 1.0, 2.0],
+        then the control at time 1.0 is the value at time 1.0.
+        """
+
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -89,8 +116,11 @@ class SDESimulator(BaseSimulator):
 
         if ctrl_times is not None and ctrl_values is not None:
             # We use rectilinear interpolation, to match cd_dynamax
+            # In cd_dynamax, control paths are left-continuous, so we subtract a
+            # small amount from the times to ensure the control is evaluated at the
+            # correct time.
             _ct, _cv = dfx.rectilinear_interpolation(
-                ts=ctrl_times - 1e-8, ys=ctrl_values
+                ts=ctrl_times - TIME_EPSILON, ys=ctrl_values
             )
             control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
             control_path_eval: Callable[[Array], Array | None] = control_path.evaluate
@@ -343,10 +373,12 @@ class ODESimulator(BaseSimulator):
 
         # Create drift function that interpolates controls
         if ctrl_times is not None and ctrl_values is not None:
-            # Create LinearInterpolation for controls using diffrax
             # We use rectilinear interpolation, to match cd_dynamax
+            # In cd_dynamax, control paths are left-continuous, so we subtract a
+            # small amount from the times to ensure the control is evaluated at the
+            # correct time.
             _ct, _cv = dfx.rectilinear_interpolation(
-                ts=ctrl_times - 1e-8, ys=ctrl_values
+                ts=ctrl_times - TIME_EPSILON, ys=ctrl_values
             )
             control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
