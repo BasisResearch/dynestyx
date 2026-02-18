@@ -33,7 +33,7 @@ pip install git+https://github.com/BasisResearch/dynestyx.git
 
 ## Quick Example: Simulation
 
-Define a dynamical model, wrap it with a simulator and context, and generate synthetic trajectories:
+Define a dynamical model, wrap it with a simulator, and generate synthetic trajectories by passing observation times (and optionally controls) as kwargs:
 
 ```python
 import jax.numpy as jnp
@@ -41,10 +41,10 @@ import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 import dynestyx as dsx
-from dynestyx import DynamicalModel, DiscreteTimeSimulator, Condition, Context, Trajectory
+from dynestyx import DynamicalModel, DiscreteTimeSimulator
 from numpyro.infer import Predictive
 
-def model(phi=None):
+def model(phi=None, obs_times=None, obs_values=None):
     phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
     dynamics = DynamicalModel(
         state_dim=1, observation_dim=1, control_dim=0,
@@ -52,13 +52,11 @@ def model(phi=None):
         state_evolution=lambda x, u, t_n, t_next: dist.Normal(phi * x, 0.5),
         observation_model=lambda x, u, t: dist.Normal(0.0, jnp.exp(x / 2.0)),
     )
-    return dsx.sample("f", dynamics)
+    return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
 obs_times = jnp.arange(0.0, 100.0, 1.0)
-context = Context(observations=Trajectory(times=obs_times), controls=Trajectory())
 with DiscreteTimeSimulator():
-    with Condition(context):
-        samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), phi=0.9)
+    samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), phi=0.9, obs_times=obs_times)
 ```
 
 ## Quick Example: Inference
@@ -67,15 +65,14 @@ Using the simulated `samples` and `obs_times` from above, condition on the data 
 
 ```python
 from dynestyx import Filter
+from dynestyx.filters import ContinuousTimeEnKFConfig
 from numpyro.infer import MCMC, NUTS
 
-observation_trajectory = Trajectory(times=obs_times, values=samples["observations"][0])
-context = Context(observations=observation_trajectory, controls=Trajectory())
+obs_values = samples["observations"][0]
 
 def inference_model():
-    with Filter(filter_type="EnKF", enkf_N_particles=25):
-        with Condition(context):
-            return model()
+    with Filter(filter_config=ContinuousTimeEnKFConfig(n_particles=25)):
+        return model(obs_times=obs_times, obs_values=obs_values)
 
 mcmc = MCMC(NUTS(inference_model), num_warmup=100, num_samples=100)
 mcmc.run(jr.PRNGKey(1))
