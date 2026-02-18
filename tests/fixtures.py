@@ -820,7 +820,7 @@ def data_conditioned_jumpy_controls_sde():
             observations=observation_trajectory,
             controls=Trajectory(times=obs_times, values=controls),
         )
-        with FilterBasedMarginalLogLikelihood(
+        with Filter(
             filter_config=ContinuousTimeEKFConfig(record_filtered_states_mean=True)
         ):
             with Condition(context):
