@@ -89,18 +89,20 @@ class SDESimulator(BaseSimulator):
 
         if ctrl_times is not None and ctrl_values is not None:
             # We use rectilinear interpolation, to match cd_dynamax
-            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
+            _ct, _cv = dfx.rectilinear_interpolation(
+                ts=ctrl_times - 1e-8, ys=ctrl_values
+            )
             control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
             control_path_eval: Callable[[Array], Array | None] = control_path.evaluate
         else:
             control_path_eval = lambda t: None
 
         def _drift(t, y, args):
-            u_t = control_path_eval(t)
+            u_t = args(t)
             return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
 
         def _diffusion(t, y, args):
-            u_t = control_path_eval(t)
+            u_t = args(t)
             return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
         bm = dfx.VirtualBrownianTree(
@@ -120,7 +122,7 @@ class SDESimulator(BaseSimulator):
             t0=times[0],
             t1=times[-1],
             y0=initial_state,
-            args=None,
+            args=control_path_eval,
             saveat=dfx.SaveAt(ts=times),
             **self.diffeqsolve_settings,
         )
@@ -129,7 +131,7 @@ class SDESimulator(BaseSimulator):
         def _create_observations_step(carry, t_idx):
             x_t = states_sol[t_idx]
             t = times[t_idx]
-            u_t = _get_val_or_None(ctrl_values, t_idx)
+            u_t = control_path_eval(t)
             y_t = numpyro.sample(
                 f"y_{t_idx}",
                 dynamics.observation_model(x=x_t, u=u_t, t=t),

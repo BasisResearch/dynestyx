@@ -329,3 +329,24 @@ def jumpy_controls_model():
     )
 
     dsx.sample("f", dynamics)
+
+
+def jumpy_controls_model_sde():
+
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x + u,
+        diffusion_coefficient=lambda x, u, t: 0.01 * jnp.eye(1),
+        bm_dim=1,
+    )
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=1,
+        initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
+        state_evolution=state_evolution,
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]), R=jnp.array([[0.1**2]])
+        ),
+    )
+
+    dsx.sample("f", dynamics)
