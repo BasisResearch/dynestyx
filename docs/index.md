@@ -66,14 +66,14 @@ with DiscreteTimeSimulator():
 Using the simulated `samples` and `obs_times` from above, condition on the data and infer parameters with a filter plus NUTS (no explicit state sampling):
 
 ```python
-from dynestyx import FilterBasedMarginalLogLikelihood
+from dynestyx import Filter
 from numpyro.infer import MCMC, NUTS
 
 observation_trajectory = Trajectory(times=obs_times, values=samples["observations"][0])
 context = Context(observations=observation_trajectory, controls=Trajectory())
 
 def inference_model():
-    with FilterBasedMarginalLogLikelihood(filter_type="EnKF", enkf_N_particles=25):
+    with Filter(filter_type="EnKF", enkf_N_particles=25):
         with Condition(context):
             return model()
 
