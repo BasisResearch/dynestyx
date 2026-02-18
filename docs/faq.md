@@ -17,9 +17,9 @@ def model(...):
 and data `context = Context(observations=Trajectory(times=times, values=values), controls=...)`.
 
 
-- **HMM**: Use the HMM filter (`FilterBasedHMMMarginalLogLikelihood`). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
+- **HMM**: Use the HMM filter (using an `HMMConfig` configuation). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
 ```python
-with FilterBasedHMMMarginalLogLikelihood():
+with Filter(HMMConfig()):
     with Condition(context):
         return model()
 ```

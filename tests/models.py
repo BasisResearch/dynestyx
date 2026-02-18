@@ -133,14 +133,16 @@ def continuous_time_stochastic_l63_model():
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
         state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: jnp.array(
-                [
-                    10.0 * (x[1] - x[0]),
-                    x[0] * (rho - x[2]) - x[1],
-                    x[0] * x[1] - (8.0 / 3.0) * x[2],
-                ]
-            )
-            + (10 * u if u is not None else jnp.zeros(3)),
+            drift=lambda x, u, t: (
+                jnp.array(
+                    [
+                        10.0 * (x[1] - x[0]),
+                        x[0] * (rho - x[2]) - x[1],
+                        x[0] * x[1] - (8.0 / 3.0) * x[2],
+                    ]
+                )
+                + (10 * u if u is not None else jnp.zeros(3))
+            ),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
             diffusion_covariance=lambda x, u, t: jnp.eye(3),
         ),
@@ -176,14 +178,16 @@ def continuous_time_stochastic_l63_model_dirac_obs():
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
         ),
         state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: jnp.array(
-                [
-                    10.0 * (x[1] - x[0]),
-                    x[0] * (rho - x[2]) - x[1],
-                    x[0] * x[1] - (8.0 / 3.0) * x[2],
-                ]
-            )
-            + (10 * u if u is not None else jnp.zeros_like(x)),
+            drift=lambda x, u, t: (
+                jnp.array(
+                    [
+                        10.0 * (x[1] - x[0]),
+                        x[0] * (rho - x[2]) - x[1],
+                        x[0] * x[1] - (8.0 / 3.0) * x[2],
+                    ]
+                )
+                + (10 * u if u is not None else jnp.zeros_like(x))
+            ),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
             diffusion_covariance=lambda x, u, t: jnp.eye(3),
         ),
@@ -261,14 +265,16 @@ def continuous_time_deterministic_l63_model():
             loc=jnp.zeros(3), covariance_matrix=2.0**2 * jnp.eye(3)
         ),
         state_evolution=ContinuousTimeStateEvolution(
-            drift=lambda x, u, t: jnp.array(
-                [
-                    10.0 * (x[1] - x[0]),
-                    x[0] * (rho - x[2]) - x[1],
-                    x[0] * x[1] - (8.0 / 3.0) * x[2],
-                ]
-            )
-            + (10 * u if u is not None else jnp.zeros(3)),
+            drift=lambda x, u, t: (
+                jnp.array(
+                    [
+                        10.0 * (x[1] - x[0]),
+                        x[0] * (rho - x[2]) - x[1],
+                        x[0] * x[1] - (8.0 / 3.0) * x[2],
+                    ]
+                )
+                + (10 * u if u is not None else jnp.zeros(3))
+            ),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
