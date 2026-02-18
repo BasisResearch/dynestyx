@@ -15,7 +15,9 @@ SAVE_FIG = True
 
 def test_profile_hmm(data_conditioned_hmm):  # noqa: F811
     data_conditioned_model, true_params, synthetic, use_controls = data_conditioned_hmm
-    output_name = "profile_hmm_filter_hmm" + ("_controlled" if use_controls else "") + ".png"
+    output_name = (
+        "profile_hmm_filter_hmm" + ("_controlled" if use_controls else "") + ".png"
+    )
     output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
         model=data_conditioned_model,
@@ -62,7 +64,9 @@ def test_profile_discrete_time_l63_pf(data_conditioned_discrete_time_l63_filter_
         use_controls,
     ) = data_conditioned_discrete_time_l63_filter_pf
     output_name = (
-        "profile_discrete_time_l63_filter_pf" + ("_controlled" if use_controls else "") + ".png"
+        "profile_discrete_time_l63_filter_pf"
+        + ("_controlled" if use_controls else "")
+        + ".png"
     )
     output_dir = get_output_dir("profiles") if SAVE_FIG else None
     run_profile_likelihood(
