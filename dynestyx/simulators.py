@@ -345,7 +345,9 @@ class ODESimulator(BaseSimulator):
         if ctrl_times is not None and ctrl_values is not None:
             # Create LinearInterpolation for controls using diffrax
             # We use rectilinear interpolation, to match cd_dynamax
-            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
+            _ct, _cv = dfx.rectilinear_interpolation(
+                ts=ctrl_times - 1e-8, ys=ctrl_values
+            )
             control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
             def f(t, y, args):
