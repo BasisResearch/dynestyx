@@ -41,7 +41,7 @@ def _default_filter_config(dynamics: DynamicalModel):
 
 
 @dataclasses.dataclass
-class FilterBasedMarginalLogLikelihood(BaseCDDynamaxLogFactorAdder):
+class Filter(BaseCDDynamaxLogFactorAdder):
     """
     Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
 
@@ -110,7 +110,7 @@ __all__ = [
     "ContinuousTimeUKFConfig",
     "EKFConfig",
     "EnKFConfig",
-    "FilterBasedMarginalLogLikelihood",
+    "Filter",
     "HMMConfig",
     "HMMConfigs",
     "KFConfig",
