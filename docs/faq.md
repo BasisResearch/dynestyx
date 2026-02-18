@@ -17,9 +17,9 @@ def model(...):
 and data `context = Context(observations=Trajectory(times=times, values=values), controls=...)`.
 
 
-- **HMM**: Use the HMM filter (`FilterBasedHMMMarginalLogLikelihood`). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
+- **HMM**: Use the HMM filter (using an `HMMConfig` configuation). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
 ```python
-with FilterBasedHMMMarginalLogLikelihood():
+with Filter(HMMConfig()):
     with Condition(context):
         return model()
 ```
@@ -33,7 +33,7 @@ with DiscreteTimeSimulator():
 ```
 For filter-based marginalization (currently not working reliably), do:
 ```python
-with FilterBasedMarginalLogLikelihood():
+with Filter():
     with Condition(context):
         return model()
 ```
@@ -41,8 +41,8 @@ with FilterBasedMarginalLogLikelihood():
 
 - **Continuous-time stochastic differential equation**: **Filter** is the main choice. EnKF is the default and works well for nonlinear models, but only works if your initial condition and observation model are linear/gaussian. Use the particle filter (PF) only if you have non-Gaussian initial conditions or observation models—see [SDE with non-Gaussian observations](tutorials/sde_non_gaussian_observations.ipynb). We stand by these implementations, and they appear to be working well currently (especially EnKF).
 ```python
-with FilterBasedMarginalLogLikelihood(filter_type='enkf'):
-# with FilterBasedMarginalLogLikelihood(filter_type='pf'): 
+with Filter(filter_type='enkf'):
+# with Filter(filter_type='pf'): 
     with Condition(context):
         return model()
 ```
@@ -64,7 +64,7 @@ with ODESimulator():
 ```
 Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
 ```python
-with FilterBasedMarginalLogLikelihood(filter_type='enkf'):
+with Filter(filter_type='enkf'):
     with Condition(context):
         return model(diffusion_coefficient = 0.01)
 ```

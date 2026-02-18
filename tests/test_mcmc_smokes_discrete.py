@@ -1,5 +1,5 @@
 """
-Smoke tests for MCMC inference on discrete-time models using FilterBasedMarginalLogLikelihood.
+Smoke tests for MCMC inference on discrete-time models using Filter.
 
 This module tests MCMC inference pipelines for discrete-time models using
 the new discrete-time filtering capabilities via bootstrap particle filters.

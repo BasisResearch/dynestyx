@@ -29,7 +29,7 @@ def run_profile_likelihood(
     runs the model, and extracts f_marginal_loglik from the output.
 
     Args:
-        model: The data-conditioned model (must use FilterBasedMarginalLogLikelihood).
+        model: The data-conditioned model (must use Filter).
         param_name: Name of the parameter to profile.
         true_val: True parameter value (for vertical line in plot).
         param_min: Minimum of parameter grid.
@@ -62,7 +62,7 @@ def run_profile_likelihood(
         if "f_marginal_loglik" not in out:
             raise ValueError(
                 "Model does not have f_marginal_loglik site. "
-                "Profile likelihood requires FilterBasedMarginalLogLikelihood."
+                "Profile likelihood requires Filter."
             )
         return float(out["f_marginal_loglik"].squeeze())
 
