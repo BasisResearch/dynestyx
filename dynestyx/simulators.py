@@ -384,13 +384,17 @@ class ODESimulator(BaseSimulator):
 
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
-                u_t = control_path.evaluate(t)
+                u_t = args(t)
                 return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+
+            args = lambda t: control_path.evaluate(t)
 
         else:
 
             def f(t, y, args):
                 return dynamics.state_evolution.drift(x=y, u=None, t=t)
+
+            args = None
 
         # Solve ODE at all observation times using diffrax
         sol = dfx.diffeqsolve(
@@ -404,6 +408,7 @@ class ODESimulator(BaseSimulator):
             stepsize_controller=self.stepsize_controller,
             adjoint=self.adjoint,
             max_steps=self.max_steps,
+            args=args,
         )
         x_sol = sol.ys  # shape (T, state_dim) # includes initial state at t0
 
