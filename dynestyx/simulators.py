@@ -116,14 +116,11 @@ class SDESimulator(BaseSimulator):
 
         if ctrl_times is not None and ctrl_values is not None:
             # We use rectilinear interpolation, to match cd_dynamax
-            # In cd_dynamax, control paths are left-continuous, so we subtract a
-            # small amount from the times to ensure the control is evaluated at the
-            # correct time.
-            _ct, _cv = dfx.rectilinear_interpolation(
-                ts=ctrl_times - TIME_EPSILON, ys=ctrl_values
-            )
+            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
             control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
-            control_path_eval: Callable[[Array], Array | None] = control_path.evaluate
+            control_path_eval: Callable[[Array], Array | None] = lambda t: (
+                control_path.evaluate(t, left=False)
+            )
         else:
             control_path_eval = lambda t: None
 
@@ -334,7 +331,7 @@ class ODESimulator(BaseSimulator):
     solver: dfx.AbstractSolver = dfx.Tsit5()
     adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint()
     stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
-    dt0: float = 1e-4
+    dt0: float = 1e-3
     max_steps: int = 10_000
 
     def __init__(
@@ -342,8 +339,8 @@ class ODESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Tsit5(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-        dt0: float = 1e-4,
-        max_steps: int = 10_000,
+        dt0: float = 1e-3,
+        max_steps: int = 100_000,
     ):
         self.solver = solver
         self.adjoint = adjoint
@@ -374,12 +371,7 @@ class ODESimulator(BaseSimulator):
         # Create drift function that interpolates controls
         if ctrl_times is not None and ctrl_values is not None:
             # We use rectilinear interpolation, to match cd_dynamax
-            # In cd_dynamax, control paths are left-continuous, so we subtract a
-            # small amount from the times to ensure the control is evaluated at the
-            # correct time.
-            _ct, _cv = dfx.rectilinear_interpolation(
-                ts=ctrl_times - TIME_EPSILON, ys=ctrl_values
-            )
+            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
             control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
             def f(t, y, args):
@@ -387,7 +379,7 @@ class ODESimulator(BaseSimulator):
                 u_t = args(t)
                 return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
 
-            args = lambda t: control_path.evaluate(t)
+            args = lambda t: control_path.evaluate(t, left=False)
 
         else:
 
