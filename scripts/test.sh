@@ -12,4 +12,8 @@ export TEST_OUTPUT_MASTER_DIR="$MASTER_OUTPUT_DIR"
 
 echo "Master output directory: $MASTER_OUTPUT_DIR"
 
+echo "--- CPU info (pytest-xdist uses os.cpu_count for -n auto) ---"
+echo "  System cores:  $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 'N/A')"
+echo "  os.cpu_count(): $(python -c 'import os; print(os.cpu_count())')"
+
 pytest tests/ -n auto --ignore=tests/test_science
