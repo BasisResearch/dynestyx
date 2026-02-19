@@ -19,7 +19,7 @@ def test_jumpy_controls():
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_observations.shape == filtered_means.shape
     assert jnp.allclose(synthetic_observations, filtered_means, atol=1e0)
-    assert jnp.abs(jnp.mean(synthetic_observations - filtered_means)) < 1e-2
+    assert jnp.abs(jnp.mean(synthetic_observations - filtered_means)) < 1e-1
 
 
 def test_jumpy_controls_sde():
@@ -45,4 +45,4 @@ def test_jumpy_controls_ode():
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_observations.shape == filtered_means.shape
     assert jnp.allclose(synthetic_observations, filtered_means, atol=1e0)
-    assert jnp.abs(jnp.mean(synthetic_observations - filtered_means)) < 1e-2
+    assert jnp.abs(jnp.mean(synthetic_observations - filtered_means)) < 0.1

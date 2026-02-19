@@ -18,14 +18,13 @@ from dynestyx.dynamical_models import (
 from dynestyx.handlers import BaseSimulator
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.utils import (
+    _build_control_path,
     _get_controls,
     _get_val_or_None,
     _validate_control_dim,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
-
-TIME_EPSILON = 1e-8
 
 
 class SDESimulator(BaseSimulator):
@@ -115,9 +114,7 @@ class SDESimulator(BaseSimulator):
         initial_state = numpyro.sample("x_0", dynamics.initial_condition)
 
         if ctrl_times is not None and ctrl_values is not None:
-            # We use rectilinear interpolation, to match cd_dynamax
-            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
-            control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
+            control_path = _build_control_path(ctrl_times, ctrl_values, times)
             control_path_eval: Callable[[Array], Array | None] = lambda t: (
                 control_path.evaluate(t, left=False)
             )
@@ -370,9 +367,7 @@ class ODESimulator(BaseSimulator):
 
         # Create drift function that interpolates controls
         if ctrl_times is not None and ctrl_values is not None:
-            # We use rectilinear interpolation, to match cd_dynamax
-            _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times, ys=ctrl_values)
-            control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
+            control_path = _build_control_path(ctrl_times, ctrl_values, obs_times)
 
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
