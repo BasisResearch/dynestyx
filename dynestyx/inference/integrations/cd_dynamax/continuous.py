@@ -119,7 +119,7 @@ def run_continuous_filter(
     """
 
     if obs_times is None or obs_values is None:
-        return
+        raise ValueError("obs_times and obs_values are required for filtering.")
 
     if isinstance(filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)):
         if key is None:

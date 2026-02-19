@@ -196,7 +196,7 @@ def _filter_hmm(
         ctrl_values: Control values (optional).
     """
     if obs_times is None or obs_values is None:
-        return
+        raise ValueError("obs_times and obs_values are required for filtering.")
 
     _validate_controls(obs_times, ctrl_times, ctrl_values)
 
