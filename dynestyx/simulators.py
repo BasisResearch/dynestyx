@@ -334,7 +334,7 @@ class ODESimulator(BaseSimulator):
     solver: dfx.AbstractSolver = dfx.Tsit5()
     adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint()
     stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
-    dt0: float = 0.01
+    dt0: float = 1e-4
     max_steps: int = 10_000
 
     def __init__(
@@ -342,7 +342,7 @@ class ODESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Tsit5(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-        dt0: float = 0.01,
+        dt0: float = 1e-4,
         max_steps: int = 10_000,
     ):
         self.solver = solver
@@ -416,7 +416,7 @@ class ODESimulator(BaseSimulator):
         def _step(carry, t_idx):
             x_t = x_sol[t_idx]
             t = obs_times[t_idx]
-            u_t = _get_val_or_None(ctrl_values, t_idx)
+            u_t = None if args is None else args(t)
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx}",

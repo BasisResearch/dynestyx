@@ -30,6 +30,7 @@ from tests.models import (
     discrete_time_lti_model,
     hmm_model,
     jumpy_controls_model,
+    jumpy_controls_model_ode,
     jumpy_controls_model_sde,
     stochastic_volatility,
 )
@@ -825,6 +826,47 @@ def data_conditioned_jumpy_controls_sde():
         ):
             with Condition(context):
                 return jumpy_controls_model_sde()
+
+    return data_conditioned_model, synthetic
+
+
+def data_conditioned_jumpy_controls_ode():
+    rng_key = jr.PRNGKey(0)
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+    predictive = Predictive(
+        jumpy_controls_model_ode,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    controls = jnp.ones((len(obs_times),)) * 100
+    for i in range(1, len(controls), 2):
+        controls = controls.at[i].set(-controls[i])
+
+    context = Context(
+        observations=Trajectory(times=obs_times),
+        controls=Trajectory(times=obs_times, values=controls),
+    )
+    with Simulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory,
+            controls=Trajectory(times=obs_times, values=controls),
+        )
+        with Filter(
+            filter_config=ContinuousTimeEKFConfig(record_filtered_states_mean=True)
+        ):
+            with Condition(context):
+                return jumpy_controls_model_ode()
 
     return data_conditioned_model, synthetic
 
