@@ -10,6 +10,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
+    ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EKFConfig,
     KFConfig,
@@ -24,10 +25,12 @@ from dynestyx.simulators import (
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,
+    continuous_time_lti_simplified_model,
     continuous_time_stochastic_l63_model,
     continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,
     discrete_time_lti_model,
+    discrete_time_lti_simplified_model,
     hmm_model,
     jumpy_controls_model,
     stochastic_volatility,
@@ -853,5 +856,215 @@ def data_conditioned_discrete_time_lti_kf(request):
         with Filter(filter_config=config):
             with Condition(context):
                 return discrete_time_lti_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
+
+
+@pytest.fixture(params=[False, True])
+def data_conditioned_discrete_time_lti_simplified(request):
+    """Discrete-time LTI using LTI_discrete factory, with KF filter."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, mcmc_key, ctrl_key = jr.split(rng_key, 3)
+
+    true_alpha = 0.4
+    # Longer timeseries (~200 obs) so data inform alpha more, like continuous LTI
+    obs_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"alpha": jnp.array(true_alpha)}
+    predictive = Predictive(
+        discrete_time_lti_simplified_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with Filter(filter_config=KFConfig()):
+            with Condition(context):
+                return discrete_time_lti_simplified_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(
+    params=[
+        (False, "kf"),
+        (False, "pf"),
+        (True, "kf"),
+        (True, "pf"),
+    ]
+)
+def data_conditioned_discrete_time_lti_simplified_science(request):
+    """Discrete-time LTI using LTI_discrete factory. filter_type: 'kf' or 'pf'."""
+    use_controls, filter_type = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, mcmc_key, ctrl_key = jr.split(rng_key, 3)
+
+    true_alpha = 0.4
+    # Longer timeseries (~200 obs) so data inform alpha more, like continuous LTI
+    obs_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"alpha": jnp.array(true_alpha)}
+    predictive = Predictive(
+        discrete_time_lti_simplified_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+
+    with DiscreteTimeSimulator():
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    config = KFConfig() if filter_type == "kf" else PFConfig(n_particles=2_000)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with Filter(filter_config=config):
+            with Condition(context):
+                return discrete_time_lti_simplified_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls, filter_type
+
+
+@pytest.fixture(params=[False, True])
+def data_conditioned_continuous_time_lti_simplified(request):
+    """Continuous-time LTI using LTI_continuous factory, with exact KF filter."""
+    use_controls = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, data_solver_key, ctrl_key = jr.split(rng_key, 3)
+
+    true_rho = 2.0
+    obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        continuous_time_lti_simplified_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    with Simulator(key=data_solver_key):
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with Filter(filter_config=ContinuousTimeKFConfig()):
+            with Condition(context):
+                return continuous_time_lti_simplified_model()
+
+    return data_conditioned_model, true_params, synthetic, use_controls
+
+
+@pytest.fixture(
+    params=[
+        (False, "kf"),
+        (False, "pf"),
+        (True, "kf"),
+        (True, "pf"),
+    ]
+)
+def data_conditioned_continuous_time_lti_simplified_science(request):
+    """Continuous-time LTI using LTI_continuous factory. filter_type: 'kf' or 'pf'."""
+    use_controls, filter_type = request.param
+    rng_key = jr.PRNGKey(0)
+
+    data_init_key, data_solver_key, ctrl_key = jr.split(rng_key, 3)
+
+    true_rho = 2.0
+    obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+
+    control_trajectory = Trajectory()
+    if use_controls:
+        control_dim = 1
+        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
+        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+
+    true_params = {"rho": jnp.array(true_rho)}
+    predictive = Predictive(
+        continuous_time_lti_simplified_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    context = Context(
+        observations=Trajectory(times=obs_times), controls=control_trajectory
+    )
+    with Simulator(key=data_solver_key):
+        with Condition(context):
+            synthetic = predictive(data_init_key)
+
+    obs_values = synthetic["observations"].squeeze(0)
+    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
+
+    config = (
+        ContinuousTimeKFConfig()
+        if filter_type == "kf"
+        else ContinuousTimeDPFConfig(n_particles=2_000)
+    )
+
+    def data_conditioned_model():
+        context = Context(
+            observations=observation_trajectory, controls=control_trajectory
+        )
+        with Filter(filter_config=config):
+            with Condition(context):
+                return continuous_time_lti_simplified_model()
 
     return data_conditioned_model, true_params, synthetic, use_controls, filter_type

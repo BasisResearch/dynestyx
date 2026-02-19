@@ -7,6 +7,8 @@ from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
     LinearGaussianStateEvolution,
+    LTI_continuous,
+    LTI_discrete,
 )
 from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
@@ -196,6 +198,19 @@ def continuous_time_stochastic_l63_model_dirac_obs():
     dsx.sample("f", dynamics)
 
 
+def continuous_time_lti_simplified_model():
+    """Continuous-time LTI using LTI_continuous factory: only rho = A[1,0] is sampled."""
+    rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
+    state_dim = 2
+    A = jnp.array([[-1.0, 0.0], [rho, -1.0]])
+    L = jnp.eye(state_dim)
+    H = jnp.array([[0.0, 1.0]])
+    R = jnp.array([[1.0**2]])
+    B = jnp.array([[0.0], [10.0]])
+    dynamics = LTI_continuous(A=A, L=L, H=H, R=R, bm_dim=state_dim, B=B)
+    dsx.sample("f", dynamics)
+
+
 def continuous_time_LTI_gaussian():
     """2D linear SDE with a sampled coupling."""
     rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
@@ -311,6 +326,20 @@ def discrete_time_lti_model():
         observation_dim=emission_dim,
         control_dim=control_dim,
     )
+    dsx.sample("f", dynamics)
+
+
+def discrete_time_lti_simplified_model():
+    """Discrete-time LTI using LTI_discrete factory: only alpha = A[0,0] is sampled."""
+    alpha = numpyro.sample("alpha", dist.Uniform(-0.7, 0.7))
+    state_dim = 2
+    A = jnp.array([[alpha, 0.0], [0.0, 0.8]])
+    Q = 0.1 * jnp.eye(state_dim)
+    H = jnp.array([[1.0, 0.0]])
+    R = jnp.array([[0.5**2]])
+    B = jnp.array([[0.1], [0.0]])
+    D = jnp.array([[0.01]])
+    dynamics = LTI_discrete(A=A, Q=Q, H=H, R=R, B=B, D=D)
     dsx.sample("f", dynamics)
 
 

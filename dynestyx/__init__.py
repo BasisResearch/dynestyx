@@ -2,12 +2,15 @@
 
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.dynamical_models import (
+    AffineDrift,
     Context,
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
     GaussianStateEvolution,
     LinearGaussianStateEvolution,
+    LTI_continuous,
+    LTI_discrete,
     ObservationModel,
     Trajectory,
 )
@@ -25,6 +28,9 @@ __all__ = [
     "ContinuousTimeStateEvolution",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
+    "AffineDrift",
+    "LTI_continuous",
+    "LTI_discrete",
     "LinearGaussianStateEvolution",
     "GaussianStateEvolution",
     "Discretizer",

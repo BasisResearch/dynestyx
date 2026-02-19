@@ -1,19 +1,30 @@
-"""Continuous-time filters via CD-Dynamax: EnKF, DPF, EKF, UKF."""
+"""Continuous-time filters via CD-Dynamax: KF, EnKF, DPF, EKF, UKF."""
 
 import jax
 import jax.numpy as jnp
 import numpyro
 
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+from cd_dynamax import (
+    ContDiscreteLinearGaussianSSM,
+    ContDiscreteNonlinearGaussianSSM,
+    ContDiscreteNonlinearSSM,
+)
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
+    PosteriorGSSMFiltered,
+)
 from dynestyx.dynamical_models import Context, DynamicalModel
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
+    ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     config_to_record_kwargs,
 )
-from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
+from dynestyx.inference.integrations.cd_dynamax.utils import (
+    dsx_to_cd_dynamax,
+    dsx_to_cdlgssm_params,
+)
 from dynestyx.utils import (
     _get_controls,
     _should_record_field,
@@ -23,7 +34,8 @@ from dynestyx.utils import (
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 ContinuousTimeFilterConfig = (
-    ContinuousTimeEnKFConfig
+    ContinuousTimeKFConfig
+    | ContinuousTimeEnKFConfig
     | ContinuousTimeDPFConfig
     | ContinuousTimeEKFConfig
     | ContinuousTimeUKFConfig
@@ -92,6 +104,77 @@ def _config_to_cd_dynamax_filter_kwargs(
     return base
 
 
+def _add_filter_sites(
+    name: str,
+    filter_config: ContinuousTimeFilterConfig,
+    filtered,
+) -> None:
+    """Add marginal log-likelihood factor and filtered state deterministic sites."""
+    record_kwargs = config_to_record_kwargs(filter_config)
+    numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
+    numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
+
+    max_elems = record_kwargs["record_max_elems"]
+    means_shape = filtered.filtered_means.shape
+    cov_shape = filtered.filtered_covariances.shape
+    add_mean = _should_record_field(
+        record_kwargs["record_filtered_states_mean"], means_shape, max_elems
+    )
+    add_cov = _should_record_field(
+        record_kwargs["record_filtered_states_cov"], cov_shape, max_elems
+    )
+    add_cov_diag = _should_record_field(
+        record_kwargs["record_filtered_states_cov_diag"],
+        (cov_shape[0], cov_shape[1]),
+        max_elems,
+    )
+    if add_mean:
+        numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
+    if add_cov:
+        numpyro.deterministic(
+            f"{name}_filtered_states_cov", filtered.filtered_covariances
+        )
+    if add_cov_diag:
+        diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
+        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+
+
+def _prepare_filter_data(context: Context, dynamics: DynamicalModel, obs_traj):
+    """Shared data prep for all continuous-time filter branches."""
+    obs_times = obs_traj.times[:, None]
+    obs_values = obs_traj.values
+    _, ctrl_values = _get_controls(context, obs_traj.times)
+    _validate_control_dim(dynamics, ctrl_values)
+    if ctrl_values is None:
+        ctrl_values = jnp.zeros((obs_values.shape[0], dynamics.control_dim))
+    return obs_times, obs_values, ctrl_values
+
+
+def _run_linear_kf(
+    name: str,
+    dynamics: DynamicalModel,
+    obs_times,
+    obs_values,
+    ctrl_values,
+    filter_config: ContinuousTimeKFConfig,
+) -> PosteriorGSSMFiltered:
+    """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
+    params = dsx_to_cdlgssm_params(dynamics)
+    cd_model = ContDiscreteLinearGaussianSSM(
+        state_dim=dynamics.state_dim,
+        emission_dim=dynamics.observation_dim,
+        input_dim=dynamics.control_dim,
+    )
+    filtered = cd_model.filter(
+        params=params,
+        emissions=obs_values,
+        t_emissions=obs_times,
+        inputs=ctrl_values,
+        warn=filter_config.warn,
+    )
+    return filtered
+
+
 def run_continuous_filter(
     name: str,
     dynamics: DynamicalModel,
@@ -114,17 +197,23 @@ def run_continuous_filter(
     if obs_traj.times is None or obs_traj.values is None:
         return
 
+    obs_times, obs_values, ctrl_values = _prepare_filter_data(
+        context, dynamics, obs_traj
+    )
+
+    if isinstance(filter_config, ContinuousTimeKFConfig):
+        filtered = _run_linear_kf(
+            name, dynamics, obs_times, obs_values, ctrl_values, filter_config
+        )
+        _add_filter_sites(name, filter_config, filtered)
+        return
+
     if isinstance(filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)):
         if key is None:
             raise ValueError(
                 f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
             )
-
-    obs_times = obs_traj.times[:, None]
-    obs_values = obs_traj.values
-    ctrl_times, ctrl_values = _get_controls(context, obs_traj.times)
-    _validate_control_dim(dynamics, ctrl_values)
 
     if isinstance(filter_config, ContinuousTimeDPFConfig):
         cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
@@ -145,34 +234,4 @@ def run_continuous_filter(
     )
 
     filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
-
-    record_kwargs = config_to_record_kwargs(filter_config)
-
-    numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
-
-    max_elems = record_kwargs["record_max_elems"]
-    means_shape = filtered.filtered_means.shape
-    cov_shape = filtered.filtered_covariances.shape
-
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], means_shape, max_elems
-    )
-    add_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"], cov_shape, max_elems
-    )
-    add_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"],
-        (cov_shape[0], cov_shape[1]),
-        max_elems,
-    )
-
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
-    if add_cov:
-        numpyro.deterministic(
-            f"{name}_filtered_states_cov", filtered.filtered_covariances
-        )
-    if add_cov_diag:
-        diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+    _add_filter_sites(name, filter_config, filtered)
