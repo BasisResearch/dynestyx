@@ -44,10 +44,10 @@ def dsx_to_cd_dynamax(
                     "diffusion_coeff": state_evo.diffusion_coefficient,
                 }
             )
-        if state_evo.diffusion_covariance is not None:
+        if state_evo.bm_dim is not None:
             params.update(
                 {
-                    "diffusion_cov": state_evo.diffusion_covariance,
+                    "diffusion_cov": jnp.eye(state_evo.bm_dim),
                 }
             )
     else:
