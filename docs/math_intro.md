@@ -49,7 +49,7 @@ dynamics = DynamicalModel(
     state_evolution=ContinuousTimeStateEvolution(
         drift=lambda x, u, t: ...,
         diffusion_coefficient=lambda x, u, t: ...,
-        diffusion_covariance=lambda x, u, t: ...,
+        bm_dim=...
     ),
     observation_model=lambda x, u, t: ...,
 )
@@ -78,10 +78,9 @@ from dynestyx.simulators import SDESimulator
 
 import jax.random as jr
 
-prng_key = jr.PRNGKey(0)
 obs_times = jnp.arange(0.0, 1.0, 0.1)
 
-with SDESimulator(key=prng_key):  # Specify how the SDE will be simulated/solved
+with SDESimulator():  # Specify how the SDE will be simulated/solved
     sampled_trajectory = continuous_discrete_model(obs_times=obs_times)  # Obtain samples
 ```
 

@@ -1,5 +1,7 @@
 import math
 
+import diffrax as dfx
+import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array
@@ -82,6 +84,26 @@ def _validate_controls(
             f"Control times length ({len(ctrl_times)}) must match "
             f"observation times length ({len(obs_times)})"
         )
+
+
+_CONTROL_EXTEND_EPSILON = 1e-5
+
+
+def _build_control_path(
+    ctrl_times: Array, ctrl_values: Array, obs_times: Array
+) -> dfx.LinearInterpolation:
+    """
+    Build rectilinear control path for continuous-time simulators.
+
+    Extends the path past the final time so that evaluate(t_last, left=False)
+    returns the last value instead of NaN (rectilinear path has no right piece
+    at the boundary).
+    """
+    t_final = jnp.maximum(obs_times[-1], ctrl_times[-1]) + _CONTROL_EXTEND_EPSILON
+    ctrl_times_ext = jnp.concatenate([ctrl_times, t_final[None]])
+    ctrl_values_ext = jnp.concatenate([ctrl_values, ctrl_values[-1:]], axis=0)
+    _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times_ext, ys=ctrl_values_ext)
+    return dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
 
 def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:

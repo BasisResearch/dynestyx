@@ -29,6 +29,8 @@ from tests.models import (
     discrete_time_lti_model,
     hmm_model,
     jumpy_controls_model,
+    jumpy_controls_model_ode,
+    jumpy_controls_model_sde,
     stochastic_volatility,
 )
 
@@ -312,7 +314,7 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         exclude_deterministic=False,
     )
 
-    with Simulator(key=data_solver_key):
+    with Simulator():
         synthetic = predictive(
             data_init_key,
             obs_times=obs_times,
@@ -374,7 +376,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
         exclude_deterministic=False,
     )
 
-    with Simulator(key=data_solver_key):
+    with Simulator():
         synthetic = predictive(
             data_init_key,
             obs_times=obs_times,
@@ -549,7 +551,7 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         exclude_deterministic=False,
     )
 
-    with Simulator(key=data_solver_key):
+    with Simulator():
         synthetic = predictive(
             data_init_key,
             obs_times=obs_times,
@@ -605,7 +607,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
         exclude_deterministic=False,
     )
 
-    with Simulator(key=data_solver_key):
+    with Simulator():
         synthetic = predictive(
             data_init_key,
             obs_times=obs_times,
@@ -767,6 +769,85 @@ def data_conditioned_jumpy_controls():
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+            )
+
+    return data_conditioned_model, synthetic
+
+
+def data_conditioned_jumpy_controls_sde():
+    rng_key = jr.PRNGKey(0)
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+    predictive = Predictive(
+        jumpy_controls_model_sde,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    controls = jnp.ones((len(obs_times),)) * 100
+    for i in range(1, len(controls), 2):
+        controls = controls.at[i].set(-controls[i])
+
+    with Simulator():
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=obs_times,
+            ctrl_values=controls,
+        )
+
+    obs_values = synthetic["observations"].squeeze(0)
+
+    def data_conditioned_model():
+        with Filter(
+            filter_config=ContinuousTimeEKFConfig(record_filtered_states_mean=True)
+        ):
+            return jumpy_controls_model_sde(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=obs_times,
+                ctrl_values=controls,
+            )
+
+    return data_conditioned_model, synthetic
+
+
+def data_conditioned_jumpy_controls_ode():
+    rng_key = jr.PRNGKey(0)
+    data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
+        rng_key, 5
+    )
+    predictive = Predictive(
+        jumpy_controls_model_ode,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    controls = jnp.ones((len(obs_times),)) * 100
+    for i in range(1, len(controls), 2):
+        controls = controls.at[i].set(-controls[i])
+
+    with Simulator():
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=obs_times,
+            ctrl_values=controls,
+        )
+    obs_values = synthetic["observations"].squeeze(0)
+
+    def data_conditioned_model():
+        with Filter(
+            filter_config=ContinuousTimeEKFConfig(record_filtered_states_mean=True)
+        ):
+            return jumpy_controls_model_ode(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=obs_times,
+                ctrl_values=controls,
             )
 
     return data_conditioned_model, synthetic

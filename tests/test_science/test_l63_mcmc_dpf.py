@@ -1,3 +1,7 @@
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 import arviz as az
 import jax.numpy as jnp
 import jax.random as jr

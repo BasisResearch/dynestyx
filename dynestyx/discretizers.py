@@ -1,3 +1,4 @@
+import jax.numpy as jnp
 import numpyro.distributions as dist
 from jax import vmap
 
@@ -50,7 +51,7 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
             drift = self.cte.drift(_x, _u, _t_now)
             x_pred_mean = _x + drift * _dt
             L = self.cte.diffusion_coefficient(_x, _u, _t_now)
-            Q = self.cte.diffusion_covariance(_x, _u, _t_now)
+            Q = jnp.eye(self.cte.bm_dim)
             x_pred_cov = L @ Q @ L.T * _dt
             return x_pred_mean, x_pred_cov
 

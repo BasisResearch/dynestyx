@@ -1,10 +1,9 @@
 import dataclasses
-import warnings
+from collections.abc import Callable
 
 import diffrax as dfx
 import jax.numpy as jnp
 import numpyro
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
@@ -15,39 +14,55 @@ from dynestyx.dynamical_models import (
     State,
 )
 from dynestyx.handlers import BaseSimulator
-from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.observations import DiracIdentityObservation
 from dynestyx.utils import (
+    _build_control_path,
     _get_val_or_None,
     _validate_control_dim,
     _validate_controls,
 )
 
-type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
-
 
 class SDESimulator(BaseSimulator):
-    """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics."""
+    """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics.
+
+    Simulation occurs via the stochastic adjoint method, as provided by diffrax."""
 
     def __init__(
         self,
-        key: Array,
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-        dt0: float = 0.01,
-        tol_vbt: float = 1e-1,  # tolerance for virtual brownian tree
-        max_steps: int = int(1e5),
+        dt0: float = 1e-4,
+        tol_vbt: float | None = None,
+        max_steps: int | None = None,
     ):
-        self.key = key  # key for model randomness (initial condition, SDE solver, and observation noise)
+        """Create an SDESimulator, which forms a generative model for a continuous-time SDE.
+
+        Parameters:
+        - solver: The solver to use for the SDE. Defaults to dfx.Heun().
+        - stepsize_controller: The stepsize controller to use for the SDE. Defaults to dfx.ConstantStepSize().
+        - adjoint: The adjoint to use for the SDE. Defaults to dfx.RecursiveCheckpointAdjoint().
+        - dt0: The initial stepsize for the SDE. Defaults to 1e-4.
+        - tol_vbt: The tolerance for the virtual Brownian tree. If None, defaults to dt0 / 2.0.
+        - max_steps: The maximum number of steps for the SDE. Defaults to None.
+        """
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
             "dt0": dt0,
-            "tol_vbt": tol_vbt,
             "max_steps": max_steps,
         }
+
+        if tol_vbt is None:
+            self.tol_vbt = dt0 / 2.0
+        else:
+            self.tol_vbt = tol_vbt
+
+        assert self.tol_vbt < dt0, (
+            "tol_vbt must be smaller than dt0 for statistically correct simulation."
+        )
 
     def simulate(
         self,
@@ -59,6 +74,14 @@ class SDESimulator(BaseSimulator):
         ctrl_values=None,
         **kwargs,
     ) -> dict[str, State]:
+        """
+        Simulates a continuous-time SDE from a given dynamical model, using diffrax
+        and the settings provided in the `__init__` method.
+
+        To handle controls, we use a rectilinear interpolation that is right-continuous,
+        i.e., if ctrl_times = [0.0, 1.0, 2.0] and ctrl_values = [0.0, 1.0, 2.0],
+        then the control at time 1.0 is the value at time 1.0.
+        """
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
@@ -66,12 +89,12 @@ class SDESimulator(BaseSimulator):
 
         if (
             dynamics.state_evolution.diffusion_coefficient is None
-            or dynamics.state_evolution.diffusion_covariance is None
+            or dynamics.state_evolution.bm_dim is None
         ):
             raise ValueError(
-                "SDESimulator requires both diffusion_coefficient and diffusion_covariance to be "
+                "SDESimulator requires both diffusion_coefficient and bm_dim to be "
                 f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
-                f"cov={dynamics.state_evolution.diffusion_covariance}). "
+                f"bm_dim={dynamics.state_evolution.bm_dim}). "
                 "Use ODESimulator for deterministic dynamics."
             )
 
@@ -82,92 +105,62 @@ class SDESimulator(BaseSimulator):
         _validate_controls(times, ctrl_times, ctrl_values)
         _validate_control_dim(dynamics, ctrl_values)
 
-        # Generate a CD-Dynamax-compatible parameter dict
-        # Works for both stochastic and deterministic dynamics
-        params, non_gaussian_flag = dsx_to_cd_dynamax(dynamics)
+        initial_state = numpyro.sample("x_0", dynamics.initial_condition)
 
-        # Instantiate the CD-Dynamax model (gets a solver internally, which is only used by .sample() method)
-        if non_gaussian_flag:
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-                diffeqsolve_settings=self.diffeqsolve_settings,
+        if ctrl_times is not None and ctrl_values is not None:
+            control_path = _build_control_path(ctrl_times, ctrl_values, times)
+            control_path_eval: Callable[[Array], Array | None] = lambda t: (
+                control_path.evaluate(t, left=False)
             )
         else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
+            control_path_eval = lambda t: None
 
-        # Sample states and emissions from the model using solver settings defined above.
-        # ensure that times has shape (num_timesteps, 1)
-        if times.ndim == 1:
-            times = times[:, None]
-        control_dim = dynamics.control_dim
-        inputs = (
-            ctrl_values
-            if ctrl_values is not None
-            else jnp.zeros((len(times), control_dim))
+        def _drift(t, y, args):
+            u_t = args(t)
+            return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+
+        def _diffusion(t, y, args):
+            u_t = args(t)
+            return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+
+        bm = dfx.VirtualBrownianTree(
+            t0=times[0],
+            t1=times[-1],
+            tol=self.tol_vbt,
+            shape=(dynamics.state_evolution.bm_dim,),
+            key=numpyro.prng_key(),
         )
-        states, emissions = cd_dynamax_model.sample(
-            params=params,
-            key=self.key,
-            num_timesteps=len(times),
-            t_emissions=times,
-            inputs=inputs,
-            transition_type="path",
+
+        terms = dfx.MultiTerm(  # type: ignore
+            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
         )
+
+        sol = dfx.diffeqsolve(
+            terms,
+            t0=times[0],
+            t1=times[-1],
+            y0=initial_state,
+            args=control_path_eval,
+            saveat=dfx.SaveAt(ts=times),
+            **self.diffeqsolve_settings,
+        )
+        states_sol = sol.ys  # (T, ..., state_dim)
+
+        def _create_observations_step(carry, t_idx):
+            x_t = states_sol[t_idx]
+            t = times[t_idx]
+            u_t = control_path_eval(t)
+            y_t = numpyro.sample(
+                f"y_{t_idx}",
+                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                obs=_get_val_or_None(obs_values, t_idx),
+            )
+            return carry, y_t
+
+        states = states_sol
+        _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))
 
         return {"times": times, "states": states, "observations": emissions}
-
-    def add_solved_sites(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        **kwargs,
-    ):
-        if obs_times is None:
-            raise ValueError("obs_times must be provided")
-
-        # Run the simulator to obtain states/emissions (times reshaped as needed for cd-dynamax)
-        simulated = self.simulate(
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
-        )
-        states = simulated["states"]
-        emissions = simulated["observations"]
-
-        # Deterministic sites for times, states, emissions
-        numpyro.deterministic("times", obs_times)
-        numpyro.deterministic("states", states)
-        numpyro.deterministic("observations", emissions)
-
-        # Observation sample sites using the model's observation distribution only when obs values are provided.
-        # If obs_values is None and emissions were produced, we avoid resampling to keep consistency with cd-dynamax.
-        if obs_values is not None:
-            T = len(obs_times)
-            warnings.warn(
-                "Adding observation sample sites in the SDESimulator will not result in proper state inference. While it provides a technically unbiased estimate of the marginal likelihood for system identification, it is highly inefficient and is not recommended."
-            )
-            for t_idx in range(T):
-                u_t = _get_val_or_None(ctrl_values, t_idx)
-                t = obs_times[t_idx]
-                numpyro.sample(
-                    f"y_{t_idx}",
-                    dynamics.observation_model(states[t_idx], u_t, t),
-                    obs=_get_val_or_None(obs_values, t_idx),
-                )
 
 
 @dataclasses.dataclass
@@ -329,7 +322,7 @@ class ODESimulator(BaseSimulator):
     solver: dfx.AbstractSolver = dfx.Tsit5()
     adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint()
     stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
-    dt0: float = 0.01
+    dt0: float = 1e-3
     max_steps: int = 10_000
 
     def __init__(
@@ -337,8 +330,8 @@ class ODESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Tsit5(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-        dt0: float = 0.01,
-        max_steps: int = 10_000,
+        dt0: float = 1e-3,
+        max_steps: int = 100_000,
     ):
         self.solver = solver
         self.adjoint = adjoint
@@ -367,19 +360,22 @@ class ODESimulator(BaseSimulator):
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
         # Create drift function that interpolates controls
-        # For now, use piecewise constant (nearest neighbor) interpolation
         if ctrl_times is not None and ctrl_values is not None:
-            # Create LinearInterpolation for controls using diffrax
-            control_path = dfx.LinearInterpolation(ts=ctrl_times, ys=ctrl_values)
+            control_path = _build_control_path(ctrl_times, ctrl_values, obs_times)
 
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
-                u_t = control_path.evaluate(t)
+                u_t = args(t)
                 return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+
+            args = lambda t: control_path.evaluate(t, left=False)
+
         else:
 
             def f(t, y, args):
                 return dynamics.state_evolution.drift(x=y, u=None, t=t)
+
+            args = None
 
         # Solve ODE at all observation times using diffrax
         sol = dfx.diffeqsolve(
@@ -393,6 +389,7 @@ class ODESimulator(BaseSimulator):
             stepsize_controller=self.stepsize_controller,
             adjoint=self.adjoint,
             max_steps=self.max_steps,
+            args=args,
         )
         x_sol = sol.ys  # shape (T, state_dim) # includes initial state at t0
 
@@ -400,7 +397,7 @@ class ODESimulator(BaseSimulator):
         def _step(carry, t_idx):
             x_t = x_sol[t_idx]
             t = obs_times[t_idx]
-            u_t = _get_val_or_None(ctrl_values, t_idx)
+            u_t = None if args is None else args(t)
             # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx}",
@@ -466,7 +463,7 @@ class Simulator(BaseSimulator):
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
                 if (
                     dynamics.state_evolution.diffusion_coefficient is None
-                    or dynamics.state_evolution.diffusion_covariance is None
+                    or dynamics.state_evolution.bm_dim is None
                 ):
                     self.simulator = ODESimulator(*self.args, **self.kwargs)
                 else:
