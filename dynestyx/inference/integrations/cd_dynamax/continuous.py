@@ -101,8 +101,8 @@ def run_continuous_filter(
     filter_config: ContinuousTimeFilterConfig,
     key: jax.Array | None = None,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -120,10 +120,6 @@ def run_continuous_filter(
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
     """
-
-    if obs_times is None or obs_values is None:
-        raise ValueError("obs_times and obs_values are required for filtering.")
-
     if isinstance(filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)):
         if key is None:
             raise ValueError(

@@ -1,5 +1,6 @@
 import dataclasses
 
+import jax
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
@@ -63,8 +64,8 @@ class Filter(BaseCDDynamaxLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
+        obs_times: jax.Array | None = None,
+        obs_values: jax.Array | None = None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -80,6 +81,9 @@ class Filter(BaseCDDynamaxLogFactorAdder):
             ctrl_times: Control times (optional).
             ctrl_values: Control values (optional).
         """
+        if obs_times is None or obs_values is None:
+            raise ValueError("obs_times and obs_values are required for filtering.")
+
         config = (
             self.filter_config
             if self.filter_config is not None

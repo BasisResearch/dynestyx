@@ -48,8 +48,8 @@ def run_discrete_filter(
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -59,19 +59,12 @@ def run_discrete_filter(
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = config_to_record_kwargs(filter_config)
 
-    if obs_values is None:
-        return
-
     ys = obs_values
     t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
     if t1 == 0:
         return
 
-    # Time axis
-    if obs_times is None:
-        times = jnp.arange(t1, dtype=jnp.float32)
-    else:
-        times = jnp.asarray(obs_times)
+    times = obs_times
 
     _validate_controls(times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)

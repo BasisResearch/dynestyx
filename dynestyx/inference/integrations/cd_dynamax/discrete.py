@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
@@ -80,15 +81,13 @@ def _filter_discrete_time_dynamax_kf(
     dynamics: DynamicalModel,
     record_kwargs: dict,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
 ) -> None:
     """Run dynamax Kalman filter for LTI_discretetime and add factor + sites."""
-    if obs_values is None or obs_times is None:
-        return
     emissions = obs_values
     times = jnp.asarray(obs_times)
     T1 = emissions.shape[0]
@@ -115,15 +114,13 @@ def _run_nlgssm_filter(
     record_kwargs: dict,
     run_filter: Callable,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
 ) -> None:
     """Common setup for EKF/UKF: get emissions/inputs, run filter, add factor + sites."""
-    if obs_values is None or obs_times is None:
-        return
     emissions = obs_values
     times = jnp.asarray(obs_times)
     T1 = emissions.shape[0]
@@ -147,8 +144,8 @@ def _filter_discrete_time_dynamax_ekf(
     record_kwargs: dict,
     num_iter: int = 1,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -179,8 +176,8 @@ def _filter_discrete_time_dynamax_ukf(
     record_kwargs: dict,
     hyperparams: UKFHyperParams | None = None,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -242,8 +239,8 @@ def run_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -259,7 +256,6 @@ def run_discrete_filter(
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
     """
-
     record_kwargs = config_to_record_kwargs(filter_config)
     filter_kwargs = dict(
         obs_times=obs_times,

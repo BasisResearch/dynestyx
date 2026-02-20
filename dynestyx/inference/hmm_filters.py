@@ -178,8 +178,8 @@ def _filter_hmm(
     dynamics: DynamicalModel,
     filter_config: HMMConfig,
     *,
-    obs_times=None,
-    obs_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -195,9 +195,6 @@ def _filter_hmm(
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
     """
-    if obs_times is None or obs_values is None:
-        raise ValueError("obs_times and obs_values are required for filtering.")
-
     _validate_controls(obs_times, ctrl_times, ctrl_values)
 
     log_pi, log_A_seq, log_emit_seq = hmm_log_components(
