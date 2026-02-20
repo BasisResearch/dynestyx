@@ -103,17 +103,52 @@ class Drift(Protocol):
         raise NotImplementedError()
 
 
+class Potential(Protocol):
+    """
+    A scalar potential energy callable mapping:
+        (state, control, time) -> scalar potential
+    """
+
+    def __call__(
+        self,
+        x: State,
+        u: Control | None,
+        t: Time,
+    ) -> jax.Array:
+        raise NotImplementedError()
+
+
 @dataclasses.dataclass
 class ContinuousTimeStateEvolution:
     """
-    SDE: dx = f(State_t, t) dt + L(State_t, t) dW
+    SDE: dx = [drift(x, u, t) + s * grad(potential)(x, u, t)] dt + L(x, u, t) dW
+
+    where s = -1 when `use_negative_gradient` is True, else s = +1.
     """
 
     drift: Drift | None = None
+    potential: Potential | None = None
+    use_negative_gradient: bool = False
     diffusion_coefficient: Drift | None = None
     bm_dim: int | None = None
 
-    ...
+    def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
+        base = self.drift(x, u, t) if self.drift is not None else None
+
+        potential = self.potential
+        if potential is None:
+            if base is None:
+                raise ValueError(
+                    "ContinuousTimeStateEvolution requires drift or potential to be defined."
+                )
+            return base
+
+        grad_potential = jax.grad(lambda z: potential(z, u, t))(x)
+        sign = -1.0 if self.use_negative_gradient else 1.0
+        grad_term = sign * grad_potential
+        if base is None:
+            return grad_term
+        return base + grad_term
 
 
 class ObservationModel(eqx.Module):

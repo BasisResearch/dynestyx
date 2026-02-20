@@ -370,6 +370,49 @@ def continuous_time_deterministic_l63_model(
     )
 
 
+def continuous_time_potential_dynamics_model(
+    mode: str = "both",
+    obs_times=None,
+    obs_values=None,
+):
+    """1D continuous-time model supporting drift-only, grad-only, or both."""
+    if mode not in {"drift_only", "grad_only", "both"}:
+        raise ValueError(f"Unsupported mode: {mode}")
+
+    alpha = jnp.asarray(numpyro.sample("alpha", dist.Uniform(0.1, 2.0)))  # type: ignore[arg-type]
+    beta = jnp.asarray(numpyro.sample("beta", dist.Uniform(0.1, 2.0)))  # type: ignore[arg-type]
+
+    drift = None
+    potential = None
+    if mode in {"drift_only", "both"}:
+        drift = lambda x, u, t: jnp.asarray(-alpha * x)
+    if mode in {"grad_only", "both"}:
+        potential = lambda x, u, t: jnp.asarray(0.5 * beta * jnp.sum(x**2))
+
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(1), covariance_matrix=0.5**2 * jnp.eye(1)
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=drift,
+            potential=potential,
+            use_negative_gradient=True,
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]), R=jnp.array([[0.1**2]])
+        ),
+    )
+
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+
 def discrete_time_lti_model(
     obs_times=None,
     obs_values=None,
