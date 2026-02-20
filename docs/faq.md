@@ -6,67 +6,64 @@
 
 ## What are the most common ways to condition models on data for system identification?
 
-Say you have a dynestyx model `model`:
+Say you have a dynestyx model `model` that accepts `obs_times`, `obs_values` (and optionally `ctrl_times`, `ctrl_values` for controlled systems) and passes them to `dsx.sample`:
 ```python
-
-def model(...):
+def model(obs_times=None, obs_values=None, ctrl_times=None, ctrl_values=None):
     params = numpyro.sample(...)
     dynamics = DynamicalModel(...)
-    return dsx.sample("f", dynamics)
+    return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values, ctrl_times=ctrl_times, ctrl_values=ctrl_values)
 ```
-and data `context = Context(observations=Trajectory(times=times, values=values), controls=...)`.
+Omit `ctrl_times` and `ctrl_values` when the model has no controls.
 
 
 - **HMM**: Use the HMM filter (using an `HMMConfig` configuation). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
 ```python
-with Filter(HMMConfig()):
-    with Condition(context):
-        return model()
+from dynestyx.filters import Filter, HMMConfig
+
+with Filter(filter_config=HMMConfig()):
+    return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
 - **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (pseudo-marginal MCMC—parameters only). Note: the usage of discrete-time filters is currently under active development (likely incorrect implementations).
 For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), use the simulator approach (currently working reliably), do:
 ```python
 with DiscreteTimeSimulator():
-    with Condition(context):
-        return model()
+    return model(obs_times=obs_times, obs_values=obs_values)
 ```
 For filter-based marginalization (currently not working reliably), do:
 ```python
 with Filter():
-    with Condition(context):
-        return model()
+    return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
 
 - **Continuous-time stochastic differential equation**: **Filter** is the main choice. EnKF is the default and works well for nonlinear models, but only works if your initial condition and observation model are linear/gaussian. Use the particle filter (PF) only if you have non-Gaussian initial conditions or observation models—see [SDE with non-Gaussian observations](tutorials/sde_non_gaussian_observations.ipynb). We stand by these implementations, and they appear to be working well currently (especially EnKF).
 ```python
-with Filter(filter_type='enkf'):
-# with Filter(filter_type='pf'): 
-    with Condition(context):
-        return model()
+from dynestyx.filters import Filter, ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig
+
+with Filter(filter_config=ContinuousTimeEnKFConfig()):
+# with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=1000)):
+    return model(obs_times=obs_times, obs_values=obs_values)
 ```
- EnKF is the default and works well for nonlinear models, but only works if your initial condition and observation model are linear/gaussian. Use the particle filter (PF) only if you have non-Gaussian initial conditions or observation models—see [SDE with non-Gaussian observations](tutorials/sde_non_gaussian_observations.ipynb). We stand by these implementations, and they appear to be working well currently (especially EnKF).
 
 If you happen to have high-frequency, fully-observed, low-noise data, then there IS a much faster option, as shown in this [deep dive](deep_dives/l63_speedup_dirac_vs_enkf.ipynb). Simply do:
 ```python
 with DiscreteTimeSimulator():
     with Discretizer():
-        with Condition(context):
-            return model(dirac_observation=True)
+        return model(obs_times=obs_times, obs_values=obs_values, dirac_observation=True)
 ```
 
 - **Continuous-time ordinary differential equation**: You can use a **Simulator** or a **Filter**. The simulator simply rolls out solutions from the initial conditions and checks fit to data; see tutorial on [ODE inference](tutorials/gentle_intro/06b_odes.ipynb).
 ```python
 with ODESimulator():
-    with Condition(context):
-        return model()
+    return model(obs_times=obs_times, obs_values=obs_values)
 ```
 Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
 ```python
-with Filter(filter_type='enkf'):
-    with Condition(context):
-        return model(diffusion_coefficient = 0.01)
+from dynestyx.filters import Filter, ContinuousTimeEnKFConfig
+
+with Filter(filter_config=ContinuousTimeEnKFConfig()):
+    return model(obs_times=obs_times, obs_values=obs_values, diffusion_coefficient=0.01)
 ```
 
 

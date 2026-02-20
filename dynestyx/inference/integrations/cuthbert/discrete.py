@@ -7,7 +7,7 @@ import numpyro
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
@@ -16,7 +16,11 @@ from dynestyx.inference.filter_configs import (
     config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
-from dynestyx.utils import _get_controls, _should_record_field, _validate_control_dim
+from dynestyx.utils import (
+    _should_record_field,
+    _validate_control_dim,
+    _validate_controls,
+)
 
 
 class CuthbertInputs(NamedTuple):
@@ -41,32 +45,28 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
 def run_discrete_filter(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
 
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = config_to_record_kwargs(filter_config)
 
-    obs_traj = context.observations
-    if obs_traj.values is None:
-        return
-
-    ys = obs_traj.values
+    ys = obs_values
     t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
     if t1 == 0:
         return
 
-    # Time axis (scalar at each step after slicing by cuthbert.filter)
-    if obs_traj.times is None:
-        times = jnp.arange(t1, dtype=jnp.float32)
-    else:
-        times = jnp.asarray(obs_traj.times)
+    times = obs_times
 
-    # Align controls (if any) to observation times
-    _, ctrl_values = _get_controls(context, times)
+    _validate_controls(times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 
     if ctrl_values is None:
@@ -151,23 +151,18 @@ def _cuthbert_filter_taylor_kf(
         def init_log_density(x):
             return jnp.asarray(dist0.log_prob(x)).sum()
 
-        # Ensure (state_dim,) so cuthbert's linearize_log_density gets 2D Hessian.
         x0_lin = jnp.reshape(jnp.atleast_1d(jnp.asarray(dist0.mean)), (state_dim,))
         return init_log_density, x0_lin
 
     def get_dynamics_log_density(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
     ):
-        # log p(x_t | x_{t-1})
         def dynamics_log_density(x_prev, x):
             dist = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)
             return jnp.asarray(dist.log_prob(x)).sum()
 
-        # Linearize around previous filtered mean. Ensure at least 1d for cuthbertlib
-        # (jnp.diag fails on 0-d precision when state_dim=1).
         x_prev_lin = jnp.atleast_1d(jnp.asarray(state.mean))
 
-        # A decent guess for the x_t linearization point is the conditional mean at x_prev_lin (if available).
         dist_at_lin = dynamics.state_evolution(  # type: ignore
             x_prev_lin, mi.u_prev, mi.time_prev, mi.time
         )
@@ -203,13 +198,10 @@ def _cuthbert_filter_taylor_kf(
 def _add_sites_pf(
     name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
 ):
-    # Compute filtered means and covariances from the particles using the weights.
-    # particles (T+1, n_particles, state_dim), log_weights (T+1, n_particles)
-    # When state_dim=1, cuthbert may return (T+1, n_particles) with trailing dim squeezed.
     log_weights = states.log_weights
     particles = states.particles
     if particles.ndim == 2:
-        particles = particles[..., None]  # (T+1, n_particles) -> (T+1, n_particles, 1)
+        particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
     t1, n_particles, state_dim = particles.shape
 
@@ -236,8 +228,8 @@ def _add_sites_pf(
     )
 
     if need_filtered_means:
-        w = jnp.exp(log_weights)[..., None]  # (T+1, n_particles, 1)
-        filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
+        w = jnp.exp(log_weights)[..., None]
+        filtered_means = jnp.sum(particles * w, axis=1)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
         second_mom = jnp.einsum(

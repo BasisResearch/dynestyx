@@ -10,7 +10,6 @@ from effectful.ops.types import NotHandled
 
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.dynamical_models import (
-    Context,
     ContinuousTimeStateEvolution,
     DynamicalModel,
     FunctionOfTime,
@@ -22,7 +21,14 @@ T = TypeVar("T")
 
 @defop
 def sample(
-    name: str, dynamics: DynamicalModel, context: Context | None = None
+    name: str,
+    dynamics: DynamicalModel,
+    *,
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> FunctionOfTime:
     raise NotHandled()
 
@@ -63,7 +69,12 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context | None = None,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ) -> FunctionOfTime:
         if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             discrete_evolution = self.discretize(dynamics.state_evolution)
@@ -76,30 +87,21 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 observation_dim=dynamics.observation_dim,
                 control_dim=dynamics.control_dim,
             )
-        return fwd(name, dynamics, context)
-
-
-class Condition(ObjectInterpretation, HandlesSelf):
-    def __init__(self, context: Context):
-        super().__init__()
-        self.context = context
-
-    @implements(sample)
-    def _sample_ds(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        context: Context | None = None,
-    ) -> FunctionOfTime:
-        # Ignore any context passed in the call and use the handler's context
-        site_ctx = self.context
-        return fwd(name, dynamics, site_ctx)
+        return fwd(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulators/unrollers.
 
-    Concrete simulators implement `simulate(context, dynamics)` and optionally
+    Concrete simulators implement `simulate(dynamics, obs_times, ...)` and optionally
     override `add_solved_sites` if they need custom behavior.
     """
 
@@ -108,58 +110,128 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ) -> FunctionOfTime:
-        self.add_solved_sites(name, dynamics, context)
-        return fwd(name, dynamics, context)
+        self.add_solved_sites(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+        return fwd(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
 
     def add_solved_sites(
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ):
         # Only simulate if we have observation times
-        if context is None or context.observations.times is None:
+        if obs_times is None:
             return
 
         # Run the simulator
-        simulated = self.simulate(context, dynamics)
+        simulated = self.simulate(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
 
         # Add the results from the simulator as deterministic sites
         for site_name, trajectory in simulated.items():
             numpyro.deterministic(site_name, trajectory)
 
-    def simulate(self, context: Context, dynamics: DynamicalModel) -> dict[str, State]:
+    def simulate(
+        self,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> dict[str, State]:
         """
         Args:
-            context (Context): Context containing times and potentially controls.
-            dynamics (DynamicalModel): The dynamical model to simulate.
+            dynamics: The dynamical model to simulate.
+            obs_times: Observation times.
+            obs_values: Observed values (optional).
+            ctrl_times: Control times (optional).
+            ctrl_values: Control values (optional).
         Returns:
-            dict[str, Trajectory]: A dictionary mapping site names to simulated trajectories.
+            dict[str, State]: A dictionary mapping site names to simulated trajectories.
         """
         raise NotImplementedError()
 
 
 class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
+    """Base for filter handlers."""
+
     @implements(sample)
     def _sample_ds(
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ) -> FunctionOfTime:
-        self.add_log_factors(name, dynamics, context)
-
-        # Forward unchanged so downstream handlers (or default implementation)
-        # can still see this op if needed.
-        return fwd(name, dynamics, context)
+        self.add_log_factors(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+        return fwd(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
 
     def add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,
-        context: Context,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
     ):
         # Inheritors should implement this method.
         raise NotImplementedError()

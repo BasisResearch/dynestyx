@@ -6,7 +6,7 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array
 
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 
 type SSMType = CDNLGSSM | CDNLSSM
 
@@ -56,56 +56,34 @@ def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -
                 )
 
 
-def _get_controls(
-    context: Context, obs_times: Array
-) -> tuple[Array | None, Array | None]:
+def _validate_controls(
+    obs_times: Array,
+    ctrl_times: Array | None,
+    ctrl_values: Array | None,
+) -> None:
     """
-    Extract and validate controls from context.
-
-    Args:
-        context: Context containing controls trajectory
-        obs_times: Observation times array for validation
-
-    Returns:
-        Tuple of (ctrl_times, ctrl_values). Both are None if no controls are provided.
-        If controls are provided, ctrl_times and ctrl_values are extracted and validated.
+    Validate that ctrl_times/ctrl_values align with obs_times if provided.
 
     Raises:
-        ValueError: If control times length doesn't match observation times length,
-                    or if ctrl_values is a dict.
+        ValueError: If control times length doesn't match observation times length.
     """
-    # Pull control trajectory from context
-    # Only validate controls if they actually have times
-    # If controls is a Trajectory with times=None, treat it as no controls
-    ctrl_traj = context.controls
-    ctrl_times = ctrl_traj.times if ctrl_traj is not None else None
-
     if ctrl_times is None:
-        if ctrl_traj.values is not None:
+        if ctrl_values is not None:
             raise ValueError(
-                "ctrl_traj.values is not None, but ctrl_times is None. This is likely a bug in the context creation."
+                "ctrl_values is not None, but ctrl_times is None. "
+                "Provide both ctrl_times and ctrl_values together."
             )
-        # No controls provided
-        return None, None
-    elif ctrl_traj.values is None:
+        return
+    if ctrl_values is None:
         raise ValueError(
-            "ctrl_traj.values is None, but ctrl_times is not None. This is likely a bug in the context creation."
+            "ctrl_times is not None, but ctrl_values is None. "
+            "Provide both ctrl_times and ctrl_values together."
         )
-
-    # Check lengths match (concrete check, safe in traced context)
     if len(ctrl_times) != len(obs_times):
         raise ValueError(
             f"Control times length ({len(ctrl_times)}) must match "
             f"observation times length ({len(obs_times)})"
         )
-    # Note: Full equality check would require jnp.array_equal which creates
-    # traced booleans. We trust that if lengths match, times match (validated
-    # at fixture/context creation time).
-
-    # Controls are provided (have times), extract and validate
-    ctrl_values = ctrl_traj.values
-
-    return ctrl_times, ctrl_values
 
 
 _CONTROL_EXTEND_EPSILON = 1e-5

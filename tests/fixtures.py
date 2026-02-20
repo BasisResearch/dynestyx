@@ -3,9 +3,8 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
-from dynestyx.dynamical_models import Context, Trajectory
 from dynestyx.filters import Filter
-from dynestyx.handlers import Condition, Discretizer
+from dynestyx.handlers import Discretizer
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -57,13 +56,12 @@ def data_conditioned_hmm(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
 
-    # Initialize control trajectory (empty if not using controls)
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
-        # Generate controls and set trajectory
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"A": true_A, "mu": true_mu, "sigma": true_sigma}
@@ -74,15 +72,13 @@ def data_conditioned_hmm(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
-
-    # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     # Prefer indexing rather than squeeze, to keep (T, obs_dim)
     obs_values = synthetic["observations"][0]  # (T,)
@@ -90,16 +86,14 @@ def data_conditioned_hmm(request):
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Filter(filter_config=HMMConfig()):
-            with Condition(context):
-                return hmm_model()
+            return hmm_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -123,12 +117,12 @@ def data_conditioned_discrete_time_l63(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -139,31 +133,27 @@ def data_conditioned_discrete_time_l63(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
-
-    # with handler(BaseSolver()): # SHOULD raise error but does not. WHY JACK?
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with DiscreteTimeSimulator():
-            with Condition(context):
-                return discrete_time_l63_model()
+            return discrete_time_l63_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -185,12 +175,12 @@ def data_conditioned_discrete_time_l63_filter(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -201,28 +191,25 @@ def data_conditioned_discrete_time_l63_filter(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
-
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # Build conditioned model
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Filter():
-            with Condition(context):
-                return discrete_time_l63_model()
+            return discrete_time_l63_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -244,12 +231,12 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -260,28 +247,25 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
-
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # Build conditioned model
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Filter(filter_config=PFConfig(n_particles=3_000)):
-            with Condition(context):
-                return discrete_time_l63_model()
+            return discrete_time_l63_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -314,12 +298,12 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -330,33 +314,31 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         config = {
             "default": ContinuousTimeEnKFConfig(),
             "EnKF": ContinuousTimeEnKFConfig(),
         }[filter_type]
         with Filter(filter_config=config):
-            with Condition(context):
-                return continuous_time_stochastic_l63_model()
+            return continuous_time_stochastic_l63_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls, filter_type
 
@@ -378,12 +360,12 @@ def data_conditioned_continuous_time_l63_dpf(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -394,29 +376,27 @@ def data_conditioned_continuous_time_l63_dpf(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=1_000)):
-            with Condition(context):
-                return continuous_time_stochastic_l63_model()
+            return continuous_time_stochastic_l63_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -438,12 +418,12 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -454,29 +434,27 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # ---------------------------------------------------------
     # Build conditioned model
     # ---------------------------------------------------------
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Simulator():
-            with Condition(context):
-                return continuous_time_deterministic_l63_model()
+            return continuous_time_deterministic_l63_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -491,10 +469,17 @@ def data_conditioned_stochastic_volatility(request):
 
     true_phi = 0.9
     obs_times = jnp.arange(start=0.0, stop=100.0, step=1.0)
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
 
-    def model():
-        return stochastic_volatility(identity_observation=identity_observation)
+    def model(obs_times=None, obs_values=None, ctrl_times=None, ctrl_values=None):
+        return stochastic_volatility(
+            identity_observation=identity_observation,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     true_params = {"phi": jnp.array(true_phi)}
     predictive = Predictive(
@@ -504,23 +489,25 @@ def data_conditioned_stochastic_volatility(request):
         exclude_deterministic=False,
     )
 
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with DiscreteTimeSimulator():
-            with Condition(context):
-                return stochastic_volatility(identity_observation=identity_observation)
+            return stochastic_volatility(
+                identity_observation=identity_observation,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, identity_observation
 
@@ -549,12 +536,12 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     true_rho = 2.0
     obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -564,22 +551,17 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         config = {
             "default": ContinuousTimeEnKFConfig(),
             "EnKF": ContinuousTimeEnKFConfig(),
@@ -587,8 +569,12 @@ def data_conditioned_continuous_time_lti_gaussian(request):
             "UKF": ContinuousTimeUKFConfig(),
         }[filter_type]
         with Filter(filter_config=config):
-            with Condition(context):
-                return continuous_time_LTI_gaussian()
+            return continuous_time_LTI_gaussian(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls, filter_type
 
@@ -606,12 +592,12 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     true_rho = 2.0
     obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -621,25 +607,24 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=2_500)):
-            with Condition(context):
-                return continuous_time_LTI_gaussian()
+            return continuous_time_LTI_gaussian(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -657,11 +642,12 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
     true_rho = 28.0
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -671,26 +657,26 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
         exclude_deterministic=False,
     )
 
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
     with DiscreteTimeSimulator():
         with Discretizer():
-            with Condition(context):
-                synthetic = predictive(data_init_key)
+            synthetic = predictive(
+                data_init_key,
+                obs_times=obs_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     obs_values = synthetic["observations"].squeeze(0)
 
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with DiscreteTimeSimulator():
             with Discretizer():
-                with Condition(context):
-                    return continuous_time_stochastic_l63_model_dirac_obs()
+                return continuous_time_stochastic_l63_model_dirac_obs(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -699,7 +685,7 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
 def data_conditioned_discrete_time_l63_auto(request):
     """Uses continuous_time_stochastic_l63_model with Discretize(EulMar) to get
     a discrete-time transition (Euler-Maruyama over each [t_now, t_next]), then
-    DiscreteTimeSimulator + Condition."""
+    DiscreteTimeSimulator."""
     use_controls = request.param
     rng_key = jr.PRNGKey(0)
 
@@ -710,11 +696,12 @@ def data_conditioned_discrete_time_l63_auto(request):
     true_rho = 28.0
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
 
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -724,28 +711,26 @@ def data_conditioned_discrete_time_l63_auto(request):
         exclude_deterministic=False,
     )
 
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
-    # Order: Condition innermost (injects context), then Discretizer (CTE->discrete),
-    # then DiscreteTimeSimulator (simulates with discrete dynamics + context).
     with Simulator():
         with Discretizer():
-            with Condition(context):
-                synthetic = predictive(data_init_key)
+            synthetic = predictive(
+                data_init_key,
+                obs_times=obs_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     obs_values = synthetic["observations"].squeeze(0)
 
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         with Simulator():
             with Discretizer():
-                with Condition(context):
-                    return continuous_time_stochastic_l63_model()
+                return continuous_time_stochastic_l63_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
 
     return data_conditioned_model, true_params, synthetic, use_controls
 
@@ -762,29 +747,29 @@ def data_conditioned_jumpy_controls():
     )
 
     obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
-    controls = jnp.ones((len(obs_times),)) * 100
-    for i in range(1, len(controls), 2):
-        controls = controls.at[i].set(-controls[i])
+    ctrl_values = jnp.ones((len(obs_times), 1)) * 100  # control_dim=1
+    for i in range(1, len(ctrl_values), 2):
+        ctrl_values = ctrl_values.at[i, 0].set(-100)
+    ctrl_times = obs_times
 
-    context = Context(
-        observations=Trajectory(times=obs_times),
-        controls=Trajectory(times=obs_times, values=controls),
-    )
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(
-            observations=observation_trajectory,
-            controls=Trajectory(times=obs_times, values=controls),
-        )
         with Filter(filter_config=EKFConfig(record_filtered_states_mean=True)):
-            with Condition(context):
-                return jumpy_controls_model()
+            return jumpy_controls_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, synthetic
 
@@ -805,27 +790,26 @@ def data_conditioned_jumpy_controls_sde():
     for i in range(1, len(controls), 2):
         controls = controls.at[i].set(-controls[i])
 
-    context = Context(
-        observations=Trajectory(times=obs_times),
-        controls=Trajectory(times=obs_times, values=controls),
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=obs_times,
+            ctrl_values=controls,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(
-            observations=observation_trajectory,
-            controls=Trajectory(times=obs_times, values=controls),
-        )
         with Filter(
             filter_config=ContinuousTimeEKFConfig(record_filtered_states_mean=True)
         ):
-            with Condition(context):
-                return jumpy_controls_model_sde()
+            return jumpy_controls_model_sde(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=obs_times,
+                ctrl_values=controls,
+            )
 
     return data_conditioned_model, synthetic
 
@@ -846,27 +830,25 @@ def data_conditioned_jumpy_controls_ode():
     for i in range(1, len(controls), 2):
         controls = controls.at[i].set(-controls[i])
 
-    context = Context(
-        observations=Trajectory(times=obs_times),
-        controls=Trajectory(times=obs_times, values=controls),
-    )
     with Simulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
-
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=obs_times,
+            ctrl_values=controls,
+        )
     obs_values = synthetic["observations"].squeeze(0)
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
 
     def data_conditioned_model():
-        context = Context(
-            observations=observation_trajectory,
-            controls=Trajectory(times=obs_times, values=controls),
-        )
         with Filter(
             filter_config=ContinuousTimeEKFConfig(record_filtered_states_mean=True)
         ):
-            with Condition(context):
-                return jumpy_controls_model_ode()
+            return jumpy_controls_model_ode(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=obs_times,
+                ctrl_values=controls,
+            )
 
     return data_conditioned_model, synthetic
 
@@ -893,12 +875,12 @@ def data_conditioned_discrete_time_lti_kf(request):
     # Generate observations at some times
     obs_times = jnp.arange(start=0.0, stop=20.0, step=1.0)
 
-    # Always generate control trajectory to keep randomness consistent
-    control_trajectory = Trajectory()
+    ctrl_times = None
+    ctrl_values = None
     if use_controls:
         control_dim = 1
         ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        control_trajectory = Trajectory(times=obs_times, values=ctrl_values)
+        ctrl_times = obs_times
 
     # Generate synthetic data
     true_params = {"alpha": jnp.array(true_alpha)}
@@ -909,25 +891,18 @@ def data_conditioned_discrete_time_lti_kf(request):
         exclude_deterministic=False,
     )
 
-    # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-    context = Context(
-        observations=Trajectory(times=obs_times), controls=control_trajectory
-    )
-
     with DiscreteTimeSimulator():
-        with Condition(context):
-            synthetic = predictive(data_init_key)
+        synthetic = predictive(
+            data_init_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # Build conditioned model
-    observation_trajectory = Trajectory(times=obs_times, values=obs_values)
-
     def data_conditioned_model():
-        # Always pass control_trajectory to context (empty Trajectory() if not using controls)
-        context = Context(
-            observations=observation_trajectory, controls=control_trajectory
-        )
         config = {
             "kf": KFConfig(),
             "taylor_kf": EKFConfig(filter_source="cuthbert"),
@@ -935,7 +910,11 @@ def data_conditioned_discrete_time_lti_kf(request):
             "ukf": UKFConfig(),
         }[filter_type]
         with Filter(filter_config=config):
-            with Condition(context):
-                return discrete_time_lti_model()
+            return discrete_time_lti_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
     return data_conditioned_model, true_params, synthetic, use_controls, filter_type
