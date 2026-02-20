@@ -113,7 +113,7 @@ def discrete_time_l63_model():
     # In the future, we will build internal logic to identify linear-gaussian observation models
     # and extract H, R automatically.
 
-    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
+    # TODO: Functions for drift, diffusion_coefficient should not
     # require (x, u, t) arguments if they are not used. We can wrap them internally.
     # e.g. diffusion_coefficient=jnp.eye(3)
     # e.g. drift = lambda x: F(x, rho)
@@ -146,7 +146,7 @@ def continuous_time_stochastic_l63_model():
                 + (10 * u if u is not None else jnp.zeros(3))
             ),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3),
+            bm_dim=3,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
@@ -159,7 +159,7 @@ def continuous_time_stochastic_l63_model():
     # In the future, we will build internal logic to identify linear-gaussian observation models
     # and extract H, R automatically.
 
-    # TODO: Functions for drift, diffusion_coefficient, diffusion_covariance should not
+    # TODO: Functions for drift, diffusion_coefficient should not
     # require (x, u, t) arguments if they are not used. We can wrap them internally.
     # e.g. diffusion_coefficient=jnp.eye(3)
     # e.g. drift = lambda x: F(x, rho)
@@ -191,7 +191,7 @@ def continuous_time_stochastic_l63_model_dirac_obs():
                 + (10 * u if u is not None else jnp.zeros_like(x))
             ),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            diffusion_covariance=lambda x, u, t: jnp.eye(3),
+            bm_dim=3,
         ),
         observation_model=DiracIdentityObservation(),
     )
@@ -227,7 +227,7 @@ def continuous_time_LTI_gaussian():
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: A @ x + (10 * u if u is not None else jnp.zeros(2)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(2),
-            diffusion_covariance=lambda x, u, t: jnp.eye(2),
+            bm_dim=2,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
@@ -354,6 +354,45 @@ def jumpy_controls_model():
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0]]), R=jnp.array([[0.1**2]])
+        ),
+    )
+
+    dsx.sample("f", dynamics)
+
+
+def jumpy_controls_model_sde():
+
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x + u,
+        diffusion_coefficient=lambda x, u, t: 0.01 * jnp.eye(1),
+        bm_dim=1,
+    )
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=1,
+        initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
+        state_evolution=state_evolution,
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]), R=jnp.array([[0.1**2]])
+        ),
+    )
+
+    dsx.sample("f", dynamics)
+
+
+def jumpy_controls_model_ode():
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x + u,
+    )
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=1,
+        initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
+        state_evolution=state_evolution,
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]), R=jnp.array([[0.01**2]])
         ),
     )
 

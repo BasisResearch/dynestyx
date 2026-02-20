@@ -1,6 +1,9 @@
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 import arviz as az
 import blackjax
-import jax
 import jax.numpy as jnp
 import jax.random as jr
 import pytest

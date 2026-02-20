@@ -76,7 +76,8 @@ def _config_to_cd_dynamax_filter_kwargs(
         base["extra_filter_kwargs"] = {
             "perturb_measurements": config.perturb_measurements
             if config.perturb_measurements is not None
-            else True
+            else True,
+            **config.extra_filter_kwargs,
         }
     elif isinstance(config, ContinuousTimeEKFConfig):
         base["filter_type"] = "EKF"
@@ -88,6 +89,7 @@ def _config_to_cd_dynamax_filter_kwargs(
             "alpha": config.alpha,
             "beta": config.beta,
             "kappa": config.kappa,
+            **config.extra_filter_kwargs,
         }
     elif isinstance(config, ContinuousTimeDPFConfig):
         if config.resampling_method.base_method != "multinomial":
@@ -100,6 +102,7 @@ def _config_to_cd_dynamax_filter_kwargs(
             "resample_method": config.resampling_method.differential_method,
             "softness": config.resampling_method.softness,
             "ess_threshold_ratio": config.ess_threshold_ratio,
+            **config.extra_filter_kwargs,
         }
     return base
 

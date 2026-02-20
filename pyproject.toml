@@ -22,6 +22,8 @@ dependencies = [
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
     "cuthbert>=0.0.2",
+    "jax>=0.6.2",
+    "jaxlib>=0.6.2",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -29,8 +31,8 @@ packages = ["dynestyx"]
 
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
-cd-dynamax = { git = "https://github.com/hd-UQ/cd_dynamax", rev = "dev-numpyro-api" }
 cuthbert = { git = "https://github.com/DanWaxman/cuthbert.git", rev = "dw-fix-install" }
+cd-dynamax = { git = "https://github.com/DanWaxman/cd_dynamax.git", rev = "dw-dpf" }
 
 [dependency-groups]
 dev = [
