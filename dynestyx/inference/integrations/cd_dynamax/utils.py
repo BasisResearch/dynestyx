@@ -29,7 +29,7 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
 
     Requires:
     - drift is AffineDrift (A, B, b)
-    - diffusion_coefficient and diffusion_covariance are constant (callables
+    - diffusion_coefficient is constant (callable returning same value for any x, u, t)
       returning same value for any x, u, t)
     - observation_model is LinearGaussianObservation
     - initial_condition is MultivariateNormal
@@ -42,18 +42,13 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
         raise TypeError(
             f"dsx_to_cdlgssm_params requires AffineDrift, got {type(drift).__name__}."
         )
-    if (
-        state_evo.diffusion_coefficient is None
-        or state_evo.diffusion_covariance is None
-    ):
-        raise ValueError(
-            "dsx_to_cdlgssm_params requires diffusion_coefficient and diffusion_covariance."
-        )
+    if state_evo.diffusion_coefficient is None:
+        raise ValueError("dsx_to_cdlgssm_params requires diffusion_coefficient.")
 
     # Extract constant L, Q by evaluating at (0, None, 0)
     x0 = jnp.zeros(dsx_model.state_dim)
     L = state_evo.diffusion_coefficient(x0, None, jnp.array(0.0))
-    Q = state_evo.diffusion_covariance(x0, None, jnp.array(0.0))
+    Q = jnp.eye(state_evo.bm_dim)
 
     ic = dsx_model.initial_condition
     if not isinstance(ic, dist.MultivariateNormal):

@@ -6,9 +6,9 @@ import numpyro
 from jax import lax
 from jax.scipy.special import logsumexp
 
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import HMMConfig
-from dynestyx.utils import _get_controls, _should_record_field
+from dynestyx.utils import _should_record_field, _validate_controls
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
@@ -176,27 +176,30 @@ def hmm_filter(
 def _filter_hmm(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: HMMConfig,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Exact HMM marginal likelihood via forward filtering.
 
     Args:
         name: Name of the factor.
         dynamics: Dynamical model (HMM with finite discrete state space).
-        context: Context containing the observations and controls.
         filter_config: HMMConfig with record_filtered, record_log_filtered, record_max_elems.
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
     """
-    obs = context.observations
-    if obs.times is None or obs.values is None:
-        return
-
-    obs_values = obs.values
-    ctrl_times, ctrl_values = _get_controls(context, obs.times)
+    _validate_controls(obs_times, ctrl_times, ctrl_values)
 
     log_pi, log_A_seq, log_emit_seq = hmm_log_components(
         dynamics,
-        obs.times,
+        obs_times,
         obs_values,
         ctrl_values=ctrl_values,
     )

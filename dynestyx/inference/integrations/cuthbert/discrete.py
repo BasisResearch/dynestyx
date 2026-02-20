@@ -7,7 +7,7 @@ import numpyro
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
@@ -16,7 +16,11 @@ from dynestyx.inference.filter_configs import (
     config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
-from dynestyx.utils import _get_controls, _should_record_field, _validate_control_dim
+from dynestyx.utils import (
+    _should_record_field,
+    _validate_control_dim,
+    _validate_controls,
+)
 
 
 class CuthbertInputs(NamedTuple):
@@ -41,32 +45,28 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
 def run_discrete_filter(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
 
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = config_to_record_kwargs(filter_config)
 
-    obs_traj = context.observations
-    if obs_traj.values is None:
-        return
-
-    ys = obs_traj.values
+    ys = obs_values
     t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
     if t1 == 0:
         return
 
-    # Time axis (scalar at each step after slicing by cuthbert.filter)
-    if obs_traj.times is None:
-        times = jnp.arange(t1, dtype=jnp.float32)
-    else:
-        times = jnp.asarray(obs_traj.times)
+    times = obs_times
 
-    # Align controls (if any) to observation times
-    _, ctrl_values = _get_controls(context, times)
+    _validate_controls(times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 
     if ctrl_values is None:

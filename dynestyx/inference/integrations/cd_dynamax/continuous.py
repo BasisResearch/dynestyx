@@ -12,7 +12,7 @@ from cd_dynamax import (
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
-from dynestyx.dynamical_models import Context, DynamicalModel
+from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -26,9 +26,9 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cdlgssm_params,
 )
 from dynestyx.utils import (
-    _get_controls,
     _should_record_field,
     _validate_control_dim,
+    _validate_controls,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -142,17 +142,6 @@ def _add_filter_sites(
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
 
 
-def _prepare_filter_data(context: Context, dynamics: DynamicalModel, obs_traj):
-    """Shared data prep for all continuous-time filter branches."""
-    obs_times = obs_traj.times[:, None]
-    obs_values = obs_traj.values
-    _, ctrl_values = _get_controls(context, obs_traj.times)
-    _validate_control_dim(dynamics, ctrl_values)
-    if ctrl_values is None:
-        ctrl_values = jnp.zeros((obs_values.shape[0], dynamics.control_dim))
-    return obs_times, obs_values, ctrl_values
-
-
 def _run_linear_kf(
     name: str,
     dynamics: DynamicalModel,
@@ -181,32 +170,44 @@ def _run_linear_kf(
 def run_continuous_filter(
     name: str,
     dynamics: DynamicalModel,
-    context: Context,
     filter_config: ContinuousTimeFilterConfig,
     key: jax.Array | None = None,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
 ) -> None:
     """Run continuous-time filter via CD-Dynamax.
 
     Args:
         name: Name of the factor.
         dynamics: Dynamical model to filter.
-        context: Context containing the observations and controls.
-        filter_config: ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig,
-            ContinuousTimeEKFConfig, or ContinuousTimeUKFConfig.
+        filter_config: ContinuousTimeKFConfig, ContinuousTimeEnKFConfig,
+            ContinuousTimeDPFConfig, ContinuousTimeEKFConfig, or ContinuousTimeUKFConfig.
         key: Random key (optional).
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
     """
+    obs_times_arr = jnp.asarray(obs_times)
+    if obs_times_arr.ndim == 1:
+        obs_times_arr = obs_times_arr[:, None]
+    _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
+    _validate_control_dim(dynamics, ctrl_values)
 
-    obs_traj = context.observations
-    if obs_traj.times is None or obs_traj.values is None:
-        return
-
-    obs_times, obs_values, ctrl_values = _prepare_filter_data(
-        context, dynamics, obs_traj
+    control_dim = dynamics.control_dim
+    ctrl_vals = (
+        ctrl_values
+        if ctrl_values is not None
+        else jnp.zeros((obs_times_arr.shape[0], control_dim))
     )
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
         filtered = _run_linear_kf(
-            name, dynamics, obs_times, obs_values, ctrl_values, filter_config
+            name, dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
         )
         _add_filter_sites(name, filter_config, filtered)
         return
@@ -233,7 +234,7 @@ def run_continuous_filter(
 
     params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
     filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-        filter_config, params, obs_values, obs_times, ctrl_values, key
+        filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
     )
 
     filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore

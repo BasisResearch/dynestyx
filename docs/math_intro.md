@@ -49,7 +49,7 @@ dynamics = DynamicalModel(
     state_evolution=ContinuousTimeStateEvolution(
         drift=lambda x, u, t: ...,
         diffusion_coefficient=lambda x, u, t: ...,
-        diffusion_covariance=lambda x, u, t: ...,
+        bm_dim=...
     ),
     observation_model=lambda x, u, t: ...,
 )
@@ -71,22 +71,17 @@ In subsequent tutorials, we give concrete examples of defining many different ty
 
 ### Simulation of Dynamical Systems
 
-Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation. To specify how dynamical models are simulated, we must select a simulator from `dsx.simulators`. We then additionally `Condition` on a `Context`, which may include things like times in a trajectory, and potentially, control inputs. For example, to simulate from a continuous-discrete model:
+Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation. To specify how dynamical models are simulated, we must select a simulator from `dsx.simulators`. Pass observation times (and optionally controls) as kwargs to the model. For example, to simulate from a continuous-discrete model:
 
 ```python
 from dynestyx.simulators import SDESimulator
-from dynestyx.handlers import Condition
-from dynestyx.ops import Trajectory, Context
 
 import jax.random as jr
 
-context = Context(
-    observations=Trajectory(times=jnp.arange(0.0, 1.0, 0.1))
-)
+obs_times = jnp.arange(0.0, 1.0, 0.1)
 
-with SDESimulator(): # Specify how the SDE will be simulated/solved
-    with Condition(context): # Specify the context in which to simulate
-        sampled_trajectory = continuous_discrete_model() # Obtain samples
+with SDESimulator():  # Specify how the SDE will be simulated/solved
+    sampled_trajectory = continuous_discrete_model(obs_times=obs_times)  # Obtain samples
 ```
 
 To instead simulate from a discrete-time system, we would write 
@@ -94,13 +89,8 @@ To instead simulate from a discrete-time system, we would write
 ```python
 from dynestyx.simulators import DiscreteTimeSimulator
 
-context = Context(
-    observations=Trajectory(times=jnp.arange(0.0, 1.0, 0.1))
-)
-
-with DiscreteTimeSimulator(key=prng_key): # Specify how the discrete-time system will be simulated
-    with Condition(context): # Specify the context in which to simulate
-        sampled_trajectory = discrete_time_model() # Obtain samples
+with DiscreteTimeSimulator():  # Specify how the discrete-time system will be simulated
+    sampled_trajectory = discrete_time_model(obs_times=obs_times)  # Obtain samples
 ```
 
 Simulating from a dynamical model essentially "unrolls" it into a standard `numpyro` probabilistic program. For Bayesian inference of dynamical systems, however, this is a rather inefficient way to do things; in the next section, we review Bayesian inference of dynamical systems, and discuss the way we perform inference more efficiently in `dynestyx`.
