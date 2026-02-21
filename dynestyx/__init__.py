@@ -8,12 +8,11 @@ from dynestyx.dynamical_models import (
     DynamicalModel,
     GaussianStateEvolution,
     LinearGaussianStateEvolution,
-    LTI_continuous,
-    LTI_discrete,
     ObservationModel,
 )
 from dynestyx.filters import Filter
 from dynestyx.handlers import Discretizer, sample
+from dynestyx.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.observations import (
     DiracIdentityObservation,
     GaussianObservation,

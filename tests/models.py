@@ -7,9 +7,8 @@ from dynestyx.dynamical_models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
     LinearGaussianStateEvolution,
-    LTI_continuous,
-    LTI_discrete,
 )
+from dynestyx.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
 
