@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from numpyro._typing import DistributionT
 
+from dynestyx.observations import LinearGaussianObservation
+
 # ----------------------------------------------------------------------
 # TYPE ALIASES
 # ----------------------------------------------------------------------
@@ -340,8 +342,6 @@ def LTI_continuous(
         diffusion_coefficient=lambda x, u, t: L,
         bm_dim=L.shape[1],
     )
-
-    from dynestyx.observations import LinearGaussianObservation
 
     observation_model = LinearGaussianObservation(H=H, R=R, D=D, bias=d)
 
