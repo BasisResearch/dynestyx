@@ -209,33 +209,34 @@ def run_continuous_filter(
         filtered = _run_linear_kf(
             name, dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
         )
-        _add_filter_sites(name, filter_config, filtered)
-        return
+    else:
+        if isinstance(
+            filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
+        ):
+            if key is None:
+                raise ValueError(
+                    f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
+                    "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+                )
 
-    if isinstance(filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)):
-        if key is None:
-            raise ValueError(
-                f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+        if isinstance(filter_config, ContinuousTimeDPFConfig):
+            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
+                state_dim=dynamics.state_dim,
+                emission_dim=dynamics.observation_dim,
+                input_dim=dynamics.control_dim,
+            )
+        else:
+            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+                state_dim=dynamics.state_dim,
+                emission_dim=dynamics.observation_dim,
+                input_dim=dynamics.control_dim,
             )
 
-    if isinstance(filter_config, ContinuousTimeDPFConfig):
-        cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-            state_dim=dynamics.state_dim,
-            emission_dim=dynamics.observation_dim,
-            input_dim=dynamics.control_dim,
-        )
-    else:
-        cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-            state_dim=dynamics.state_dim,
-            emission_dim=dynamics.observation_dim,
-            input_dim=dynamics.control_dim,
+        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
+        filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
+            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
         )
 
-    params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-    filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-        filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
-    )
+        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
-    filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
     _add_filter_sites(name, filter_config, filtered)
