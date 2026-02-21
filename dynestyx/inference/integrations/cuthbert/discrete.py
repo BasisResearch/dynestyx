@@ -151,23 +151,18 @@ def _cuthbert_filter_taylor_kf(
         def init_log_density(x):
             return jnp.asarray(dist0.log_prob(x)).sum()
 
-        # Ensure (state_dim,) so cuthbert's linearize_log_density gets 2D Hessian.
         x0_lin = jnp.reshape(jnp.atleast_1d(jnp.asarray(dist0.mean)), (state_dim,))
         return init_log_density, x0_lin
 
     def get_dynamics_log_density(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
     ):
-        # log p(x_t | x_{t-1})
         def dynamics_log_density(x_prev, x):
             dist = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)
             return jnp.asarray(dist.log_prob(x)).sum()
 
-        # Linearize around previous filtered mean. Ensure at least 1d for cuthbertlib
-        # (jnp.diag fails on 0-d precision when state_dim=1).
         x_prev_lin = jnp.atleast_1d(jnp.asarray(state.mean))
 
-        # A decent guess for the x_t linearization point is the conditional mean at x_prev_lin (if available).
         dist_at_lin = dynamics.state_evolution(  # type: ignore
             x_prev_lin, mi.u_prev, mi.time_prev, mi.time
         )
@@ -203,13 +198,10 @@ def _cuthbert_filter_taylor_kf(
 def _add_sites_pf(
     name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
 ):
-    # Compute filtered means and covariances from the particles using the weights.
-    # particles (T+1, n_particles, state_dim), log_weights (T+1, n_particles)
-    # When state_dim=1, cuthbert may return (T+1, n_particles) with trailing dim squeezed.
     log_weights = states.log_weights
     particles = states.particles
     if particles.ndim == 2:
-        particles = particles[..., None]  # (T+1, n_particles) -> (T+1, n_particles, 1)
+        particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
     t1, n_particles, state_dim = particles.shape
 
