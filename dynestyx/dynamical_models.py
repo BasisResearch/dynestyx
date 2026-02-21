@@ -272,7 +272,6 @@ def LTI_continuous(
     L: jax.Array,
     H: jax.Array,
     R: jax.Array,
-    bm_dim: int,
     B: jax.Array | None = None,
     b: jax.Array | None = None,
     D: jax.Array | None = None,
@@ -280,18 +279,17 @@ def LTI_continuous(
     initial_mean: jax.Array | None = None,
     initial_cov: jax.Array | None = None,
 ) -> DynamicalModel:
-    """
+    f"""
     Build a continuous-time LTI DynamicalModel from core generating parameters.
 
-    SDE:  dx = (A x + B u + b) dt + L dW_t,   dW_t ~ N(0, I dt)
+    SDE:  dx = (A x(t) + B u(t) + b) dt + L dW_t,   dW_t ~ N(0, I_{L.shape[1]} dt)
     Obs:  y_t ~ N(H x_t + D u_t + d, R)
 
     L is the diffusion coefficient (not a covariance). It maps the Brownian
-    increment dW_t into the state space: L has shape (state_dim, bm_dim),
-    where bm_dim is the dimension of the driving Brownian motion dW_t.
-    With standard Brownian (dW_t ~ N(0, I dt)), the state noise covariance
-    over dt is L @ L.T * dt. Common choices: L square (state_dim, state_dim)
-    for independent noise per state; or L column vector for scalar noise.
+    increment dW_t into the state space: L has shape (state_dim, L.shape[1]),
+    where L.shape[1] is the dimension of the driving Brownian motion dW_t.
+    With standard Brownian (dW_t ~ N(0, I_{L.shape[1]} dt)), the state noise covariance
+    over dt is L @ L.T * dt.
 
     Args:
         A: Drift matrix, shape (state_dim, state_dim).
@@ -299,7 +297,6 @@ def LTI_continuous(
             bm_dim-dimensional dW_t into state_dim-dimensional noise.
         H: Observation matrix, shape (observation_dim, state_dim).
         R: Observation noise covariance, shape (observation_dim, observation_dim).
-        bm_dim: Dimension of the driving Brownian motion dW_t. Must equal L.shape[1].
         B: Control input matrix, shape (state_dim, control_dim). If None, control_dim=0.
         b: Drift bias, shape (state_dim,). If None, zero bias.
         D: Observation control matrix, shape (observation_dim, control_dim). If None, no control in obs.
@@ -310,11 +307,6 @@ def LTI_continuous(
     state_dim = A.shape[0]
     observation_dim = H.shape[0]
     control_dim = B.shape[1] if B is not None else 0
-    if L.shape[1] != bm_dim:
-        raise ValueError(
-            f"L.shape[1]={L.shape[1]} does not match bm_dim={bm_dim}. "
-            "L must have shape (state_dim, bm_dim)."
-        )
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
@@ -330,7 +322,7 @@ def LTI_continuous(
     state_evolution = ContinuousTimeStateEvolution(
         drift=drift,
         diffusion_coefficient=lambda x, u, t: L,
-        bm_dim=bm_dim,
+        bm_dim=L.shape[1],
     )
 
     from dynestyx.observations import LinearGaussianObservation

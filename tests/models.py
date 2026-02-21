@@ -260,7 +260,7 @@ def continuous_time_lti_simplified_model(
     H = jnp.array([[0.0, 1.0]])
     R = jnp.array([[1.0**2]])
     B = jnp.array([[0.0], [10.0]])
-    dynamics = LTI_continuous(A=A, L=L, H=H, R=R, bm_dim=state_dim, B=B)
+    dynamics = LTI_continuous(A=A, L=L, H=H, R=R, B=B)
     dsx.sample(
         "f",
         dynamics,
