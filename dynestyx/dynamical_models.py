@@ -244,8 +244,16 @@ def LTI_discrete(
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
+    elif initial_mean.shape != (state_dim,):
+        raise ValueError(
+            f"initial_mean must have shape ({state_dim},), got {initial_mean.shape}"
+        )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
+    elif initial_cov.shape != (state_dim, state_dim):
+        raise ValueError(
+            f"initial_cov must have shape ({state_dim}, {state_dim}), got {initial_cov.shape}"
+        )
 
     initial_condition = dist.MultivariateNormal(
         loc=initial_mean, covariance_matrix=initial_cov
@@ -310,8 +318,16 @@ def LTI_continuous(
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
+    elif initial_mean.shape != (state_dim,):
+        raise ValueError(
+            f"initial_mean must have shape ({state_dim},), got {initial_mean.shape}"
+        )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
+    elif initial_cov.shape != (state_dim, state_dim):
+        raise ValueError(
+            f"initial_cov must have shape ({state_dim}, {state_dim}), got {initial_cov.shape}"
+        )
 
     initial_condition = dist.MultivariateNormal(
         loc=initial_mean, covariance_matrix=initial_cov
