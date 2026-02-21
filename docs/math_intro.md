@@ -40,7 +40,7 @@ Specifying the dynamical model in `dynestyx` follows a simple, unified interface
 
 The resulting constructor is simple, yet quite general:
 ```python 
-from dynestyx.dynamical_models import DynamicalModel, ContinuousTimeStateEvolution
+from dynestyx.models import DynamicalModel, ContinuousTimeStateEvolution
 
 dynamics = DynamicalModel(
     state_dim=...,

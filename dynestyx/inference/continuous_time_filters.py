@@ -2,9 +2,9 @@
 
 import jax
 
-from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import BaseFilterConfig
 from dynestyx.inference.integrations.cd_dynamax.continuous import run_continuous_filter
+from dynestyx.models import DynamicalModel
 
 
 def _filter_continuous_time(

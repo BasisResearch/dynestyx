@@ -5,7 +5,6 @@ import jax.numpy as jnp
 import numpyro
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
-from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -14,6 +13,7 @@ from dynestyx.inference.filter_configs import (
     config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
+from dynestyx.models import DynamicalModel
 from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,

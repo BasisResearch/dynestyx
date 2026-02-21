@@ -7,14 +7,14 @@ import numpyro
 from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
-from dynestyx.dynamical_models import (
+from dynestyx.handlers import BaseSimulator
+from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
-    State,
 )
-from dynestyx.handlers import BaseSimulator
-from dynestyx.observations import DiracIdentityObservation
+from dynestyx.types import State
 from dynestyx.utils import (
     _build_control_path,
     _get_val_or_None,

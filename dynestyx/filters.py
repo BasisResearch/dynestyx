@@ -4,7 +4,6 @@ import jax
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 
-from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.handlers import BaseCDDynamaxLogFactorAdder
 from dynestyx.inference.continuous_time_filters import (
     _filter_continuous_time,
@@ -28,6 +27,7 @@ from dynestyx.inference.filter_configs import (
     UKFConfig,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm
+from dynestyx.models import DynamicalModel
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 

@@ -5,13 +5,14 @@ import numpyro.distributions as dist
 
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
-from dynestyx.dynamical_models import (
+from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    GaussianObservation,
     GaussianStateEvolution,
+    LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.observations import GaussianObservation, LinearGaussianObservation
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 

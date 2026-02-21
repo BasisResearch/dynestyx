@@ -9,12 +9,11 @@ from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
 
 from dynestyx.discretizers import euler_maruyama
-from dynestyx.dynamical_models import (
+from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
-    FunctionOfTime,
-    State,
 )
+from dynestyx.types import FunctionOfTime, State
 
 T = TypeVar("T")
 

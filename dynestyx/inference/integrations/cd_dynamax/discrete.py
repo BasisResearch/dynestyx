@@ -19,10 +19,6 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_filter,
 )
-from dynestyx.dynamical_models import (
-    DynamicalModel,
-    LinearGaussianStateEvolution,
-)
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
@@ -31,7 +27,11 @@ from dynestyx.inference.filter_configs import (
     config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
-from dynestyx.observations import LinearGaussianObservation
+from dynestyx.models import (
+    DynamicalModel,
+    LinearGaussianObservation,
+    LinearGaussianStateEvolution,
+)
 from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,
