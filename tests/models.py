@@ -8,6 +8,7 @@ from dynestyx.dynamical_models import (
     DynamicalModel,
     LinearGaussianStateEvolution,
 )
+from dynestyx.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
 
 
@@ -244,6 +245,31 @@ def continuous_time_stochastic_l63_model_dirac_obs(
     )
 
 
+def continuous_time_lti_simplified_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
+    """Continuous-time LTI using LTI_continuous factory: only rho = A[1,0] is sampled."""
+    rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
+    state_dim = 2
+    A = jnp.array([[-1.0, 0.0], [rho, -1.0]])
+    L = jnp.eye(state_dim)
+    H = jnp.array([[0.0, 1.0]])
+    R = jnp.array([[1.0**2]])
+    B = jnp.array([[0.0], [10.0]])
+    dynamics = LTI_continuous(A=A, L=L, H=H, R=R, B=B)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
+
 def continuous_time_LTI_gaussian(
     obs_times=None,
     obs_values=None,
@@ -444,6 +470,32 @@ def discrete_time_lti_model(
         observation_dim=emission_dim,
         control_dim=control_dim,
     )
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
+
+def discrete_time_lti_simplified_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+):
+    """Discrete-time LTI using LTI_discrete factory: only alpha = A[0,0] is sampled."""
+    alpha = numpyro.sample("alpha", dist.Uniform(-0.7, 0.7))
+    state_dim = 2
+    A = jnp.array([[alpha, 0.0], [0.0, 0.8]])
+    Q = 0.1 * jnp.eye(state_dim)
+    H = jnp.array([[1.0, 0.0]])
+    R = jnp.array([[0.5**2]])
+    B = jnp.array([[0.1], [0.0]])
+    D = jnp.array([[0.01]])
+    dynamics = LTI_discrete(A=A, Q=Q, H=H, R=R, B=B, D=D)
     dsx.sample(
         "f",
         dynamics,

@@ -86,6 +86,13 @@ class ContinuousTimeConfig:
 
 
 @dataclasses.dataclass
+class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
+    """Exact continuous-discrete Kalman filter. Requires AffineDrift + constant diffusion + LinearGaussianObservation."""
+
+    filter_source: FilterSource = "cd_dynamax"
+
+
+@dataclasses.dataclass
 class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
     filter_source: FilterSource = "cd_dynamax"
 
@@ -117,6 +124,7 @@ DiscreteTimeConfigs: tuple[type, ...] = (
 )
 
 ContinuousTimeConfigs: tuple[type, ...] = (
+    ContinuousTimeKFConfig,
     ContinuousTimeEnKFConfig,
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,

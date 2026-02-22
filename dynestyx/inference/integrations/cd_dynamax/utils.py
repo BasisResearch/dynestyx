@@ -3,9 +3,17 @@ from typing import Any
 import jax.numpy as jnp
 import numpyro.distributions as dist
 
-from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
+from cd_dynamax import (
+    ContDiscreteNonlinearGaussianSSM,
+    ContDiscreteNonlinearSSM,
+    ParamsCDLGSSM,
+)
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.builders import (
+    build_params as build_cdlgssm_params,
+)
 from dynestyx.dynamical_models import (
+    AffineDrift,
     ContinuousTimeStateEvolution,
     DynamicalModel,
     GaussianStateEvolution,
@@ -14,6 +22,72 @@ from dynestyx.dynamical_models import (
 from dynestyx.observations import GaussianObservation, LinearGaussianObservation
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+
+
+def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
+    """Build ParamsCDLGSSM for CD-Dynamax's continuous-discrete KF.
+
+    Requires:
+    - drift is AffineDrift (A, B, b)
+    - diffusion_coefficient is constant (callable returning same value for any x, u, t)
+      returning same value for any x, u, t)
+    - observation_model is LinearGaussianObservation
+    - initial_condition is MultivariateNormal
+    """
+    state_evo = dsx_model.state_evolution
+    if not isinstance(state_evo, ContinuousTimeStateEvolution):
+        raise TypeError("dsx_to_cdlgssm_params requires ContinuousTimeStateEvolution.")
+    drift = state_evo.drift
+    if not isinstance(drift, AffineDrift):
+        raise TypeError(
+            f"dsx_to_cdlgssm_params requires AffineDrift, got {type(drift).__name__}."
+        )
+    if state_evo.diffusion_coefficient is None:
+        raise ValueError("dsx_to_cdlgssm_params requires diffusion_coefficient.")
+
+    # Extract constant L, Q by evaluating at (0, None, 0)
+    x0 = jnp.zeros(dsx_model.state_dim)
+    L = state_evo.diffusion_coefficient(x0, None, jnp.array(0.0))
+    Q = jnp.eye(state_evo.bm_dim)
+
+    ic = dsx_model.initial_condition
+    if not isinstance(ic, dist.MultivariateNormal):
+        raise TypeError(
+            "dsx_to_cdlgssm_params requires MultivariateNormal initial condition."
+        )
+    obs = dsx_model.observation_model
+    if not isinstance(obs, LinearGaussianObservation):
+        raise TypeError("dsx_to_cdlgssm_params requires LinearGaussianObservation.")
+
+    B = (
+        drift.B
+        if drift.B is not None
+        else jnp.zeros((dsx_model.state_dim, dsx_model.control_dim))
+    )
+    b = drift.b if drift.b is not None else jnp.zeros(dsx_model.state_dim)
+    D = (
+        obs.D
+        if obs.D is not None
+        else jnp.zeros((dsx_model.observation_dim, dsx_model.control_dim))
+    )
+    d = obs.bias if obs.bias is not None else jnp.zeros(dsx_model.observation_dim)
+
+    return build_cdlgssm_params(
+        state_dim=dsx_model.state_dim,
+        emission_dim=dsx_model.observation_dim,
+        input_dim=dsx_model.control_dim,
+        dynamics_drift_weights=drift.A,
+        dynamics_input_weights=B,
+        dynamics_bias=b,
+        diffusion_coeff=L,
+        diffusion_cov=Q,
+        x0_mean=jnp.asarray(ic.loc),
+        x0_cov=jnp.asarray(ic.covariance_matrix),
+        emission_weights=obs.H,
+        emission_input_weights=D,
+        emission_bias=d,
+        emission_cov=obs.R,
+    )
 
 
 def dsx_to_cd_dynamax(
