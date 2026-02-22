@@ -2,6 +2,7 @@
 
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.dynamical_models import (
+    AffineDrift,
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
@@ -11,6 +12,7 @@ from dynestyx.dynamical_models import (
 )
 from dynestyx.filters import Filter
 from dynestyx.handlers import Discretizer, sample
+from dynestyx.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.observations import (
     DiracIdentityObservation,
     GaussianObservation,
@@ -22,6 +24,9 @@ __all__ = [
     "ContinuousTimeStateEvolution",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
+    "AffineDrift",
+    "LTI_continuous",
+    "LTI_discrete",
     "LinearGaussianStateEvolution",
     "GaussianStateEvolution",
     "Discretizer",

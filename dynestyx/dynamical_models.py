@@ -103,6 +103,30 @@ class Drift(Protocol):
         raise NotImplementedError()
 
 
+class AffineDrift(eqx.Module):
+    """
+    Affine drift: f(x, u, t) = A @ x + B @ u + b.
+    """
+
+    A: jax.Array
+    B: jax.Array | None = None
+    b: jax.Array | None = None
+
+    def __call__(
+        self,
+        x: State,
+        u: Control | None,
+        t: Time,
+    ) -> dState:
+        out = jnp.dot(self.A, x)
+        if self.B is not None:
+            u_vec = u if u is not None else jnp.zeros(self.B.shape[1])
+            out = out + jnp.dot(self.B, u_vec)
+        if self.b is not None:
+            out = out + self.b
+        return out
+
+
 @dataclasses.dataclass
 class ContinuousTimeStateEvolution:
     """

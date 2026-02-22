@@ -16,6 +16,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
+    ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     DiscreteTimeConfigs,
     EKFConfig,
@@ -143,6 +144,7 @@ class Filter(BaseCDDynamaxLogFactorAdder):
 
 
 __all__ = [
+    "ContinuousTimeKFConfig",
     "ContinuousTimeDPFConfig",
     "ContinuousTimeEnKFConfig",
     "ContinuousTimeEKFConfig",

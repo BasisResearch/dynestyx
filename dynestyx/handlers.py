@@ -212,6 +212,8 @@ class BaseCDDynamaxLogFactorAdder(ObjectInterpretation, HandlesSelf):
             ctrl_values=ctrl_values,
             **kwargs,
         )
+        # Forward unchanged so downstream handlers (or default implementation)
+        # can still see this op if needed.
         return fwd(
             name,
             dynamics,
