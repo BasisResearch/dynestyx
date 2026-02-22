@@ -228,13 +228,14 @@ def _add_sites_pf(
     )
 
     if need_filtered_means:
-        w = jnp.exp(log_weights)[..., None]  # (T+1, n_particles, 1)
+        log_weights_norm = log_weights - jax.scipy.special.logsumexp(
+            log_weights, axis=1, keepdims=True
+        )
+        w = jnp.exp(log_weights_norm)[..., None]  # (T+1, n_particles, 1)
         filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
-        second_mom = jnp.einsum(
-            "...tnj,...tnk,...tn->...tjk", particles, particles, jnp.exp(log_weights)
-        )
+        second_mom = jnp.einsum("...tnj,...tnk,...tn->...tjk", particles, particles, w.squeeze(-1))
         filtered_covariances = second_mom - jnp.einsum(
             "...tj,...tk->...tjk", filtered_means, filtered_means
         )
