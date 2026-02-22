@@ -24,8 +24,8 @@ from dynestyx.simulators import (
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,
-    continuous_time_potential_dynamics_model,
     continuous_time_lti_simplified_model,
+    continuous_time_potential_dynamics_model,
     continuous_time_stochastic_l63_model,
     continuous_time_stochastic_l63_model_dirac_obs,
     discrete_time_l63_model,

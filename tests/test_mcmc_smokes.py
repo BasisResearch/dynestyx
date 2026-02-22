@@ -13,8 +13,8 @@ from tests.fixtures import (
     data_conditioned_continuous_time_l63_dpf,  # noqa: F401
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F401
     data_conditioned_continuous_time_lti_gaussian_dpf,  # noqa: F401
-    data_conditioned_continuous_time_potential_dynamics,  # noqa: F401
     data_conditioned_continuous_time_lti_simplified,  # noqa: F401
+    data_conditioned_continuous_time_potential_dynamics,  # noqa: F401
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F401
     data_conditioned_discrete_time_l63,  # noqa: F401
     data_conditioned_discrete_time_l63_auto,  # noqa: F401
