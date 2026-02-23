@@ -119,10 +119,15 @@ class Drift(Protocol):
     """
     Drift vector field for continuous-time state evolution.
 
-    A drift maps the current state, control, and time to the instantaneous rate of change
-    of the state. In an SDE of the form
-    $dx_t = \\mu(x_t, u_t, t)\\,dt + \\sigma(x_t, u_t, t)\\,dW_t$, the drift is
-    $\\mu$. Implementations must be compatible with JAX transformations (e.g., `jax.grad`).
+    Mathematically, the drift is a mapping
+    $\\mu: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
+    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto \\mu(x, u, t)$.
+    In the SDE formulation used by `ContinuousTimeStateEvolution`,
+    $dx_t = \\mu(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
+    mapping forms the $\\mu$ term.
+
+    Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
+    `jax.vmap`, and `jax.grad` when differentiable).
 
     Args:
         x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
@@ -131,6 +136,16 @@ class Drift(Protocol):
 
     Returns:
         dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
+    
+    Note:
+        This is a protocol interface; implement this callable signature; do not instantiate.
+        We recommend simply using a plain Python function that matches this signature, e.g.:
+
+        ```python
+        def drift(x, u, t):
+            return - x + u
+        ```
+        or `lambda x, u, t: - x + u`
     """
 
     def __call__(
@@ -147,17 +162,27 @@ class Potential(Protocol):
     Scalar potential energy for gradient-based drift.
 
     A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
-    gradient contributes to the drift via $\\pm \\nabla_x V$, enabling
-    Langevin-type dynamics. Used in `ContinuousTimeStateEvolution` when
+    gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling
+    Langevin-type dynamics. It is used in `ContinuousTimeStateEvolution` when
     `potential` is set; the sign is controlled by `use_negative_gradient`.
 
     Args:
         x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input or None.
+        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
         t (Time): Current time.
 
     Returns:
-        jax.Array: Scalar potential $V(x, u, t) \\in \\mathbb{R}$.
+        jax.Array: Scalar potential value $V(x, u, t) \\in \\mathbb{R}$.
+    
+    Note:
+        This is a protocol interface; implement this callable signature; do not instantiate.
+        We recommend simply using a plain Python function that matches this signature, e.g.:
+
+        ```python
+        def potential(x, u, t):
+            return x[0]**2 + x[1]**2 + x[2]**2
+        ```
+        or `lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2`
     """
 
     def __call__(
@@ -187,12 +212,16 @@ class ContinuousTimeStateEvolution:
 
     Attributes:
         drift (Drift | None): Drift vector field $\\mu(x, u, t)$.
+            Defaults to zero if None.
             At least one of `drift` or `potential` must be non-None.
-        potential (Potential | None): Scalar potential $V(x, u, t)$ whose gradient is added to the drift. At least one of `drift` or `potential` must be non-None.
+        potential (Potential | None): Scalar potential $V(x, u, t)$ whose gradient is added to the drift.
+            Defaults to zero if None.
+            At least one of `drift` or `potential` must be non-None.
         use_negative_gradient (bool): If True, use $-\\nabla_x V$ (e.g., gradient descent on potential);
             otherwise use $+\\nabla_x V$. Default is False.
         diffusion_coefficient (Drift | None): Diffusion coefficient $L(x, u, t)$ mapping to a matrix;
-            multiplies the Brownian increment $dW_t$. If None, the SDE is deterministic.
+            multiplies the Brownian increment $dW_t$. 
+            Defaults to zero if None (i.e., deterministic ODE).
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
             Inferred from `state_dim` when `diffusion_coefficient` is set and `bm_dim` is None.
     
@@ -233,21 +262,21 @@ class DiscreteTimeStateEvolution:
     control, and time indices:
 
     $$
-    x_{t+1} \\sim p(x_{t+1} \\mid x_t, u_t, t_{\\mathrm{now}}, t_{\\mathrm{next}})
+    x_{t_{k+1}} \\sim p\\left(x_{t_{k+1}} \\mid x_{t_k}, u_{t_k}, t_k, t_{k+1}\\right)
     $$
 
     Implementations must return a NumPyro-compatible distribution (e.g.,
     `numpyro.distributions.Distribution`) that can be sampled and evaluated.
 
     Args:
-        x (State): Current state $x_t \\in \\mathbb{R}^{d_x}$.
+        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
         u (Control | None): Current control input or None.
-        t_now (Time): Current time index.
-        t_next (Time): Next time index (for non-uniform sampling or continuous-time embeddings).
+        t_now (Time): Current time index $t_k$.
+        t_next (Time): Next time index $t_{k+1}$ (for non-uniform sampling or continuous-time embeddings).
 
     Returns:
-        numpyro.distributions.Distribution: Distribution over the next state $x_{t+1}$ (a NumPyro distribution; see the
-            [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html)).
+        DistributionT: Distribution over the next state $x_{t_{k+1}}$.
+            In practice this should be a `numpyro.distributions.Distribution` instance.
     """
 
     def __call__(
@@ -278,9 +307,9 @@ class ObservationModel(eqx.Module):
     Methods:
         __call__(x, u, t) -> numpyro.distributions.Distribution: Return the observation distribution (a NumPyro distribution; see
             the [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html)) for
-            $p(y \\mid x, u, t)$.
-        log_prob(y, x, u, t, ...): Compute $\\log p(y \\mid x, u, t)$.
-        sample(x, u, t, ...): Sample $y \\sim p(y \\mid x, u, t)$.
+            $p(y_t \\mid x_t, u_t, t)$.
+        log_prob(y_t, x_t, u_t, t, ...): Compute $\\log p(y_t \\mid x_t, u_t, t)$.
+        sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
 
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):

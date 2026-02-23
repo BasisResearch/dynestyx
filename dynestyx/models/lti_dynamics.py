@@ -90,10 +90,10 @@ def LTI_continuous(
     initial_mean: jax.Array | None = None,
     initial_cov: jax.Array | None = None,
 ) -> DynamicalModel:
-    f"""
+    """
     Build a continuous-time LTI DynamicalModel from core generating parameters.
 
-    SDE:  dx = (A x(t) + B u(t) + b) dt + L dW_t,   dW_t ~ N(0, I_{L.shape[1]} dt)
+    SDE:  dx = (A x(t) + B u(t) + b) dt + L dW_t,   dW_t ~ N(0, I_d dt)
     Obs:  y_t ~ N(H x_t + D u_t + d, R)
 
     L is the diffusion coefficient (not a covariance). It maps the Brownian
