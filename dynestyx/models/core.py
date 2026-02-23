@@ -136,7 +136,7 @@ class Drift(Protocol):
 
     Returns:
         dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
-    
+
     Note:
         This is a protocol interface; implement this callable signature; do not instantiate.
         We recommend simply using a plain Python function that matches this signature, e.g.:
@@ -173,7 +173,7 @@ class Potential(Protocol):
 
     Returns:
         jax.Array: Scalar potential value $V(x, u, t) \\in \\mathbb{R}$.
-    
+
     Note:
         This is a protocol interface; implement this callable signature; do not instantiate.
         We recommend simply using a plain Python function that matches this signature, e.g.:
@@ -220,11 +220,11 @@ class ContinuousTimeStateEvolution:
         use_negative_gradient (bool): If True, use $-\\nabla_x V$ (e.g., gradient descent on potential);
             otherwise use $+\\nabla_x V$. Default is False.
         diffusion_coefficient (Drift | None): Diffusion coefficient $L(x, u, t)$ mapping to a matrix;
-            multiplies the Brownian increment $dW_t$. 
+            multiplies the Brownian increment $dW_t$.
             Defaults to zero if None (i.e., deterministic ODE).
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
             Inferred from `state_dim` when `diffusion_coefficient` is set and `bm_dim` is None.
-    
+
     Warning:
         - Soon, we will deprecate `bm_dim` and infer it automatically from the shape of the diffusion coefficient.
     """

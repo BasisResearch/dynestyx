@@ -38,7 +38,9 @@ nav:
         - Potential: api_reference/public/models/core/potential.md
       - Specialized Models:
         - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
+        - GaussianObservation: api_reference/public/models/specialized/gaussian_observation.md
         - LinearGaussianStateEvolution: api_reference/public/models/specialized/linear_gaussian_state_evolution.md
+        - AffineDrift: api_reference/public/models/specialized/affine_drift.md
         - LTI_continuous: api_reference/public/models/specialized/lti_continuous.md
         - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
     - Inference:

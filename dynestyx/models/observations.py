@@ -12,9 +12,17 @@ from dynestyx.types import Control, Observation, State, Time
 
 class LinearGaussianObservation(ObservationModel):
     """
-    y_t | x_t, u_t, t ~ Normal( H x_t + D u_t + bias, R )
+    Linear-Gaussian observation model.
 
-    where H is the observation matrix, D is the control matrix, and R is the observation noise covariance.
+    Observations are modeled as
+
+    $$
+    y_t \\sim \\mathcal{N}(H x_t + D u_t + b, R).
+    $$
+
+    Here, $H$ is the observation matrix, $D$ is an optional control-input
+    matrix, $b$ is an optional observation bias, and $R$ is the observation
+    noise covariance.
     """
 
     H: jax.Array
@@ -30,8 +38,15 @@ class LinearGaussianObservation(ObservationModel):
         bias: jax.Array | None = None,
     ):
         """
-        H: Observation matrix, shape (obs_dim, state_dim)
-        R: Observation noise covariance, shape (obs_dim, obs_dim)
+        Args:
+            H (jax.Array): Observation matrix with shape
+                $(d_y, d_x)$.
+            R (jax.Array): Observation noise covariance with shape
+                $(d_y, d_y)$.
+            D (jax.Array | None): Optional control matrix with shape
+                $(d_y, d_u)$. If None, no control contribution is used.
+            bias (jax.Array | None): Optional additive bias with shape
+                $(d_y,)$.
         """
         self.H = H
         self.D = D
@@ -48,16 +63,30 @@ class LinearGaussianObservation(ObservationModel):
 
 
 class GaussianObservation(ObservationModel):
-    r"""
-    $ y_t | x_t, u_t, t ~ \mathcal{N}(h(x_t, u_t, t), R) $
-    where h is a callable mapping (State, Control, Time) -> State
-    and R is the observation noise covariance.
+    """
+    Nonlinear Gaussian observation model.
+
+    Observations are modeled as
+
+    $$
+    y_t \\sim \\mathcal{N}(h(x_t, u_t, t), R),
+    $$
+
+    where $h$ is a user-provided measurement function and $R$ is the
+    observation noise covariance.
     """
 
     h: Callable[[State, Control, Time], Observation]
     R: jax.Array
 
     def __init__(self, h: Callable[[State, Control, Time], jax.Array], R: jax.Array):
+        """
+        Args:
+            h (Callable[[State, Control, Time], jax.Array]): Measurement
+                function mapping $(x, u, t)$ to the mean observation.
+            R (jax.Array): Observation noise covariance with shape
+                $(d_y, d_y)$.
+        """
         self.h = h
         self.R = R
 
@@ -68,7 +97,15 @@ class GaussianObservation(ObservationModel):
 
 class DiracIdentityObservation(ObservationModel):
     """
-    y_t | x_t ~ DiracDelta(x_t)
+    Noise-free identity observation model.
+
+    Observations are modeled as
+
+    $$
+    y_t \\sim \\delta(x_t),
+    $$
+
+    i.e., the observation equals the latent state almost surely.
     """
 
     def __call__(self, x, u, t):

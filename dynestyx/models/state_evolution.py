@@ -17,9 +17,17 @@ from dynestyx.types import Control, State, Time, dState
 
 class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     """
-    x_t_next | x_t_now, u_t_now, t_now, t_next ~ Normal( A x_t_now + B u_t_now + bias, cov )
+    Linear-Gaussian discrete-time state transition.
 
-    where A is the observation matrix, B is the control matrix, bias is the bias, and cov is the state noise covariance.
+    The next state is modeled as
+
+    $$
+    x_{t_{k+1}} \\sim \\mathcal{N}(A x_{t_k} + B u_{t_k} + b, Q),
+    $$
+
+    where $A$ is the state transition matrix, $B$ is an optional control-input
+    matrix, $b$ is an optional transition bias, and $Q$ is the process-noise
+    covariance.
     """
 
     A: jax.Array
@@ -34,6 +42,17 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
         B: jax.Array | None = None,
         bias: jax.Array | None = None,
     ):
+        """
+        Args:
+            A (jax.Array): State transition matrix with shape
+                $(d_x, d_x)$.
+            cov (jax.Array): Process-noise covariance with shape
+                $(d_x, d_x)$.
+            B (jax.Array | None): Optional control matrix with shape
+                $(d_x, d_u)$.
+            bias (jax.Array | None): Optional additive bias with shape
+                $(d_x,)$.
+        """
         self.A = A
         self.B = B
         self.bias = bias
@@ -51,10 +70,16 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):
     """
-    x_t_next | x_t_now, u_t_now, t_now, t_next ~ Normal( F(x_t_now, u_t_now, t_now, t_next), cov )
+    Nonlinear Gaussian discrete-time state transition.
 
-    where F is a callable mapping (State, Control, Time) -> State
-    and cov is the state noise covariance.
+    The next state is modeled as
+
+    $$
+    x_{t_{k+1}} \\sim \\mathcal{N}(F(x_{t_k}, u_{t_k}, t_k, t_{k+1}), Q),
+    $$
+
+    where $F$ is a user-provided transition function and $Q$ is the
+    process-noise covariance.
     """
 
     F: Callable[[State, Control, Time, Time], State]
@@ -65,6 +90,13 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         F: Callable[[State, Control, Time, Time], State],
         cov: jax.Array,
     ):
+        """
+        Args:
+            F (Callable[[State, Control, Time, Time], State]): Transition
+                function mapping $(x, u, t_k, t_{k+1})$ to the conditional mean.
+            cov (jax.Array): Process-noise covariance with shape
+                $(d_x, d_x)$.
+        """
         self.F = F
         self.cov = cov
 
@@ -76,7 +108,24 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
 
 class AffineDrift(eqx.Module):
     """
-    Affine drift: f(x, u, t) = A @ x + B @ u + b.
+    Affine drift function for continuous-time models.
+
+    This implements an affine map of the form
+
+    $$f(x, u, t) = A x + B u + b,$$
+
+    where $A \\in \\mathbb{R}^{d_x \\times d_x}$, $B \\in \\mathbb{R}^{d_x \\times d_u}$
+    (optional), and $b \\in \\mathbb{R}^{d_x}$ (optional). The time argument $t$
+    is accepted for compatibility with the `Drift` protocol but is not used.
+
+    This is commonly used as the drift term $\\mu(x_t, u_t, t)$ inside
+    `ContinuousTimeStateEvolution`, and is a building block for LTI models such as
+    `LTI_continuous`.
+
+    Attributes:
+        A (jax.Array): Drift matrix with shape $(d_x, d_x)$.
+        B (jax.Array | None): Optional control matrix with shape $(d_x, d_u)$.
+        b (jax.Array | None): Optional additive bias with shape $(d_x,)$.
     """
 
     A: jax.Array
