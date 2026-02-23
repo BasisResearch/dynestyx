@@ -104,14 +104,23 @@ class Filter(BaseLogFactorAdder):
     """
     Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
 
+    $x + y = z$
+
     Uses a single filter_config to specify the filter. If None, defaults are chosen:
+
     - Continuous-time: Ensemble Kalman Filter (ContinuousTimeEnKFConfig)
     - Discrete-time: Extended Kalman Filter (EKFConfig)
 
-    Args:
+    Parameters:
         filter_config: Filter configuration. If None, defaults are chosen.
 
-    For HMMs, must use `HMMConfig` to specify the filter.
+
+    Returns:
+        a1: None
+        a2: Nothing
+
+    Note:    
+        For HMMs, must use `HMMConfig` to specify the filter.
 
     """
 

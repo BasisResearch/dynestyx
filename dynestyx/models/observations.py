@@ -48,8 +48,8 @@ class LinearGaussianObservation(ObservationModel):
 
 
 class GaussianObservation(ObservationModel):
-    """
-    y_t | x_t, u_t, t ~ Normal(h(x_t, u_t, t), R)
+    r"""
+    $ y_t | x_t, u_t, t ~ \mathcal{N}(h(x_t, u_t, t), R) $
     where h is a callable mapping (State, Control, Time) -> State
     and R is the observation noise covariance.
     """

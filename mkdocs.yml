@@ -26,24 +26,38 @@ nav:
     - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
     - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
     - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
-  - API Reference:
-    - api_reference.md
-    - dynamical_models: api_reference/dynamical_models.md
-    - filters: api_reference/filters.md
-    - handlers: api_reference/handlers.md
-    - discretizers: api_reference/discretizers.md
-    - hmm_filter: api_reference/hmm_filter.md
-    - observations: api_reference/observations.md
-    - diagnostics: api_reference/diagnostics.md
-    - simulators: api_reference/simulators.md
-    - utils: api_reference/utils.md
+  - Public API:
+    - Overview: api_reference/public/index.md
+    - models:
+      - Core Models:
+        - DynamicalModel: api_reference/public/models/core/dynamical_model.md
+        - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
+        - DiscreteTimeStateEvolution: api_reference/public/models/core/discrete_time_state_evolution.md
+        - ObservationModel: api_reference/public/models/core/observation_model.md
+        - Drift: api_reference/public/models/core/drift.md
+        - Potential: api_reference/public/models/core/potential.md
+      - Specialized Models:
+        - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
+        - LinearGaussianStateEvolution: api_reference/public/models/specialized/linear_gaussian_state_evolution.md
+        - LTI_continuous: api_reference/public/models/specialized/lti_continuous.md
+        - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
+    - Inference:
+      - Filters: api_reference/public/inference/filters.md
+      - FilterConfigs: api_reference/public/inference/filter_configs.md
+    - Discretizers:
+      - Discretizer: api_reference/public/discretizers/discretizer.md
+    - Simulators:
+      - Simulators: api_reference/public/simulators/simulator.md
+    - Diagnostics:
+      - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
+  - Developer API:
+    - Everything (including private): api_reference/developer.md
   - Examples:
     - tutorials.md
     - Quickstart: tutorials/quickstart.ipynb
     - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
     - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
-    - Using `Discretizer` to go from continuous-time -> discrete: deep_dives/discretizer_demo.ipynb
   - FAQ: faq.md
 
 theme:

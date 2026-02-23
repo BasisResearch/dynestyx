@@ -1,9 +1,4 @@
-# filters
-
-::: dynestyx.inference.filters
-    options:
-      members:
-        - Filter
+# FilterConfigs
 
 ::: dynestyx.inference.filter_configs
     options:
@@ -16,3 +11,4 @@
         - EnKFConfig
         - ContinuousTimeConfig
         - ContinuousTimeKFConfig
+
