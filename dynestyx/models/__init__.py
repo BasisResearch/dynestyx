@@ -4,6 +4,7 @@ Structure anticipates future extension to LTI factories, Neural SDEs, etc.
 """
 
 from dynestyx.models.core import (
+    AffineDrift,
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     Drift,
@@ -22,6 +23,7 @@ from dynestyx.models.state_evolution import (
 
 __all__ = [
     "ContinuousTimeStateEvolution",
+    "AffineDrift",
     "DiracIdentityObservation",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",

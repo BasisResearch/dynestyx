@@ -6,6 +6,8 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 import equinox as eqx
+import jax
+import jax.numpy as jnp
 from numpyro._typing import DistributionT
 
 from dynestyx.types import Control, State, Time, dState

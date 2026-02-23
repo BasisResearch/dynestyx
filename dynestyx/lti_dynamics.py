@@ -2,13 +2,13 @@ import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 
-from dynestyx.dynamical_models import (
+from dynestyx.models import (
     AffineDrift,
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.observations import LinearGaussianObservation
 
 
 def LTI_discrete(
