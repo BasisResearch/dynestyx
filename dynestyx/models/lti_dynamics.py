@@ -75,7 +75,6 @@ def LTI_discrete(
         state_dim=state_dim,
         observation_dim=observation_dim,
         control_dim=control_dim,
-        continuous_time=False,
     )
 
 
@@ -155,5 +154,4 @@ def LTI_continuous(
         state_dim=state_dim,
         observation_dim=observation_dim,
         control_dim=control_dim,
-        continuous_time=True,
     )

@@ -1,7 +1,7 @@
 # DynamicalModel
 
-::: dynestyx.models.core
+::: dynestyx.models.core.DynamicalModel
     options:
-      members:
-        - DynamicalModel
+      show_root_heading: false
+      show_root_toc_entry: false
 

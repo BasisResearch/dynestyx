@@ -1,7 +1,7 @@
 # ContinuousTimeStateEvolution
 
-::: dynestyx.models.core
+::: dynestyx.models.core.ContinuousTimeStateEvolution
     options:
-      members:
-        - ContinuousTimeStateEvolution
+      show_root_heading: false
+      show_root_toc_entry: false
 

@@ -1,7 +1,7 @@
 # LinearGaussianObservation
 
-::: dynestyx.models.observations
+::: dynestyx.models.observations.LinearGaussianObservation
     options:
-      members:
-        - LinearGaussianObservation
+      show_root_heading: false
+      show_root_toc_entry: false
 

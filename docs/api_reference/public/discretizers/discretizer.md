@@ -2,9 +2,15 @@
 
 Sometimes it's convenient to discretize.
 
-::: dynestyx.discretizers
+::: dynestyx.discretizers.Discretizer
     options:
-      members:
-        - Discretizer
-        - euler_maruyama
+      show_root_heading: false
+      show_root_toc_entry: false
+
+---
+
+::: dynestyx.discretizers.euler_maruyama
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
 

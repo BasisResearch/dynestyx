@@ -1,7 +1,7 @@
 # LTI_discrete
 
-::: dynestyx.models.lti_dynamics
+::: dynestyx.models.lti_dynamics.LTI_discrete
     options:
-      members:
-        - LTI_discrete
+      show_root_heading: false
+      show_root_toc_entry: false
 

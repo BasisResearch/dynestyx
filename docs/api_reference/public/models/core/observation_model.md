@@ -1,7 +1,7 @@
 # ObservationModel
 
-::: dynestyx.models.core
+::: dynestyx.models.core.ObservationModel
     options:
-      members:
-        - ObservationModel
+      show_root_heading: false
+      show_root_toc_entry: false
 

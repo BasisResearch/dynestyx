@@ -1,7 +1,7 @@
 # Filters
 
-::: dynestyx.inference.filters
+::: dynestyx.inference.filters.Filter
     options:
-      members:
-        - Filter
+      show_root_heading: false
+      show_root_toc_entry: false
 

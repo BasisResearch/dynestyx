@@ -1,7 +1,7 @@
 # LinearGaussianStateEvolution
 
-::: dynestyx.models.state_evolution
+::: dynestyx.models.state_evolution.LinearGaussianStateEvolution
     options:
-      members:
-        - LinearGaussianStateEvolution
+      show_root_heading: false
+      show_root_toc_entry: false
 
