@@ -91,7 +91,7 @@ class EnKFConfig(BaseFilterConfig):
             better covariance estimate at higher compute cost. Defaults to
             `30`.
         crn_seed (jax.Array | None): Fixed PRNG key for the ensemble. Defaults
-            to `jr.PRNGKey(0)`, i.e., common random numbers are used. This 
+            to `jr.PRNGKey(0)`, i.e., common random numbers are used. This
             can reduce variance in gradient-based learning, but introduces
             further bias.
         perturb_measurements (bool | None): Add noise to observations before
@@ -158,7 +158,7 @@ class PFResamplingConfig:
 
         - For the stop_gradient method, see: Ścibior, A., & Wood, F. (2021).
             Differentiable particle filtering without modifying the forward pass. [arXiv:2106.10314](https://arxiv.org/abs/2106.10314).
-        - For the soft method, see: Karkus, P., Hsu, D., & Lee, W. S. (2018, October). Particle filter networks with application to visual localization. 
+        - For the soft method, see: Karkus, P., Hsu, D., & Lee, W. S. (2018, October). Particle filter networks with application to visual localization.
             In Conference on Robot Learning (pp. 169-178). [Available Online](https://proceedings.mlr.press/v87/karkus18a.html).
         - For a recent review of differentiable particle filters, see: Brady, J. J., Cox, B., Li, Y., & Elvira, V. (2025).
             PyDPF: A Python Package for Differentiable Particle Filtering. [arXiv:2510.25693](https://arxiv.org/abs/2510.25693).
@@ -506,7 +506,7 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
 
     Notes: Algorithm Reference
         References:
-        
+
         - For a modern textbook reference, see Chapter 10.7 of: Särkkä, S., & Solin, A. (2019).
             Applied Stochastic Differential Equations. Cambridge University Press.
             [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
@@ -532,7 +532,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 
     Notes: Algorithm Reference
         References:
-        
+
         - For a modern textbook reference, see Section 10.8 of: Särkkä, S., & Solin, A. (2019).
             Applied Stochastic Differential Equations. Cambridge University Press.
             [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
