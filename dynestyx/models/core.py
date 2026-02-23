@@ -45,13 +45,14 @@ class DynamicalModel(eqx.Module):
             transitions. Do not pass raw callables; use the appropriate base class implementations.
         observation_model (ObservationModel): The observation/likelihood model $p(y_t \\mid x_t, u_t, t)$.
             Must be an instance of `ObservationModel`, not a bare callable.
-        control_model (Any): Optional model for control inputs (e.g., exogenous process). Not currently used.
+        control_model (Any): Optional model for control inputs (e.g., exogenous process). Not currently supported.
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
     
-    Todo:
-        - Implement logic for control_model.
-        - Add auto-inference for state_dim, observation_dim, control_dim (and remove the need to pass them as arguments).
+    Warning:
+        - Soon, we will implement auto-inference for continuous_time, state_dim, and observation_dim (and remove them as arguments).
+        - Logic for control_model is not implemented yet.
+    
     """
 
     state_dim: int
@@ -191,6 +192,9 @@ class ContinuousTimeStateEvolution:
             multiplies the Brownian increment $dW_t$. If None, the SDE is deterministic.
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
             Inferred from `state_dim` when `diffusion_coefficient` is set and `bm_dim` is None.
+    
+    Warning:
+        - Soon, we will deprecate `bm_dim` and infer it automatically from the shape of the diffusion coefficient.
     """
 
     drift: Drift | None = None

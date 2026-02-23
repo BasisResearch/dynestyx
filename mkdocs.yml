@@ -416,7 +416,7 @@ markdown_extensions:
   #- pymdownx.smartsymbols:
   #- pymdownx.snippets:
   #- pymdownx.striphtml:
-  #- pymdownx.superfences:
+  - pymdownx.superfences:
   #- pymdownx.tabbed:
   #- pymdownx.tasklist:
   #- pymdownx.tilde:
@@ -425,5 +425,9 @@ plugins:
   - search # default plugin, need to re-enable when using manual plugins
   - mkdocstrings:
       default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: false
   - mkdocs-jupyter:
       execute: false
