@@ -3,7 +3,7 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
-from dynestyx.handlers import Discretizer
+from dynestyx.discretizers import Discretizer
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,

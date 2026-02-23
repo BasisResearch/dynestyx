@@ -1,8 +1,8 @@
 """Dynestyx package."""
 
-from dynestyx.discretizers import euler_maruyama
-from dynestyx.filters import Filter
-from dynestyx.handlers import Discretizer, sample
+from dynestyx.discretizers import Discretizer, euler_maruyama
+from dynestyx.handlers import sample
+from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -16,7 +16,12 @@ from dynestyx.models import (
     LTI_discrete,
     ObservationModel,
 )
-from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
+from dynestyx.simulators import (
+    DiscreteTimeSimulator,
+    ODESimulator,
+    SDESimulator,
+    Simulator,
+)
 
 __all__ = [
     "ContinuousTimeStateEvolution",
@@ -37,5 +42,6 @@ __all__ = [
     "DiscreteTimeSimulator",
     "ODESimulator",
     "SDESimulator",
+    "Simulator",
     "euler_maruyama",
 ]

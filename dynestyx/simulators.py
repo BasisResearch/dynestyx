@@ -4,23 +4,115 @@ from collections.abc import Callable
 import diffrax as dfx
 import jax.numpy as jnp
 import numpyro
+from effectful.ops.semantics import fwd
+from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
-from dynestyx.handlers import BaseSimulator
+from dynestyx.handlers import HandlesSelf, sample
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
 )
-from dynestyx.types import State
+from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _build_control_path,
     _get_val_or_None,
     _validate_control_dim,
     _validate_controls,
 )
+
+
+class BaseSimulator(ObjectInterpretation, HandlesSelf):
+    """Base class for simulators/unrollers.
+
+    Concrete simulators implement `simulate(dynamics, obs_times, ...)` and optionally
+    override `add_solved_sites` if they need custom behavior.
+    """
+
+    @implements(sample)
+    def _sample_ds(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> FunctionOfTime:
+        self.add_solved_sites(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+        return fwd(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+
+    def add_solved_sites(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ):
+        # Only simulate if we have observation times
+        if obs_times is None:
+            return
+
+        # Run the simulator
+        simulated = self.simulate(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+
+        # Add the results from the simulator as deterministic sites
+        for site_name, trajectory in simulated.items():
+            numpyro.deterministic(site_name, trajectory)
+
+    def simulate(
+        self,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> dict[str, State]:
+        """
+        Args:
+            dynamics: The dynamical model to simulate.
+            obs_times: Observation times.
+            obs_values: Observed values (optional).
+            ctrl_times: Control times (optional).
+            ctrl_values: Control values (optional).
+        Returns:
+            dict[str, State]: A dictionary mapping site names to simulated trajectories.
+        """
+        raise NotImplementedError()
 
 
 class SDESimulator(BaseSimulator):
