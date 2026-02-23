@@ -40,11 +40,14 @@ class DynamicalModel(eqx.Module):
             In the codebase this is annotated as `DistributionT` (a typing alias); in practice you should pass
             a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
             [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
-        state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution): The state transition model.
+        state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
             Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
-            transitions. Do not pass raw callables; use the appropriate base class implementations.
-        observation_model (ObservationModel): The observation/likelihood model $p(y_t \\mid x_t, u_t, t)$.
-            Must be an instance of `ObservationModel`, not a bare callable.
+            transitions. A callable is also accepted (e.g., `lambda x, u, t_now, t_next: ...`), but class-based
+            implementations are recommended for full compatibility with type-based integrations (such as automatic
+            simulator selection).
+        observation_model (ObservationModel | Callable): The observation/likelihood model $p(y_t \\mid x_t, u_t, t)$.
+            A callable is accepted (e.g., `lambda x, u, t: ...`) as long as it returns a NumPyro-compatible
+            distribution, while subclassing `ObservationModel` is recommended for richer reuse and consistency.
         control_model (Any): Optional model for control inputs (e.g., exogenous process). Not currently supported.
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
