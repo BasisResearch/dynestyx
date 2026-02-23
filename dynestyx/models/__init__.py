@@ -4,19 +4,20 @@ Structure anticipates future extension to LTI factories, Neural SDEs, etc.
 """
 
 from dynestyx.models.core import (
-    AffineDrift,
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     Drift,
     DynamicalModel,
     ObservationModel,
 )
+from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
     GaussianObservation,
     LinearGaussianObservation,
 )
 from dynestyx.models.state_evolution import (
+    AffineDrift,
     GaussianStateEvolution,
     LinearGaussianStateEvolution,
 )
@@ -33,4 +34,6 @@ __all__ = [
     "LinearGaussianObservation",
     "LinearGaussianStateEvolution",
     "ObservationModel",
+    "LTI_continuous",
+    "LTI_discrete",
 ]

@@ -3,7 +3,6 @@
 from dynestyx.discretizers import euler_maruyama
 from dynestyx.filters import Filter
 from dynestyx.handlers import Discretizer, sample
-from dynestyx.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -13,6 +12,8 @@ from dynestyx.models import (
     GaussianStateEvolution,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
+    LTI_continuous,
+    LTI_discrete,
     ObservationModel,
 )
 from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator

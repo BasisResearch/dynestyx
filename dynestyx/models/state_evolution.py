@@ -6,12 +6,13 @@ extension to LTI factories, Neural SDEs, etc.
 
 from collections.abc import Callable
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
-from dynestyx.types import Control, State, Time
+from dynestyx.types import Control, State, Time, dState
 
 
 class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
@@ -71,3 +72,27 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         loc = self.F(x, u, t_now, t_next)
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
+
+
+class AffineDrift(eqx.Module):
+    """
+    Affine drift: f(x, u, t) = A @ x + B @ u + b.
+    """
+
+    A: jax.Array
+    B: jax.Array | None = None
+    b: jax.Array | None = None
+
+    def __call__(
+        self,
+        x: State,
+        u: Control | None,
+        t: Time,
+    ) -> dState:
+        out = jnp.dot(self.A, x)
+        if self.B is not None:
+            u_vec = u if u is not None else jnp.zeros(self.B.shape[1])
+            out = out + jnp.dot(self.B, u_vec)
+        if self.b is not None:
+            out = out + self.b
+        return out
