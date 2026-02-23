@@ -117,7 +117,7 @@ class SDESimulator(BaseSimulator):
 
         def _drift(t, y, args):
             u_t = args(t)
-            return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
 
         def _diffusion(t, y, args):
             u_t = args(t)
@@ -366,14 +366,14 @@ class ODESimulator(BaseSimulator):
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
                 u_t = args(t)
-                return dynamics.state_evolution.drift(x=y, u=u_t, t=t)
+                return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
 
             args = lambda t: control_path.evaluate(t, left=False)
 
         else:
 
             def f(t, y, args):
-                return dynamics.state_evolution.drift(x=y, u=None, t=t)
+                return dynamics.state_evolution.total_drift(x=y, u=None, t=t)
 
             args = None
 

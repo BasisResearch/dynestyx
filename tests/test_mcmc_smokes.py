@@ -13,6 +13,8 @@ from tests.fixtures import (
     data_conditioned_continuous_time_l63_dpf,  # noqa: F401
     data_conditioned_continuous_time_lti_gaussian,  # noqa: F401
     data_conditioned_continuous_time_lti_gaussian_dpf,  # noqa: F401
+    data_conditioned_continuous_time_lti_simplified,  # noqa: F401
+    data_conditioned_continuous_time_potential_dynamics,  # noqa: F401
     data_conditioned_continuous_time_stochastic_l63,  # noqa: F401
     data_conditioned_discrete_time_l63,  # noqa: F401
     data_conditioned_discrete_time_l63_auto,  # noqa: F401
@@ -132,6 +134,23 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
+def test_continuous_time_potential_dynamics_mcmc_smoke(
+    data_conditioned_continuous_time_potential_dynamics,  # noqa: F811
+) -> None:
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, _, _, mode = (
+        data_conditioned_continuous_time_potential_dynamics
+    )
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "alpha" in posterior_samples
+    assert "beta" in posterior_samples
+    assert mode in {"drift_only", "grad_only", "both"}
+
+
 def test_continuous_time_stochastic_l63_dpf_mcmc_smoke(
     data_conditioned_continuous_time_l63_dpf,  # noqa: F811
 ) -> None:
@@ -151,6 +170,20 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
     mcmc_key = jr.PRNGKey(0)
     data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_lti_gaussian
+    )
+    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc.run(mcmc_key)
+    posterior_samples = mcmc.get_samples()
+    assert "rho" in posterior_samples
+
+
+def test_continuous_time_lti_simplified_mcmc_smoke(
+    data_conditioned_continuous_time_lti_simplified,  # noqa: F811
+) -> None:
+    """MCMC smoke test for LTI_continuous + ContinuousTimeKFConfig."""
+    mcmc_key = jr.PRNGKey(0)
+    data_conditioned_model, true_params, synthetic, _ = (
+        data_conditioned_continuous_time_lti_simplified
     )
     mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
     mcmc.run(mcmc_key)

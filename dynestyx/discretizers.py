@@ -48,7 +48,7 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
 
         def _step(_x, _u, _t_now, _t_next):
             _dt = _t_next - _t_now
-            drift = self.cte.drift(_x, _u, _t_now)
+            drift = self.cte.total_drift(_x, _u, _t_now)
             x_pred_mean = _x + drift * _dt
             L = self.cte.diffusion_coefficient(_x, _u, _t_now)
             Q = jnp.eye(self.cte.bm_dim)
