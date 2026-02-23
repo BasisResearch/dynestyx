@@ -65,7 +65,7 @@ Using the simulated `samples` and `obs_times` from above, condition on the data 
 
 ```python
 from dynestyx import Filter
-from dynestyx.filters import ContinuousTimeEnKFConfig
+from dynestyx.inference.filters import ContinuousTimeEnKFConfig
 from numpyro.infer import MCMC, NUTS
 
 obs_values = samples["observations"][0]

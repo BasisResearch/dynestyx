@@ -3,7 +3,6 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
-from dynestyx.filters import Filter
 from dynestyx.handlers import Discretizer
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
@@ -16,6 +15,7 @@ from dynestyx.inference.filter_configs import (
     PFConfig,
     UKFConfig,
 )
+from dynestyx.inference.filters import Filter
 from dynestyx.inference.hmm_filters import HMMConfig
 from dynestyx.simulators import (
     DiscreteTimeSimulator,

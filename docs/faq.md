@@ -18,7 +18,7 @@ Omit `ctrl_times` and `ctrl_values` when the model has no controls.
 
 - **HMM**: Use the HMM filter (using an `HMMConfig` configuation). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
 ```python
-from dynestyx.filters import Filter, HMMConfig
+from dynestyx.inference.filters import Filter, HMMConfig
 
 with Filter(filter_config=HMMConfig()):
     return model(obs_times=obs_times, obs_values=obs_values)
@@ -39,7 +39,7 @@ with Filter():
 
 - **Continuous-time stochastic differential equation**: **Filter** is the main choice. EnKF is the default and works well for nonlinear models, but only works if your initial condition and observation model are linear/gaussian. Use the particle filter (PF) only if you have non-Gaussian initial conditions or observation models—see [SDE with non-Gaussian observations](tutorials/sde_non_gaussian_observations.ipynb). We stand by these implementations, and they appear to be working well currently (especially EnKF).
 ```python
-from dynestyx.filters import Filter, ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig
+from dynestyx.inference.filters import Filter, ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig
 
 with Filter(filter_config=ContinuousTimeEnKFConfig()):
 # with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=1000)):
@@ -60,7 +60,7 @@ with ODESimulator():
 ```
 Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
 ```python
-from dynestyx.filters import Filter, ContinuousTimeEnKFConfig
+from dynestyx.inference.filters import Filter, ContinuousTimeEnKFConfig
 
 with Filter(filter_config=ContinuousTimeEnKFConfig()):
     return model(obs_times=obs_times, obs_values=obs_values, diffusion_coefficient=0.01)
