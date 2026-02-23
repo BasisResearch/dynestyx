@@ -119,7 +119,7 @@ class Filter(BaseLogFactorAdder):
         a1: None
         a2: Nothing
 
-    Note:    
+    Note:
         For HMMs, must use `HMMConfig` to specify the filter.
 
     """

@@ -12,6 +12,7 @@ type SSMType = CDNLGSSM | CDNLSSM
 
 _CONTROL_EXTEND_EPSILON = 1e-5
 
+
 def _should_record_field(
     record_val: bool | None, shape: tuple[int, ...], max_elems: int
 ) -> bool:
@@ -85,6 +86,7 @@ def _validate_controls(
             f"Control times length ({len(ctrl_times)}) must match "
             f"observation times length ({len(obs_times)})"
         )
+
 
 def _build_control_path(
     ctrl_times: Array, ctrl_values: Array, obs_times: Array
