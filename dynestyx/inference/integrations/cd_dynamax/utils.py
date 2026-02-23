@@ -102,16 +102,14 @@ def dsx_to_cd_dynamax(
     ## Map state evolution ##
     state_evo = dsx_model.state_evolution
     if isinstance(state_evo, ContinuousTimeStateEvolution):
-        if state_evo.drift is not None:
+        if state_evo.drift is not None or state_evo.potential is not None:
             params.update(
                 {
-                    "drift": state_evo.drift,
+                    "drift": state_evo.total_drift,
                 }
             )
         else:
-            raise ValueError(
-                "drift is None; default drift (e.g., ZERO) is not yet handled carefully."
-            )
+            raise ValueError("Both drift and potential are None; define at least one.")
         if state_evo.diffusion_coefficient is not None:
             params.update(
                 {
