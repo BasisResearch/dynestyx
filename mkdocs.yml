@@ -62,8 +62,6 @@ nav:
 
 theme:
   name: "material"
-  features:
-    - content.footnote.tooltips
 
   # +------------------------------------------------------------------------------------------------------+
   # |                                                                                                      |
@@ -182,6 +180,7 @@ theme:
   # |                                                                                                      |
   # +------------------------------------------------------------------------------------------------------+
   features:
+    - content.footnote.tooltips
     # Announce
     #
     #- announce.dismiss # Adds a "X" button to dismiss a news banner/mark it as read.*
