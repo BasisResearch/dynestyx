@@ -63,8 +63,6 @@ def hmm_model(
         return dist.Normal(mu[x] + u_effect, sigma)
 
     dynamics = DynamicalModel(
-        state_dim=K,
-        observation_dim=1,
         control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=initial_condition,
         state_evolution=state_evolution,
@@ -112,8 +110,6 @@ def discrete_time_l63_model(
 
     # Create the dynamical model with sampled rho
     dynamics = DynamicalModel(
-        state_dim=3,
-        observation_dim=1,
         control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
@@ -157,8 +153,6 @@ def continuous_time_stochastic_l63_model(
 
     # Create the dynamical model with sampled rho
     dynamics = DynamicalModel(
-        state_dim=3,
-        observation_dim=1,
         control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
@@ -175,7 +169,6 @@ def continuous_time_stochastic_l63_model(
                 + (10 * u if u is not None else jnp.zeros(3))
             ),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            bm_dim=3,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
@@ -214,8 +207,6 @@ def continuous_time_stochastic_l63_model_dirac_obs(
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
 
     dynamics = DynamicalModel(
-        state_dim=3,
-        observation_dim=3,
         control_dim=1,
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=20.0**2 * jnp.eye(3)
@@ -232,7 +223,6 @@ def continuous_time_stochastic_l63_model_dirac_obs(
                 + (10 * u if u is not None else jnp.zeros_like(x))
             ),
             diffusion_coefficient=lambda x, u, t: jnp.eye(3),
-            bm_dim=3,
         ),
         observation_model=DiracIdentityObservation(),
     )
@@ -283,8 +273,6 @@ def continuous_time_LTI_gaussian(
     A = jnp.array([[-1.0, 0.0], [rho, -1.0]])
 
     dynamics = DynamicalModel(
-        state_dim=2,
-        observation_dim=1,
         control_dim=1,
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(2), covariance_matrix=1.0**2 * jnp.eye(2)
@@ -292,7 +280,6 @@ def continuous_time_LTI_gaussian(
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: A @ x + (10 * u if u is not None else jnp.zeros(2)),
             diffusion_coefficient=lambda x, u, t: jnp.eye(2),
-            bm_dim=2,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
@@ -334,8 +321,6 @@ def stochastic_volatility(
             return dist.Normal(0.0, jnp.exp(x / 2.0))
 
     dynamics = DynamicalModel(
-        state_dim=1,
-        observation_dim=1,
         control_dim=0,
         initial_condition=initial_condition,
         state_evolution=state_evolution,
@@ -363,8 +348,6 @@ def continuous_time_deterministic_l63_model(
 
     # Create the dynamical model with sampled rho
     dynamics = DynamicalModel(
-        state_dim=3,
-        observation_dim=1,
         control_dim=1,  # Model uses controls, and are ignored when u=None
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(3), covariance_matrix=2.0**2 * jnp.eye(3)
@@ -417,8 +400,6 @@ def continuous_time_potential_dynamics_model(
         potential = lambda x, u, t: jnp.asarray(0.5 * beta * jnp.sum(x**2))
 
     dynamics = DynamicalModel(
-        state_dim=1,
-        observation_dim=1,
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(1), covariance_matrix=0.5**2 * jnp.eye(1)
         ),
@@ -467,8 +448,6 @@ def discrete_time_lti_model(
         initial_condition=dist.MultivariateNormal(initial_mean, initial_cov),
         state_evolution=LinearGaussianStateEvolution(A=A, B=B, bias=b, cov=Q),
         observation_model=LinearGaussianObservation(H=H, D=D, bias=d, R=R),
-        state_dim=state_dim,
-        observation_dim=emission_dim,
         control_dim=control_dim,
     )
     dsx.sample(
@@ -514,8 +493,6 @@ def jumpy_controls_model(
     ctrl_values=None,
 ):
     dynamics = DynamicalModel(
-        state_dim=1,
-        observation_dim=1,
         control_dim=1,
         initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
         state_evolution=lambda x, u, t_now, t_next: dist.MultivariateNormal(
@@ -545,11 +522,8 @@ def jumpy_controls_model_sde(
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x + u,
         diffusion_coefficient=lambda x, u, t: 0.01 * jnp.eye(1),
-        bm_dim=1,
     )
     dynamics = DynamicalModel(
-        state_dim=1,
-        observation_dim=1,
         control_dim=1,
         initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
         state_evolution=state_evolution,
@@ -578,8 +552,6 @@ def jumpy_controls_model_ode(
         drift=lambda x, u, t: x + u,
     )
     dynamics = DynamicalModel(
-        state_dim=1,
-        observation_dim=1,
         control_dim=1,
         initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
         state_evolution=state_evolution,

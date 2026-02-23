@@ -46,9 +46,13 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     if state_evo.diffusion_coefficient is None:
         raise ValueError("dsx_to_cdlgssm_params requires diffusion_coefficient.")
 
-    # Extract constant L, Q by evaluating at (0, None, 0)
+    # Extract constant L and use inferred Brownian dimension.
     x0 = jnp.zeros(dsx_model.state_dim)
     L = state_evo.diffusion_coefficient(x0, None, jnp.array(0.0))
+    if state_evo.bm_dim is None:
+        raise ValueError(
+            "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
+        )
     Q = jnp.eye(state_evo.bm_dim)
 
     ic = dsx_model.initial_condition
@@ -112,14 +116,13 @@ def dsx_to_cd_dynamax(
         else:
             raise ValueError("Both drift and potential are None; define at least one.")
         if state_evo.diffusion_coefficient is not None:
+            if state_evo.bm_dim is None:
+                raise ValueError(
+                    "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
+                )
             params.update(
                 {
                     "diffusion_coeff": state_evo.diffusion_coefficient,
-                }
-            )
-        if state_evo.bm_dim is not None:
-            params.update(
-                {
                     "diffusion_cov": jnp.eye(state_evo.bm_dim),
                 }
             )

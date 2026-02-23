@@ -56,6 +56,11 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
             drift = self.cte.total_drift(_x, _u, _t_now)
             x_pred_mean = _x + drift * _dt
             L = self.cte.diffusion_coefficient(_x, _u, _t_now)
+            if self.cte.bm_dim is None:
+                raise ValueError(
+                    "ContinuousTimeStateEvolution.bm_dim is not set. "
+                    "Construct dynamics via DynamicalModel before discretization."
+                )
             Q = jnp.eye(self.cte.bm_dim)
             x_pred_cov = L @ Q @ L.T * _dt
             return x_pred_mean, x_pred_cov
@@ -126,8 +131,6 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 state_evolution=discrete_evolution,
                 observation_model=dynamics.observation_model,
                 control_model=dynamics.control_model,
-                state_dim=dynamics.state_dim,
-                observation_dim=dynamics.observation_dim,
                 control_dim=dynamics.control_dim,
             )
         return fwd(

@@ -179,14 +179,10 @@ class SDESimulator(BaseSimulator):
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
             )
 
-        if (
-            dynamics.state_evolution.diffusion_coefficient is None
-            or dynamics.state_evolution.bm_dim is None
-        ):
+        if dynamics.state_evolution.diffusion_coefficient is None:
             raise ValueError(
-                "SDESimulator requires both diffusion_coefficient and bm_dim to be "
-                f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
-                f"bm_dim={dynamics.state_evolution.bm_dim}). "
+                "SDESimulator requires diffusion_coefficient to be defined "
+                f"(got coeff={dynamics.state_evolution.diffusion_coefficient}). "
                 "Use ODESimulator for deterministic dynamics."
             )
 
@@ -214,6 +210,12 @@ class SDESimulator(BaseSimulator):
         def _diffusion(t, y, args):
             u_t = args(t)
             return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+
+        if dynamics.state_evolution.bm_dim is None:
+            raise ValueError(
+                "SDESimulator requires state_evolution.bm_dim to be inferred. "
+                "Construct dynamics via DynamicalModel before simulation."
+            )
 
         bm = dfx.VirtualBrownianTree(
             t0=times[0],
@@ -553,10 +555,7 @@ class Simulator(BaseSimulator):
     ):
         if self.simulator is None:
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-                if (
-                    dynamics.state_evolution.diffusion_coefficient is None
-                    or dynamics.state_evolution.bm_dim is None
-                ):
+                if dynamics.state_evolution.diffusion_coefficient is None:
                     self.simulator = ODESimulator(*self.args, **self.kwargs)
                 else:
                     self.simulator = SDESimulator(*self.args, **self.kwargs)

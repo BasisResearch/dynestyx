@@ -47,7 +47,7 @@ from numpyro.infer import Predictive
 def model(phi=None, obs_times=None, obs_values=None):
     phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
     dynamics = DynamicalModel(
-        state_dim=1, observation_dim=1, control_dim=0,
+        control_dim=0,
         initial_condition=dist.Normal(0.0, 1.0),
         state_evolution=lambda x, u, t_n, t_next: dist.Normal(phi * x, 0.5),
         observation_model=lambda x, u, t: dist.Normal(0.0, jnp.exp(x / 2.0)),
