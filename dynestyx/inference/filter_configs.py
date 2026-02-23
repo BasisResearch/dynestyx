@@ -142,7 +142,7 @@ class HMMConfig(BaseFilterConfig):
 HMMConfigs: tuple[type, ...] = (HMMConfig,)
 
 
-def config_to_record_kwargs(config: BaseFilterConfig) -> dict:
+def _config_to_record_kwargs(config: BaseFilterConfig) -> dict:
     """Build record_kwargs dict from config. Config must have all record_* fields."""
     if isinstance(config, HMMConfig):
         return {

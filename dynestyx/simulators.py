@@ -28,8 +28,8 @@ from dynestyx.utils import (
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulators/unrollers.
 
-    Concrete simulators implement `simulate(dynamics, obs_times, ...)` and optionally
-    override `add_solved_sites` if they need custom behavior.
+    Concrete simulators implement `_simulate(dynamics, obs_times, ...)` and optionally
+    override `_add_solved_sites` if they need custom behavior.
     """
 
     @implements(sample)
@@ -44,7 +44,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
-        self.add_solved_sites(
+        self._add_solved_sites(
             name,
             dynamics,
             obs_times=obs_times,
@@ -63,7 +63,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             **kwargs,
         )
 
-    def add_solved_sites(
+    def _add_solved_sites(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -79,7 +79,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             return
 
         # Run the simulator
-        simulated = self.simulate(
+        simulated = self._simulate(
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
@@ -92,7 +92,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         for site_name, trajectory in simulated.items():
             numpyro.deterministic(site_name, trajectory)
 
-    def simulate(
+    def _simulate(
         self,
         dynamics: DynamicalModel,
         *,
@@ -156,7 +156,7 @@ class SDESimulator(BaseSimulator):
             "tol_vbt must be smaller than dt0 for statistically correct simulation."
         )
 
-    def simulate(
+    def _simulate(
         self,
         dynamics,
         *,
@@ -269,7 +269,7 @@ class DiscreteTimeSimulator(BaseSimulator):
     (which numpyro uses to compute logfactors).
     """
 
-    def simulate(
+    def _simulate(
         self,
         dynamics: DynamicalModel,
         *,
@@ -431,7 +431,7 @@ class ODESimulator(BaseSimulator):
         self.dt0 = dt0
         self.max_steps = max_steps
 
-    def simulate(
+    def _simulate(
         self,
         dynamics: DynamicalModel,
         *,
@@ -518,7 +518,7 @@ class Simulator(BaseSimulator):
 
         self.simulator = None
 
-    def simulate(
+    def _simulate(
         self,
         dynamics: DynamicalModel,
         *,
@@ -531,7 +531,7 @@ class Simulator(BaseSimulator):
         if self.simulator is None:
             raise ValueError("Simulator not initialized. This shouldn't happen.")
 
-        return self.simulator.simulate(
+        return self.simulator._simulate(
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
@@ -540,7 +540,7 @@ class Simulator(BaseSimulator):
             **kwargs,
         )
 
-    def add_solved_sites(
+    def _add_solved_sites(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -568,7 +568,7 @@ class Simulator(BaseSimulator):
                     + "If using a generic function as a state evolution, you must specify the type of simulator manually."
                 )
 
-        return self.simulator.add_solved_sites(
+        return self.simulator._add_solved_sites(
             name,
             dynamics,
             obs_times=obs_times,

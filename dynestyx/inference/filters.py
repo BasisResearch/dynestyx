@@ -54,7 +54,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
-        self.add_log_factors(
+        self._add_log_factors(
             name,
             dynamics,
             obs_times=obs_times,
@@ -75,7 +75,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
             **kwargs,
         )
 
-    def add_log_factors(
+    def _add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -126,7 +126,7 @@ class Filter(BaseLogFactorAdder):
 
     filter_config: BaseFilterConfig | None = None
 
-    def add_log_factors(
+    def _add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,

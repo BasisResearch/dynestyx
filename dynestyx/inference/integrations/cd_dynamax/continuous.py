@@ -18,7 +18,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
-    config_to_record_kwargs,
+    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
@@ -113,7 +113,7 @@ def _add_filter_sites(
     filtered,
 ) -> None:
     """Add marginal log-likelihood factor and filtered state deterministic sites."""
-    record_kwargs = config_to_record_kwargs(filter_config)
+    record_kwargs = _config_to_record_kwargs(filter_config)
     numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
 
