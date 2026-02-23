@@ -401,7 +401,7 @@ markdown_extensions:
   #- pymdownx.betterem:
   #- pymdownx.caret:
   #- pymdownx.critic:
-  #- pymdownx.details:
+  - pymdownx.details:
   #- pymdownx.emoji:
   #- pymdownx.escapeall:
   #- pymdownx.extra:
