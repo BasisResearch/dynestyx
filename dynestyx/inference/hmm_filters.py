@@ -6,8 +6,8 @@ import numpyro
 from jax import lax
 from jax.scipy.special import logsumexp
 
-from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import HMMConfig
+from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field, _validate_controls
 
 

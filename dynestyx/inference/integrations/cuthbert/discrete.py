@@ -7,7 +7,6 @@ import numpyro
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
-from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
@@ -16,6 +15,7 @@ from dynestyx.inference.filter_configs import (
     config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
+from dynestyx.models import DynamicalModel
 from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,

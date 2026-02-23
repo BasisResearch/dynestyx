@@ -1,3 +1,3 @@
 # filters
 
-::: dynestyx.filters
+::: dynestyx.inference.filters

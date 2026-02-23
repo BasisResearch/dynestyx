@@ -1,16 +1,13 @@
+"""Observation model implementations."""
+
 from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
 from numpyro import distributions as dist
 
-from dynestyx.dynamical_models import (
-    Control,
-    Observation,
-    ObservationModel,
-    State,
-    Time,
-)
+from dynestyx.models.core import ObservationModel
+from dynestyx.types import Control, Observation, State, Time
 
 
 class LinearGaussianObservation(ObservationModel):

@@ -12,7 +12,6 @@ from cd_dynamax import (
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
-from dynestyx.dynamical_models import DynamicalModel
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -25,6 +24,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.models import DynamicalModel
 from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,

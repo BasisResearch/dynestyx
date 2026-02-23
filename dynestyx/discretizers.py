@@ -1,11 +1,16 @@
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from effectful.ops.semantics import fwd
+from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import vmap
 
-from dynestyx.dynamical_models import (
+from dynestyx.handlers import HandlesSelf, sample
+from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
+    DynamicalModel,
 )
+from dynestyx.types import FunctionOfTime
 
 
 class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
@@ -89,3 +94,48 @@ def euler_maruyama(cte: ContinuousTimeStateEvolution) -> DiscreteTimeStateEvolut
             delta_t is the time step between timepoints (t_next - t_now)
     """
     return _EulerMaruyamaDiscreteEvolution(cte)
+
+
+class Discretizer(ObjectInterpretation, HandlesSelf):
+    """
+    Discretize a continuous-time state evolution to a discrete-time state evolution.
+    Args:
+        discretize: Callable (CTSE) -> DTSE. Defaults to euler_maruyama.
+    """
+
+    def __init__(self, discretize=euler_maruyama):
+        super().__init__()
+        self.discretize = discretize
+
+    @implements(sample)
+    def _sample_ds(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> FunctionOfTime:
+        if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+            discrete_evolution = self.discretize(dynamics.state_evolution)
+            dynamics = DynamicalModel(
+                initial_condition=dynamics.initial_condition,
+                state_evolution=discrete_evolution,
+                observation_model=dynamics.observation_model,
+                control_model=dynamics.control_model,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
+                control_dim=dynamics.control_dim,
+            )
+        return fwd(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )

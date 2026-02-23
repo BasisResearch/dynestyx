@@ -3,13 +3,14 @@ import numpyro
 import numpyro.distributions as dist
 
 import dynestyx as dsx
-from dynestyx.dynamical_models import (
+from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
     DynamicalModel,
+    LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.lti_dynamics import LTI_continuous, LTI_discrete
-from dynestyx.observations import DiracIdentityObservation, LinearGaussianObservation
+from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 
 
 def hmm_model(

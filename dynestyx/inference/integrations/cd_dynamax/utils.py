@@ -12,14 +12,15 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.builders import (
     build_params as build_cdlgssm_params,
 )
-from dynestyx.dynamical_models import (
+from dynestyx.models import (
     AffineDrift,
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    GaussianObservation,
     GaussianStateEvolution,
+    LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.observations import GaussianObservation, LinearGaussianObservation
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
