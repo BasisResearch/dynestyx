@@ -43,6 +43,7 @@ nav:
     - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
     - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
+    - GP drift learning: deep_dives/gp_drift.ipynb
     - Using `Discretizer` to go from continuous-time -> discrete: deep_dives/discretizer_demo.ipynb
   - FAQ: faq.md
 
