@@ -2,6 +2,7 @@
 
 from typing import TypeVar
 
+import jax
 from effectful.ops.semantics import handler
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
@@ -19,10 +20,10 @@ def sample(
     name: str,
     dynamics: DynamicalModel,
     *,
-    obs_times=None,
-    obs_values=None,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: jax.Array,
+    obs_values: jax.Array | None = None,
+    ctrl_times: jax.Array | None = None,
+    ctrl_values: jax.Array | None = None,
     **kwargs,
 ) -> FunctionOfTime:
     """
