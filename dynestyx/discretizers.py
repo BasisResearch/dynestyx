@@ -74,24 +74,39 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
 
 
 def euler_maruyama(cte: ContinuousTimeStateEvolution) -> DiscreteTimeStateEvolution:
-    """Discretize continuous-time state evolution via Euler-Maruyama. (CTSE) -> DTSE.
+    """Discretize continuous-time state evolution via Euler-Maruyama.
+
+    Euler-Maruyama is a first-order discrete approximation of a continuous-time state evolution.
+    It is popular, as it is simple and effective for simple models.
+    The resulting discrete-time state evolution is linear and Gaussian.
 
     Args:
-        cte: ContinuousTimeStateEvolution to discretize.
+        cte: `ContinuousTimeStateEvolution` to discretize.
     Returns:
         DiscreteTimeStateEvolution: The discretized state evolution.
 
     Note:
         No dt is passed; it is set to t_next - t_now in the __call__ method.
 
-    How it works:
+    ??? note "Algorithm Reference"
+        The Euler Maruyama is a first order discretization.
+        The resulting discret-time state evolution is approximated as
+
         x_{t+1} ~ N(x_t + drift * delta_t, (L@Q@L.T)*delta_t)
+
         where:
             x_t is the current state
             drift is the drift function
             L is the diffusion coefficient
             Q is the diffusion covariance
             delta_t is the time step between timepoints (t_next - t_now)
+
+        This is the first-order Ito-Taylor approximation.
+
+        References:
+            - This is the first-order Ito-Taylor approximation, discussed in Chapter 9.2 of: Särkkä, S., & Solin, A. (2019).
+                Applied Stochastic Differential Equations. Cambridge University Press.
+                [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
     """
     return _EulerMaruyamaDiscreteEvolution(cte)
 
