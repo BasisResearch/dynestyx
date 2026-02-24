@@ -36,10 +36,11 @@ nav:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
-  - API Reference:
+  - API Reference: 
+    - api_reference/index.md
     - Public API:
       - Overview: api_reference/public/index.md
-      - models:
+      - Models:
         - Core Models:
           - DynamicalModel: api_reference/public/models/core/dynamical_model.md
           - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
@@ -73,7 +74,6 @@ nav:
         - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
     - Developer API:
       - Overview: api_reference/developer/index.md
-      - Handlers: api_reference/developer/handlers.md
       - Models:
         - Core Models: api_reference/developer/models/core_models.md
         - Specialized Models: api_reference/developer/models/specialized_models.md
@@ -84,6 +84,7 @@ nav:
         - Discretizer: api_reference/developer/discretizers/discretizer.md
       - Simulators:
         - Simulators: api_reference/developer/simulators.md
+      - Handlers: api_reference/developer/handlers.md
       - Diagnostics:
         - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - FAQ: faq.md
