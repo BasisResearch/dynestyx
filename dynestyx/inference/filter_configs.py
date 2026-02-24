@@ -75,14 +75,15 @@ class BaseFilterConfig:
 
 @dataclasses.dataclass
 class EnKFConfig(BaseFilterConfig):
-    """Ensemble Kalman Filter (EnKF) for discrete-time models.
+    r"""Ensemble Kalman Filter (EnKF) for discrete-time models.
 
     A good general-purpose filter for nonlinear models. Works with any
     differentiable or non-differentiable dynamics and scales well to moderate
     state dimensions. Cheaper per-step than the particle filter, but assumes
     observations are approximately Gaussian given the ensemble.
 
-    The primary tuning knob is `n_particles`: 20–100 members is typical.
+    The primary tuning knob is `n_particles`, with more particles providing
+    more accurate results at the cost of higher compute.
     If the ensemble collapses over long trajectories, increase
     `inflation_delta` slightly (e.g. `0.05`–`0.2`).
 
@@ -102,15 +103,15 @@ class EnKFConfig(BaseFilterConfig):
             `None` disables inflation.
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         Each ensemble member \(x_t^{(i)}\) receives a perturbed observation
         \(\tilde y_t^{(i)} = y_t + \epsilon^{(i)}\),
         \(\epsilon^{(i)} \sim \mathcal{N}(0, R)\), and is updated by:
 
-        \[
+        $$
             x_t^{(i)+} = x_t^{(i)} + K \left(\tilde y_t^{(i)} - H x_t^{(i)}\right),
             \quad K = P_t H^\top (H P_t H^\top + R)^{-1}
-        \]
+        $$
 
         where \(P_t\) is estimated from the ensemble spread.
 
@@ -195,7 +196,7 @@ class PFConfig(BaseFilterConfig):
             `1.0` → always resample; `0.0` → never. Defaults to `0.7`.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`, which is currently the only available implementation.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         At each step, particles are propagated through the transition and
         reweighted by the observation likelihood. The marginal log-likelihood
         is estimated as:
@@ -250,7 +251,7 @@ class EKFConfig(BaseFilterConfig):
             skips observation linearisation.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         The EKF propagates a Gaussian approximation
         \(\mathcal{N}(\hat x_{t|t}, P_{t|t})\) through Jacobian
         linearizations of \(f\) and \(h\):
@@ -279,27 +280,27 @@ class EKFConfig(BaseFilterConfig):
 
 @dataclasses.dataclass
 class KFConfig(BaseFilterConfig):
-    """Kalman Filter (KF) for discrete-time linear-Gaussian models.
+    r"""Kalman Filter (KF) for discrete-time linear-Gaussian models.
 
     The exact Bayesian filter for linear-Gaussian state-space models; requires
-    ua model built with `LTI_discrete` or using
+    a model built with `LTI_discrete` or using
     `LinearGaussianStateEvolution` + `LinearGaussianObservation`. For
     nonlinear Gaussian models, use `EKFConfig`, `UKFConfig`, or `EnKFConfig` instead.
 
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         The KF iterates a closed-form predict–update cycle:
 
-        \[
+        $$
             \hat x_{t|t-1} = A \hat x_{t-1|t-1} + b,
             \quad P_{t|t-1} = A P_{t-1|t-1} A^\top + Q
-        \]
-        \[
+        $$
+        $$
             K_t = P_{t|t-1} H^\top (H P_{t|t-1} H^\top + R)^{-1},
             \quad \hat x_{t|t} = \hat x_{t|t-1} + K_t (y_t - H \hat x_{t|t-1})
-        \]
+        $$
 
         References:
 
@@ -315,7 +316,7 @@ class KFConfig(BaseFilterConfig):
 
 @dataclasses.dataclass
 class UKFConfig(BaseFilterConfig):
-    """Unscented Kalman Filter (UKF) for discrete-time models.
+    r"""Unscented Kalman Filter (UKF) for discrete-time models.
 
     A derivative-free Gaussian filter that handles stronger nonlinearities
     than the EKF by propagating a small, deterministic set of *sigma points*
@@ -334,14 +335,14 @@ class UKFConfig(BaseFilterConfig):
         kappa (int): Secondary scaling parameter. Defaults to `1`.
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         For a state of dimension \(n\), \(2n+1\) sigma points are placed as:
 
-        \[
+        $$
             \mathcal{X}_0 = \hat x, \quad
             \mathcal{X}_i = \hat x \pm \sqrt{(n + \lambda) P}_i, \quad
             \lambda = \alpha^2 (n + \kappa) - n
-        \]
+        $$
 
         Each sigma point is propagated through \(f\) and \(h\); the outputs
         are recombined with weights depending on \(\alpha, \beta, \kappa\) to
@@ -394,7 +395,7 @@ class ContinuousTimeConfig:
 
 @dataclasses.dataclass
 class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
-    """Continuous-discrete Kalman Filter (CD-KF).
+    r"""Continuous-discrete Kalman Filter (CD-KF).
 
     The exact Bayesian filter for continuous-time linear-Gaussian models.
     Use this when your model was built with `LTI_continuous`. For nonlinear
@@ -407,14 +408,14 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         Between observations the mean and covariance evolve via the
         Kalman–Bucy ODEs:
 
-        \[
+        $$
             \dot{\hat x} = A \hat x + B u,
             \quad \dot P = A P + P A^\top + L Q L^\top
-        \]
+        $$
 
         At each observation the standard Kalman update is applied.
 
@@ -430,7 +431,7 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
 
 @dataclasses.dataclass
 class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
-    """Continuous-discrete Ensemble Kalman Filter (CD-EnKF).
+    r"""Continuous-discrete Ensemble Kalman Filter (CD-EnKF).
 
     The **default filter** for continuous-time models. Each ensemble member
     is propagated forward by solving the SDE between observations; the
@@ -443,7 +444,7 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         References:
 
         - The implementation details are due to: Sanz-Alonso, D., Stuart, A. M., & Taeb, A. (2018).
@@ -460,7 +461,7 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
 
 @dataclasses.dataclass
 class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
-    """Continuous-discrete Differentiable Particle Filter (CD-DPF).
+    r"""Continuous-discrete Differentiable Particle Filter (CD-DPF).
 
     Particle filter for continuous-time SDEs. Particles are propagated by
     solving the SDE between observations; importance weights are updated at
@@ -478,7 +479,7 @@ class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
         resampling_method (PFResamplingConfig): Defaults to
             `PFResamplingConfig(base_method="multinomial")`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         The bootstrap version of the continuous-discrete PF is the same as the discrete-time PF version.
         See `PFConfig` for more information.
     """
@@ -491,7 +492,7 @@ class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
 
 @dataclasses.dataclass
 class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
-    """Continuous-discrete Extended Kalman Filter (CD-EKF).
+    r"""Continuous-discrete Extended Kalman Filter (CD-EKF).
 
     Fast Gaussian filter for mildly nonlinear SDEs. Requires differentiable
     dynamics (JAX autodiff is used). The moment equations for the Gaussian
@@ -504,7 +505,7 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         References:
 
         - For a modern textbook reference, see Chapter 10.7 of: Särkkä, S., & Solin, A. (2019).
@@ -530,7 +531,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         References:
 
         - For a modern textbook reference, see Section 10.8 of: Särkkä, S., & Solin, A. (2019).
@@ -577,7 +578,7 @@ class HMMConfig(BaseFilterConfig):
             backend default.
         filter_source (FilterSource): Backend. Defaults to `"dynestyx"`.
 
-    Notes: Algorithm Reference
+    ??? note "Algorithm Reference"
         At each step the belief vector \(\pi_t = p(z_t \mid y_{1:t})\) is
         updated exactly:
 
