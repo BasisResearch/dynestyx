@@ -49,7 +49,13 @@ nav:
     - Discretizers:
       - Discretizer: api_reference/public/discretizers/discretizer.md
     - Simulators:
-      - Simulators: api_reference/public/simulators/simulator.md
+      - Simulator Classes:
+        - Overview: api_reference/public/simulators/overview.md
+        - BaseSimulator: api_reference/public/simulators/overview/#basesimulator
+        - Simulator: api_reference/public/simulators/simulator_wrapper.md
+        - DiscreteTimeSimulator: api_reference/public/simulators/discrete_time_simulator.md
+        - ODESimulator: api_reference/public/simulators/ode_simulator.md
+        - SDESimulator: api_reference/public/simulators/sde_simulator.md
     - Diagnostics:
       - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
   - Developer API:

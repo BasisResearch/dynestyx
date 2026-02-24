@@ -1,3 +1,5 @@
+"""NumPyro-aware simulators/unrollers for dynamical models."""
+
 import dataclasses
 from collections.abc import Callable
 
@@ -26,10 +28,19 @@ from dynestyx.utils import (
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
-    """Base class for simulators/unrollers.
+    """Base class for simulator/unroller handlers.
 
-    Concrete simulators implement `_simulate(dynamics, obs_times, ...)` and optionally
-    override `_add_solved_sites` if they need custom behavior.
+    Interprets `dsx.sample(name, dynamics, obs_times=..., obs_values=..., ...)` by
+    unrolling `dynamics` into NumPyro sample sites (latent states and emissions) on
+    the provided time grid.
+
+    When the simulator runs, it records the solved trajectories as deterministic
+    sites (conventionally `"times"`, `"states"`, and `"observations"`).
+
+    Notes:
+        - If `obs_times` is None, the handler is a no-op.
+        - If `obs_values` is provided, observation sample sites are conditioned via
+          `obs=...`.
     """
 
     @implements(sample)
@@ -102,23 +113,54 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> dict[str, State]:
-        """
+        """Unroll `dynamics` as a NumPyro model.
+
+        Implementations are expected to:
+        - require `obs_times` (the grid at which to simulate and emit observations),
+        - sample (and possibly condition) observation sites using `obs_values`,
+        - and return arrays suitable for recording as deterministic sites.
+
         Args:
-            dynamics: The dynamical model to simulate.
-            obs_times: Observation times.
-            obs_values: Observed values (optional).
-            ctrl_times: Control times (optional).
-            ctrl_values: Control values (optional).
+            dynamics: Dynamical model to simulate/unroll.
+            obs_times: Observation times. Required by all concrete simulators.
+            obs_values: Optional observations. If provided, observation sites
+                are conditioned via `obs=...`.
+            ctrl_times: Optional control times.
+            ctrl_values: Optional control values aligned to `ctrl_times`.
+
         Returns:
-            dict[str, State]: A dictionary mapping site names to simulated trajectories.
+            dict[str, State]: Mapping from deterministic site names to
+                trajectories. Conventionally includes `"times"`, `"states"`,
+                and `"observations"`.
         """
         raise NotImplementedError()
 
 
 class SDESimulator(BaseSimulator):
-    """Simulator that works with ContinuousTimeStateEvolution with stochastic dynamics.
+    """Simulator for continuous-time stochastic dynamics (SDEs).
 
-    Simulation occurs via the stochastic adjoint method, as provided by diffrax."""
+    This simulator integrates a `ContinuousTimeStateEvolution` with nonzero diffusion
+    using Diffrax and a `VirtualBrownianTree` (see the Diffrax docs on
+    [Brownian controls](https://docs.kidger.site/diffrax/api/brownian/)). It constructs a NumPyro generative
+    model with state sample sites (starting at `"x_0"`) and observation sample sites
+    (`"y_0"`, `"y_1"`, ...).
+
+    Controls:
+        If `ctrl_times` / `ctrl_values` are provided at the `dsx.sample(...)` site,
+        controls are interpolated with a right-continuous rectilinear rule
+        (`left=False`), i.e., the control at time `t_k` is `ctrl_values[k]`.
+
+    Deterministic outputs:
+        When run, the simulator records `"times"`, `"states"`, and `"observations"`
+        as `numpyro.deterministic(...)` sites.
+
+    Important:
+        - This is intended for **simulation / predictive checks** inside NumPyro.
+        - Conditioning on `obs_values` with an SDE unroller typically yields a
+          very high-dimensional latent path and is usually a **poor inference
+          strategy** for parameters. Prefer filtering (`Filter` with
+          `ContinuousTime*Config`) or particle methods instead.
+    """
 
     def __init__(
         self,
@@ -129,15 +171,28 @@ class SDESimulator(BaseSimulator):
         tol_vbt: float | None = None,
         max_steps: int | None = None,
     ):
-        """Create an SDESimulator, which forms a generative model for a continuous-time SDE.
+        """Configure SDE integration settings.
 
-        Parameters:
-        - solver: The solver to use for the SDE. Defaults to dfx.Heun().
-        - stepsize_controller: The stepsize controller to use for the SDE. Defaults to dfx.ConstantStepSize().
-        - adjoint: The adjoint to use for the SDE. Defaults to dfx.RecursiveCheckpointAdjoint().
-        - dt0: The initial stepsize for the SDE. Defaults to 1e-4.
-        - tol_vbt: The tolerance for the virtual Brownian tree. If None, defaults to dt0 / 2.0.
-        - max_steps: The maximum number of steps for the SDE. Defaults to None.
+        Args:
+            solver: Diffrax solver for the SDE (e.g., [`dfx.Heun`](https://docs.kidger.site/diffrax/api/solvers/ode_solvers/)).
+                For solver guidance, see [How to choose a solver](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/).
+            stepsize_controller: Diffrax step-size controller. Use
+                [`dfx.ConstantStepSize`](https://docs.kidger.site/diffrax/api/stepsize_controller/)
+                for fixed-step simulation, or an adaptive controller for error-controlled stepping.
+            adjoint: Diffrax adjoint strategy used for differentiation through the
+                solver (relevant when used under gradient-based inference). See
+                [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
+            dt0: Initial step size passed to
+                [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
+            tol_vbt: Tolerance parameter for
+                [`diffrax.VirtualBrownianTree`](https://docs.kidger.site/diffrax/api/brownian/). If None,
+                defaults to `dt0 / 2`. For statistically correct simulation, this
+                must be smaller than `dt0`.
+            max_steps: Optional hard cap on solver steps.
+
+        Notes:
+            - `VirtualBrownianTree` draws randomness via `numpyro.prng_key()`, so
+              `SDESimulator` must be executed inside a seeded NumPyro context.
         """
         self.diffeqsolve_settings = {
             "solver": solver,
@@ -167,12 +222,37 @@ class SDESimulator(BaseSimulator):
         **kwargs,
     ) -> dict[str, State]:
         """
-        Simulates a continuous-time SDE from a given dynamical model, using diffrax
-        and the settings provided in the `__init__` method.
+        Unroll a continuous-time SDE as a NumPyro model.
+
+        This method:
+        - samples the initial latent state as `numpyro.sample("x_0", ...)`,
+        - integrates the SDE to all `obs_times` using Diffrax,
+        - emits observations at those times as `numpyro.sample("y_i", ..., obs=...)`,
+        - and returns trajectories for deterministic recording.
 
         To handle controls, we use a rectilinear interpolation that is right-continuous,
         i.e., if ctrl_times = [0.0, 1.0, 2.0] and ctrl_values = [0.0, 1.0, 2.0],
         then the control at time 1.0 is the value at time 1.0.
+
+        Args:
+            dynamics: A `DynamicalModel` whose `state_evolution` is a
+                `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
+                and `bm_dim`.
+            obs_times: Times at which to save the latent state and emit observations.
+                Required.
+            obs_values: Optional observation array. If provided, observation sites are
+                conditioned via `obs=obs_values[i]`.
+            ctrl_times: Optional control times.
+            ctrl_values: Optional control values aligned to `ctrl_times`.
+
+        Returns:
+            dict[str, State]: Dictionary with `"times"`, `"states"`, and
+                `"observations"` trajectories.
+
+        Warning:
+            Conditioning on `obs_values` here is generally **not** a good way to do
+            parameter inference for SDEs, because it introduces an explicit, high-
+            dimensional latent path. Prefer filtering (`Filter`) or particle methods.
         """
         if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
             raise NotImplementedError(
@@ -259,14 +339,29 @@ class SDESimulator(BaseSimulator):
 class DiscreteTimeSimulator(BaseSimulator):
     """Simulator for discrete-time dynamical models.
 
-    Assumes we have ic, transition, and observation distributions,
-    as well as (time_index, observation) pairs in the context.
+    This unrolls a discrete-time `DynamicalModel` as a NumPyro model:
 
-    Simply unrolls the model and adds obs=data as you would in numpyro.
+    - samples an initial state (`"x_0"`),
+    - repeatedly samples transitions (`"x_1"`, `"x_2"`, ...) and observations
+      (`"y_0"`, `"y_1"`, ...),
+    - and, if provided, conditions on `obs_values` via `obs=...`.
 
-    This does not explicitly add logfactors; it lets numpyro do it automatically.
-    Instead, it just unrolls the model and adds observed sites
-    (which numpyro uses to compute logfactors).
+    Optimization for fully observed state:
+        If `dynamics.observation_model` is `DiracIdentityObservation` and
+        `obs_values` is provided, then $y_t = x_t$ and the latent state is
+        observed directly. In this case, the simulator:
+
+        - conditions the initial state as `numpyro.sample("x_0", ..., obs=obs_values[0])`,
+        - records `"y_0"` deterministically,
+        - and vectorizes the transition likelihood across time using a
+          `numpyro.plate("time", T-1)` rather than a scan, for efficiency.
+
+        The returned `"states"` and `"observations"` are both `obs_values`.
+
+    Deterministic outputs:
+        When run, the simulator records `"times"`, `"states"`, and `"observations"`
+        as `numpyro.deterministic(...)` sites.
+
     """
 
     def _simulate(
@@ -279,6 +374,28 @@ class DiscreteTimeSimulator(BaseSimulator):
         ctrl_values=None,
         **kwargs,
     ) -> dict[str, State]:
+        """Unroll a discrete-time model as a NumPyro model.
+
+        Creates NumPyro sample sites for the initial condition (`"x_0"`), subsequent
+        states (`"x_1"`, ...), and observations (`"y_0"`, ...). If `obs_values` is
+        provided, observation sites are conditioned via `obs=...`.
+
+        Notes:
+            - For `DiracIdentityObservation` with provided `obs_values`, the latent
+              state is observed directly (`y_t = x_t`) and this uses a plated
+              transition likelihood instead of a scan for efficiency.
+
+        Args:
+            dynamics: Discrete-time `DynamicalModel` to unroll.
+            obs_times: Discrete observation indices/times. Required.
+            obs_values: Optional observations for conditioning.
+            ctrl_times: Optional control times.
+            ctrl_values: Optional controls aligned to `ctrl_times`.
+
+        Returns:
+            dict[str, State]: Dictionary with `"times"`, `"states"`, and
+                `"observations"` trajectories.
+        """
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
 
@@ -401,14 +518,23 @@ class DiscreteTimeSimulator(BaseSimulator):
 
 @dataclasses.dataclass
 class ODESimulator(BaseSimulator):
-    """Simulator for continuous-time deterministic (ODE) dynamical models.
+    """Simulator for continuous-time deterministic dynamics (ODEs).
 
-    Assumes we have ic, transition, and observation distributions,
-    as well as (time_index, observation) pairs in the context.
+    This unrolls a `ContinuousTimeStateEvolution` with **no diffusion** by solving
+    an ODE using Diffrax and then emitting observations at `obs_times` as NumPyro
+    sample sites. Solver options can be configured via the constructor.
 
-    Simply unrolls the model and adds obs=data as you would in numpyro.
+    Controls:
+        If `ctrl_times` / `ctrl_values` are provided at the `dsx.sample(...)` site,
+        controls are interpolated with a right-continuous rectilinear rule
+        (`left=False`), i.e., the control at time `t_k` is `ctrl_values[k]`.
 
-    This does not add logfactors, just unrolls the model and adds observed sites.
+    Conditioning:
+        If `obs_values` is provided, observation sites are conditioned via `obs=...`.
+
+    Deterministic outputs:
+        When run, the simulator records `"times"`, `"states"`, and `"observations"`
+        as `numpyro.deterministic(...)` sites.
     """
 
     solver: dfx.AbstractSolver = dfx.Tsit5()
@@ -425,6 +551,20 @@ class ODESimulator(BaseSimulator):
         dt0: float = 1e-3,
         max_steps: int = 100_000,
     ):
+        """Configure ODE integration settings.
+
+        Args:
+            solver: Diffrax ODE solver (default: [`dfx.Tsit5`](https://docs.kidger.site/diffrax/api/solvers/ode_solvers/)).
+                For solver guidance, see [How to choose a solver](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/).
+            adjoint: Diffrax adjoint strategy for differentiating through the ODE
+                solve (relevant when used under gradient-based inference).
+                See [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
+            stepsize_controller: Diffrax step-size controller (default:
+                [`dfx.ConstantStepSize`](https://docs.kidger.site/diffrax/api/stepsize_controller/)).
+            dt0: Initial step size passed to
+                [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
+            max_steps: Hard cap on solver steps.
+        """
         self.solver = solver
         self.adjoint = adjoint
         self.stepsize_controller = stepsize_controller
@@ -441,6 +581,27 @@ class ODESimulator(BaseSimulator):
         ctrl_values=None,
         **kwargs,
     ) -> dict[str, State]:
+        """Unroll a deterministic continuous-time model as a NumPyro model.
+
+        This method:
+        - samples the initial state as `numpyro.sample("x_0", ...)`,
+        - solves the ODE and saves the solution at `obs_times`,
+        - emits observations as `numpyro.sample("y_i", ..., obs=...)`.
+
+        Args:
+            dynamics: A `DynamicalModel` whose `state_evolution` is a
+                `ContinuousTimeStateEvolution` with deterministic dynamics.
+            obs_times: Times at which to save the latent state and emit observations.
+                Required.
+            obs_values: Optional observation array. If provided, observation sites are
+                conditioned via `obs=obs_values[i]`.
+            ctrl_times: Optional control times.
+            ctrl_values: Optional controls aligned to `ctrl_times`.
+
+        Returns:
+            dict[str, State]: Dictionary with `"times"`, `"states"`, and
+                `"observations"` trajectories.
+        """
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
 
@@ -507,9 +668,24 @@ class ODESimulator(BaseSimulator):
 
 
 class Simulator(BaseSimulator):
-    """Simulator for dynamical models.
+    """Auto-selecting simulator wrapper.
 
-    This is a wrapper class that selects the appropriate simulator based on the type of dynamical model.
+    Chooses a concrete simulator based on the structure of `dynamics.state_evolution`:
+
+    - `ContinuousTimeStateEvolution` with diffusion and `bm_dim` -> `SDESimulator`
+    - `ContinuousTimeStateEvolution` without diffusion -> `ODESimulator`
+    - `DiscreteTimeStateEvolution` -> `DiscreteTimeSimulator`
+
+    Note:
+        - Any `*args` / `**kwargs` are forwarded to the routed simulator
+          constructor, so Diffrax settings can be supplied here when routing to
+          `ODESimulator` / `SDESimulator`.
+        - Auto-routing depends on structured model metadata (for example,
+          `ContinuousTimeStateEvolution` vs. `DiscreteTimeStateEvolution`, and
+          diffusion presence for continuous-time models).
+        - If structure cannot be inferred (e.g., a generic callable state
+          evolution), routing may fail and you should instantiate a concrete
+          simulator class directly.
     """
 
     def __init__(self, *args, **kwargs):
