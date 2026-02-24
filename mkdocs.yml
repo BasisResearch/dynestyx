@@ -59,7 +59,20 @@ nav:
     - Diagnostics:
       - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
   - Developer API:
-    - Everything (including private): api_reference/developer.md
+    - Overview: api_reference/developer/index.md
+    - Handlers: api_reference/developer/handlers.md
+    - Models:
+      - Core Models: api_reference/developer/models/core_models.md
+      - Specialized Models: api_reference/developer/models/specialized_models.md
+    - Inference:
+      - Filters: api_reference/developer/inference/filters.md
+      - FilterConfigs: api_reference/developer/inference/filter_configs.md
+    - Discretizers:
+      - Discretizer: api_reference/developer/discretizers/discretizer.md
+    - Simulators:
+      - Simulators: api_reference/developer/simulators.md
+    - Diagnostics:
+      - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - Examples:
     - tutorials.md
     - Quickstart: tutorials/quickstart.ipynb
