@@ -1,3 +1,0 @@
-# simulators
-
-::: dynestyx.simulators
