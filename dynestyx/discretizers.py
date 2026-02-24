@@ -98,9 +98,48 @@ def euler_maruyama(cte: ContinuousTimeStateEvolution) -> DiscreteTimeStateEvolut
 
 class Discretizer(ObjectInterpretation, HandlesSelf):
     """
-    Discretize a continuous-time state evolution to a discrete-time state evolution.
-    Args:
-        discretize: Callable (CTSE) -> DTSE. Defaults to euler_maruyama.
+    Performs discretization of a continuous-time state evolution, converting it to a discrete-time state evolution.
+
+    A `Discretizer` object should be used as a context manager around a call to a model with a `dsx.sample(...)`
+    statement to discretize a continuous-time state evolution to a discrete-time state evolution. The `Discretizer`
+    should be at a lower (i.e. inner) level in the current context stack than any inference (e.g., `Filter` or `Simulator`)
+    objects.
+
+    ??? example "Using a Euler Maruyama Discretizer"
+        ```python
+        import dynestyx as dsx
+        from dynestyx.discretizers import Discretizer, euler_maruyama
+        from dynestyx.inference.filters import Filter, EKFConfig
+        from dynestyx.models import ContinuousTimeStateEvolution, DiscreteTimeStateEvolution
+
+        def model_with_ctse(obs_times=None, obs_values=None):
+            dynamics = DynamicalModel(
+                state_dim=1,
+                observation_dim=1,
+                control_dim=0,
+                initial_condition=dist.Normal(0.0, 1.0),
+                state_evolution=ContinuousTimeStateEvolution(
+                    drift=lambda x, u, t: x,
+                    diffusion_coefficient=lambda x, u, t: jnp.eye(1),
+                    bm_dim=1,
+                ),
+            )
+            return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+
+        def discretized_data_conditioned_model():
+            # We use a discrete-time filter now
+            with Filter(filter_config=EKFConfig()):
+                with Discretizer(discretize=euler_maruyama):
+                    return model_with_ctse(obs_times=obs_times, obs_values=obs_values)
+        ```
+
+    ??? note "Algorithm Reference"
+        For an overview of discretization methods for SDEs, see Chapter 9 of: Särkkä, S., & Solin, A. (2019).
+        Applied Stochastic Differential Equations. Cambridge University Press.
+        [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
+
+    Attributes:
+        discretize: A callable that converts a continuous-time state evolution to a discrete-time state evolution. Defaults to euler_maruyama.
     """
 
     def __init__(self, discretize=euler_maruyama):
