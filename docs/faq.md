@@ -2,7 +2,7 @@
 
 ## What is the `ObservationModel` class / do I need it?
 
-`ObservationModel` is a convenience class that wraps a callable `(x, u, t) -> Distribution` into a standard interface with `log_prob` and `sample` methods. You don't strictly need it: you can pass any callable that returns a NumPyro distribution to `DynamicalModel`'s `observation_model` argument. The built-in `LinearGaussianObservation` and `DiracIdentityObservation` implement this interface for common cases. See the [observations API reference](api_reference/observations.md) for details.
+`ObservationModel` is a convenience class that wraps a callable `(x, u, t) -> Distribution` into a standard interface with `log_prob` and `sample` methods. You don't strictly need it: you can pass any callable that returns a NumPyro distribution to `DynamicalModel`'s `observation_model` argument. The built-in `LinearGaussianObservation` and `DiracIdentityObservation` implement this interface for common cases. See the [observations API reference](api_reference/public/models/core/observation_model.md) for details.
 
 ## What are the most common ways to condition models on data for system identification?
 

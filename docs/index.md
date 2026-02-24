@@ -111,7 +111,7 @@ Other JAX-based libraries for dynamical systems:
 
 Other probabilistic programming languages with support for dynamical systems:
 
-- **[STAN](https://mc-stan.org)** — Probabilistic programming with Hamiltonian Monte Carlo
+- **[Stan](https://mc-stan.org)** — Probabilistic programming with Hamiltonian Monte Carlo
     - [ODEs in Stan](https://mc-stan.org/docs/stan-users-guide/odes.html) — ODEs are a special transformation requiring little extra treatment from the user
 - **[NumPyro](https://num.pyro.ai/en/stable/)** — JAX-based probabilistic programming
     - [ODEs in NumPyro](https://num.pyro.ai/en/stable/tutorials/lotka_volterra_multiple.html) — ODE solver must be defined inside the model (violates separation of concerns)
