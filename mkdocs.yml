@@ -48,6 +48,8 @@ nav:
       - FilterConfigs: api_reference/public/inference/filter_configs.md
     - Discretizers:
       - Discretizer: api_reference/public/discretizers/discretizer.md
+    - Handlers:
+      - Sample: api_reference/public/handlers.md
     - Simulators:
       - Simulator Classes:
         - Overview: api_reference/public/simulators/overview.md

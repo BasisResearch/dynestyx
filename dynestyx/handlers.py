@@ -1,5 +1,4 @@
-# handlers.py
-"""Handlers for dsx operations using Interpretation-based style."""
+"""Contains the `sample` primitive and `effectful` utilities for `dynestyx`."""
 
 from typing import TypeVar
 
@@ -26,16 +25,43 @@ def sample(
     ctrl_values=None,
     **kwargs,
 ) -> FunctionOfTime:
+    """
+    Samples from a dynamical model. This is the main primitive of dynestyx.
+
+    The `sample` primitive is meant to mimic the `numpyro.sample` primitive in usage,
+    but using a `DynamicalModel` instead of a `Distribution`.
+
+    The `sample` method is defined as a `defop` in `effectful`, meaning that
+    it is an undefined function here, but "interpreted" at runtime. In other words,
+    the actual implementation of a `sample` operation is determined by the context
+    in which it is used, e.g., within a `Filter` or `Simulator` object.
+
+    Parameters:
+        name: Name of the sample site.
+        dynamics: Dynamical model to sample from.
+        obs_times: Times at which to sample the observations.
+        obs_values: Values of the observations at the given times.
+        ctrl_times: Times at which to sample the controls.
+        ctrl_values: Values of the controls at the given times.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        FunctionOfTime: A function of time that samples from the dynamical model.
+    """
     raise NotHandled()
 
 
 class HandlesSelf:
     """Mixin class that allows an object to act as an interpretation and its own handler.
 
-    Note: this is unidiomatic for `effectful` code, but it simplifies our documentation and development process.
+    This is used by most inference and simulation objects in `dynestyx`, allowing them to provide
+    an object interpretation of the `sample` operation whilst still being used directly as a handler.
 
-    In particular, it is not straightforward to define a decorator that automates interpretation handling whilst
-    keeping IDE-friendly docstrings.
+    ??? note
+        This is unidiomatic for `effectful` code, but it simplifies our documentation and development process.
+
+        In particular, it is not straightforward to define a decorator that automates interpretation handling whilst
+        keeping IDE-friendly docstrings.
     """
 
     _cm = None
