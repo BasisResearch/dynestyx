@@ -104,20 +104,46 @@ class EnKFConfig(BaseFilterConfig):
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
     ??? note "Algorithm Reference"
-        Each ensemble member \(x_t^{(i)}\) receives a perturbed observation
-        \(\tilde y_t^{(i)} = y_t + \epsilon^{(i)}\),
-        \(\epsilon^{(i)} \sim \mathcal{N}(0, R)\), and is updated by:
+        The ensemble Kalman filter comprises ensemble members $x_t^{(i)}, i = 1, \ldots, N_{\text{particles}}$.
+        There are many implementation tricks in the EnKF; we describe the basic version here.
+
+        For each time step \(t\), the ensemble is propagated forward by the transition model:
 
         $$
-            x_t^{(i)+} = x_t^{(i)} + K \left(\tilde y_t^{(i)} - H x_t^{(i)}\right),
-            \quad K = P_t H^\top (H P_t H^\top + R)^{-1}
+            \hat{x}_t^{(i)} = f(x_t^{(i)}, u_t, t_t) + \epsilon_t^{(i)},
         $$
 
-        where \(P_t\) is estimated from the ensemble spread.
+        where \(u_t\) is the control input at time \(t\) and \(t_t\) is the time of the transition,
+        and \(\epsilon_t^{(i)} \sim \mathcal{N}(0, Q)\) is the process noise.
+
+        Each ensemble member is then updated using observations:
+
+        $$
+            x_t^{(i)} = \hat{x}_t^{(i)} + \hat{K}_t^{(i)} \left(y_t - h(x_t^{(i)}, u_t, t_t)\right),
+        $$
+
+        where $\hat{K}_t^{(i)}$ is the Kalman gain for the \(i\)-th ensemble member, computed as
+
+        $$
+            \hat{K}_t^{(i)} = \hat{P}_t^{(i)} H^\top (H \hat{P}_t^{(i)} H^\top + R)^{-1},
+        $$
+
+        where $\hat{P}_t^{(i)}$ is the empirical covariance of the particles, and $R$ is the
+        covariance of the observation model.
+
+        The resulting estimator is known to be biased for non-linear observations, but is often rather
+        robust in practice to moderate nonlinearities. It is particualrly effective for high-dimensional
+        inverse problems, where other particle methods like particle filters often struggle.
 
         References:
-        - For the classical reference, see: Evensen, G. (2003).
-            The ensemble Kalman filter: Theoretical formulation and practical implementation. Ocean Dynamics, 53(4), 343-367.
+
+            - The implementation details are due to: Sanz-Alonso, D., Stuart, A. M., & Taeb, A. (2018).
+                Inverse problems and data assimilation. [arXiv:1810.06191](https://arxiv.org/abs/1810.06191).
+            - For a classical reference to the ensemble Kalman filter, see: Evensen, G. (2003).
+                The ensemble Kalman filter: Theoretical formulation and practical implementation. Ocean Dynamics, 53(4), 343-367.
+            - The solution using automatic differentiation for nonlinear dynamics is due to: Chen, Y., Sanz-Alonso, D., & Willett, R. (2022).
+                Autodifferentiable ensemble Kalman filters. SIAM Journal on Mathematics of Data Science, 4(2), 801-833.
+                [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
     n_particles: int = 30
@@ -155,14 +181,20 @@ class PFResamplingConfig:
             `differential_method="soft"`. Lower values are closer to non-differentiable resampling,
             and higher values are closer to the differentiable method. Defaults to `0.7`.
 
-    References:
+    ??? note "Algorithm Reference"
+        The stop gradient method provides an unbiased score estimate for the marginal likelihood via the classical Fisher estimate.
+        This is accomplished directly through automatic differentiation. For non-bootstrap filters, the proposal estimates will be biased.
 
-        - For the stop_gradient method, see: Ścibior, A., & Wood, F. (2021).
-            Differentiable particle filtering without modifying the forward pass. [arXiv:2106.10314](https://arxiv.org/abs/2106.10314).
-        - For the soft method, see: Karkus, P., Hsu, D., & Lee, W. S. (2018, October). Particle filter networks with application to visual localization.
-            In Conference on Robot Learning (pp. 169-178). [Available Online](https://proceedings.mlr.press/v87/karkus18a.html).
-        - For a recent review of differentiable particle filters, see: Brady, J. J., Cox, B., Li, Y., & Elvira, V. (2025).
-            PyDPF: A Python Package for Differentiable Particle Filtering. [arXiv:2510.25693](https://arxiv.org/abs/2510.25693).
+        The soft resampling method provides biased score estimates, but propagates gradients through the reasmpling step. It is fast.
+
+        References:
+
+            - For the stop_gradient method, see: Ścibior, A., & Wood, F. (2021).
+                Differentiable particle filtering without modifying the forward pass. [arXiv:2106.10314](https://arxiv.org/abs/2106.10314).
+            - For the soft method, see: Karkus, P., Hsu, D., & Lee, W. S. (2018, October). Particle filter networks with application to visual localization.
+                In Conference on Robot Learning (pp. 169-178). [Available Online](https://proceedings.mlr.press/v87/karkus18a.html).
+            - For a recent review of differentiable particle filters, see: Brady, J. J., Cox, B., Li, Y., & Elvira, V. (2025).
+                PyDPF: A Python Package for Differentiable Particle Filtering. [arXiv:2510.25693](https://arxiv.org/abs/2510.25693).
     """
 
     base_method: ResamplingBaseMethod = "systematic"
@@ -198,13 +230,16 @@ class PFConfig(BaseFilterConfig):
 
     ??? note "Algorithm Reference"
         At each step, particles are propagated through the transition and
-        reweighted by the observation likelihood. The marginal log-likelihood
-        is estimated as:
+        reweighted by the observation likelihood. The resulting empirical distribution
+        is asymptotically exact to the true filtering distribution as the number of particles goes to infinity.
+        The marginal log-likelihood without a resampling step is estimated as:
 
         \[
             \log p(y_{1:T}) \approx \sum_{t=1}^T \log \frac{1}{N}
-            \sum_{i=1}^N w_t^{(i)}
+            \sum_{i=1}^N \tilde{w}_t^{(i)}
         \]
+
+        where $\tilde{w}_t^{(i)}$ is the are unnormalized weights of each particle.
 
         There are several different resampling algorithms available, which result in different
         approximations of the score function $\nabla_\theta \log p(y_{1:T} | \theta)$.
@@ -260,10 +295,9 @@ class EKFConfig(BaseFilterConfig):
             \hat x_{t|t-1} = f(\hat x_{t-1|t-1}),
             \quad P_{t|t-1} = F_t P_{t-1|t-1} F_t^\top + Q_t
         \]
-        \[
-            K_t = P_{t|t-1} H_t^\top (H_t P_{t|t-1} H_t^\top + R)^{-1},
-            \quad \hat x_{t|t} = \hat x_{t|t-1} + K_t (y_t - h(\hat x_{t|t-1}))
-        \]
+
+        where $F_t$ is the Jacobian of $f$ at $\hat x_{t|t-1}$,
+        and proceeds via the typical Kalman update.
 
         References:
 
@@ -291,16 +325,38 @@ class KFConfig(BaseFilterConfig):
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
     ??? note "Algorithm Reference"
-        The KF iterates a closed-form predict–update cycle:
+        When the dynamics and observation process of a dynamical system are both linear-Gaussian,
+        the recursive updates can be computed in closed form.
+
+        This proceeds via a "prediction" step, where the mean and covariance are propagated forward in time,
+        and an "update" step, where the mean and covariance are updated with the observation.
+
+        The prediction step is given by:
 
         $$
             \hat x_{t|t-1} = A \hat x_{t-1|t-1} + b,
             \quad P_{t|t-1} = A P_{t-1|t-1} A^\top + Q
         $$
+
+        The update step is given by:
+
         $$
-            K_t = P_{t|t-1} H^\top (H P_{t|t-1} H^\top + R)^{-1},
-            \quad \hat x_{t|t} = \hat x_{t|t-1} + K_t (y_t - H \hat x_{t|t-1})
+            \hat x_{t|t} = \hat x_{t|t-1} + K_t (y_t - H \hat x_{t|t-1}),
+            \quad P_{t|t} = (I - K_t H) P_{t|t-1}
         $$
+
+        where $K_t$ is the Kalman gain.
+
+        The Kalman gain is given by:
+
+        $$
+            K_t = P_{t|t-1} H^\top (H P_{t|t-1} H^\top + R)^{-1}
+        $$
+
+        where $H$ is the Jacobian of $h$ at $\hat x_{t|t-1}$.
+
+        There are variants to the particular algorithm; the `cuthbert` implementation is the so-called "square root" form.
+        This provides a more numerically stable implementation of the Kalman filter.
 
         References:
 
@@ -309,6 +365,7 @@ class KFConfig(BaseFilterConfig):
         - For a more modern textbook reference, see Chapter 6 of: Särkkä, S., & Svensson, L. (2023).
             Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
             [Available Online](https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf).
+        - For more details on the `cuthbert` implementation, see the [cuthbert documentation](https://state-space-models.github.io/cuthbert/cuthbert_api/gaussian/kalman/).
     """
 
     filter_source: FilterSource = "cd_dynamax"
