@@ -130,18 +130,30 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         import dynestyx as dsx
         from dynestyx.discretizers import Discretizer, euler_maruyama
         from dynestyx.inference.filters import Filter, EKFConfig
-        from dynestyx.models import ContinuousTimeStateEvolution, DiscreteTimeStateEvolution
+        from dynestyx.models import (
+            ContinuousTimeStateEvolution,
+            DiscreteTimeStateEvolution,
+            DynamicalModel,
+        )
+
+        state_dim = 1
+        observation_dim = 1
+        bm_dim = 1
 
         def model_with_ctse(obs_times=None, obs_values=None):
             dynamics = DynamicalModel(
-                state_dim=1,
-                observation_dim=1,
                 control_dim=0,
-                initial_condition=dist.Normal(0.0, 1.0),
+                initial_condition=dist.MultivariateNormal(
+                    loc=jnp.zeros(state_dim),
+                    covariance_matrix=jnp.eye(state_dim),
+                ),
                 state_evolution=ContinuousTimeStateEvolution(
                     drift=lambda x, u, t: x,
-                    diffusion_coefficient=lambda x, u, t: jnp.eye(1),
-                    bm_dim=1,
+                    diffusion_coefficient=lambda x, u, t: jnp.eye(state_dim, bm_dim),
+                ),
+                observation_model=lambda x, u, t: dist.MultivariateNormal(
+                    x,
+                    0.1**2 * jnp.eye(observation_dim),
                 ),
             )
             return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)

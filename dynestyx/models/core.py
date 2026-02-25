@@ -57,8 +57,8 @@ class DynamicalModel(eqx.Module):
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
     
-    Warning:
-        - Soon, we will implement auto-inference for continuous_time, state_dim, and observation_dim (and remove them as arguments).
+    Note:
+        - `continuous_time`, `state_dim`, and `observation_dim` are inferred automatically; do not pass them to the constructor.
         - Logic for control_model is not implemented yet.
     
     """
@@ -236,10 +236,8 @@ class ContinuousTimeStateEvolution:
             multiplies the Brownian increment $dW_t$.
             Defaults to zero if None (i.e., deterministic ODE).
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
-            Inferred from `state_dim` when `diffusion_coefficient` is set and `bm_dim` is None.
-
-    Warning:
-        - Soon, we will deprecate `bm_dim` and infer it automatically from the shape of the diffusion coefficient.
+            Inferred automatically from the output shape of `diffusion_coefficient`;
+            users should not pass `bm_dim` manually.
     """
 
     drift: Drift | None = None

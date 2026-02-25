@@ -237,7 +237,7 @@ class SDESimulator(BaseSimulator):
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
-                and `bm_dim`.
+                and inferred `bm_dim` (set during `DynamicalModel` construction).
             obs_times: Times at which to save the latent state and emit observations.
                 Required.
             obs_values: Optional observation array. If provided, observation sites are
@@ -674,7 +674,7 @@ class Simulator(BaseSimulator):
 
     Chooses a concrete simulator based on the structure of `dynamics.state_evolution`:
 
-    - `ContinuousTimeStateEvolution` with diffusion and `bm_dim` -> `SDESimulator`
+    - `ContinuousTimeStateEvolution` with diffusion (and inferred `bm_dim`) -> `SDESimulator`
     - `ContinuousTimeStateEvolution` without diffusion -> `ODESimulator`
     - `DiscreteTimeStateEvolution` -> `DiscreteTimeSimulator`
 
