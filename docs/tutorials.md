@@ -12,4 +12,4 @@ Welcome to the `dynestyx` examples page
 - [SDEs with Non-Gaussian Observations](tutorials/sde_non_gaussian_observations.ipynb)
 - [HUGE speedups if you assume perfect observations](deep_dives/l63_speedup_dirac_vs_enkf.ipynb)
 - [SINDy (Sparse identification of non-linear dynamics)](deep_dives/fhn_sparse_id.ipynb)
-- [Using `Discretizer` to go from continuous-time -> discrete](deep_dives/discretizer_demo.ipynb) - Coming soon!
+- Using `Discretizer` to go from continuous-time -> discrete - Coming soon!

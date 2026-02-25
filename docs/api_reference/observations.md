@@ -1,3 +1,0 @@
-# observations
-
-::: dynestyx.models.observations

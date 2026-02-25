@@ -30,4 +30,4 @@ pip install git+https://github.com/BasisResearch/dynestyx.git
 
 ## Quickstart
 
-We provide a more mathematical introduction in the [Introduction](intro.md) section. For a hands-on tutorial with code examples, check out the [Quickstart Tutorial](tutorials/quickstart/). 
+We provide a more mathematical introduction in the [Introduction](docs/math_intro.md) section. For a hands-on tutorial with code examples, check out the [Quickstart Tutorial](docs/tutorials/quickstart.ipynb).

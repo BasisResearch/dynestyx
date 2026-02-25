@@ -14,42 +14,83 @@ repo_url: https://github.com/BasisResearch/dynestyx
 
 nav:
   - Welcome: index.md
-  - Quick Example: quick_example.ipynb
-  - A mathematical introduction: math_intro.md
   - Tutorials: 
-    - A gentle introduction: tutorials/gentle_intro/00_index.ipynb
-    - NumPyro and Bayesian workflow: tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
-    - NumPyro + dynamical systems = Dynestyx: tutorials/gentle_intro/02_dynestyx_discrete_intro.ipynb
-    - Filtering and marginal likelihood: tutorials/gentle_intro/03_filtering_mll.ipynb
-    - Filtering for pseudo-marginal MCMC: tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb
-    - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
-    - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
-    - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
-    - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
-  - API Reference:
-    - api_reference.md
-    - dynamical_models: api_reference/dynamical_models.md
-    - filters: api_reference/filters.md
-    - handlers: api_reference/handlers.md
-    - discretizers: api_reference/discretizers.md
-    - hmm_filter: api_reference/hmm_filter.md
-    - observations: api_reference/observations.md
-    - diagnostics: api_reference/diagnostics.md
-    - simulators: api_reference/simulators.md
-    - utils: api_reference/utils.md
-  - Examples:
+    - "Quickstart: Writing dynestyx models": tutorials/quickstart.ipynb
+    - A Mathematical Introduction: math_intro.md
+    - A Gentle Introduction:
+      - tutorials/gentle_intro/00_index.ipynb
+      - NumPyro and Bayesian workflow: tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
+      - NumPyro + dynamical systems = Dynestyx: tutorials/gentle_intro/02_dynestyx_discrete_intro.ipynb
+      - Filtering and marginal likelihood: tutorials/gentle_intro/03_filtering_mll.ipynb
+      - Filtering for pseudo-marginal MCMC: tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb
+      - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
+      - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
+      - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
+      - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
+  - Examples and Deep Dives:
     - tutorials.md
-    - Quickstart: tutorials/quickstart.ipynb
-    - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
-    - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
-    - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
-    - Using `Discretizer` to go from continuous-time -> discrete: deep_dives/discretizer_demo.ipynb
+    - Examples:
+      - Quick Example L63: quick_example.ipynb
+      - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
+    - Deep Dives:
+      - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
+      - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
+      - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
+  - API Reference: 
+    - api_reference/index.md
+    - Public API:
+      - Overview: api_reference/public/index.md
+      - Models:
+        - Core Models:
+          - DynamicalModel: api_reference/public/models/core/dynamical_model.md
+          - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
+          - DiscreteTimeStateEvolution: api_reference/public/models/core/discrete_time_state_evolution.md
+          - ObservationModel: api_reference/public/models/core/observation_model.md
+          - Drift: api_reference/public/models/core/drift.md
+          - Potential: api_reference/public/models/core/potential.md
+        - Specialized Models:
+          - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
+          - GaussianObservation: api_reference/public/models/specialized/gaussian_observation.md
+          - LinearGaussianStateEvolution: api_reference/public/models/specialized/linear_gaussian_state_evolution.md
+          - AffineDrift: api_reference/public/models/specialized/affine_drift.md
+          - LTI_continuous: api_reference/public/models/specialized/lti_continuous.md
+          - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
+      - Inference:
+        - Filters: api_reference/public/inference/filters.md
+        - FilterConfigs: api_reference/public/inference/filter_configs.md
+      - Discretizers:
+        - Discretizer: api_reference/public/discretizers/discretizer.md
+      - Handlers:
+        - Sample: api_reference/public/handlers.md
+      - Simulators:
+        - Simulator Classes:
+          - Overview: api_reference/public/simulators/overview.md
+          - BaseSimulator: api_reference/public/simulators/overview/#basesimulator
+          - Simulator: api_reference/public/simulators/simulator_wrapper.md
+          - DiscreteTimeSimulator: api_reference/public/simulators/discrete_time_simulator.md
+          - ODESimulator: api_reference/public/simulators/ode_simulator.md
+          - SDESimulator: api_reference/public/simulators/sde_simulator.md
+      - Diagnostics:
+        - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
+    - Developer API:
+      - Overview: api_reference/developer/index.md
+      - Models:
+        - Core Models: api_reference/developer/models/core_models.md
+        - Specialized Models: api_reference/developer/models/specialized_models.md
+      - Inference:
+        - Filters: api_reference/developer/inference/filters.md
+        - FilterConfigs: api_reference/developer/inference/filter_configs.md
+      - Discretizers:
+        - Discretizer: api_reference/developer/discretizers/discretizer.md
+      - Simulators:
+        - Simulators: api_reference/developer/simulators.md
+      - Handlers: api_reference/developer/handlers.md
+      - Diagnostics:
+        - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - FAQ: faq.md
 
 theme:
   name: "material"
-  features:
-    - content.footnote.tooltips
 
   # +------------------------------------------------------------------------------------------------------+
   # |                                                                                                      |
@@ -168,6 +209,7 @@ theme:
   # |                                                                                                      |
   # +------------------------------------------------------------------------------------------------------+
   features:
+    - content.footnote.tooltips
     # Announce
     #
     #- announce.dismiss # Adds a "X" button to dismiss a news banner/mark it as read.*
@@ -388,7 +430,7 @@ markdown_extensions:
   #- pymdownx.betterem:
   #- pymdownx.caret:
   #- pymdownx.critic:
-  #- pymdownx.details:
+  - pymdownx.details:
   #- pymdownx.emoji:
   #- pymdownx.escapeall:
   #- pymdownx.extra:
@@ -403,7 +445,7 @@ markdown_extensions:
   #- pymdownx.smartsymbols:
   #- pymdownx.snippets:
   #- pymdownx.striphtml:
-  #- pymdownx.superfences:
+  - pymdownx.superfences:
   #- pymdownx.tabbed:
   #- pymdownx.tasklist:
   #- pymdownx.tilde:
@@ -412,5 +454,11 @@ plugins:
   - search # default plugin, need to re-enable when using manual plugins
   - mkdocstrings:
       default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_signature_annotations: true
+
   - mkdocs-jupyter:
       execute: false

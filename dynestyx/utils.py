@@ -10,6 +10,8 @@ from dynestyx.models import DynamicalModel
 
 type SSMType = CDNLGSSM | CDNLSSM
 
+_CONTROL_EXTEND_EPSILON = 1e-5
+
 
 def _should_record_field(
     record_val: bool | None, shape: tuple[int, ...], max_elems: int
@@ -84,9 +86,6 @@ def _validate_controls(
             f"Control times length ({len(ctrl_times)}) must match "
             f"observation times length ({len(obs_times)})"
         )
-
-
-_CONTROL_EXTEND_EPSILON = 1e-5
 
 
 def _build_control_path(

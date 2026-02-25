@@ -24,7 +24,7 @@ from dynestyx.inference.filter_configs import (
     EKFConfig,
     KFConfig,
     UKFConfig,
-    config_to_record_kwargs,
+    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
 from dynestyx.models import (
@@ -256,7 +256,7 @@ def run_discrete_filter(
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
     """
-    record_kwargs = config_to_record_kwargs(filter_config)
+    record_kwargs = _config_to_record_kwargs(filter_config)
     filter_kwargs = dict(
         obs_times=obs_times,
         obs_values=obs_values,
