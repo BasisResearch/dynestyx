@@ -1,3 +1,0 @@
-# discretizers
-
-::: dynestyx.discretizers

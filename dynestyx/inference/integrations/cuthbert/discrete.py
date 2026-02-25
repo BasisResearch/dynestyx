@@ -12,7 +12,7 @@ from dynestyx.inference.filter_configs import (
     EKFConfig,
     EnKFConfig,
     PFConfig,
-    config_to_record_kwargs,
+    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
 from dynestyx.models import DynamicalModel
@@ -57,7 +57,7 @@ def run_discrete_filter(
     """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
 
     filter_kwargs = _config_to_filter_kwargs(filter_config)
-    record_kwargs = config_to_record_kwargs(filter_config)
+    record_kwargs = _config_to_record_kwargs(filter_config)
 
     ys = obs_values
     t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention

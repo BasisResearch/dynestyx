@@ -1,3 +1,0 @@
-# handlers
-
-::: dynestyx.handlers

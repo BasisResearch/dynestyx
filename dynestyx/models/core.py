@@ -14,11 +14,48 @@ from dynestyx.types import Control, State, Time, dState
 
 class DynamicalModel(eqx.Module):
     """
-    Unified interface:
-        - initial_condition: DistributionT
-        - state_evolution: Callable[[State, Control, Time], State] | Callable[[State, Control, Time, Time], State]
-        - observation_model: Callable[[State, Control, Time], DistributionT]
-        - control_model: Any
+    Unified interface for state-space dynamical systems.
+
+    A dynamical model specifies the joint generative process for states and observations.
+    The state evolves according to either a continuous-time SDE or a discrete-time Markov
+    transition, and observations are emitted conditionally on the latent state:
+
+    $$
+    \\begin{aligned}
+    x_0 &\\sim p(x_0) \\\\
+    x_{t+1} &\\sim p(x_{t+1} \\mid x_t, u_t, t) \\\\
+    y_t &\\sim p(y_t \\mid x_t, u_t, t)
+    \\end{aligned}
+    $$
+
+    For continuous-time models, the state evolution is governed by an SDE (see
+    `ContinuousTimeStateEvolution`). For discrete-time models, the transition
+    is given by `DiscreteTimeStateEvolution`.
+
+    Attributes:
+        state_dim (int): Dimension of the latent state vector $x_t \\in \\mathbb{R}^{d_x}$.
+        observation_dim (int): Dimension of the observation vector $y_t \\in \\mathbb{R}^{d_y}$.
+        control_dim (int): Dimension of the control/input vector $u_t \\in \\mathbb{R}^{d_u}$. Defaults to 0 if not provided (assumes no controls).
+        initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
+            In the codebase this is annotated as `DistributionT` (a typing alias); in practice you should pass
+            a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
+            [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
+        state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
+            Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
+            transitions. A callable is also accepted (e.g., `lambda x, u, t_now, t_next: ...`), but class-based
+            implementations are recommended for full compatibility with type-based integrations (such as automatic
+            simulator selection).
+        observation_model (ObservationModel | Callable): The observation/likelihood model $p(y_t \\mid x_t, u_t, t)$.
+            A callable is accepted (e.g., `lambda x, u, t: ...`) as long as it returns a NumPyro-compatible
+            distribution, while subclassing `ObservationModel` is recommended for richer reuse and consistency.
+        control_model (Any): Optional model for control inputs (e.g., exogenous process). Not currently supported.
+        continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
+            Gets set automatically from the concrete type of `state_evolution`.
+    
+    Warning:
+        - Soon, we will implement auto-inference for continuous_time, state_dim, and observation_dim (and remove them as arguments).
+        - Logic for control_model is not implemented yet.
+    
     """
 
     state_dim: int
@@ -80,8 +117,35 @@ class DynamicalModel(eqx.Module):
 
 class Drift(Protocol):
     """
-    A callable mapping:
-        (state, control, time) -> dState
+    Drift vector field for continuous-time state evolution.
+
+    Mathematically, the drift is a mapping
+    $\\mu: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
+    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto \\mu(x, u, t)$.
+    In the SDE formulation used by `ContinuousTimeStateEvolution`,
+    $dx_t = \\mu(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
+    mapping forms the $\\mu$ term.
+
+    Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
+    `jax.vmap`, and `jax.grad` when differentiable).
+
+    Args:
+        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
+        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
+        t (Time): Current time (scalar or array).
+
+    Returns:
+        dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
+
+    Note:
+        This is a protocol interface; implement this callable signature; do not instantiate.
+        We recommend simply using a plain Python function that matches this signature, e.g.:
+
+        ```python
+        def drift(x, u, t):
+            return - x + u
+        ```
+        or `lambda x, u, t: - x + u`
     """
 
     def __call__(
@@ -95,8 +159,30 @@ class Drift(Protocol):
 
 class Potential(Protocol):
     """
-    A scalar potential energy callable mapping:
-        (state, control, time) -> scalar potential
+    Scalar potential energy for gradient-based drift.
+
+    A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
+    gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling
+    Langevin-type dynamics. It is used in `ContinuousTimeStateEvolution` when
+    `potential` is set; the sign is controlled by `use_negative_gradient`.
+
+    Args:
+        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
+        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
+        t (Time): Current time.
+
+    Returns:
+        jax.Array: Scalar potential value $V(x, u, t) \\in \\mathbb{R}$.
+
+    Note:
+        This is a protocol interface; implement this callable signature; do not instantiate.
+        We recommend simply using a plain Python function that matches this signature, e.g.:
+
+        ```python
+        def potential(x, u, t):
+            return x[0]**2 + x[1]**2 + x[2]**2
+        ```
+        or `lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2`
     """
 
     def __call__(
@@ -111,9 +197,36 @@ class Potential(Protocol):
 @dataclasses.dataclass
 class ContinuousTimeStateEvolution:
     """
-    SDE: dx = [drift(x, u, t) + s * grad(potential)(x, u, t)] dt + L(x, u, t) dW
+    Continuous-time state evolution via stochastic differential equations (SDEs).
 
-    where s = -1 when `use_negative_gradient` is True, else s = +1.
+    The state evolves according to
+
+    $$
+    dx_t = \\bigl[ \\mu(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
+         + L(x_t, u_t, t) \\, dW_t
+    $$
+
+    where $\\mu$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
+    coefficient. The sign $s$ is $-1$ when `use_negative_gradient` is True (e.g., for
+    Langevin dynamics) and $+1$ otherwise.
+
+    Attributes:
+        drift (Drift | None): Drift vector field $\\mu(x, u, t)$.
+            Defaults to zero if None.
+            At least one of `drift` or `potential` must be non-None.
+        potential (Potential | None): Scalar potential $V(x, u, t)$ whose gradient is added to the drift.
+            Defaults to zero if None.
+            At least one of `drift` or `potential` must be non-None.
+        use_negative_gradient (bool): If True, use $-\\nabla_x V$ (e.g., gradient descent on potential);
+            otherwise use $+\\nabla_x V$. Default is False.
+        diffusion_coefficient (Drift | None): Diffusion coefficient $L(x, u, t)$ mapping to a matrix;
+            multiplies the Brownian increment $dW_t$.
+            Defaults to zero if None (i.e., deterministic ODE).
+        bm_dim (int | None): Dimension of the Brownian motion $W_t$.
+            Inferred from `state_dim` when `diffusion_coefficient` is set and `bm_dim` is None.
+
+    Warning:
+        - Soon, we will deprecate `bm_dim` and infer it automatically from the shape of the diffusion coefficient.
     """
 
     drift: Drift | None = None
@@ -143,8 +256,27 @@ class ContinuousTimeStateEvolution:
 
 class DiscreteTimeStateEvolution:
     """
-    x_{t+1} ~ p(x_{t+1} | State_t, Control_t, t)
-    Return a NumPyro Distribution over next state.
+    Discrete-time state evolution via Markov transition distributions.
+
+    The next state is drawn from a conditional distribution given the current state,
+    control, and time indices:
+
+    $$
+    x_{t_{k+1}} \\sim p\\left(x_{t_{k+1}} \\mid x_{t_k}, u_{t_k}, t_k, t_{k+1}\\right)
+    $$
+
+    Implementations must return a NumPyro-compatible distribution (e.g.,
+    `numpyro.distributions.Distribution`) that can be sampled and evaluated.
+
+    Args:
+        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
+        u (Control | None): Current control input or None.
+        t_now (Time): Current time index $t_k$.
+        t_next (Time): Next time index $t_{k+1}$ (for non-uniform sampling or continuous-time embeddings).
+
+    Returns:
+        DistributionT: Distribution over the next state $x_{t_{k+1}}$.
+            In practice this should be a `numpyro.distributions.Distribution` instance.
     """
 
     def __call__(
@@ -158,7 +290,27 @@ class DiscreteTimeStateEvolution:
 
 
 class ObservationModel(eqx.Module):
-    """p(y_t | State_t, Control_t, t)"""
+    """
+    Observation or emission model for state-space systems.
+
+    Defines the conditional distribution of observations given the latent state,
+    control, and time:
+
+    $$
+    y_t \\sim p(y_t \\mid x_t, u_t, t)
+    $$
+
+    Subclasses implement `__call__` to return a NumPyro-compatible distribution.
+    The base class provides `log_prob` and `sample` for convenience. Subclasses
+    may add parameters (e.g., observation noise scale) as module attributes.
+
+    Methods:
+        __call__(x, u, t) -> numpyro.distributions.Distribution: Return the observation distribution (a NumPyro distribution; see
+            the [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html)) for
+            $p(y_t \\mid x_t, u_t, t)$.
+        log_prob(y_t, x_t, u_t, t, ...): Compute $\\log p(y_t \\mid x_t, u_t, t)$.
+        sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
+    """
 
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
         dist = self(x, u, t)

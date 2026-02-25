@@ -1,24 +1,33 @@
 #!/usr/bin/env python3
 """
-WARNING: This script is primarily LLM-generated (with lots of feedback and iteration).
-It would be nice to rewrite this as a proper dynestyx model and sample from the SDE that way :).
+dynestyx logo generator (boundary-orbit version).
 
-dynestyx logo generator (BOUNDARY ORBIT version):
-- particles initialized uniformly over the whole window
-- each particle is assigned a fixed letter id/color based on its STARTING point
-  (nearest-letter boundary field)
-- particles are attracted to a thin ring around the UNION of letter boundaries
-  and swirl tangentially along those boundaries (orbit)
-- all particles are rendered at all times in their fixed color
-- white background (ink subtracted from white)
-- outputs a GIF
+Trajectory generation is handled by a dynestyx continuous-time model simulated
+with SDESimulator:
+- particles start uniformly over the full canvas
+- each particle receives a fixed color from its initial nearest-letter boundary
+- the SDE drift adds tangential orbiting around letter boundaries
+- a potential term attracts particles to a thin boundary ring
+- diffusion is time-constant
+- frames are rendered as white background with subtracted colored ink
 """
 
-import os
-import math
 import argparse
-import numpy as np
+import os
+
+import dynestyx as dsx
 import imageio.v2 as imageio
+import jax.numpy as jnp
+import jax.random as jr
+import numpy as np
+import numpyro.distributions as dist
+from dynestyx import (
+    ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
+    DynamicalModel,
+    SDESimulator,
+)
+from numpyro.infer import Predictive
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
 from scipy.ndimage import binary_erosion
@@ -73,18 +82,18 @@ def load_font(font_size: int, font_path: str | None):
 # -----------------------------
 
 
-def bilinear_sample(arr: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Bilinear interpolation for arr[y,x], x,y in pixel coordinates."""
+def bilinear_sample_jax(arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+    """Bilinear interpolation for arr[y, x], where x/y are pixel coordinates."""
     H, W = arr.shape
-    x0 = np.floor(x).astype(np.int32)
-    y0 = np.floor(y).astype(np.int32)
+    x0 = jnp.floor(x).astype(jnp.int32)
+    y0 = jnp.floor(y).astype(jnp.int32)
     x1 = x0 + 1
     y1 = y0 + 1
 
-    x0 = np.clip(x0, 0, W - 1)
-    x1 = np.clip(x1, 0, W - 1)
-    y0 = np.clip(y0, 0, H - 1)
-    y1 = np.clip(y1, 0, H - 1)
+    x0 = jnp.clip(x0, 0, W - 1)
+    x1 = jnp.clip(x1, 0, W - 1)
+    y0 = jnp.clip(y0, 0, H - 1)
+    y1 = jnp.clip(y1, 0, H - 1)
 
     Ia = arr[y0, x0]
     Ib = arr[y1, x0]
@@ -238,7 +247,6 @@ def simulate_boundary_orbit_gif(
     ring: float,  # target distance from boundary
     swirl_width: float,  # tangential localization width (pixels)
     sigma: float,  # diffusion
-    ramp_power: float,  # >1 slows early convergence
     # rendering
     blur_sigma: float,
     gamma: float,
@@ -254,68 +262,79 @@ def simulate_boundary_orbit_gif(
     )
     pal = palette_by_character(text)
 
-    # Uniform init over window
-    rng = np.random.default_rng(seed)
-    x = rng.uniform(0, W - 1, size=n_particles).astype(np.float32)
-    y = rng.uniform(0, H - 1, size=n_particles).astype(np.float32)
+    dist_grid_j = jnp.asarray(dist_grid)
+    vhatx_grid_j = jnp.asarray(vhatx_grid)
+    vhaty_grid_j = jnp.asarray(vhaty_grid)
 
-    # Fixed particle color assignment based on STARTING point nearest-boundary-letter field
-    xi0 = np.clip(x.astype(np.int32), 0, W - 1)
-    yi0 = np.clip(y.astype(np.int32), 0, H - 1)
+    total_steps = frames * steps_per_frame
+    obs_times = jnp.arange(total_steps + 1, dtype=jnp.float32) * dt
+
+    def logo_model(obs_times=None, obs_values=None):
+        def drift_fn(x, u, t):
+            dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
+            vhatx = bilinear_sample_jax(vhatx_grid_j, x[0], x[1])
+            vhaty = bilinear_sample_jax(vhaty_grid_j, x[0], x[1])
+
+            tx = -vhaty
+            ty = vhatx
+            wloc = omega * jnp.exp(
+                -((dist_to_boundary - ring) ** 2) / (2.0 * swirl_width * swirl_width)
+            )
+            return jnp.array([wloc * tx, wloc * ty], dtype=jnp.float32)
+
+        def potential_fn(x, u, t):
+            dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
+            return 0.5 * kappa * (dist_to_boundary - ring) ** 2
+
+        def diffusion_fn(x, u, t):
+            return sigma * jnp.eye(2, dtype=jnp.float32)
+
+        dynamics = DynamicalModel(
+            state_dim=2,
+            observation_dim=2,
+            control_dim=0,
+            initial_condition=dist.Uniform(
+                low=jnp.array([0.0, 0.0], dtype=jnp.float32),
+                high=jnp.array([W - 1.0, H - 1.0], dtype=jnp.float32),
+            ).to_event(1),
+            state_evolution=ContinuousTimeStateEvolution(
+                drift=drift_fn,
+                potential=potential_fn,
+                use_negative_gradient=True,
+                diffusion_coefficient=diffusion_fn,
+                bm_dim=2,
+            ),
+            observation_model=DiracIdentityObservation(),
+        )
+        return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+
+    with SDESimulator(dt0=dt):
+        samples = Predictive(logo_model, num_samples=n_particles)(
+            jr.PRNGKey(seed),
+            obs_times=obs_times,
+        )
+
+    states = np.asarray(samples["states"], dtype=np.float32)  # (N, T, 2)
+
+    # Fixed particle colors based on STARTING point nearest-letter field
+    x0 = states[:, 0, 0]
+    y0 = states[:, 0, 1]
+    xi0 = np.clip(x0.astype(np.int32), 0, W - 1)
+    yi0 = np.clip(y0.astype(np.int32), 0, H - 1)
     particle_letter = letter_id_field[yi0, xi0].astype(np.int32)
 
     pr = pal[particle_letter, 0].astype(np.float32)
     pg = pal[particle_letter, 1].astype(np.float32)
     pb = pal[particle_letter, 2].astype(np.float32)
 
-    rng_dyn = np.random.default_rng(seed + 123)
-    sqrt_dt = math.sqrt(dt)
-
     frames_list: list[np.ndarray] = []
 
     for frame_idx in range(frames):
-        prog = frame_idx / (frames - 1) if frames > 1 else 1.0
-        ramp = prog**ramp_power
-
-        kappa_t = kappa * ramp
-        omega_t = omega * ramp
-        sigma_t = sigma * (1.15 - 0.65 * ramp)  # noisier early
-
-        for _ in range(steps_per_frame):
-            dist = bilinear_sample(dist_grid, x, y)
-            vhatx = bilinear_sample(vhatx_grid, x, y)
-            vhaty = bilinear_sample(vhaty_grid, x, y)
-
-            # Radial term: vhat points toward boundary; drive dist -> ring
-            bx = (kappa_t * (dist - ring)) * vhatx
-            by = (kappa_t * (dist - ring)) * vhaty
-
-            # Tangential term: J vhat = (-vhaty, vhatx), localized near ring
-            tx = -vhaty
-            ty = vhatx
-            wloc = omega_t * np.exp(
-                -((dist - ring) ** 2) / (2.0 * swirl_width * swirl_width)
-            )
-            bx += wloc * tx
-            by += wloc * ty
-
-            # Euler–Maruyama
-            x += bx * dt + sigma_t * sqrt_dt * rng_dyn.normal(size=n_particles).astype(
-                np.float32
-            )
-            y += by * dt + sigma_t * sqrt_dt * rng_dyn.normal(size=n_particles).astype(
-                np.float32
-            )
-
-            # Reflect at window boundaries
-            x = np.where(x < 0, -x, x)
-            y = np.where(y < 0, -y, y)
-            x = np.where(x > W - 1, 2 * (W - 1) - x, x)
-            y = np.where(y > H - 1, 2 * (H - 1) - y, y)
-
-        # ---------------- Render once per frame ----------------
-        xi = np.clip(x.astype(np.int32), 0, W - 1)
-        yi = np.clip(y.astype(np.int32), 0, H - 1)
+        step_idx = (frame_idx + 1) * steps_per_frame
+        x_frame = states[:, step_idx, 0]
+        y_frame = states[:, step_idx, 1]
+        xi = np.clip(x_frame.astype(np.int32), 0, W - 1)
+        yi = np.clip(y_frame.astype(np.int32), 0, H - 1)
 
         counts_rgb = np.zeros((H, W, 3), dtype=np.float32)
         np.add.at(counts_rgb[..., 0], (yi, xi), pr)
@@ -349,7 +368,7 @@ def simulate_boundary_orbit_gif(
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--text", type=str, default="dynestyx")
-    ap.add_argument("--out", type=str, default="dynestyx_boundary.gif")
+    ap.add_argument("--out", type=str, default="dynestyx.gif")
     ap.add_argument("--W", type=int, default=900)
     ap.add_argument("--H", type=int, default=240)
     ap.add_argument("--font_path", type=str, default=None)
@@ -362,9 +381,9 @@ def main():
     ap.add_argument("--dt", type=float, default=0.06)
 
     # orbit dynamics
-    ap.add_argument("--kappa", type=float, default=1.0, help="ring attraction strength")
+    ap.add_argument("--kappa", type=float, default=0.5, help="ring attraction strength")
     ap.add_argument(
-        "--omega", type=float, default=15.0, help="tangential swirl strength"
+        "--omega", type=float, default=24.0, help="tangential swirl strength"
     )
     ap.add_argument(
         "--ring", type=float, default=2.8, help="target distance from boundary (pixels)"
@@ -376,9 +395,6 @@ def main():
         help="swirl localization width (pixels)",
     )
     ap.add_argument("--sigma", type=float, default=4.0, help="diffusion strength")
-    ap.add_argument(
-        "--ramp_power", type=float, default=1.0, help=">1 slows early convergence"
-    )
 
     # rendering
     ap.add_argument("--blur_sigma", type=float, default=1.0)
@@ -404,7 +420,6 @@ def main():
         ring=args.ring,
         swirl_width=args.swirl_width,
         sigma=args.sigma,
-        ramp_power=args.ramp_power,
         blur_sigma=args.blur_sigma,
         gamma=args.gamma,
         ink_strength=args.ink_strength,

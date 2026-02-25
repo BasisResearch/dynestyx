@@ -23,25 +23,46 @@ def LTI_discrete(
     initial_cov: jax.Array | None = None,
 ) -> DynamicalModel:
     """
-    Build a discrete-time LTI DynamicalModel from core generating parameters.
+    Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
 
-    State:  x_{t+1} ~ N(A x_t + B u_t + b, Q)
-    Obs:    y_t ~ N(H x_t + D u_t + d, R)
+    The model has transition and observation distributions
 
-    Compatible with KF, EKF, UKF via LinearGaussianStateEvolution and
-    LinearGaussianObservation; also compatible with PF.
+    $$
+    \\begin{aligned}
+    x_0 &\\sim \\mathcal{N}(m_0, C_0), \\\\
+    x_{t_{k+1}} &\\sim \\mathcal{N}(A x_{t_k} + B u_{t_k} + b, Q), \\\\
+    y_{t_k} &\\sim \\mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
+    \\end{aligned}
+    $$
+
+    This factory composes `LinearGaussianStateEvolution` and
+    `LinearGaussianObservation` into a core `DynamicalModel`.
 
     Args:
-        A: State transition matrix, shape (state_dim, state_dim).
-        Q: Process noise covariance, shape (state_dim, state_dim).
-        H: Observation matrix, shape (observation_dim, state_dim).
-        R: Observation noise covariance, shape (observation_dim, observation_dim).
-        B: Control input matrix, shape (state_dim, control_dim). If None, control_dim=0.
-        b: State evolution bias, shape (state_dim,). If None, zero bias.
-        D: Observation control matrix, shape (observation_dim, control_dim). If None, no control in obs.
-        d: Observation bias, shape (observation_dim,). If None, zero bias.
-        initial_mean: Initial state mean, shape (state_dim,). If None, zeros.
-        initial_cov: Initial state covariance, shape (state_dim, state_dim). If None, identity.
+        A (jax.Array): State transition matrix with shape
+            $(d_x, d_x)$.
+        Q (jax.Array): Process-noise covariance with shape
+            $(d_x, d_x)$.
+        H (jax.Array): Observation matrix with shape
+            $(d_y, d_x)$.
+        R (jax.Array): Observation-noise covariance with shape
+            $(d_y, d_y)$.
+        B (jax.Array | None): Optional control matrix in the transition model
+            with shape $(d_x, d_u)$. If None, no control term is used and
+            `control_dim` is set to 0.
+        b (jax.Array | None): Optional additive transition bias with shape
+            $(d_x,)$.
+        D (jax.Array | None): Optional control matrix in the observation model
+            with shape $(d_y, d_u)$.
+        d (jax.Array | None): Optional additive observation bias with shape
+            $(d_y,)$.
+        initial_mean (jax.Array | None): Optional initial-state mean $m_0$ with
+            shape $(d_x,)$. Defaults to zeros.
+        initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
+            with shape $(d_x, d_x)$. Defaults to identity.
+
+    Returns:
+        DynamicalModel: A discrete-time LTI state-space model.
     """
     state_dim = A.shape[0]
     observation_dim = H.shape[0]
@@ -75,7 +96,6 @@ def LTI_discrete(
         state_dim=state_dim,
         observation_dim=observation_dim,
         control_dim=control_dim,
-        continuous_time=False,
     )
 
 
@@ -91,30 +111,48 @@ def LTI_continuous(
     initial_mean: jax.Array | None = None,
     initial_cov: jax.Array | None = None,
 ) -> DynamicalModel:
-    f"""
-    Build a continuous-time LTI DynamicalModel from core generating parameters.
+    """
+    Build a continuous-time linear time-invariant (LTI) `DynamicalModel`.
 
-    SDE:  dx = (A x(t) + B u(t) + b) dt + L dW_t,   dW_t ~ N(0, I_{L.shape[1]} dt)
-    Obs:  y_t ~ N(H x_t + D u_t + d, R)
+    The state evolves according to the SDE and observation model
 
-    L is the diffusion coefficient (not a covariance). It maps the Brownian
-    increment dW_t into the state space: L has shape (state_dim, L.shape[1]),
-    where L.shape[1] is the dimension of the driving Brownian motion dW_t.
-    With standard Brownian (dW_t ~ N(0, I_{L.shape[1]} dt)), the state noise covariance
-    over dt is L @ L.T * dt.
+    $$
+    \\begin{aligned}
+    x_0 &\\sim \\mathcal{N}(m_0, C_0), \\\\
+    dx_t &= (A x_t + B u_t + b) \\, dt + L \\, dW_t, \\\\
+    y_t &\\sim \\mathcal{N}(H x_t + D u_t + d, R).
+    \\end{aligned}
+    $$
+
+    Here, $L$ is a diffusion coefficient (not a covariance) with shape
+    $(d_x, d_w)$. It multiplies a $d_w$-dimensional Brownian motion $W_t$ whose
+    increments have identity covariance: $dW_t \\sim \\mathcal{N}(0, I_{d_w} \\, dt)$.
+    The Brownian motion dimension $d_w$ is determined by the second dimension of
+    $L$. Under this convention, the infinitesimal state covariance contributed by
+    the noise term is $L L^\\top \\, dt$.
 
     Args:
-        A: Drift matrix, shape (state_dim, state_dim).
-        L: Diffusion coefficient, shape (state_dim, bm_dim). Maps
-            bm_dim-dimensional dW_t into state_dim-dimensional noise.
-        H: Observation matrix, shape (observation_dim, state_dim).
-        R: Observation noise covariance, shape (observation_dim, observation_dim).
-        B: Control input matrix, shape (state_dim, control_dim). If None, control_dim=0.
-        b: Drift bias, shape (state_dim,). If None, zero bias.
-        D: Observation control matrix, shape (observation_dim, control_dim). If None, no control in obs.
-        d: Observation bias, shape (observation_dim,). If None, zero bias.
-        initial_mean: Initial state mean, shape (state_dim,). If None, zeros.
-        initial_cov: Initial state covariance, shape (state_dim, state_dim). If None, identity.
+        A (jax.Array): Drift matrix with shape $(d_x, d_x)$.
+        L (jax.Array): Diffusion coefficient with shape $(d_x, d_w)$.
+        H (jax.Array): Observation matrix with shape $(d_y, d_x)$.
+        R (jax.Array): Observation-noise covariance with shape
+            $(d_y, d_y)$.
+        B (jax.Array | None): Optional control matrix in the drift with shape
+            $(d_x, d_u)$. If None, no control term is used and `control_dim` is
+            set to 0.
+        b (jax.Array | None): Optional additive drift bias with shape
+            $(d_x,)$.
+        D (jax.Array | None): Optional control matrix in the observation model
+            with shape $(d_y, d_u)$.
+        d (jax.Array | None): Optional additive observation bias with shape
+            $(d_y,)$.
+        initial_mean (jax.Array | None): Optional initial-state mean $m_0$ with
+            shape $(d_x,)$. Defaults to zeros.
+        initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
+            with shape $(d_x, d_x)$. Defaults to identity.
+
+    Returns:
+        DynamicalModel: A continuous-time LTI state-space model.
     """
     state_dim = A.shape[0]
     observation_dim = H.shape[0]
@@ -155,5 +193,4 @@ def LTI_continuous(
         state_dim=state_dim,
         observation_dim=observation_dim,
         control_dim=control_dim,
-        continuous_time=True,
     )

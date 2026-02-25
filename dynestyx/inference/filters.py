@@ -54,7 +54,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
-        self.add_log_factors(
+        self._add_log_factors(
             name,
             dynamics,
             obs_times=obs_times,
@@ -75,7 +75,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
             **kwargs,
         )
 
-    def add_log_factors(
+    def _add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -101,23 +101,61 @@ def _default_filter_config(dynamics: DynamicalModel):
 
 @dataclasses.dataclass
 class Filter(BaseLogFactorAdder):
-    """
-    Object for filtering a dynamical model, and adding the resulting marginal log likelihood as a numpyro factor.
+    r"""Performs Bayesian filtering to compute the filtering distribution $p(x_t | y_{1:t})$ and the marginal likelihood $\log p(y_{1:T})$.
 
-    Uses a single filter_config to specify the filter. If None, defaults are chosen:
-    - Continuous-time: Ensemble Kalman Filter (ContinuousTimeEnKFConfig)
-    - Discrete-time: Extended Kalman Filter (EKFConfig)
+    A `Filter` object should be used as a context manager around a call to a model with a `dsx.sample(...)` statement
+    to condition a dynamical model on observations via a filtering algorithm. The filter
+    is selected and dispatched according to the `filter_config` argument, which adds the
+    marginal log-likelihood as a NumPyro factor, allowing for downstream parameter inference.
 
-    Args:
-        filter_config: Filter configuration. If None, defaults are chosen.
+    Examples:
+        >>> def model(obs_times=None, obs_values=None):
+        ...     dynamics = DynamicalModel(...)
+        ...     return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        >>> def filtered_model(t, y):
+        ...     with Filter(filter_config=KFConfig()):
+        ...         return model(obs_times=t, obs_values=y)
 
-    For HMMs, must use `HMMConfig` to specify the filter.
+    What this does
+    --------------
+    Filtering is the recursive (potentially approximate) computation of the filtering distribution
+    \(p(x_t \mid y_{1:t})\). It allows for the computation of the marginal likelihood:
 
+    \[
+      \log p(y_{1:T}) = \sum_{t=1}^T \log p(y_t \mid y_{1:t-1}),
+    \]
+
+    which in turn can be used to compute the posterior distribution over the parameters $p(\theta | y_{1:T})$.
+
+
+    Available Filter Configurations
+    ----------------------------------
+    There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
+    What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
+    For a summary table of all config classes and when to use them, see
+    [Available filter configurations](../filter_configs.md).
+
+    Defaults
+    --------
+    If `filter_config=None`, defaults are:
+
+    - `ContinuousTimeEnKFConfig()` for continuous-time models, and
+    - `EKFConfig(filter_source="cuthbert")` for discrete-time models.
+
+    Notes:
+        - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
+        - What gets recorded to the trace (means/covariances, particles/weights,
+        etc.) depends on `filter_config.record_*` and the backend implementation.
+
+    Attributes:
+        filter_config: Selects the filtering algorithm and its hyperparameters.
+            If `None`, a reasonable default is chosen based on whether the model
+            is continuous-time or discrete-time.
     """
 
     filter_config: BaseFilterConfig | None = None
 
-    def add_log_factors(
+    def _add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,
