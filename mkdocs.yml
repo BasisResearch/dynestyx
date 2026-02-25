@@ -15,7 +15,7 @@ repo_url: https://github.com/BasisResearch/dynestyx
 nav:
   - Welcome: index.md
   - Tutorials: 
-    - Quick Example: quick_example.ipynb
+    - "Quickstart: Writing dynestyx models": tutorials/quickstart.ipynb
     - A Mathematical Introduction: math_intro.md
     - A Gentle Introduction:
       - tutorials/gentle_intro/00_index.ipynb
@@ -30,7 +30,7 @@ nav:
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
-      - Quickstart: tutorials/quickstart.ipynb
+      - Quick Example L63: quick_example.ipynb
       - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - Deep Dives:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb

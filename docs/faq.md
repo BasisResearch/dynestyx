@@ -79,7 +79,7 @@ Feature coming soon.
 
 ## What about neural nets?
 
-We will put examples up soon. See [CD-Dynamax's Lorenz 63 neural drift tutorial](https://github.com/hd-UQ/cd_dynamax/blob/dev-numpyro-api/demos/numpyro/notebooks/lorenz63_nndrift_sgd_fit_to_data_tutorial_newAPI.ipynb) to convince you that this will work well.
+We will put examples up soon. See [CD-Dynamax's Lorenz 63 neural drift tutorial](https://github.com/hd-UQ/cd_dynamax/blob/dev-numpyro-api/demos/numpyro/notebooks/lorenz63_nndrift_sgd_fit_to_data_tutorial_newAPI.ipynb) to convince yourself that this will work well.
 
 ## What about SINDy?
 
