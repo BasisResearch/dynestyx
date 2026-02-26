@@ -216,7 +216,10 @@ def run_continuous_filter(
         if predict_times_arr.ndim == 1:
             predict_times_arr = predict_times_arr[:, None]
 
-    _validate_predict_times(jnp.ravel(obs_times_arr), None if predict_times_arr is None else jnp.ravel(predict_times_arr))
+    _validate_predict_times(
+        jnp.ravel(obs_times_arr),
+        None if predict_times_arr is None else jnp.ravel(predict_times_arr),
+    )
     _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 
@@ -290,7 +293,9 @@ def run_continuous_filter(
                 inputs_forecast=None,
                 filter_type=filter_kwargs["filter_type"],
                 filter_state_order=filter_kwargs["filter_state_order"],
-                filter_emission_order=filter_kwargs.get("filter_emission_order", "first"),
+                filter_emission_order=filter_kwargs.get(
+                    "filter_emission_order", "first"
+                ),
                 filter_num_iter=filter_kwargs.get("filter_num_iter", 1),
                 filter_state_cov_rescaling=filter_kwargs["filter_state_cov_rescaling"],
                 enkf_N_particles=filter_kwargs.get("enkf_N_particles", 25),

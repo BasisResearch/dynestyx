@@ -580,7 +580,9 @@ class DiscreteTimeSimulator(BaseSimulator):
             n_pred = int(len(prediction_times))
             t_now_pred = jnp.concatenate([obs_times[-1:]], axis=0)
             if n_pred > 1:
-                t_now_pred = jnp.concatenate([t_now_pred, prediction_times[:-1]], axis=0)
+                t_now_pred = jnp.concatenate(
+                    [t_now_pred, prediction_times[:-1]], axis=0
+                )
 
             def _pred_step(x_prev_pred, pred_idx):
                 t_now = t_now_pred[pred_idx]

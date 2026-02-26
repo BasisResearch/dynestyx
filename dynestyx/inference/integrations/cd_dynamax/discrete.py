@@ -10,8 +10,8 @@ import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.builders import build_params
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     PosteriorGSSMFiltered,
-    lgssm_joint_sample,
     lgssm_filter,
+    lgssm_joint_sample,
 )
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
     extended_kalman_filter,
@@ -128,7 +128,9 @@ def _filter_discrete_time_dynamax_kf(
             if len(ctrl_values) == T1 + n_predict:
                 inputs_forecast = ctrl_values[-n_predict:]
             elif len(ctrl_values) == T1:
-                inputs_forecast = jnp.zeros((n_predict, control_dim), dtype=inputs.dtype)
+                inputs_forecast = jnp.zeros(
+                    (n_predict, control_dim), dtype=inputs.dtype
+                )
             else:
                 raise ValueError(
                     "When predict_times is provided with controls for discrete cd_dynamax "

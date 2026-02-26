@@ -5,10 +5,18 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import ContinuousTimeEKFConfig, EKFConfig, KFConfig
+from dynestyx.inference.filter_configs import (
+    ContinuousTimeEKFConfig,
+    EKFConfig,
+    KFConfig,
+)
 from dynestyx.inference.filters import Filter
+from dynestyx.models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    LinearGaussianObservation,
+)
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, LinearGaussianObservation
 from dynestyx.simulators import DiscreteTimeSimulator, ODESimulator, SDESimulator
 from tests.test_utils import get_output_dir
 
@@ -275,4 +283,3 @@ def test_unsupported_cuthbert_predict_times_raises_useful_error():
     with pytest.raises(ValueError, match="not supported for cuthbert"):
         with seed(rng_seed=jr.PRNGKey(0)):
             model()
-
