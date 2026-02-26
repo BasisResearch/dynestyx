@@ -1,5 +1,7 @@
 """Continuous-time filters via CD-Dynamax: KF, EnKF, DPF, EKF, UKF."""
 
+from typing import Any
+
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -151,7 +153,7 @@ def _run_linear_kf(
     ctrl_values,
     predict_times,
     filter_config: ContinuousTimeKFConfig,
-) -> PosteriorGSSMFiltered | tuple[PosteriorGSSMFiltered, object]:
+) -> tuple[PosteriorGSSMFiltered, Any | None]:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
     cd_model = ContDiscreteLinearGaussianSSM(
@@ -178,7 +180,7 @@ def _run_linear_kf(
         inputs=ctrl_values,
         warn=filter_config.warn,
     )
-    return filtered
+    return filtered, None
 
 
 def run_continuous_filter(
@@ -231,7 +233,7 @@ def run_continuous_filter(
     )
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
-        kf_output = _run_linear_kf(
+        filtered, forecasted = _run_linear_kf(
             name,
             dynamics,
             obs_times_arr,
@@ -240,11 +242,6 @@ def run_continuous_filter(
             predict_times_arr,
             filter_config,
         )
-        if isinstance(kf_output, tuple):
-            filtered, forecasted = kf_output
-        else:
-            filtered = kf_output
-            forecasted = None
     else:
         if isinstance(
             filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
