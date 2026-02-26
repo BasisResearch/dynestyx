@@ -29,6 +29,7 @@ from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,
     _validate_controls,
+    _validate_predict_times,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -148,8 +149,9 @@ def _run_linear_kf(
     obs_times,
     obs_values,
     ctrl_values,
+    predict_times,
     filter_config: ContinuousTimeKFConfig,
-) -> PosteriorGSSMFiltered:
+) -> PosteriorGSSMFiltered | tuple[PosteriorGSSMFiltered, object]:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
     cd_model = ContDiscreteLinearGaussianSSM(
@@ -157,6 +159,18 @@ def _run_linear_kf(
         emission_dim=dynamics.observation_dim,
         input_dim=dynamics.control_dim,
     )
+    if predict_times is not None and len(predict_times) > 0:
+        filtered, forecasted = cd_model.filter_and_forecast(
+            params=params,
+            emissions_filter=obs_values,
+            t_emissions_filter=obs_times,
+            t_emissions_forecast=predict_times,
+            inputs_filter=ctrl_values,
+            inputs_forecast=None,
+            warn=filter_config.warn,
+        )
+        return filtered, forecasted
+
     filtered = cd_model.filter(
         params=params,
         emissions=obs_values,
@@ -175,6 +189,7 @@ def run_continuous_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -195,6 +210,13 @@ def run_continuous_filter(
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
         obs_times_arr = obs_times_arr[:, None]
+    predict_times_arr = None
+    if predict_times is not None:
+        predict_times_arr = jnp.asarray(predict_times)
+        if predict_times_arr.ndim == 1:
+            predict_times_arr = predict_times_arr[:, None]
+
+    _validate_predict_times(jnp.ravel(obs_times_arr), None if predict_times_arr is None else jnp.ravel(predict_times_arr))
     _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 
@@ -206,9 +228,20 @@ def run_continuous_filter(
     )
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
-        filtered = _run_linear_kf(
-            name, dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
+        kf_output = _run_linear_kf(
+            name,
+            dynamics,
+            obs_times_arr,
+            obs_values,
+            ctrl_vals,
+            predict_times_arr,
+            filter_config,
         )
+        if isinstance(kf_output, tuple):
+            filtered, forecasted = kf_output
+        else:
+            filtered = kf_output
+            forecasted = None
     else:
         if isinstance(
             filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
@@ -233,10 +266,54 @@ def run_continuous_filter(
             )
 
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-        filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
-        )
-
-        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
+        if predict_times_arr is not None and len(predict_times_arr) > 0:
+            if not hasattr(cd_dynamax_model, "filter_and_forecast"):
+                raise ValueError(
+                    "predict_times is not supported for this CD-Dynamax model "
+                    f"({type(cd_dynamax_model).__name__}). "
+                    "Only CDNLGSSM/CDLGSSM backends currently support forecasting."
+                )
+            if isinstance(filter_config, ContinuousTimeDPFConfig):
+                raise ValueError(
+                    "predict_times is not supported for ContinuousTimeDPFConfig "
+                    "(CDNLSSM backend has no filter_and_forecast)."
+                )
+            filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
+                filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+            )
+            filtered, forecasted = cd_dynamax_model.filter_and_forecast(  # type: ignore[attr-defined]
+                params=filter_kwargs["params"],
+                emissions_filter=filter_kwargs["emissions"],
+                t_emissions_filter=filter_kwargs["t_emissions"],
+                t_emissions_forecast=predict_times_arr,
+                inputs_filter=filter_kwargs["inputs"],
+                inputs_forecast=None,
+                filter_type=filter_kwargs["filter_type"],
+                filter_state_order=filter_kwargs["filter_state_order"],
+                filter_emission_order=filter_kwargs.get("filter_emission_order", "first"),
+                filter_num_iter=filter_kwargs.get("filter_num_iter", 1),
+                filter_state_cov_rescaling=filter_kwargs["filter_state_cov_rescaling"],
+                enkf_N_particles=filter_kwargs.get("enkf_N_particles", 25),
+                enkf_inflation_delta=filter_kwargs.get("enkf_inflation_delta", 0.0),
+                diffeqsolve_max_steps=filter_kwargs["diffeqsolve_max_steps"],
+                diffeqsolve_dt0=filter_kwargs["diffeqsolve_dt0"],
+                key=filter_kwargs["key"],
+                diffeqsolve_kwargs=filter_kwargs["diffeqsolve_kwargs"],
+                extra_filter_kwargs=filter_kwargs["extra_filter_kwargs"],
+                warn=filter_kwargs["warn"],
+            )
+        else:
+            filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
+                filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+            )
+            filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
+            forecasted = None
 
     _add_filter_sites(name, filter_config, filtered)
+    if forecasted is not None:
+        numpyro.deterministic(
+            f"{name}_forecasted_state_means", forecasted.forecasted_state_means
+        )
+        numpyro.deterministic(
+            f"{name}_forecasted_state_covs", forecasted.forecasted_state_covariances
+        )

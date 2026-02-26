@@ -1,6 +1,7 @@
 import math
 
 import diffrax as dfx
+import jax
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
@@ -85,6 +86,38 @@ def _validate_controls(
         raise ValueError(
             f"Control times length ({len(ctrl_times)}) must match "
             f"observation times length ({len(obs_times)})"
+        )
+
+
+def _validate_predict_times(obs_times: Array, predict_times: Array | None) -> None:
+    """Validate forecasting times are strictly after all observation times."""
+    if predict_times is None:
+        return
+
+    if len(predict_times) == 0:
+        return
+
+    obs_times_arr = jnp.asarray(obs_times).reshape(-1)
+    predict_times_arr = jnp.asarray(predict_times).reshape(-1)
+
+    # Under JAX tracing (e.g., Predictive with num_samples > 1), Python boolean
+    # checks on traced arrays are not allowed. We keep strict validation for
+    # eager execution paths and skip this check when values are traced.
+    if isinstance(obs_times_arr, jax.core.Tracer) or isinstance(
+        predict_times_arr, jax.core.Tracer
+    ):
+        return
+
+    max_obs_time = jnp.max(obs_times_arr)
+    try:
+        violates = bool(jnp.any(predict_times_arr <= max_obs_time))
+    except jax.errors.TracerBoolConversionError:
+        return
+    if violates:
+        raise ValueError(
+            "predict_times must be strictly greater than all obs_times. "
+            f"Got max(obs_times)={max_obs_time} and predict_times containing "
+            "values at or before that boundary."
         )
 
 

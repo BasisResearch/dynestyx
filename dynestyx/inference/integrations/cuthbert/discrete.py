@@ -50,11 +50,17 @@ def run_discrete_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
 ) -> None:
     """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
+    if predict_times is not None and len(predict_times) > 0:
+        raise ValueError(
+            "predict_times is not supported for cuthbert discrete filters. "
+            "Use a cd_dynamax filter backend/config to enable forecasting."
+        )
 
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = _config_to_record_kwargs(filter_config)

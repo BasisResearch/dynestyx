@@ -35,6 +35,7 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _validate_predict_times
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -50,6 +51,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -59,6 +61,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -70,6 +73,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -82,6 +86,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -162,6 +167,7 @@ class Filter(BaseLogFactorAdder):
         *,
         obs_times: jax.Array | None = None,
         obs_values: jax.Array | None = None,
+        predict_times: jax.Array | None = None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -179,6 +185,13 @@ class Filter(BaseLogFactorAdder):
         """
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
+
+        if "forecast_times" in kwargs:
+            raise ValueError(
+                "forecast_times is not supported. Use predict_times=... instead."
+            )
+
+        _validate_predict_times(obs_times, predict_times)
 
         config = (
             self.filter_config
@@ -202,6 +215,7 @@ class Filter(BaseLogFactorAdder):
                 key=key,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                predict_times=predict_times,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 **kwargs,
@@ -214,6 +228,7 @@ class Filter(BaseLogFactorAdder):
                     config,  # type: ignore[arg-type]
                     obs_times=obs_times,
                     obs_values=obs_values,
+                    predict_times=predict_times,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     **kwargs,
@@ -226,6 +241,7 @@ class Filter(BaseLogFactorAdder):
                     key=key,
                     obs_times=obs_times,
                     obs_values=obs_values,
+                    predict_times=predict_times,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     **kwargs,
@@ -246,6 +262,7 @@ def _filter_discrete_time(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -272,6 +289,7 @@ def _filter_discrete_time(
             filter_config,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -284,6 +302,7 @@ def _filter_discrete_time(
             key=key,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -300,6 +319,7 @@ def _filter_continuous_time(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -324,6 +344,7 @@ def _filter_continuous_time(
         key=key,
         obs_times=obs_times,
         obs_values=obs_values,
+        predict_times=predict_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         **kwargs,

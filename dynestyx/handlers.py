@@ -22,6 +22,7 @@ def sample(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array | None = None,
+    predict_times: jax.Array | None = None,
     ctrl_times: jax.Array | None = None,
     ctrl_values: jax.Array | None = None,
     **kwargs,
@@ -42,6 +43,7 @@ def sample(
         dynamics: Dynamical model to sample from.
         obs_times: Times at which to sample the observations.
         obs_values: Values of the observations at the given times.
+        predict_times: Optional forecasting times, strictly after all observation times.
         ctrl_times: Times at which to sample the controls.
         ctrl_values: Values of the controls at the given times.
         **kwargs: Additional keyword arguments.
