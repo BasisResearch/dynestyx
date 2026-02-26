@@ -145,6 +145,24 @@ def _add_filter_sites(
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
 
 
+def _to_filter_and_forecast_kwargs(
+    filter_kwargs: dict, predict_times_arr: jax.Array
+) -> dict:
+    """Translate cd_dynamax `filter(...)` kwargs into `filter_and_forecast(...)` kwargs."""
+    shared = dict(filter_kwargs)
+    emissions_filter = shared.pop("emissions")
+    t_emissions_filter = shared.pop("t_emissions")
+    inputs_filter = shared.pop("inputs")
+    return {
+        "emissions_filter": emissions_filter,
+        "t_emissions_filter": t_emissions_filter,
+        "t_emissions_forecast": predict_times_arr,
+        "inputs_filter": inputs_filter,
+        "inputs_forecast": None,
+        **shared,
+    }
+
+
 def _run_linear_kf(
     name: str,
     dynamics: DynamicalModel,
@@ -281,28 +299,11 @@ def run_continuous_filter(
             filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
                 filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
             )
+            forecast_kwargs = _to_filter_and_forecast_kwargs(
+                filter_kwargs, predict_times_arr
+            )
             filtered, forecasted = cd_dynamax_model.filter_and_forecast(  # type: ignore[attr-defined]
-                params=filter_kwargs["params"],
-                emissions_filter=filter_kwargs["emissions"],
-                t_emissions_filter=filter_kwargs["t_emissions"],
-                t_emissions_forecast=predict_times_arr,
-                inputs_filter=filter_kwargs["inputs"],
-                inputs_forecast=None,
-                filter_type=filter_kwargs["filter_type"],
-                filter_state_order=filter_kwargs["filter_state_order"],
-                filter_emission_order=filter_kwargs.get(
-                    "filter_emission_order", "first"
-                ),
-                filter_num_iter=filter_kwargs.get("filter_num_iter", 1),
-                filter_state_cov_rescaling=filter_kwargs["filter_state_cov_rescaling"],
-                enkf_N_particles=filter_kwargs.get("enkf_N_particles", 25),
-                enkf_inflation_delta=filter_kwargs.get("enkf_inflation_delta", 0.0),
-                diffeqsolve_max_steps=filter_kwargs["diffeqsolve_max_steps"],
-                diffeqsolve_dt0=filter_kwargs["diffeqsolve_dt0"],
-                key=filter_kwargs["key"],
-                diffeqsolve_kwargs=filter_kwargs["diffeqsolve_kwargs"],
-                extra_filter_kwargs=filter_kwargs["extra_filter_kwargs"],
-                warn=filter_kwargs["warn"],
+                **forecast_kwargs
             )
         else:
             filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
