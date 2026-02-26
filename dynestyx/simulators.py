@@ -176,7 +176,7 @@ class SDESimulator(BaseSimulator):
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         dt0: float = 1e-4,
         tol_vbt: float | None = None,
-        max_steps: int = 100_000,
+        max_steps: int = 1_000_000,
     ):
         """Configure SDE integration settings.
 
