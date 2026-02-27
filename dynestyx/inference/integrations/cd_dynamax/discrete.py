@@ -140,9 +140,16 @@ def _filter_discrete_time_dynamax_kf(
         else:
             inputs_forecast = jnp.zeros((n_predict, control_dim), dtype=inputs.dtype)
 
+        forecast_key = numpyro.prng_key()
+        if forecast_key is None:
+            raise ValueError(
+                "Forecasting with predict_times requires a PRNG key. "
+                "Run inside a NumPyro seeded context (e.g., numpyro.handlers.seed)."
+            )
+
         states_forecast, _ = lgssm_joint_sample(
             forecast_params,
-            key=numpyro.prng_key(),
+            key=forecast_key,
             num_timesteps=n_predict,
             inputs=inputs_forecast,
         )

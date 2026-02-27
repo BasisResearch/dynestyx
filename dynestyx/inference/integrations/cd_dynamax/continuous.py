@@ -1,7 +1,5 @@
 """Continuous-time filters via CD-Dynamax: KF, EnKF, DPF, EKF, UKF."""
 
-from typing import Any
-
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -10,6 +8,9 @@ from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
+)
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.cdlgssm_utils import (
+    GSSMForecast,
 )
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
@@ -171,7 +172,7 @@ def _run_linear_kf(
     ctrl_values,
     predict_times,
     filter_config: ContinuousTimeKFConfig,
-) -> tuple[PosteriorGSSMFiltered, Any | None]:
+) -> tuple[PosteriorGSSMFiltered, GSSMForecast | None]:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
     cd_model = ContDiscreteLinearGaussianSSM(
@@ -291,11 +292,6 @@ def run_continuous_filter(
                     f"({type(cd_dynamax_model).__name__}). "
                     "Only CDNLGSSM/CDLGSSM backends currently support forecasting."
                 )
-            if isinstance(filter_config, ContinuousTimeDPFConfig):
-                raise ValueError(
-                    "predict_times is not supported for ContinuousTimeDPFConfig "
-                    "(CDNLSSM backend has no filter_and_forecast)."
-                )
             filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
                 filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
             )
@@ -314,9 +310,12 @@ def run_continuous_filter(
 
     _add_filter_sites(name, filter_config, filtered)
     if forecasted is not None:
-        numpyro.deterministic(
-            f"{name}_forecasted_state_means", forecasted.forecasted_state_means
-        )
-        numpyro.deterministic(
-            f"{name}_forecasted_state_covs", forecasted.forecasted_state_covariances
-        )
+        if forecasted.forecasted_state_means is not None:
+            numpyro.deterministic(
+                f"{name}_forecasted_state_means", forecasted.forecasted_state_means
+            )
+        if forecasted.forecasted_state_covariances is not None:
+            numpyro.deterministic(
+                f"{name}_forecasted_state_covs",
+                forecasted.forecasted_state_covariances,
+            )
