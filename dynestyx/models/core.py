@@ -11,6 +11,7 @@ from numpyro._typing import DistributionT
 
 from dynestyx.models.checkers import (
     _infer_vector_dim_from_distribution,
+    _is_categorical_distribution,
     _make_probe_state,
     _validate_state_evolution_output_shape,
 )
@@ -40,6 +41,8 @@ class DynamicalModel(eqx.Module):
     Attributes:
         state_dim (int): Dimension of the latent state vector $x_t \\in \\mathbb{R}^{d_x}$.
         observation_dim (int): Dimension of the observation vector $y_t \\in \\mathbb{R}^{d_y}$.
+        categorical_state (bool): Whether latent states are categorical class labels.
+            Gets inferred automatically from the type of `initial_condition`.
         control_dim (int): Dimension of the control/input vector $u_t \\in \\mathbb{R}^{d_u}$. Defaults to 0 if not provided (assumes no controls).
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
             In the codebase this is annotated as `DistributionT` (a typing alias); in practice you should pass
@@ -58,7 +61,7 @@ class DynamicalModel(eqx.Module):
             Gets set automatically from the concrete type of `state_evolution`.
     
     Note:
-        - `continuous_time`, `state_dim`, and `observation_dim` are inferred automatically; do not pass them to the constructor.
+        - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
         - Logic for control_model is not implemented yet.
     
     """
@@ -73,6 +76,7 @@ class DynamicalModel(eqx.Module):
     control_model: Any
     state_dim: int
     observation_dim: int
+    categorical_state: bool
     continuous_time: bool
 
     def __init__(
@@ -82,36 +86,58 @@ class DynamicalModel(eqx.Module):
         observation_model,
         control_dim: int | None = None,
         control_model=None,
-        **_internal_fields,
+        *,
+        state_dim: int | None = None,
+        observation_dim: int | None = None,
+        categorical_state: bool | None = None,
+        continuous_time: bool | None = None,
     ):
-        # dataclasses.replace/effect handlers may pass stored fields back into
-        # __init__; accept and ignore them because these are always inferred.
-        _internal_fields.pop("state_dim", None)
-        _internal_fields.pop("observation_dim", None)
-        _internal_fields.pop("continuous_time", None)
-        if _internal_fields:
-            unknown = ", ".join(sorted(_internal_fields.keys()))
-            raise TypeError(f"Unexpected constructor arguments: {unknown}")
-
-        self.continuous_time = isinstance(state_evolution, ContinuousTimeStateEvolution)
+        inferred_continuous_time = isinstance(
+            state_evolution, ContinuousTimeStateEvolution
+        )
+        if (
+            continuous_time is not None
+            and bool(continuous_time) != inferred_continuous_time
+        ):
+            raise ValueError(
+                "continuous_time does not match inferred state_evolution type."
+            )
+        self.continuous_time = inferred_continuous_time
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
 
-        state_dim = _infer_vector_dim_from_distribution(
+        inferred_state_dim = _infer_vector_dim_from_distribution(
             initial_condition, "initial_condition"
         )
+        if state_dim is not None and int(state_dim) != int(inferred_state_dim):
+            raise ValueError(
+                "state_dim does not match inferred initial_condition shape. "
+                f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
+            )
+        inferred_categorical_state = _is_categorical_distribution(initial_condition)
+        if (
+            categorical_state is not None
+            and bool(categorical_state) != inferred_categorical_state
+        ):
+            raise ValueError(
+                "categorical_state does not match inferred initial_condition type. "
+                f"Got categorical_state={categorical_state}, "
+                f"inferred={inferred_categorical_state}."
+            )
         if control_dim is None:
             control_dim = 0
 
-        x0 = _make_probe_state(initial_condition=initial_condition, state_dim=state_dim)
+        x0 = _make_probe_state(
+            initial_condition=initial_condition, state_dim=inferred_state_dim
+        )
         u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
         t0 = jnp.array(0.0)
 
         _validate_state_evolution_output_shape(
             state_evolution=state_evolution,
-            state_dim=state_dim,
+            state_dim=inferred_state_dim,
             x0=x0,
             u0=u0,
             t0=t0,
@@ -119,13 +145,21 @@ class DynamicalModel(eqx.Module):
         )
 
         obs_dist = observation_model(x0, u0, t0)
-        observation_dim = _infer_vector_dim_from_distribution(
+        inferred_observation_dim = _infer_vector_dim_from_distribution(
             obs_dist, "observation_model(x, u, t)"
         )
+        if observation_dim is not None and int(observation_dim) != int(
+            inferred_observation_dim
+        ):
+            raise ValueError(
+                "observation_dim does not match inferred observation_model output shape. "
+                f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
+            )
 
-        self.state_dim = int(state_dim)
-        self.observation_dim = int(observation_dim)
+        self.state_dim = int(inferred_state_dim)
+        self.observation_dim = int(inferred_observation_dim)
         self.control_dim = int(control_dim)
+        self.categorical_state = bool(inferred_categorical_state)
 
 
 class Drift(Protocol):

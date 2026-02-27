@@ -136,10 +136,6 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
             DynamicalModel,
         )
 
-        state_dim = 1
-        observation_dim = 1
-        bm_dim = 1
-
         def model_with_ctse(obs_times=None, obs_values=None):
             dynamics = DynamicalModel(
                 control_dim=0,

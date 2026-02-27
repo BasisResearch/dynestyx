@@ -5,24 +5,50 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpyro.distributions as dist
 
 from dynestyx.types import Control, State, Time
 
 
+def _unwrap_base_distribution(distribution: Any) -> Any:
+    """Peel common NumPyro wrapper distributions to inspect the base distribution.
+
+    NumPyro often wraps scalar/vector distributions in containers like
+    `Independent`, `ExpandedDistribution`, or `MaskedDistribution`. For shape and
+    categorical checks we want to reason about the base distribution semantics.
+    """
+    current = distribution
+    while hasattr(current, "base_dist"):
+        current = current.base_dist
+    return current
+
+
 def _is_categorical_distribution(distribution: Any) -> bool:
-    return hasattr(
-        distribution, "probs"
-    ) and distribution.__class__.__name__.startswith("Categorical")
+    """Return True for class-label categorical distributions.
+
+    This intentionally excludes one-hot categorical variants because the model
+    logic here assumes scalar integer latent states.
+    """
+    base = _unwrap_base_distribution(distribution)
+    if isinstance(base, (dist.CategoricalProbs, dist.CategoricalLogits)):
+        return True
+    # Fallback for compatibility with custom/aliased categorical classes.
+    name = base.__class__.__name__
+    return name.startswith("Categorical") and "OneHot" not in name
 
 
 def _infer_vector_dim_from_distribution(distribution: Any, name: str) -> int:
+    """Infer scalar/vector dimension from a NumPyro-compatible distribution."""
     if _is_categorical_distribution(distribution):
-        return int(jnp.asarray(distribution.probs).shape[-1])
+        base = _unwrap_base_distribution(distribution)
+        return int(jnp.asarray(base.probs).shape[-1])
 
     shape: tuple[int, ...] | None = None
 
     if hasattr(distribution, "shape"):
         try:
+            # NumPyro distribution.shape() usually accepts no args, while some
+            # wrappers/proxies expect a sample-shape positional argument.
             shape = tuple(int(d) for d in distribution.shape())
         except TypeError:
             shape = tuple(int(d) for d in distribution.shape(()))
@@ -47,6 +73,7 @@ def _infer_vector_dim_from_distribution(distribution: Any, name: str) -> int:
 
 
 def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
+    """Build a synthetic state value used for shape-check probes."""
     if _is_categorical_distribution(initial_condition):
         return jnp.array(0, dtype=jnp.int32)
     return jnp.zeros((state_dim,))
