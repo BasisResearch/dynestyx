@@ -25,7 +25,6 @@ from dynestyx.utils import (
     _get_val_or_None,
     _validate_control_dim,
     _validate_controls,
-    _validate_predict_times,
 )
 
 
@@ -446,146 +445,156 @@ class DiscreteTimeSimulator(BaseSimulator):
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
         """
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
-
-        _validate_predict_times(obs_times, predict_times)
-        prediction_times = (
-            None
-            if predict_times is None or len(predict_times) == 0
-            else jnp.asarray(predict_times)
-        )
-        all_times = (
-            obs_times
-            if prediction_times is None
-            else jnp.concatenate([obs_times, prediction_times], axis=0)
-        )
+        combined_times = _combine_obs_predict_times(obs_times, predict_times)
+        obs_times = combined_times.obs_times
+        prediction_times = combined_times.prediction_times
+        all_times = combined_times.all_times
+        n_obs = combined_times.n_obs
+        obs_indices = combined_times.obs_indices
+        pred_indices = combined_times.pred_indices
         _validate_controls(all_times, ctrl_times, ctrl_values)
-
-        n_obs = int(len(obs_times))
-        if n_obs < 1:
-            raise ValueError("obs_times must contain at least one timepoint")
-
-        # Keep the optimized Dirac branch only for non-forecast runs.
-        if (
-            prediction_times is None
-            and isinstance(dynamics.observation_model, DiracIdentityObservation)
-            and (obs_values is not None)
-        ):
-            numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
-            numpyro.deterministic("y_0", obs_values[0])
-            if n_obs == 1:
-                return {
-                    "times": obs_times,
-                    "states": obs_values,
-                    "observations": obs_values,
-                }
-
-            if obs_values.ndim == 1:
-                x_prev = obs_values[:-1][:, None]
-                x_next = obs_values[1:][:, None]
-            else:
-                x_prev = obs_values[:-1]
-                x_next = obs_values[1:]
-            if ctrl_values is not None:
-                if ctrl_values.ndim == 1:
-                    u_prev = ctrl_values[:-1][:, None]
-                else:
-                    u_prev = ctrl_values[:-1]
-            else:
-                u_prev = None
-            t_now = obs_times[:-1]
-            t_next = obs_times[1:]
-            x_prev_batch_last = jnp.swapaxes(x_prev, 0, 1)
-            x_next_batch_last = jnp.swapaxes(x_next, 0, 1)
-            u_prev_batch_last = (
-                jnp.swapaxes(u_prev, 0, 1) if u_prev is not None else None
+        if obs_times is None and obs_values is not None:
+            raise ValueError(
+                "obs_values was provided without obs_times. "
+                "Provide obs_times when conditioning on observations."
             )
-            with numpyro.plate("time", n_obs - 1):
-                trans = dynamics.state_evolution(
-                    x_prev_batch_last,
-                    u_prev_batch_last,
-                    t_now,
-                    t_next,  # type: ignore
+
+        # For fully observed state trajectories, condition latent states directly
+        # on obs_values (works with and without forecasting windows).
+        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
+            obs_values is not None
+        ):
+            if obs_times is None:
+                raise ValueError(
+                    "DiracIdentityObservation conditioning requires obs_times "
+                    "when obs_values is provided."
                 )
-                obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
-                numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
-            return {
+            x_prev_obs = numpyro.sample(
+                "x_0", dynamics.initial_condition, obs=obs_values[0]
+            )
+            if n_obs > 1:
+
+                def _obs_state_step(x_prev, t_idx):
+                    t_now = obs_times[t_idx]
+                    t_next = obs_times[t_idx + 1]
+                    u_now = _get_val_or_None(ctrl_values, t_idx)
+                    x_t = numpyro.sample(
+                        f"x_{t_idx + 1}",
+                        dynamics.state_evolution(
+                            x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                        ),
+                        obs=_get_val_or_None(obs_values, t_idx + 1),
+                    )
+                    return x_t, x_t
+
+                x_last_obs, _ = nscan(
+                    _obs_state_step, x_prev_obs, jnp.arange(n_obs - 1)
+                )
+            else:
+                x_last_obs = x_prev_obs
+
+            output = {
                 "times": obs_times,
                 "states": obs_values,
                 "observations": obs_values,
             }
 
-        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
-        u_0 = _get_val_or_None(ctrl_values, 0)
-        y_0 = numpyro.sample(
-            "y_0",
-            dynamics.observation_model(x_prev, u_0, obs_times[0]),
-            obs=_get_val_or_None(obs_values, 0),
-        )
+            if prediction_times is not None and pred_indices is not None:
+                t_now_pred = all_times[pred_indices - 1]
 
-        def _step(x_prev, t_idx):
-            t_now = obs_times[t_idx]
-            t_next = obs_times[t_idx + 1]
-            u_now = _get_val_or_None(ctrl_values, t_idx)
-            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-            x_t = numpyro.sample(
-                f"x_{t_idx + 1}",
-                dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
-            )
-            y_t = numpyro.sample(
-                f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=u_next, t=t_next),
-                obs=_get_val_or_None(obs_values, t_idx + 1),
-            )
-            return x_t, (x_t, y_t)
+                def _pred_step(x_prev_pred, pred_idx):
+                    t_now = t_now_pred[pred_idx]
+                    t_next = prediction_times[pred_idx]
+                    u_now = _get_val_or_None(ctrl_values, n_obs - 1 + pred_idx)
+                    u_next = _get_val_or_None(ctrl_values, n_obs + pred_idx)
+                    x_t = numpyro.sample(
+                        f"x_pred_{pred_idx}",
+                        dynamics.state_evolution(
+                            x=x_prev_pred,
+                            u=u_now,
+                            t_now=t_now,
+                            t_next=t_next,
+                        ),
+                    )
+                    y_t = numpyro.sample(
+                        f"y_pred_{pred_idx}",
+                        dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                    )
+                    return x_t, (x_t, y_t)
 
-        _, scan_outputs = nscan(_step, x_prev, jnp.arange(n_obs - 1))
-        scan_states, scan_observations = scan_outputs
-        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
-        y_0_expanded = jnp.expand_dims(y_0, axis=0)
-        states = jnp.concatenate([x_0_expanded, scan_states], axis=0)
-        observations = jnp.concatenate([y_0_expanded, scan_observations], axis=0)
-
-        output = {"times": obs_times, "states": states, "observations": observations}
-
-        if prediction_times is not None:
-            n_pred = int(len(prediction_times))
-            t_now_pred = jnp.concatenate([obs_times[-1:]], axis=0)
-            if n_pred > 1:
-                t_now_pred = jnp.concatenate(
-                    [t_now_pred, prediction_times[:-1]], axis=0
+                _, pred_outputs = nscan(
+                    _pred_step, x_last_obs, jnp.arange(len(prediction_times))
                 )
+                pred_states, pred_obs = pred_outputs
+                output.update(
+                    {
+                        "prediction_times": prediction_times,
+                        "predicted_states": pred_states,
+                        "predicted_observations": pred_obs,
+                    }
+                )
+            return output
 
-            def _pred_step(x_prev_pred, pred_idx):
-                t_now = t_now_pred[pred_idx]
-                t_next = prediction_times[pred_idx]
-                if ctrl_values is not None and len(ctrl_values) == len(all_times):
-                    u_now = ctrl_values[n_obs - 1 + pred_idx]
-                    u_next = ctrl_values[n_obs + pred_idx]
-                else:
-                    u_now = None
-                    u_next = None
+        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
+        n_total = int(len(all_times))
+        if n_total == 1:
+            states_all = jnp.expand_dims(x_prev, axis=0)  # type: ignore
+        else:
+
+            def _step(x_prev, t_idx):
+                t_now = all_times[t_idx]
+                t_next = all_times[t_idx + 1]
+                u_now = _get_val_or_None(ctrl_values, t_idx)
                 x_t = numpyro.sample(
-                    f"x_pred_{pred_idx}",
+                    f"x_{t_idx + 1}",
                     dynamics.state_evolution(
-                        x=x_prev_pred,
-                        u=u_now,
-                        t_now=t_now,
-                        t_next=t_next,
+                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     ),
                 )
+                return x_t, x_t
+
+            _, scan_states = nscan(_step, x_prev, jnp.arange(n_total - 1))
+            x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
+            states_all = jnp.concatenate([x_0_expanded, scan_states], axis=0)
+
+        output = {}
+
+        if obs_times is not None:
+
+            def _obs_step(carry, t_idx):
+                x_t = states_all[t_idx]
+                t = obs_times[t_idx]
+                u_t = _get_val_or_None(ctrl_values, t_idx)
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, t_idx),
+                )
+                return carry, y_t
+
+            _, observations = nscan(_obs_step, None, obs_indices)
+            output.update(
+                {
+                    "times": obs_times,
+                    "states": states_all[obs_indices],
+                    "observations": observations,
+                }
+            )
+
+        if prediction_times is not None and pred_indices is not None:
+            pred_states = states_all[pred_indices]
+
+            def _pred_step(carry, pred_idx):
+                x_t = pred_states[pred_idx]
+                t = prediction_times[pred_idx]
+                u_t = _get_val_or_None(ctrl_values, n_obs + pred_idx)
                 y_t = numpyro.sample(
                     f"y_pred_{pred_idx}",
-                    dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
                 )
-                return x_t, (x_t, y_t)
+                return carry, y_t
 
-            x_last = states[-1]
-            _, pred_outputs = nscan(
-                _pred_step, x_last, jnp.arange(len(prediction_times))
-            )
-            pred_states, pred_obs = pred_outputs
+            _, pred_obs = nscan(_pred_step, None, jnp.arange(len(prediction_times)))
             output.update(
                 {
                     "prediction_times": prediction_times,

@@ -13,6 +13,7 @@ from dynestyx.inference.filter_configs import (
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
     DynamicalModel,
     LinearGaussianObservation,
 )
@@ -178,6 +179,67 @@ def test_discrete_simulator_emits_prediction_sites():
     _assert_all_finite(
         tr["states"]["value"],
         tr["observations"]["value"],
+        tr["predicted_states"]["value"],
+        tr["predicted_observations"]["value"],
+    )
+
+
+def test_discrete_simulator_allows_predict_times_without_obs_times():
+    predict_times = jnp.array([1.0, 2.0, 3.0])
+
+    def model():
+        with DiscreteTimeSimulator():
+            _discrete_lti_model(predict_times=predict_times)
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(11)):
+        model()
+
+    assert "prediction_times" in tr
+    assert "predicted_states" in tr
+    assert "predicted_observations" in tr
+    assert tr["prediction_times"]["value"].shape[0] == len(predict_times)
+    _assert_all_finite(
+        tr["predicted_states"]["value"],
+        tr["predicted_observations"]["value"],
+    )
+
+
+def test_discrete_dirac_observation_allows_forecast_with_obs_conditioning():
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    predict_times = jnp.array([3.0, 4.0])
+    obs_values = jnp.array([[0.2], [0.1], [-0.3]])
+
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=0,
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(0.8 * x, 0.2),
+        observation_model=DiracIdentityObservation(),
+    )
+
+    def model():
+        with DiscreteTimeSimulator():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                predict_times=predict_times,
+            )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(12)):
+        model()
+
+    assert "states" in tr
+    assert "observations" in tr
+    assert "prediction_times" in tr
+    assert "predicted_states" in tr
+    assert "predicted_observations" in tr
+    assert tr["prediction_times"]["value"].shape[0] == len(predict_times)
+    assert jnp.allclose(tr["states"]["value"], obs_values)
+    assert jnp.allclose(tr["observations"]["value"], obs_values)
+    _assert_all_finite(
         tr["predicted_states"]["value"],
         tr["predicted_observations"]["value"],
     )
