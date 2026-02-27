@@ -271,7 +271,7 @@ class ContinuousTimeStateEvolution:
             Defaults to zero if None (i.e., deterministic ODE).
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
             Inferred automatically from the output shape of `diffusion_coefficient`;
-            users should not pass `bm_dim` manually.
+            if passed by the user, it must match diffusion_coefficient(...).shape[1].
     """
 
     drift: Drift | None = None
