@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 
 import diffrax as dfx
 import jax
@@ -12,6 +13,60 @@ from dynestyx.models import DynamicalModel
 type SSMType = CDNLGSSM | CDNLSSM
 
 _CONTROL_EXTEND_EPSILON = 1e-5
+
+
+@dataclass(frozen=True)
+class _CombinedTimes:
+    obs_times: Array | None
+    prediction_times: Array | None
+    all_times: Array
+    n_obs: int
+    obs_indices: Array
+    pred_indices: Array | None
+
+
+def _combine_obs_predict_times(
+    obs_times: Array | None, predict_times: Array | None
+) -> _CombinedTimes:
+    """Normalize and combine observation/prediction times for simulators."""
+    obs_times_arr = None if obs_times is None else jnp.asarray(obs_times)
+    prediction_times = (
+        None
+        if predict_times is None or len(predict_times) == 0
+        else jnp.asarray(predict_times)
+    )
+    if obs_times_arr is None and prediction_times is None:
+        raise ValueError("At least one of obs_times or predict_times must be provided")
+    if obs_times_arr is not None:
+        _validate_predict_times(obs_times_arr, predict_times)
+
+    if prediction_times is None:
+        # At this point obs_times_arr is guaranteed non-None by the check above.
+        if obs_times_arr is None:
+            raise ValueError(
+                "At least one of obs_times or predict_times must be provided"
+            )
+        all_times = obs_times_arr
+    elif obs_times_arr is None:
+        all_times = prediction_times
+    else:
+        all_times = jnp.concatenate([obs_times_arr, prediction_times], axis=0)
+    n_obs = 0 if obs_times_arr is None else int(len(obs_times_arr))
+    obs_indices = jnp.arange(n_obs)
+    pred_indices = (
+        jnp.arange(int(len(prediction_times))) + n_obs
+        if prediction_times is not None
+        else None
+    )
+
+    return _CombinedTimes(
+        obs_times=obs_times_arr,
+        prediction_times=prediction_times,
+        all_times=all_times,
+        n_obs=n_obs,
+        obs_indices=obs_indices,
+        pred_indices=pred_indices,
+    )
 
 
 def _should_record_field(

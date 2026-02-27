@@ -21,6 +21,7 @@ from dynestyx.models import (
 from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _build_control_path,
+    _combine_obs_predict_times,
     _get_val_or_None,
     _validate_control_dim,
     _validate_controls,
@@ -39,7 +40,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     sites (conventionally `"times"`, `"states"`, and `"observations"`).
 
     Notes:
-        - If `obs_times` is None, the handler is a no-op.
+        - If both `obs_times` and `predict_times` are None, the handler is a no-op.
         - If `obs_values` is provided, observation sample sites are conditioned via
           `obs=...`.
     """
@@ -90,8 +91,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ):
-        # Only simulate if we have observation times
-        if obs_times is None:
+        # No-op only when neither observation nor prediction times are provided.
+        if obs_times is None and predict_times is None:
             return
 
         # Run the simulator
@@ -247,7 +248,7 @@ class SDESimulator(BaseSimulator):
                 `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
                 and `bm_dim`.
             obs_times: Times at which to save the latent state and emit observations.
-                Required.
+                Required unless `predict_times` is provided for forecast-only rollout.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
@@ -278,19 +279,13 @@ class SDESimulator(BaseSimulator):
                 "Use ODESimulator for deterministic dynamics."
             )
 
-        if obs_times is None:
-            raise ValueError("obs_times must be provided")
-        _validate_predict_times(obs_times, predict_times)
-        prediction_times = (
-            None
-            if predict_times is None or len(predict_times) == 0
-            else jnp.asarray(predict_times)
-        )
-        times = (
-            obs_times
-            if prediction_times is None
-            else jnp.concatenate([obs_times, prediction_times], axis=0)
-        )
+        combined_times = _combine_obs_predict_times(obs_times, predict_times)
+        obs_times = combined_times.obs_times
+        prediction_times = combined_times.prediction_times
+        times = combined_times.all_times
+        n_obs = combined_times.n_obs
+        obs_indices = combined_times.obs_indices
+        pred_indices = combined_times.pred_indices
 
         _validate_controls(times, ctrl_times, ctrl_values)
         _validate_control_dim(dynamics, ctrl_values)
@@ -313,71 +308,57 @@ class SDESimulator(BaseSimulator):
             u_t = args(t)
             return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
-        bm = dfx.VirtualBrownianTree(
-            t0=times[0],
-            t1=times[-1],
-            tol=self.tol_vbt,
-            shape=(dynamics.state_evolution.bm_dim,),
-            key=numpyro.prng_key(),
-        )
-
-        terms = dfx.MultiTerm(  # type: ignore
-            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-        )
-
-        sol_obs = dfx.diffeqsolve(
-            terms,
-            t0=obs_times[0],
-            t1=obs_times[-1],
-            y0=initial_state,
-            args=control_path_eval,
-            saveat=dfx.SaveAt(ts=obs_times),
-            **self.diffeqsolve_settings,
-        )
-        states_obs = sol_obs.ys
-        n_obs = int(len(obs_times))
-
-        def _create_observations_step(carry, t_idx):
-            x_t = states_obs[t_idx]
-            t = obs_times[t_idx]
-            u_t = control_path_eval(t)
-            y_t = numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
-            )
-            return carry, y_t
-
-        _, emissions_obs = nscan(_create_observations_step, None, jnp.arange(n_obs))
-
-        output = {
-            "times": obs_times,
-            "states": states_obs,
-            "observations": emissions_obs,
-        }
-
-        if prediction_times is not None:
-            bm_pred = dfx.VirtualBrownianTree(
-                t0=obs_times[-1],
-                t1=prediction_times[-1],
+        if len(times) == 1:
+            states_all = jnp.expand_dims(initial_state, axis=0)
+        else:
+            bm = dfx.VirtualBrownianTree(
+                t0=times[0],
+                t1=times[-1],
                 tol=self.tol_vbt,
                 shape=(dynamics.state_evolution.bm_dim,),
                 key=numpyro.prng_key(),
             )
 
-            terms_pred = dfx.MultiTerm(  # type: ignore
-                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm_pred)
+            terms = dfx.MultiTerm(  # type: ignore
+                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
             )
-            sol_pred = dfx.diffeqsolve(
-                terms_pred,
-                t0=obs_times[-1],
-                t1=prediction_times[-1],
-                y0=states_obs[-1],
+            sol = dfx.diffeqsolve(
+                terms,
+                t0=times[0],
+                t1=times[-1],
+                y0=initial_state,
                 args=control_path_eval,
-                saveat=dfx.SaveAt(ts=prediction_times),
+                saveat=dfx.SaveAt(ts=times),
                 **self.diffeqsolve_settings,
             )
-            pred_states = sol_pred.ys
+            states_all = sol.ys
+
+        output = {}
+        if obs_times is not None:
+            states_obs = states_all[obs_indices]
+
+            def _create_observations_step(carry, t_idx):
+                x_t = states_obs[t_idx]
+                t = obs_times[t_idx]
+                u_t = control_path_eval(t)
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, t_idx),
+                )
+                return carry, y_t
+
+            _, emissions_obs = nscan(_create_observations_step, None, jnp.arange(n_obs))
+            output.update(
+                {
+                    "times": obs_times,
+                    "states": states_obs,
+                    "observations": emissions_obs,
+                }
+            )
+
+        if prediction_times is not None and pred_indices is not None:
+            pred_states = states_all[pred_indices]
 
             def _create_predictions_step(carry, pred_idx):
                 x_t = pred_states[pred_idx]
@@ -693,7 +674,7 @@ class ODESimulator(BaseSimulator):
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `ContinuousTimeStateEvolution` with deterministic dynamics.
             obs_times: Times at which to save the latent state and emit observations.
-                Required.
+                Required unless `predict_times` is provided for forecast-only rollout.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
@@ -703,22 +684,14 @@ class ODESimulator(BaseSimulator):
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
         """
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
-
-        _validate_predict_times(obs_times, predict_times)
-        prediction_times = (
-            None
-            if predict_times is None or len(predict_times) == 0
-            else jnp.asarray(predict_times)
-        )
-        all_times = (
-            obs_times
-            if prediction_times is None
-            else jnp.concatenate([obs_times, prediction_times], axis=0)
-        )
+        combined_times = _combine_obs_predict_times(obs_times, predict_times)
+        obs_times = combined_times.obs_times
+        prediction_times = combined_times.prediction_times
+        all_times = combined_times.all_times
+        n_obs = combined_times.n_obs
+        obs_indices = combined_times.obs_indices
+        pred_indices = combined_times.pred_indices
         _validate_controls(all_times, ctrl_times, ctrl_values)
-        n_obs = int(len(obs_times))
 
         # Sample initial state
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
@@ -741,57 +714,51 @@ class ODESimulator(BaseSimulator):
 
             args = None
 
-        # Solve on observation window first.
-        sol_obs = dfx.diffeqsolve(
-            terms=dfx.ODETerm(f),
-            solver=self.solver,
-            t0=obs_times[0],
-            t1=obs_times[-1],
-            dt0=self.dt0,
-            y0=x_prev,
-            saveat=dfx.SaveAt(ts=obs_times),
-            stepsize_controller=self.stepsize_controller,
-            adjoint=self.adjoint,
-            max_steps=self.max_steps,
-            args=args,
-        )
-        states_obs = sol_obs.ys
-
-        # use scan to sample observations and collect them
-        def _step(carry, t_idx):
-            x_t = states_obs[t_idx]
-            t = obs_times[t_idx]
-            u_t = None if args is None else args(t)
-            # Sample observation
-            y_t = numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
-            )
-            return carry, y_t
-
-        _, scan_observations = nscan(_step, None, jnp.arange(n_obs))
-        output = {
-            "times": obs_times,
-            "states": states_obs,
-            "observations": scan_observations,
-        }
-
-        if prediction_times is not None:
-            sol_pred = dfx.diffeqsolve(
+        if len(all_times) == 1:
+            states_all = jnp.expand_dims(x_prev, axis=0)
+        else:
+            sol = dfx.diffeqsolve(
                 terms=dfx.ODETerm(f),
                 solver=self.solver,
-                t0=obs_times[-1],
-                t1=prediction_times[-1],
+                t0=all_times[0],
+                t1=all_times[-1],
                 dt0=self.dt0,
-                y0=states_obs[-1],
-                saveat=dfx.SaveAt(ts=prediction_times),
+                y0=x_prev,
+                saveat=dfx.SaveAt(ts=all_times),
                 stepsize_controller=self.stepsize_controller,
                 adjoint=self.adjoint,
                 max_steps=self.max_steps,
                 args=args,
             )
-            pred_states = sol_pred.ys
+            states_all = sol.ys
+
+        output = {}
+        if obs_times is not None:
+            states_obs = states_all[obs_indices]
+
+            def _step(carry, t_idx):
+                x_t = states_obs[t_idx]
+                t = obs_times[t_idx]
+                u_t = None if args is None else args(t)
+                # Sample observation
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, t_idx),
+                )
+                return carry, y_t
+
+            _, scan_observations = nscan(_step, None, jnp.arange(n_obs))
+            output.update(
+                {
+                    "times": obs_times,
+                    "states": states_obs,
+                    "observations": scan_observations,
+                }
+            )
+
+        if prediction_times is not None and pred_indices is not None:
+            pred_states = states_all[pred_indices]
 
             def _pred_step(carry, pred_idx):
                 x_t = pred_states[pred_idx]

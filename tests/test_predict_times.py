@@ -267,6 +267,80 @@ def test_sde_simulator_prediction_rollout_continues_from_last_observation_state(
     assert jnp.allclose(states_pred, expected_pred, atol=5e-3)
 
 
+def test_ode_simulator_allows_predict_times_without_obs_times():
+    predict_times = jnp.array([1.0, 1.2, 1.4])
+
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.array([1.0]),
+            covariance_matrix=jnp.array([[1e-8]]),
+        ),
+        state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -x),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]),
+            R=jnp.array([[1e-8]]),
+        ),
+    )
+
+    def model():
+        with ODESimulator():
+            dsx.sample("f", dynamics, predict_times=predict_times)
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(2)):
+        model()
+
+    assert "prediction_times" in tr
+    assert "predicted_states" in tr
+    assert "predicted_observations" in tr
+    x0 = tr["x_0"]["value"].squeeze(-1)
+    states_pred = tr["predicted_states"]["value"].squeeze(-1)
+    expected_pred = x0 * jnp.exp(-(predict_times - predict_times[0]))
+    _assert_all_finite(states_pred, tr["predicted_observations"]["value"])
+    assert jnp.allclose(states_pred, expected_pred, atol=5e-3)
+
+
+def test_sde_simulator_allows_predict_times_without_obs_times():
+    predict_times = jnp.array([1.0, 1.2, 1.4])
+
+    dynamics = DynamicalModel(
+        state_dim=1,
+        observation_dim=1,
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.array([1.0]),
+            covariance_matrix=jnp.array([[1e-8]]),
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -x,
+            diffusion_coefficient=lambda x, u, t: jnp.zeros((1, 1)),
+            bm_dim=1,
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]),
+            R=jnp.array([[1e-8]]),
+        ),
+    )
+
+    def model():
+        with SDESimulator():
+            dsx.sample("f", dynamics, predict_times=predict_times)
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(3)):
+        model()
+
+    assert "prediction_times" in tr
+    assert "predicted_states" in tr
+    assert "predicted_observations" in tr
+    x0 = tr["x_0"]["value"].squeeze(-1)
+    states_pred = tr["predicted_states"]["value"].squeeze(-1)
+    expected_pred = x0 * jnp.exp(-(predict_times - predict_times[0]))
+    _assert_all_finite(states_pred, tr["predicted_observations"]["value"])
+    assert jnp.allclose(states_pred, expected_pred, atol=5e-3)
+
+
 def test_unsupported_cuthbert_predict_times_raises_useful_error():
     obs_times = jnp.arange(0.0, 5.0, 1.0)
     predict_times = jnp.arange(5.0, 8.0, 1.0)
