@@ -108,8 +108,19 @@ def _validate_continuous_state_evolution(
                 "diffusion_coefficient first dimension must match state_dim. "
                 f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
             )
-        state_evolution.bm_dim = int(diffusion_shape[1])
+        inferred_bm_dim = int(diffusion_shape[1])
+        if (
+            state_evolution.bm_dim is not None
+            and int(state_evolution.bm_dim) != inferred_bm_dim
+        ):
+            raise ValueError(
+                "bm_dim does not match inferred diffusion_coefficient output shape. "
+                f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
+            )
+        state_evolution.bm_dim = inferred_bm_dim
     else:
+        if state_evolution.bm_dim is not None:
+            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
         state_evolution.bm_dim = None
 
 
@@ -132,6 +143,11 @@ def _validate_state_evolution_output_shape(
             t0=t0,
         )
     else:
+        if getattr(state_evolution, "bm_dim", None) is not None:
+            raise ValueError(
+                "bm_dim can only be set for continuous-time models with "
+                "diffusion_coefficient."
+            )
         t_now = t0
         t_next = t0 + 1.0
         transition_dist = state_evolution(x=x0, u=u0, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]

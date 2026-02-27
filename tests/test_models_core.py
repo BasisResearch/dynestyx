@@ -207,6 +207,97 @@ def test_continuous_state_evolution_infers_bm_dim() -> None:
     assert state_evolution.bm_dim == 3
 
 
+def test_continuous_state_evolution_bm_dim_override_compatible() -> None:
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=lambda x, u, t: jnp.eye(2, 3),
+        bm_dim=3,
+    )
+
+    def observation_model(x, u, t):
+        del u, t
+        return dist.MultivariateNormal(loc=x, covariance_matrix=jnp.eye(2))
+
+    _ = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(2),
+            covariance_matrix=jnp.eye(2),
+        ),
+        state_evolution=state_evolution,
+        observation_model=observation_model,
+        control_dim=0,
+    )
+
+    assert state_evolution.bm_dim == 3
+
+
+def test_continuous_state_evolution_bm_dim_override_mismatch_raises() -> None:
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=lambda x, u, t: jnp.eye(2, 3),
+        bm_dim=2,
+    )
+
+    def observation_model(x, u, t):
+        del u, t
+        return dist.MultivariateNormal(loc=x, covariance_matrix=jnp.eye(2))
+
+    with pytest.raises(
+        ValueError, match="bm_dim does not match inferred diffusion_coefficient"
+    ):
+        DynamicalModel(
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(2),
+                covariance_matrix=jnp.eye(2),
+            ),
+            state_evolution=state_evolution,
+            observation_model=observation_model,
+            control_dim=0,
+        )
+
+
+def test_continuous_state_evolution_bm_dim_without_diffusion_raises() -> None:
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        bm_dim=2,
+    )
+
+    def observation_model(x, u, t):
+        del u, t
+        return dist.MultivariateNormal(loc=x, covariance_matrix=jnp.eye(2))
+
+    with pytest.raises(
+        ValueError, match="bm_dim cannot be set when diffusion_coefficient"
+    ):
+        DynamicalModel(
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(2),
+                covariance_matrix=jnp.eye(2),
+            ),
+            state_evolution=state_evolution,
+            observation_model=observation_model,
+            control_dim=0,
+        )
+
+
+def test_discrete_state_evolution_bm_dim_override_raises() -> None:
+    def state_evolution(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return dist.MultivariateNormal(loc=x, covariance_matrix=jnp.eye(2))
+
+    state_evolution.bm_dim = 2  # type: ignore[attr-defined]
+
+    with pytest.raises(
+        ValueError, match="bm_dim can only be set for continuous-time models"
+    ):
+        DynamicalModel(
+            initial_condition=_initial_condition_2d(),
+            state_evolution=state_evolution,
+            observation_model=_observation_model_2d,
+            control_dim=0,
+        )
+
+
 def test_dirichlet_initial_condition_auto_infers_state_dim() -> None:
     k = 4
 
