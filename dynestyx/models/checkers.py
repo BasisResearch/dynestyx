@@ -86,6 +86,7 @@ def _validate_continuous_state_evolution(
     u0: Control | None,
     t0: Time,
 ) -> None:
+    """Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim."""
     drift_shape = jax.eval_shape(lambda: state_evolution.total_drift(x0, u0, t0)).shape
     if drift_shape != (state_dim,):
         raise ValueError(
@@ -134,6 +135,7 @@ def _validate_state_evolution_output_shape(
     *,
     continuous_time: bool,
 ) -> None:
+    """Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models)."""
     if continuous_time:
         _validate_continuous_state_evolution(
             state_evolution=state_evolution,
