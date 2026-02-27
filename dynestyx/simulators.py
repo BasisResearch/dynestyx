@@ -280,10 +280,6 @@ class SDESimulator(BaseSimulator):
 
         if obs_times is None:
             raise ValueError("obs_times must be provided")
-        if "forecast_times" in kwargs:
-            raise ValueError(
-                "forecast_times is not supported. Use predict_times=... instead."
-            )
         _validate_predict_times(obs_times, predict_times)
         prediction_times = (
             None
@@ -471,10 +467,6 @@ class DiscreteTimeSimulator(BaseSimulator):
         """
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
-        if "forecast_times" in kwargs:
-            raise ValueError(
-                "forecast_times is not supported. Use predict_times=... instead."
-            )
 
         _validate_predict_times(obs_times, predict_times)
         prediction_times = (
@@ -713,10 +705,6 @@ class ODESimulator(BaseSimulator):
         """
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
-        if "forecast_times" in kwargs:
-            raise ValueError(
-                "forecast_times is not supported. Use predict_times=... instead."
-            )
 
         _validate_predict_times(obs_times, predict_times)
         prediction_times = (

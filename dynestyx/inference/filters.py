@@ -186,11 +186,6 @@ class Filter(BaseLogFactorAdder):
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
 
-        if "forecast_times" in kwargs:
-            raise ValueError(
-                "forecast_times is not supported. Use predict_times=... instead."
-            )
-
         _validate_predict_times(obs_times, predict_times)
 
         config = (
