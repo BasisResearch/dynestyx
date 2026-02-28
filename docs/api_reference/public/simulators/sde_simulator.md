@@ -17,21 +17,28 @@
     from dynestyx import ContinuousTimeStateEvolution, DynamicalModel, SDESimulator
     from numpyro.infer import Predictive
 
+    state_dim = 1
+    observation_dim = 1
+    bm_dim = 1
+
     def model(obs_times=None, obs_values=None):
         theta = numpyro.sample("theta", dist.LogNormal(-0.5, 0.2))
         sigma_x = numpyro.sample("sigma_x", dist.LogNormal(-1.0, 0.2))
         sigma_y = numpyro.sample("sigma_y", dist.LogNormal(-1.5, 0.2))
         dynamics = DynamicalModel(
-            state_dim=1,
-            observation_dim=1,
             control_dim=0,
-            initial_condition=dist.Normal(0.0, 1.0),
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(state_dim),
+                covariance_matrix=jnp.eye(state_dim),
+            ),
             state_evolution=ContinuousTimeStateEvolution(
                 drift=lambda x, u, t: -theta * x,
-                diffusion_coefficient=lambda x, u, t: jnp.array([[sigma_x]]),
-                bm_dim=1,
+                diffusion_coefficient=lambda x, u, t: sigma_x * jnp.eye(state_dim, bm_dim),
             ),
-            observation_model=lambda x, u, t: dist.Normal(x, sigma_y),
+            observation_model=lambda x, u, t: dist.MultivariateNormal(
+                x,
+                sigma_y**2 * jnp.eye(observation_dim),
+            ),
         )
         return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 

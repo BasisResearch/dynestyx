@@ -247,7 +247,7 @@ class SDESimulator(BaseSimulator):
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
-                and `bm_dim`.
+                and inferred `bm_dim` (set during `DynamicalModel` construction).
             obs_times: Times at which to save the latent state and emit observations.
                 Required unless `predict_times` is provided for forecast-only rollout.
             obs_values: Optional observation array. If provided, observation sites are
@@ -269,14 +269,10 @@ class SDESimulator(BaseSimulator):
                 f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
             )
 
-        if (
-            dynamics.state_evolution.diffusion_coefficient is None
-            or dynamics.state_evolution.bm_dim is None
-        ):
+        if dynamics.state_evolution.diffusion_coefficient is None:
             raise ValueError(
-                "SDESimulator requires both diffusion_coefficient and bm_dim to be "
-                f"defined (got coeff={dynamics.state_evolution.diffusion_coefficient}, "
-                f"bm_dim={dynamics.state_evolution.bm_dim}). "
+                "SDESimulator requires diffusion_coefficient to be defined "
+                f"(got coeff={dynamics.state_evolution.diffusion_coefficient}). "
                 "Use ODESimulator for deterministic dynamics."
             )
 
@@ -322,6 +318,12 @@ class SDESimulator(BaseSimulator):
         if len(times) == 1:
             states_all = jnp.expand_dims(initial_state, axis=0)
         else:
+            if dynamics.state_evolution.bm_dim is None:
+                raise ValueError(
+                    "SDESimulator requires state_evolution.bm_dim to be inferred. "
+                    "Construct dynamics via DynamicalModel before simulation."
+                )
+
             bm = dfx.VirtualBrownianTree(
                 t0=times[0],
                 t1=times[-1],
@@ -836,7 +838,7 @@ class Simulator(BaseSimulator):
 
     Chooses a concrete simulator based on the structure of `dynamics.state_evolution`:
 
-    - `ContinuousTimeStateEvolution` with diffusion and `bm_dim` -> `SDESimulator`
+    - `ContinuousTimeStateEvolution` with diffusion (and inferred `bm_dim`) -> `SDESimulator`
     - `ContinuousTimeStateEvolution` without diffusion -> `ODESimulator`
     - `DiscreteTimeStateEvolution` -> `DiscreteTimeSimulator`
 
@@ -896,10 +898,7 @@ class Simulator(BaseSimulator):
     ):
         if self.simulator is None:
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-                if (
-                    dynamics.state_evolution.diffusion_coefficient is None
-                    or dynamics.state_evolution.bm_dim is None
-                ):
+                if dynamics.state_evolution.diffusion_coefficient is None:
                     self.simulator = ODESimulator(*self.args, **self.kwargs)
                 else:
                     self.simulator = SDESimulator(*self.args, **self.kwargs)

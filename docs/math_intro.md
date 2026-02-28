@@ -32,8 +32,6 @@ parameterized by $\varphi$. All our statistical problems arise from a set of obs
 
 Specifying the dynamical model in `dynestyx` follows a simple, unified interface. To fully specify a dynamical model, we require the following:
 
-- the state dimension, $d_x$;
-- the observation dimension, $d_y$;
 - the initial conditions, $p(x_0)$;
 - the state evolution, as a `ContinuousTimeStateEvolution` or a `DiscreteTimeStateEvolution`; and
 - an observation model, $p_\varphi(y_t \,|\, x_t)$.
@@ -43,13 +41,10 @@ The resulting constructor is simple, yet quite general:
 from dynestyx.models import DynamicalModel, ContinuousTimeStateEvolution
 
 dynamics = DynamicalModel(
-    state_dim=...,
-    observation_dim=...,
     initial_condition=dist.MultivariateNormal(...),
     state_evolution=ContinuousTimeStateEvolution(
         drift=lambda x, u, t: ...,
         diffusion_coefficient=lambda x, u, t: ...,
-        bm_dim=...
     ),
     observation_model=lambda x, u, t: ...,
 )

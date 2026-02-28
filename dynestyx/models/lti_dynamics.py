@@ -65,7 +65,6 @@ def LTI_discrete(
         DynamicalModel: A discrete-time LTI state-space model.
     """
     state_dim = A.shape[0]
-    observation_dim = H.shape[0]
     control_dim = B.shape[1] if B is not None else 0
 
     if initial_mean is None:
@@ -93,8 +92,6 @@ def LTI_discrete(
         state_evolution=state_evolution,
         observation_model=observation_model,
         control_model=None,
-        state_dim=state_dim,
-        observation_dim=observation_dim,
         control_dim=control_dim,
     )
 
@@ -155,7 +152,6 @@ def LTI_continuous(
         DynamicalModel: A continuous-time LTI state-space model.
     """
     state_dim = A.shape[0]
-    observation_dim = H.shape[0]
     control_dim = B.shape[1] if B is not None else 0
 
     if initial_mean is None:
@@ -180,7 +176,6 @@ def LTI_continuous(
     state_evolution = ContinuousTimeStateEvolution(
         drift=drift,
         diffusion_coefficient=lambda x, u, t: L,
-        bm_dim=L.shape[1],
     )
 
     observation_model = LinearGaussianObservation(H=H, R=R, D=D, bias=d)
@@ -190,7 +185,5 @@ def LTI_continuous(
         state_evolution=state_evolution,
         observation_model=observation_model,
         control_model=None,
-        state_dim=state_dim,
-        observation_dim=observation_dim,
         control_dim=control_dim,
     )

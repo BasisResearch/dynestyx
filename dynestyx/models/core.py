@@ -1,14 +1,20 @@
 """Core interfaces and base classes for dynamical models."""
 
 import dataclasses
-import warnings
 from collections.abc import Callable
 from typing import Any, Protocol
 
 import equinox as eqx
 import jax
+import jax.numpy as jnp
 from numpyro._typing import DistributionT
 
+from dynestyx.models.checkers import (
+    _infer_vector_dim_from_distribution,
+    _is_categorical_distribution,
+    _make_probe_state,
+    _validate_state_evolution_output_shape,
+)
 from dynestyx.types import Control, State, Time, dState
 
 
@@ -35,6 +41,8 @@ class DynamicalModel(eqx.Module):
     Attributes:
         state_dim (int): Dimension of the latent state vector $x_t \\in \\mathbb{R}^{d_x}$.
         observation_dim (int): Dimension of the observation vector $y_t \\in \\mathbb{R}^{d_y}$.
+        categorical_state (bool): Whether latent states are categorical class labels.
+            Gets inferred automatically from the type of `initial_condition`.
         control_dim (int): Dimension of the control/input vector $u_t \\in \\mathbb{R}^{d_u}$. Defaults to 0 if not provided (assumes no controls).
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
             In the codebase this is annotated as `DistributionT` (a typing alias); in practice you should pass
@@ -52,22 +60,23 @@ class DynamicalModel(eqx.Module):
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
     
-    Warning:
-        - Soon, we will implement auto-inference for continuous_time, state_dim, and observation_dim (and remove them as arguments).
+    Note:
+        - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
         - Logic for control_model is not implemented yet.
     
     """
 
-    state_dim: int
-    observation_dim: int
-    control_dim: int
     initial_condition: DistributionT
     state_evolution: (
         Callable[[State, Control, Time], State]
         | Callable[[State, Control, Time, Time], State]
     )
     observation_model: Callable[[State, Control, Time], DistributionT]
+    control_dim: int
     control_model: Any
+    state_dim: int
+    observation_dim: int
+    categorical_state: bool
     continuous_time: bool
     t0: float
 
@@ -76,46 +85,83 @@ class DynamicalModel(eqx.Module):
         initial_condition,
         state_evolution,
         observation_model,
+        control_dim: int | None = None,
         control_model=None,
+        *,
         state_dim: int | None = None,
         observation_dim: int | None = None,
-        control_dim: int | None = None,
-        continuous_time: bool = False,
+        categorical_state: bool | None = None,
+        continuous_time: bool | None = None,
         t0: float = 0.0,
     ):
-        if isinstance(state_evolution, ContinuousTimeStateEvolution):
-            self.continuous_time = True
-        else:
-            self.continuous_time = False
-
+        inferred_continuous_time = isinstance(
+            state_evolution, ContinuousTimeStateEvolution
+        )
+        if (
+            continuous_time is not None
+            and bool(continuous_time) != inferred_continuous_time
+        ):
+            raise ValueError(
+                "continuous_time does not match inferred state_evolution type."
+            )
+        self.continuous_time = inferred_continuous_time
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
         self.t0 = float(t0)
 
-        if state_dim is None:
+        inferred_state_dim = _infer_vector_dim_from_distribution(
+            initial_condition, "initial_condition"
+        )
+        if state_dim is not None and int(state_dim) != int(inferred_state_dim):
             raise ValueError(
-                "state_dim is required; auto-infer is not implemented yet."
+                "state_dim does not match inferred initial_condition shape. "
+                f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
             )
-        if observation_dim is None:
+        inferred_categorical_state = _is_categorical_distribution(initial_condition)
+        if (
+            categorical_state is not None
+            and bool(categorical_state) != inferred_categorical_state
+        ):
             raise ValueError(
-                "observation_dim is required; auto-infer is not implemented yet."
+                "categorical_state does not match inferred initial_condition type. "
+                f"Got categorical_state={categorical_state}, "
+                f"inferred={inferred_categorical_state}."
             )
         if control_dim is None:
             control_dim = 0
-            warnings.warn(
-                "control_dim is not provided; auto-infer is not implemented yet. Setting to 0."
+
+        x0 = _make_probe_state(
+            initial_condition=initial_condition, state_dim=inferred_state_dim
+        )
+        u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+
+        _validate_state_evolution_output_shape(
+            state_evolution=state_evolution,
+            state_dim=inferred_state_dim,
+            x0=x0,
+            u0=u0,
+            t0=jnp.array(t0),
+            continuous_time=self.continuous_time,
+        )
+
+        obs_dist = observation_model(x0, u0, t0)
+        inferred_observation_dim = _infer_vector_dim_from_distribution(
+            obs_dist, "observation_model(x, u, t)"
+        )
+        if observation_dim is not None and int(observation_dim) != int(
+            inferred_observation_dim
+        ):
+            raise ValueError(
+                "observation_dim does not match inferred observation_model output shape. "
+                f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
             )
 
-        self.state_dim: int = state_dim
-        self.observation_dim: int = observation_dim
-        self.control_dim: int = control_dim
-
-        if isinstance(state_evolution, ContinuousTimeStateEvolution):
-            if state_evolution.diffusion_coefficient is not None:
-                if state_evolution.bm_dim is None:
-                    self.state_evolution.bm_dim = state_dim  # type: ignore[union-attr]
+        self.state_dim = int(inferred_state_dim)
+        self.observation_dim = int(inferred_observation_dim)
+        self.control_dim = int(control_dim)
+        self.categorical_state = bool(inferred_categorical_state)
 
 
 class Drift(Protocol):
@@ -226,17 +272,15 @@ class ContinuousTimeStateEvolution:
             multiplies the Brownian increment $dW_t$.
             Defaults to zero if None (i.e., deterministic ODE).
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
-            Inferred from `state_dim` when `diffusion_coefficient` is set and `bm_dim` is None.
-
-    Warning:
-        - Soon, we will deprecate `bm_dim` and infer it automatically from the shape of the diffusion coefficient.
+            Inferred automatically from the output shape of `diffusion_coefficient`;
+            if passed by the user, it must match diffusion_coefficient(...).shape[1].
     """
 
     drift: Drift | None = None
     potential: Potential | None = None
     use_negative_gradient: bool = False
     diffusion_coefficient: Drift | None = None
-    bm_dim: int | None = None
+    bm_dim: int | None = dataclasses.field(default=None, repr=False)
 
     def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
         base = self.drift(x, u, t) if self.drift is not None else None

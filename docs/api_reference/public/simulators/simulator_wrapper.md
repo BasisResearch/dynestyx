@@ -17,18 +17,25 @@
     from dynestyx import DynamicalModel, GaussianStateEvolution, Simulator
     from numpyro.infer import Predictive
 
+    state_dim = 1
+    observation_dim = 1
+
     def model(phi=None, obs_times=None, obs_values=None):
         phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
         dynamics = DynamicalModel(
-            state_dim=1,
-            observation_dim=1,
             control_dim=0,
-            initial_condition=dist.Normal(0.0, 1.0),
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(state_dim),
+                covariance_matrix=jnp.eye(state_dim),
+            ),
             state_evolution=GaussianStateEvolution(
                 F=lambda x, u, t_now, t_next: phi * x + 0.1 * jnp.sin(x),
-                cov=jnp.array([[0.2**2]]),
+                cov=0.2**2 * jnp.eye(state_dim),
             ),
-            observation_model=lambda x, u, t: dist.Normal(x, 0.3),
+            observation_model=lambda x, u, t: dist.MultivariateNormal(
+                x,
+                0.3**2 * jnp.eye(observation_dim),
+            ),
         )
         return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
