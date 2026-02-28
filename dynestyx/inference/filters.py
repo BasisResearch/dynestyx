@@ -35,7 +35,7 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
-from dynestyx.utils import _validate_predict_times
+from dynestyx.utils import _validate_predict_times, _validate_t0_alignment
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -186,6 +186,9 @@ class Filter(BaseLogFactorAdder):
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
 
+        _validate_t0_alignment(
+            dynamics, obs_times, predict_times, require_obs_t0_match=True
+        )
         _validate_predict_times(obs_times, predict_times)
 
         config = (

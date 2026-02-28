@@ -176,6 +176,79 @@ def _validate_predict_times(obs_times: Array, predict_times: Array | None) -> No
         )
 
 
+def _validate_t0_alignment(
+    dynamics: DynamicalModel,
+    obs_times: Array | None,
+    predict_times: Array | None = None,
+    *,
+    require_obs_t0_match: bool = True,
+) -> None:
+    """Validate model `t0` semantics against provided time grids."""
+    t0 = float(dynamics.t0)
+    if obs_times is not None:
+        obs_times_arr = jnp.asarray(obs_times).reshape(-1)
+        if isinstance(obs_times_arr, jax.core.Tracer):
+            return
+        if len(obs_times_arr) > 0:
+            first_obs = obs_times_arr[0]
+            try:
+                starts_before_t0 = bool(first_obs < t0)
+                mismatched_t0 = bool(first_obs != t0)
+            except jax.errors.TracerBoolConversionError:
+                return
+            if starts_before_t0:
+                raise ValueError(
+                    "obs_times[0] must be greater than or equal to DynamicalModel.t0. "
+                    f"Got t0={t0} and obs_times[0]={first_obs}."
+                )
+            if require_obs_t0_match and mismatched_t0:
+                raise ValueError(
+                    "DynamicalModel.t0 must equal obs_times[0] when obs_times is provided. "
+                    f"Got t0={t0} and obs_times[0]={first_obs}."
+                )
+        return
+
+    if predict_times is not None and len(predict_times) > 0:
+        predict_times_arr = jnp.asarray(predict_times).reshape(-1)
+        if isinstance(predict_times_arr, jax.core.Tracer):
+            return
+        try:
+            violates = bool(jnp.any(predict_times_arr < t0))
+        except jax.errors.TracerBoolConversionError:
+            return
+        if violates:
+            raise ValueError(
+                "predict_times must be greater than or equal to DynamicalModel.t0 when "
+                "obs_times is not provided. "
+                f"Got t0={t0} and predict_times containing values below t0."
+            )
+
+
+def _should_prepend_t0(times: Array, t0: float, *, force_prepend: bool = False) -> bool:
+    """Return True when an explicit `t0` anchor should be inserted.
+
+    Args:
+        times: Requested output times.
+        t0: Model initial time.
+        force_prepend: If True, prepend `t0` unconditionally. This is used by
+            predict-only simulator calls (`obs_times is None`) to ensure
+            integration starts at the model initial time under both eager and
+            traced execution.
+    """
+    if force_prepend:
+        return True
+
+    times_arr = jnp.asarray(times).reshape(-1)
+    if isinstance(times_arr, jax.core.Tracer):
+        return False
+    if len(times_arr) == 0:
+        return False
+    try:
+        return bool(times_arr[0] > t0)
+    except jax.errors.TracerBoolConversionError:
+        return False
+
+
 def _build_control_path(
     ctrl_times: Array, ctrl_values: Array, obs_times: Array
 ) -> dfx.LinearInterpolation:

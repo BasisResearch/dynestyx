@@ -23,8 +23,10 @@ from dynestyx.utils import (
     _build_control_path,
     _combine_obs_predict_times,
     _get_val_or_None,
+    _should_prepend_t0,
     _validate_control_dim,
     _validate_controls,
+    _validate_t0_alignment,
 )
 
 
@@ -285,6 +287,16 @@ class SDESimulator(BaseSimulator):
         n_obs = combined_times.n_obs
         obs_indices = combined_times.obs_indices
         pred_indices = combined_times.pred_indices
+        _validate_t0_alignment(
+            dynamics, obs_times, prediction_times, require_obs_t0_match=False
+        )
+        if _should_prepend_t0(times, dynamics.t0, force_prepend=(obs_times is None)):
+            times = jnp.concatenate(
+                [jnp.asarray([dynamics.t0], dtype=times.dtype), times], axis=0
+            )
+            obs_indices = obs_indices + 1
+            if pred_indices is not None:
+                pred_indices = pred_indices + 1
 
         _validate_controls(times, ctrl_times, ctrl_values)
         _validate_control_dim(dynamics, ctrl_values)
@@ -452,6 +464,19 @@ class DiscreteTimeSimulator(BaseSimulator):
         n_obs = combined_times.n_obs
         obs_indices = combined_times.obs_indices
         pred_indices = combined_times.pred_indices
+        _validate_t0_alignment(
+            dynamics, obs_times, prediction_times, require_obs_t0_match=False
+        )
+        prepended_t0 = _should_prepend_t0(
+            all_times, dynamics.t0, force_prepend=(obs_times is None)
+        )
+        if prepended_t0:
+            all_times = jnp.concatenate(
+                [jnp.asarray([dynamics.t0], dtype=all_times.dtype), all_times], axis=0
+            )
+            obs_indices = obs_indices + 1
+            if pred_indices is not None:
+                pred_indices = pred_indices + 1
         _validate_controls(all_times, ctrl_times, ctrl_values)
         if obs_times is None and obs_values is not None:
             raise ValueError(
@@ -461,8 +486,10 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # For fully observed state trajectories, condition latent states directly
         # on obs_values (works with and without forecasting windows).
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
-            obs_values is not None
+        if (
+            isinstance(dynamics.observation_model, DiracIdentityObservation)
+            and (obs_values is not None)
+            and not prepended_t0
         ):
             if obs_times is None:
                 raise ValueError(
@@ -561,18 +588,19 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         if obs_times is not None:
 
-            def _obs_step(carry, t_idx):
+            def _obs_step(carry, obs_local_idx):
+                t_idx = obs_indices[obs_local_idx]
                 x_t = states_all[t_idx]
-                t = obs_times[t_idx]
+                t = obs_times[obs_local_idx]
                 u_t = _get_val_or_None(ctrl_values, t_idx)
                 y_t = numpyro.sample(
-                    f"y_{t_idx}",
+                    f"y_{obs_local_idx}",
                     dynamics.observation_model(x=x_t, u=u_t, t=t),
-                    obs=_get_val_or_None(obs_values, t_idx),
+                    obs=_get_val_or_None(obs_values, obs_local_idx),
                 )
                 return carry, y_t
 
-            _, observations = nscan(_obs_step, None, obs_indices)
+            _, observations = nscan(_obs_step, None, jnp.arange(n_obs))
             output.update(
                 {
                     "times": obs_times,
@@ -587,7 +615,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             def _pred_step(carry, pred_idx):
                 x_t = pred_states[pred_idx]
                 t = prediction_times[pred_idx]
-                u_t = _get_val_or_None(ctrl_values, n_obs + pred_idx)
+                u_t = _get_val_or_None(ctrl_values, pred_indices[pred_idx])
                 y_t = numpyro.sample(
                     f"y_pred_{pred_idx}",
                     dynamics.observation_model(x=x_t, u=u_t, t=t),
@@ -700,6 +728,18 @@ class ODESimulator(BaseSimulator):
         n_obs = combined_times.n_obs
         obs_indices = combined_times.obs_indices
         pred_indices = combined_times.pred_indices
+        _validate_t0_alignment(
+            dynamics, obs_times, prediction_times, require_obs_t0_match=False
+        )
+        if _should_prepend_t0(
+            all_times, dynamics.t0, force_prepend=(obs_times is None)
+        ):
+            all_times = jnp.concatenate(
+                [jnp.asarray([dynamics.t0], dtype=all_times.dtype), all_times], axis=0
+            )
+            obs_indices = obs_indices + 1
+            if pred_indices is not None:
+                pred_indices = pred_indices + 1
         _validate_controls(all_times, ctrl_times, ctrl_values)
 
         # Sample initial state

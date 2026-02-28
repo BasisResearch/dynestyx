@@ -183,6 +183,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 state_dim=dynamics.state_dim,
                 observation_dim=dynamics.observation_dim,
                 control_dim=dynamics.control_dim,
+                t0=dynamics.t0,
             )
         return fwd(
             name,

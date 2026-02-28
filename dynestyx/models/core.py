@@ -69,6 +69,7 @@ class DynamicalModel(eqx.Module):
     observation_model: Callable[[State, Control, Time], DistributionT]
     control_model: Any
     continuous_time: bool
+    t0: float
 
     def __init__(
         self,
@@ -80,6 +81,7 @@ class DynamicalModel(eqx.Module):
         observation_dim: int | None = None,
         control_dim: int | None = None,
         continuous_time: bool = False,
+        t0: float = 0.0,
     ):
         if isinstance(state_evolution, ContinuousTimeStateEvolution):
             self.continuous_time = True
@@ -90,6 +92,7 @@ class DynamicalModel(eqx.Module):
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
+        self.t0 = float(t0)
 
         if state_dim is None:
             raise ValueError(
