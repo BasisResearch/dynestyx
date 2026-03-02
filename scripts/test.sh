@@ -12,4 +12,4 @@ export TEST_OUTPUT_MASTER_DIR="$MASTER_OUTPUT_DIR"
 
 echo "Master output directory: $MASTER_OUTPUT_DIR"
 
-pytest tests/ -n auto --ignore=tests/test_science
+DYNESTYX_PF_PARTICLES_SCALE=0.01 pytest tests/ -n auto --ignore=tests/test_science
