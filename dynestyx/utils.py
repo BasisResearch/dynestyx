@@ -1,6 +1,8 @@
 import math
+from dataclasses import dataclass
 
 import diffrax as dfx
+import jax
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
@@ -11,6 +13,60 @@ from dynestyx.models import DynamicalModel
 type SSMType = CDNLGSSM | CDNLSSM
 
 _CONTROL_EXTEND_EPSILON = 1e-5
+
+
+@dataclass(frozen=True)
+class _CombinedTimes:
+    obs_times: Array | None
+    prediction_times: Array | None
+    all_times: Array
+    n_obs: int
+    obs_indices: Array
+    pred_indices: Array | None
+
+
+def _combine_obs_predict_times(
+    obs_times: Array | None, predict_times: Array | None
+) -> _CombinedTimes:
+    """Normalize and combine observation/prediction times for simulators."""
+    obs_times_arr = None if obs_times is None else jnp.asarray(obs_times)
+    prediction_times = (
+        None
+        if predict_times is None or len(predict_times) == 0
+        else jnp.asarray(predict_times)
+    )
+    if obs_times_arr is None and prediction_times is None:
+        raise ValueError("At least one of obs_times or predict_times must be provided")
+    if obs_times_arr is not None:
+        _validate_predict_times(obs_times_arr, predict_times)
+
+    if prediction_times is None:
+        # At this point obs_times_arr is guaranteed non-None by the check above.
+        if obs_times_arr is None:
+            raise ValueError(
+                "At least one of obs_times or predict_times must be provided"
+            )
+        all_times = obs_times_arr
+    elif obs_times_arr is None:
+        all_times = prediction_times
+    else:
+        all_times = jnp.concatenate([obs_times_arr, prediction_times], axis=0)
+    n_obs = 0 if obs_times_arr is None else int(len(obs_times_arr))
+    obs_indices = jnp.arange(n_obs)
+    pred_indices = (
+        jnp.arange(int(len(prediction_times))) + n_obs
+        if prediction_times is not None
+        else None
+    )
+
+    return _CombinedTimes(
+        obs_times=obs_times_arr,
+        prediction_times=prediction_times,
+        all_times=all_times,
+        n_obs=n_obs,
+        obs_indices=obs_indices,
+        pred_indices=pred_indices,
+    )
 
 
 def _should_record_field(
@@ -86,6 +142,111 @@ def _validate_controls(
             f"Control times length ({len(ctrl_times)}) must match "
             f"observation times length ({len(obs_times)})"
         )
+
+
+def _validate_predict_times(obs_times: Array, predict_times: Array | None) -> None:
+    """Validate forecasting times are strictly after all observation times."""
+    if predict_times is None:
+        return
+
+    if len(predict_times) == 0:
+        return
+
+    obs_times_arr = jnp.asarray(obs_times).reshape(-1)
+    predict_times_arr = jnp.asarray(predict_times).reshape(-1)
+
+    # Under JAX tracing (e.g., Predictive with num_samples > 1), Python boolean
+    # checks on traced arrays are not allowed. We keep strict validation for
+    # eager execution paths and skip this check when values are traced.
+    if isinstance(obs_times_arr, jax.core.Tracer) or isinstance(
+        predict_times_arr, jax.core.Tracer
+    ):
+        return
+
+    max_obs_time = jnp.max(obs_times_arr)
+    try:
+        violates = bool(jnp.any(predict_times_arr <= max_obs_time))
+    except jax.errors.TracerBoolConversionError:
+        return
+    if violates:
+        raise ValueError(
+            "predict_times must be strictly greater than all obs_times. "
+            f"Got max(obs_times)={max_obs_time} and predict_times containing "
+            "values at or before that boundary."
+        )
+
+
+def _validate_t0_alignment(
+    dynamics: DynamicalModel,
+    obs_times: Array | None,
+    predict_times: Array | None = None,
+    *,
+    require_obs_t0_match: bool = True,
+) -> None:
+    """Validate model `t0` semantics against provided time grids."""
+    t0 = float(dynamics.t0)
+    if obs_times is not None:
+        obs_times_arr = jnp.asarray(obs_times).reshape(-1)
+        if isinstance(obs_times_arr, jax.core.Tracer):
+            return
+        if len(obs_times_arr) > 0:
+            first_obs = obs_times_arr[0]
+            try:
+                starts_before_t0 = bool(first_obs < t0)
+                mismatched_t0 = bool(first_obs != t0)
+            except jax.errors.TracerBoolConversionError:
+                return
+            if starts_before_t0:
+                raise ValueError(
+                    "obs_times[0] must be greater than or equal to DynamicalModel.t0. "
+                    f"Got t0={t0} and obs_times[0]={first_obs}."
+                )
+            if require_obs_t0_match and mismatched_t0:
+                raise ValueError(
+                    "DynamicalModel.t0 must equal obs_times[0] when obs_times is provided. "
+                    f"Got t0={t0} and obs_times[0]={first_obs}."
+                )
+        return
+
+    if predict_times is not None and len(predict_times) > 0:
+        predict_times_arr = jnp.asarray(predict_times).reshape(-1)
+        if isinstance(predict_times_arr, jax.core.Tracer):
+            return
+        try:
+            violates = bool(jnp.any(predict_times_arr < t0))
+        except jax.errors.TracerBoolConversionError:
+            return
+        if violates:
+            raise ValueError(
+                "predict_times must be greater than or equal to DynamicalModel.t0 when "
+                "obs_times is not provided. "
+                f"Got t0={t0} and predict_times containing values below t0."
+            )
+
+
+def _should_prepend_t0(times: Array, t0: float, *, force_prepend: bool = False) -> bool:
+    """Return True when an explicit `t0` anchor should be inserted.
+
+    Args:
+        times: Requested output times.
+        t0: Model initial time.
+        force_prepend: If True, prepend `t0` unconditionally. This is used by
+            predict-only simulator calls (`obs_times is None`) to ensure
+            integration starts at the model initial time under both eager and
+            traced execution.
+    """
+    if force_prepend:
+        return True
+
+    times_arr = jnp.asarray(times).reshape(-1)
+    if isinstance(times_arr, jax.core.Tracer):
+        return False
+    if len(times_arr) == 0:
+        return False
+    try:
+        return bool(times_arr[0] > t0)
+    except jax.errors.TracerBoolConversionError:
+        return False
 
 
 def _build_control_path(

@@ -9,6 +9,9 @@ from cd_dynamax import (
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
 )
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.cdlgssm_utils import (
+    GSSMForecast,
+)
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
@@ -29,6 +32,7 @@ from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,
     _validate_controls,
+    _validate_predict_times,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -142,14 +146,33 @@ def _add_filter_sites(
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
 
 
+def _to_filter_and_forecast_kwargs(
+    filter_kwargs: dict, predict_times_arr: jax.Array
+) -> dict:
+    """Translate cd_dynamax `filter(...)` kwargs into `filter_and_forecast(...)` kwargs."""
+    shared = dict(filter_kwargs)
+    emissions_filter = shared.pop("emissions")
+    t_emissions_filter = shared.pop("t_emissions")
+    inputs_filter = shared.pop("inputs")
+    return {
+        "emissions_filter": emissions_filter,
+        "t_emissions_filter": t_emissions_filter,
+        "t_emissions_forecast": predict_times_arr,
+        "inputs_filter": inputs_filter,
+        "inputs_forecast": None,
+        **shared,
+    }
+
+
 def _run_linear_kf(
     name: str,
     dynamics: DynamicalModel,
     obs_times,
     obs_values,
     ctrl_values,
+    predict_times,
     filter_config: ContinuousTimeKFConfig,
-) -> PosteriorGSSMFiltered:
+) -> tuple[PosteriorGSSMFiltered, GSSMForecast | None]:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
     cd_model = ContDiscreteLinearGaussianSSM(
@@ -157,6 +180,18 @@ def _run_linear_kf(
         emission_dim=dynamics.observation_dim,
         input_dim=dynamics.control_dim,
     )
+    if predict_times is not None and len(predict_times) > 0:
+        filtered, forecasted = cd_model.filter_and_forecast(
+            params=params,
+            emissions_filter=obs_values,
+            t_emissions_filter=obs_times,
+            t_emissions_forecast=predict_times,
+            inputs_filter=ctrl_values,
+            inputs_forecast=None,
+            warn=filter_config.warn,
+        )
+        return filtered, forecasted
+
     filtered = cd_model.filter(
         params=params,
         emissions=obs_values,
@@ -164,7 +199,7 @@ def _run_linear_kf(
         inputs=ctrl_values,
         warn=filter_config.warn,
     )
-    return filtered
+    return filtered, None
 
 
 def run_continuous_filter(
@@ -175,6 +210,7 @@ def run_continuous_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -195,6 +231,16 @@ def run_continuous_filter(
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
         obs_times_arr = obs_times_arr[:, None]
+    predict_times_arr = None
+    if predict_times is not None:
+        predict_times_arr = jnp.asarray(predict_times)
+        if predict_times_arr.ndim == 1:
+            predict_times_arr = predict_times_arr[:, None]
+
+    _validate_predict_times(
+        jnp.ravel(obs_times_arr),
+        None if predict_times_arr is None else jnp.ravel(predict_times_arr),
+    )
     _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 
@@ -206,8 +252,14 @@ def run_continuous_filter(
     )
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
-        filtered = _run_linear_kf(
-            name, dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
+        filtered, forecasted = _run_linear_kf(
+            name,
+            dynamics,
+            obs_times_arr,
+            obs_values,
+            ctrl_vals,
+            predict_times_arr,
+            filter_config,
         )
     else:
         if isinstance(
@@ -233,10 +285,37 @@ def run_continuous_filter(
             )
 
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-        filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
-        )
-
-        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
+        if predict_times_arr is not None and len(predict_times_arr) > 0:
+            if not hasattr(cd_dynamax_model, "filter_and_forecast"):
+                raise ValueError(
+                    "predict_times is not supported for this CD-Dynamax model "
+                    f"({type(cd_dynamax_model).__name__}). "
+                    "Only CDNLGSSM/CDLGSSM backends currently support forecasting."
+                )
+            filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
+                filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+            )
+            forecast_kwargs = _to_filter_and_forecast_kwargs(
+                filter_kwargs, predict_times_arr
+            )
+            filtered, forecasted = cd_dynamax_model.filter_and_forecast(  # type: ignore[attr-defined]
+                **forecast_kwargs
+            )
+        else:
+            filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
+                filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+            )
+            filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
+            forecasted = None
 
     _add_filter_sites(name, filter_config, filtered)
+    if forecasted is not None:
+        if forecasted.forecasted_state_means is not None:
+            numpyro.deterministic(
+                f"{name}_forecasted_state_means", forecasted.forecasted_state_means
+            )
+        if forecasted.forecasted_state_covariances is not None:
+            numpyro.deterministic(
+                f"{name}_forecasted_state_covs",
+                forecasted.forecasted_state_covariances,
+            )

@@ -11,6 +11,7 @@ from cd_dynamax.dynamax.linear_gaussian_ssm.builders import build_params
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     PosteriorGSSMFiltered,
     lgssm_filter,
+    lgssm_joint_sample,
 )
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
     extended_kalman_filter,
@@ -36,6 +37,7 @@ from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,
     _validate_controls,
+    _validate_predict_times,
 )
 
 
@@ -83,6 +85,7 @@ def _filter_discrete_time_dynamax_kf(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -107,6 +110,57 @@ def _filter_discrete_time_dynamax_kf(
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
     _add_kf_sites(name, posterior, record_kwargs)
 
+    if predict_times is not None and len(predict_times) > 0:
+        _validate_predict_times(times, predict_times)
+        predict_times_arr = jnp.asarray(predict_times).reshape(-1)
+        n_predict = int(predict_times_arr.shape[0])
+
+        filtered_mean_last = posterior.filtered_means[-1]
+        filtered_cov_last = posterior.filtered_covariances[-1]
+        forecast_params = params._replace(
+            initial=params.initial._replace(
+                mean=filtered_mean_last,
+                cov=filtered_cov_last,
+            )
+        )
+
+        if ctrl_values is not None:
+            if len(ctrl_values) == T1 + n_predict:
+                inputs_forecast = ctrl_values[-n_predict:]
+            elif len(ctrl_values) == T1:
+                inputs_forecast = jnp.zeros(
+                    (n_predict, control_dim), dtype=inputs.dtype
+                )
+            else:
+                raise ValueError(
+                    "When predict_times is provided with controls for discrete cd_dynamax "
+                    "KF, ctrl_values must have length len(obs_times) or "
+                    "len(obs_times) + len(predict_times)."
+                )
+        else:
+            inputs_forecast = jnp.zeros((n_predict, control_dim), dtype=inputs.dtype)
+
+        forecast_key = numpyro.prng_key()
+        if forecast_key is None:
+            raise ValueError(
+                "Forecasting with predict_times requires a PRNG key. "
+                "Run inside a NumPyro seeded context (e.g., numpyro.handlers.seed)."
+            )
+
+        states_forecast, _ = lgssm_joint_sample(
+            forecast_params,
+            key=forecast_key,
+            num_timesteps=n_predict,
+            inputs=inputs_forecast,
+        )
+        pred_mean = states_forecast
+        pred_cov = jnp.broadcast_to(
+            filtered_cov_last,
+            (n_predict, filtered_cov_last.shape[0], filtered_cov_last.shape[1]),
+        )
+        numpyro.deterministic(f"{name}_forecasted_state_means", pred_mean)
+        numpyro.deterministic(f"{name}_forecasted_state_covs", pred_cov)
+
 
 def _run_nlgssm_filter(
     name: str,
@@ -116,6 +170,7 @@ def _run_nlgssm_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -130,6 +185,12 @@ def _run_nlgssm_filter(
     inputs = ctrl_values if ctrl_values is not None else jnp.zeros((T1, control_dim))
 
     params_nl = gaussian_to_nlgssm_params(dynamics)
+    if predict_times is not None and len(predict_times) > 0:
+        raise ValueError(
+            "predict_times is currently unsupported for discrete cd_dynamax EKF/UKF. "
+            "Use KFConfig (linear-Gaussian) for forecasting in discrete time."
+        )
+
     posterior = run_filter(params_nl, emissions, inputs)
 
     marginal_loglik = posterior.marginal_loglik
@@ -146,6 +207,7 @@ def _filter_discrete_time_dynamax_ekf(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -164,6 +226,7 @@ def _filter_discrete_time_dynamax_ekf(
         run_filter,
         obs_times=obs_times,
         obs_values=obs_values,
+        predict_times=predict_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         **kwargs,
@@ -178,6 +241,7 @@ def _filter_discrete_time_dynamax_ukf(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -198,6 +262,7 @@ def _filter_discrete_time_dynamax_ukf(
         run_filter,
         obs_times=obs_times,
         obs_values=obs_values,
+        predict_times=predict_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         **kwargs,
@@ -241,6 +306,7 @@ def run_discrete_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    predict_times: jax.Array | None = None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -260,6 +326,7 @@ def run_discrete_filter(
     filter_kwargs = dict(
         obs_times=obs_times,
         obs_values=obs_values,
+        predict_times=predict_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         **kwargs,

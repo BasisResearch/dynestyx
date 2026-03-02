@@ -21,9 +21,12 @@ from dynestyx.models import (
 from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _build_control_path,
+    _combine_obs_predict_times,
     _get_val_or_None,
+    _should_prepend_t0,
     _validate_control_dim,
     _validate_controls,
+    _validate_t0_alignment,
 )
 
 
@@ -38,7 +41,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     sites (conventionally `"times"`, `"states"`, and `"observations"`).
 
     Notes:
-        - If `obs_times` is None, the handler is a no-op.
+        - If both `obs_times` and `predict_times` are None, the handler is a no-op.
         - If `obs_values` is provided, observation sample sites are conditioned via
           `obs=...`.
     """
@@ -51,6 +54,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -60,6 +64,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -69,6 +74,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -81,12 +87,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
     ):
-        # Only simulate if we have observation times
-        if obs_times is None:
+        # No-op only when neither observation nor prediction times are provided.
+        if obs_times is None and predict_times is None:
             return
 
         # Run the simulator
@@ -94,6 +101,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -109,6 +117,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -169,7 +178,7 @@ class SDESimulator(BaseSimulator):
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         dt0: float = 1e-4,
         tol_vbt: float | None = None,
-        max_steps: int | None = None,
+        max_steps: int = 1_000_000,
     ):
         """Configure SDE integration settings.
 
@@ -217,6 +226,7 @@ class SDESimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -239,7 +249,7 @@ class SDESimulator(BaseSimulator):
                 `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
                 and inferred `bm_dim` (set during `DynamicalModel` construction).
             obs_times: Times at which to save the latent state and emit observations.
-                Required.
+                Required unless `predict_times` is provided for forecast-only rollout.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
@@ -266,9 +276,23 @@ class SDESimulator(BaseSimulator):
                 "Use ODESimulator for deterministic dynamics."
             )
 
-        if obs_times is None:
-            raise ValueError("obs_times must be provided")
-        times = obs_times
+        combined_times = _combine_obs_predict_times(obs_times, predict_times)
+        obs_times = combined_times.obs_times
+        prediction_times = combined_times.prediction_times
+        times = combined_times.all_times
+        n_obs = combined_times.n_obs
+        obs_indices = combined_times.obs_indices
+        pred_indices = combined_times.pred_indices
+        _validate_t0_alignment(
+            dynamics, obs_times, prediction_times, require_obs_t0_match=False
+        )
+        if _should_prepend_t0(times, dynamics.t0, force_prepend=(obs_times is None)):
+            times = jnp.concatenate(
+                [jnp.asarray([dynamics.t0], dtype=times.dtype), times], axis=0
+            )
+            obs_indices = obs_indices + 1
+            if pred_indices is not None:
+                pred_indices = pred_indices + 1
 
         _validate_controls(times, ctrl_times, ctrl_values)
         _validate_control_dim(dynamics, ctrl_values)
@@ -291,50 +315,86 @@ class SDESimulator(BaseSimulator):
             u_t = args(t)
             return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
-        if dynamics.state_evolution.bm_dim is None:
-            raise ValueError(
-                "SDESimulator requires state_evolution.bm_dim to be inferred. "
-                "Construct dynamics via DynamicalModel before simulation."
+        if len(times) == 1:
+            states_all = jnp.expand_dims(initial_state, axis=0)
+        else:
+            if dynamics.state_evolution.bm_dim is None:
+                raise ValueError(
+                    "SDESimulator requires state_evolution.bm_dim to be inferred. "
+                    "Construct dynamics via DynamicalModel before simulation."
+                )
+
+            bm = dfx.VirtualBrownianTree(
+                t0=times[0],
+                t1=times[-1],
+                tol=self.tol_vbt,
+                shape=(dynamics.state_evolution.bm_dim,),
+                key=numpyro.prng_key(),
             )
 
-        bm = dfx.VirtualBrownianTree(
-            t0=times[0],
-            t1=times[-1],
-            tol=self.tol_vbt,
-            shape=(dynamics.state_evolution.bm_dim,),
-            key=numpyro.prng_key(),
-        )
-
-        terms = dfx.MultiTerm(  # type: ignore
-            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-        )
-
-        sol = dfx.diffeqsolve(
-            terms,
-            t0=times[0],
-            t1=times[-1],
-            y0=initial_state,
-            args=control_path_eval,
-            saveat=dfx.SaveAt(ts=times),
-            **self.diffeqsolve_settings,
-        )
-        states_sol = sol.ys  # (T, ..., state_dim)
-
-        def _create_observations_step(carry, t_idx):
-            x_t = states_sol[t_idx]
-            t = times[t_idx]
-            u_t = control_path_eval(t)
-            y_t = numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
+            terms = dfx.MultiTerm(  # type: ignore
+                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
             )
-            return carry, y_t
+            sol = dfx.diffeqsolve(
+                terms,
+                t0=times[0],
+                t1=times[-1],
+                y0=initial_state,
+                args=control_path_eval,
+                saveat=dfx.SaveAt(ts=times),
+                **self.diffeqsolve_settings,
+            )
+            states_all = sol.ys
 
-        states = states_sol
-        _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))
+        output = {}
+        if obs_times is not None:
+            states_obs = states_all[obs_indices]
 
-        return {"times": times, "states": states, "observations": emissions}
+            def _create_observations_step(carry, t_idx):
+                x_t = states_obs[t_idx]
+                t = obs_times[t_idx]
+                u_t = control_path_eval(t)
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, t_idx),
+                )
+                return carry, y_t
+
+            _, emissions_obs = nscan(_create_observations_step, None, jnp.arange(n_obs))
+            output.update(
+                {
+                    "times": obs_times,
+                    "states": states_obs,
+                    "observations": emissions_obs,
+                }
+            )
+
+        if prediction_times is not None and pred_indices is not None:
+            pred_states = states_all[pred_indices]
+
+            def _create_predictions_step(carry, pred_idx):
+                x_t = pred_states[pred_idx]
+                t = prediction_times[pred_idx]
+                u_t = control_path_eval(t)
+                y_t = numpyro.sample(
+                    f"y_pred_{pred_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                )
+                return carry, y_t
+
+            _, pred_emissions = nscan(
+                _create_predictions_step, None, jnp.arange(len(prediction_times))
+            )
+            output.update(
+                {
+                    "prediction_times": prediction_times,
+                    "predicted_states": pred_states,
+                    "predicted_observations": pred_emissions,
+                }
+            )
+
+        return output
 
 
 @dataclasses.dataclass
@@ -372,6 +432,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -398,124 +459,181 @@ class DiscreteTimeSimulator(BaseSimulator):
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
         """
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
-
-        _validate_controls(obs_times, ctrl_times, ctrl_values)
-
-        T = len(obs_times)
-        if T < 1:
-            raise ValueError("obs_times must contain at least one timepoint")
-
-        # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
-        # instead of scan. state_evolution returns a dist; call it with batched inputs.
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
-            obs_values is not None
-        ):
-            numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
-            numpyro.deterministic("y_0", obs_values[0])
-            if T == 1:
-                # No transitions exist for a single-timepoint trajectory.
-                return {
-                    "times": obs_times,
-                    "states": obs_values,
-                    "observations": obs_values,
-                }
-
-            # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
-            if obs_values.ndim == 1:
-                x_prev = obs_values[:-1][:, None]
-                x_next = obs_values[1:][:, None]
-            else:
-                x_prev = obs_values[:-1]
-                x_next = obs_values[1:]
-            if ctrl_values is not None:
-                if ctrl_values.ndim == 1:
-                    u_prev = ctrl_values[:-1][:, None]
-                else:
-                    u_prev = ctrl_values[:-1]
-            else:
-                u_prev = None
-            t_now = obs_times[:-1]
-            t_next = obs_times[1:]
-
-            # Pass state (and controls) with batch as last axis so drift can use
-            # naive indexing (x[0], x[1], ...) and discretizer broadcasts correctly.
-            x_prev_batch_last = jnp.swapaxes(x_prev, 0, 1)
-            x_next_batch_last = jnp.swapaxes(x_next, 0, 1)
-            u_prev_batch_last = (
-                jnp.swapaxes(u_prev, 0, 1) if u_prev is not None else None
+        combined_times = _combine_obs_predict_times(obs_times, predict_times)
+        obs_times = combined_times.obs_times
+        prediction_times = combined_times.prediction_times
+        all_times = combined_times.all_times
+        n_obs = combined_times.n_obs
+        obs_indices = combined_times.obs_indices
+        pred_indices = combined_times.pred_indices
+        _validate_t0_alignment(
+            dynamics, obs_times, prediction_times, require_obs_t0_match=False
+        )
+        prepended_t0 = _should_prepend_t0(
+            all_times, dynamics.t0, force_prepend=(obs_times is None)
+        )
+        if prepended_t0:
+            all_times = jnp.concatenate(
+                [jnp.asarray([dynamics.t0], dtype=all_times.dtype), all_times], axis=0
+            )
+            obs_indices = obs_indices + 1
+            if pred_indices is not None:
+                pred_indices = pred_indices + 1
+        _validate_controls(all_times, ctrl_times, ctrl_values)
+        if obs_times is None and obs_values is not None:
+            raise ValueError(
+                "obs_values was provided without obs_times. "
+                "Provide obs_times when conditioning on observations."
             )
 
-            with numpyro.plate("time", T - 1):
-                trans = dynamics.state_evolution(
-                    x_prev_batch_last,
-                    u_prev_batch_last,
-                    t_now,
-                    t_next,  # type: ignore
+        # For fully observed state trajectories, condition latent states directly
+        # on obs_values (works with and without forecasting windows).
+        if (
+            isinstance(dynamics.observation_model, DiracIdentityObservation)
+            and (obs_values is not None)
+            and not prepended_t0
+        ):
+            if obs_times is None:
+                raise ValueError(
+                    "DiracIdentityObservation conditioning requires obs_times "
+                    "when obs_values is provided."
                 )
-                # obs shape must match trans.batch_shape + trans.event_shape: use
-                # time-first (T-1, state_dim) for e.g. discretizer; batch-last (state_dim, T-1) for scalar.
-                obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
-                numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
+            x_prev_obs = numpyro.sample(
+                "x_0", dynamics.initial_condition, obs=obs_values[0]
+            )
+            if n_obs > 1:
 
-            return {
+                def _obs_state_step(x_prev, t_idx):
+                    t_now = obs_times[t_idx]
+                    t_next = obs_times[t_idx + 1]
+                    u_now = _get_val_or_None(ctrl_values, t_idx)
+                    x_t = numpyro.sample(
+                        f"x_{t_idx + 1}",
+                        dynamics.state_evolution(
+                            x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                        ),
+                        obs=_get_val_or_None(obs_values, t_idx + 1),
+                    )
+                    return x_t, x_t
+
+                x_last_obs, _ = nscan(
+                    _obs_state_step, x_prev_obs, jnp.arange(n_obs - 1)
+                )
+            else:
+                x_last_obs = x_prev_obs
+
+            output = {
                 "times": obs_times,
                 "states": obs_values,
                 "observations": obs_values,
             }
 
-        # Default: scan over time
-        # Sample initial state
+            if prediction_times is not None and pred_indices is not None:
+                t_now_pred = all_times[pred_indices - 1]
+
+                def _pred_step(x_prev_pred, pred_idx):
+                    t_now = t_now_pred[pred_idx]
+                    t_next = prediction_times[pred_idx]
+                    u_now = _get_val_or_None(ctrl_values, n_obs - 1 + pred_idx)
+                    u_next = _get_val_or_None(ctrl_values, n_obs + pred_idx)
+                    x_t = numpyro.sample(
+                        f"x_pred_{pred_idx}",
+                        dynamics.state_evolution(
+                            x=x_prev_pred,
+                            u=u_now,
+                            t_now=t_now,
+                            t_next=t_next,
+                        ),
+                    )
+                    y_t = numpyro.sample(
+                        f"y_pred_{pred_idx}",
+                        dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                    )
+                    return x_t, (x_t, y_t)
+
+                _, pred_outputs = nscan(
+                    _pred_step, x_last_obs, jnp.arange(len(prediction_times))
+                )
+                pred_states, pred_obs = pred_outputs
+                output.update(
+                    {
+                        "prediction_times": prediction_times,
+                        "predicted_states": pred_states,
+                        "predicted_observations": pred_obs,
+                    }
+                )
+            return output
+
         x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
+        n_total = int(len(all_times))
+        if n_total == 1:
+            states_all = jnp.expand_dims(x_prev, axis=0)  # type: ignore
+        else:
 
-        # sample initial observation
-        u_0 = _get_val_or_None(ctrl_values, 0)
-        y_0 = numpyro.sample(
-            "y_0",
-            dynamics.observation_model(x_prev, u_0, obs_times[0]),
-            obs=_get_val_or_None(obs_values, 0),
-        )
+            def _step(x_prev, t_idx):
+                t_now = all_times[t_idx]
+                t_next = all_times[t_idx + 1]
+                u_now = _get_val_or_None(ctrl_values, t_idx)
+                x_t = numpyro.sample(
+                    f"x_{t_idx + 1}",
+                    dynamics.state_evolution(
+                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                    ),
+                )
+                return x_t, x_t
 
-        def _step(x_prev, t_idx):
-            t_now = obs_times[t_idx]
-            t_next = obs_times[t_idx + 1]
-            u_now = _get_val_or_None(ctrl_values, t_idx)
-            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-            # Sample next state
-            x_t = numpyro.sample(
-                f"x_{t_idx + 1}",
-                dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
+            _, scan_states = nscan(_step, x_prev, jnp.arange(n_total - 1))
+            x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
+            states_all = jnp.concatenate([x_0_expanded, scan_states], axis=0)
+
+        output = {}
+
+        if obs_times is not None:
+
+            def _obs_step(carry, obs_local_idx):
+                t_idx = obs_indices[obs_local_idx]
+                x_t = states_all[t_idx]
+                t = obs_times[obs_local_idx]
+                u_t = _get_val_or_None(ctrl_values, t_idx)
+                y_t = numpyro.sample(
+                    f"y_{obs_local_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, obs_local_idx),
+                )
+                return carry, y_t
+
+            _, observations = nscan(_obs_step, None, jnp.arange(n_obs))
+            output.update(
+                {
+                    "times": obs_times,
+                    "states": states_all[obs_indices],
+                    "observations": observations,
+                }
             )
 
-            # Sample observation
-            y_t = numpyro.sample(
-                f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=u_next, t=t_next),
-                obs=_get_val_or_None(obs_values, t_idx + 1),
+        if prediction_times is not None and pred_indices is not None:
+            pred_states = states_all[pred_indices]
+
+            def _pred_step(carry, pred_idx):
+                x_t = pred_states[pred_idx]
+                t = prediction_times[pred_idx]
+                u_t = _get_val_or_None(ctrl_values, pred_indices[pred_idx])
+                y_t = numpyro.sample(
+                    f"y_pred_{pred_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                )
+                return carry, y_t
+
+            _, pred_obs = nscan(_pred_step, None, jnp.arange(len(prediction_times)))
+            output.update(
+                {
+                    "prediction_times": prediction_times,
+                    "predicted_states": pred_states,
+                    "predicted_observations": pred_obs,
+                }
             )
-            return x_t, (x_t, y_t)
 
-        # Run scan and collect states and observations
-        # scan_outputs will be (scan_states, scan_observations) where each is shape (T-1, ...)
-        _, scan_outputs = nscan(_step, x_prev, jnp.arange(T - 1))
-        scan_states, scan_observations = scan_outputs
-
-        # Stack initial state/observation with scanned results
-        # x_prev is shape (state_dim,) or scalar, scan_states is (T-1, state_dim)
-        # y_0 is shape (obs_dim,) or scalar, scan_observations is (T-1, obs_dim)
-        # Use expand_dims to ensure proper shape for concatenation
-        # shape (1, state_dim) or (1,)
-        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
-        y_0_expanded = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
-        states = jnp.concatenate(
-            [x_0_expanded, scan_states], axis=0
-        )  # shape (T, state_dim)
-        observations = jnp.concatenate(
-            [y_0_expanded, scan_observations], axis=0
-        )  # shape (T, obs_dim)
-
-        return {"times": obs_times, "states": states, "observations": observations}
+        return output
 
 
 @dataclasses.dataclass
@@ -579,6 +697,7 @@ class ODESimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -594,7 +713,7 @@ class ODESimulator(BaseSimulator):
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `ContinuousTimeStateEvolution` with deterministic dynamics.
             obs_times: Times at which to save the latent state and emit observations.
-                Required.
+                Required unless `predict_times` is provided for forecast-only rollout.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
@@ -604,19 +723,33 @@ class ODESimulator(BaseSimulator):
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
         """
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
-
-        _validate_controls(obs_times, ctrl_times, ctrl_values)
-
-        T = len(obs_times)
+        combined_times = _combine_obs_predict_times(obs_times, predict_times)
+        obs_times = combined_times.obs_times
+        prediction_times = combined_times.prediction_times
+        all_times = combined_times.all_times
+        n_obs = combined_times.n_obs
+        obs_indices = combined_times.obs_indices
+        pred_indices = combined_times.pred_indices
+        _validate_t0_alignment(
+            dynamics, obs_times, prediction_times, require_obs_t0_match=False
+        )
+        if _should_prepend_t0(
+            all_times, dynamics.t0, force_prepend=(obs_times is None)
+        ):
+            all_times = jnp.concatenate(
+                [jnp.asarray([dynamics.t0], dtype=all_times.dtype), all_times], axis=0
+            )
+            obs_indices = obs_indices + 1
+            if pred_indices is not None:
+                pred_indices = pred_indices + 1
+        _validate_controls(all_times, ctrl_times, ctrl_values)
 
         # Sample initial state
         x_prev = numpyro.sample("x_0", dynamics.initial_condition)
 
         # Create drift function that interpolates controls
         if ctrl_times is not None and ctrl_values is not None:
-            control_path = _build_control_path(ctrl_times, ctrl_values, obs_times)
+            control_path = _build_control_path(ctrl_times, ctrl_values, all_times)
 
             def f(t, y, args):
                 # Evaluate control at time t using interpolation
@@ -632,41 +765,72 @@ class ODESimulator(BaseSimulator):
 
             args = None
 
-        # Solve ODE at all observation times using diffrax
-        sol = dfx.diffeqsolve(
-            terms=dfx.ODETerm(f),
-            solver=self.solver,
-            t0=obs_times[0],
-            t1=obs_times[-1],
-            dt0=self.dt0,
-            y0=x_prev,
-            saveat=dfx.SaveAt(ts=obs_times),
-            stepsize_controller=self.stepsize_controller,
-            adjoint=self.adjoint,
-            max_steps=self.max_steps,
-            args=args,
-        )
-        x_sol = sol.ys  # shape (T, state_dim) # includes initial state at t0
-
-        # use scan to sample observations and collect them
-        def _step(carry, t_idx):
-            x_t = x_sol[t_idx]
-            t = obs_times[t_idx]
-            u_t = None if args is None else args(t)
-            # Sample observation
-            y_t = numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
+        if len(all_times) == 1:
+            states_all = jnp.expand_dims(x_prev, axis=0)
+        else:
+            sol = dfx.diffeqsolve(
+                terms=dfx.ODETerm(f),
+                solver=self.solver,
+                t0=all_times[0],
+                t1=all_times[-1],
+                dt0=self.dt0,
+                y0=x_prev,
+                saveat=dfx.SaveAt(ts=all_times),
+                stepsize_controller=self.stepsize_controller,
+                adjoint=self.adjoint,
+                max_steps=self.max_steps,
+                args=args,
             )
-            return carry, y_t
+            states_all = sol.ys
 
-        # Run scan and collect observations
-        # scan_outputs will be observations of shape (T, obs_dim)
-        _, scan_observations = nscan(_step, None, jnp.arange(T))
-        observations = scan_observations  # shape (T, obs_dim)
+        output = {}
+        if obs_times is not None:
+            states_obs = states_all[obs_indices]
 
-        return {"times": obs_times, "states": x_sol, "observations": observations}
+            def _step(carry, t_idx):
+                x_t = states_obs[t_idx]
+                t = obs_times[t_idx]
+                u_t = None if args is None else args(t)
+                # Sample observation
+                y_t = numpyro.sample(
+                    f"y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=_get_val_or_None(obs_values, t_idx),
+                )
+                return carry, y_t
+
+            _, scan_observations = nscan(_step, None, jnp.arange(n_obs))
+            output.update(
+                {
+                    "times": obs_times,
+                    "states": states_obs,
+                    "observations": scan_observations,
+                }
+            )
+
+        if prediction_times is not None and pred_indices is not None:
+            pred_states = states_all[pred_indices]
+
+            def _pred_step(carry, pred_idx):
+                x_t = pred_states[pred_idx]
+                t = prediction_times[pred_idx]
+                u_t = None if args is None else args(t)
+                y_t = numpyro.sample(
+                    f"y_pred_{pred_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                )
+                return carry, y_t
+
+            _, pred_obs = nscan(_pred_step, None, jnp.arange(len(prediction_times)))
+            output.update(
+                {
+                    "prediction_times": prediction_times,
+                    "predicted_states": pred_states,
+                    "predicted_observations": pred_obs,
+                }
+            )
+
+        return output
 
 
 class Simulator(BaseSimulator):
@@ -702,6 +866,7 @@ class Simulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -713,6 +878,7 @@ class Simulator(BaseSimulator):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -725,6 +891,7 @@ class Simulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -748,6 +915,7 @@ class Simulator(BaseSimulator):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,

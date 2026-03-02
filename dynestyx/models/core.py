@@ -78,6 +78,7 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     categorical_state: bool
     continuous_time: bool
+    t0: float
 
     def __init__(
         self,
@@ -91,6 +92,7 @@ class DynamicalModel(eqx.Module):
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
         continuous_time: bool | None = None,
+        t0: float = 0.0,
     ):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
@@ -107,6 +109,7 @@ class DynamicalModel(eqx.Module):
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
+        self.t0 = float(t0)
 
         inferred_state_dim = _infer_vector_dim_from_distribution(
             initial_condition, "initial_condition"
@@ -133,14 +136,13 @@ class DynamicalModel(eqx.Module):
             initial_condition=initial_condition, state_dim=inferred_state_dim
         )
         u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-        t0 = jnp.array(0.0)
 
         _validate_state_evolution_output_shape(
             state_evolution=state_evolution,
             state_dim=inferred_state_dim,
             x0=x0,
             u0=u0,
-            t0=t0,
+            t0=jnp.array(t0),
             continuous_time=self.continuous_time,
         )
 
