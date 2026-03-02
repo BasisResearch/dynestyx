@@ -15,11 +15,13 @@
 
     state_dim = 1
     observation_dim = 1
+
     dynamics = DynamicalModel(
-        state_dim=state_dim,
-        observation_dim=observation_dim,
         initial_condition=dist.Uniform(-1.0, 1.0),
-        state_evolution=lambda: x, u, t: dist.MultivariateNormal(loc= 0.9 * x, covariance_matrix = jnp.eye(1))
+        state_evolution=lambda x, u, t_now, t_next: dist.MultivariateNormal(
+            loc=0.9 * x,
+            covariance_matrix=0.1**2 * jnp.eye(state_dim),
+        ),
         observation_model=lambda x, u, t: dist.Poisson(rate=jnp.exp(x)),
     )
     ```
@@ -39,8 +41,6 @@
     bm_dim = 2
 
     dynamics = DynamicalModel(
-        state_dim=state_dim,
-        observation_dim=observation_dim,
         initial_condition=dist.MultivariateNormal(
             loc=jnp.zeros(state_dim),
             covariance_matrix=jnp.eye(state_dim),
@@ -48,7 +48,6 @@
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: -x + u,
             diffusion_coefficient=lambda x, u, t: jnp.eye(state_dim, bm_dim),
-            bm_dim=bm_dim,
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.eye(observation_dim, state_dim),

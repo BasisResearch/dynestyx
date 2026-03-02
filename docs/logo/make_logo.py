@@ -290,8 +290,6 @@ def simulate_boundary_orbit_gif(
             return sigma * jnp.eye(2, dtype=jnp.float32)
 
         dynamics = DynamicalModel(
-            state_dim=2,
-            observation_dim=2,
             control_dim=0,
             initial_condition=dist.Uniform(
                 low=jnp.array([0.0, 0.0], dtype=jnp.float32),
@@ -302,7 +300,6 @@ def simulate_boundary_orbit_gif(
                 potential=potential_fn,
                 use_negative_gradient=True,
                 diffusion_coefficient=diffusion_fn,
-                bm_dim=2,
             ),
             observation_model=DiracIdentityObservation(),
         )
