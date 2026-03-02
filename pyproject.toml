@@ -7,7 +7,7 @@ name = "dynestyx"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "cd-dynamax",
     "effectful",
@@ -24,6 +24,7 @@ dependencies = [
     "cuthbert>=0.0.2",
     "jax>=0.6.2",
     "jaxlib>=0.6.2",
+    "pfjax",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -33,6 +34,7 @@ packages = ["dynestyx"]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cuthbert = { git = "https://github.com/DanWaxman/cuthbert.git", rev = "dw-fix-install" }
 cd-dynamax = { git = "https://github.com/DanWaxman/cd_dynamax.git", rev = "dw-dpf" }
+pfjax = { git = "https://github.com/DanWaxman/pfjax.git", rev = "dw-sg-dpf" }
 
 [dependency-groups]
 dev = [
@@ -45,6 +47,7 @@ dev = [
     "mkdocs-jupyter>=0.25.1",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
+    "jax-tqdm>=0.4.0",
 ]
 
 [tool.ruff.lint]
