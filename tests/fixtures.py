@@ -5,7 +5,6 @@ import jax.random as jr
 import pytest
 
 # Scale factor for particle filter particle counts.
-# Set DYNESTYX_PF_PARTICLES_SCALE=0.01 in CI for ~100x faster PF-based tests.
 _PF_PARTICLES_SCALE = float(os.environ.get("DYNESTYX_PF_PARTICLES_SCALE", "1.0"))
 
 from numpyro.infer import Predictive
