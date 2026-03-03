@@ -158,7 +158,9 @@ def test_continuous_time_stochastic_l63_dpf_mcmc_smoke(
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_l63_dpf
     )
-    mcmc = MCMC(BarkerMH(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        BarkerMH(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
@@ -171,7 +173,9 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
     data_conditioned_model, true_params, synthetic, _, _ = (
         data_conditioned_continuous_time_lti_gaussian
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
@@ -185,7 +189,9 @@ def test_continuous_time_lti_simplified_mcmc_smoke(
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_lti_simplified
     )
-    mcmc = MCMC(NUTS(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
@@ -198,7 +204,9 @@ def test_continuous_time_lti_gaussian_dpf_mcmc_smoke(
     data_conditioned_model, true_params, synthetic, _ = (
         data_conditioned_continuous_time_lti_gaussian_dpf
     )
-    mcmc = MCMC(BarkerMH(data_conditioned_model), num_samples=10, num_warmup=10)
+    mcmc = MCMC(
+        BarkerMH(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+    )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
