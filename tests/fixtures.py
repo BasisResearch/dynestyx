@@ -5,7 +5,14 @@ import jax.random as jr
 import pytest
 
 # Scale factor for particle filter particle counts.
+# Set DYNESTYX_PF_PARTICLES_SCALE=0.1 in CI for ~10x faster PF-based tests.
 _PF_PARTICLES_SCALE = float(os.environ.get("DYNESTYX_PF_PARTICLES_SCALE", "1.0"))
+_MIN_PARTICLES = 10
+
+
+def _n_particles(base: int) -> int:
+    return max(_MIN_PARTICLES, int(base * _PF_PARTICLES_SCALE))
+
 
 from numpyro.infer import Predictive
 
@@ -269,9 +276,7 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
 
     # Build conditioned model
     def data_conditioned_model():
-        with Filter(
-            filter_config=PFConfig(n_particles=int(3_000 * _PF_PARTICLES_SCALE))
-        ):
+        with Filter(filter_config=PFConfig(n_particles=_n_particles(3_000))):
             return discrete_time_l63_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -403,9 +408,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
     # ---------------------------------------------------------
     def data_conditioned_model():
         with Filter(
-            filter_config=ContinuousTimeDPFConfig(
-                n_particles=int(1_000 * _PF_PARTICLES_SCALE)
-            )
+            filter_config=ContinuousTimeDPFConfig(n_particles=_n_particles(1_000))
         ):
             return continuous_time_stochastic_l63_model(
                 obs_times=obs_times,
@@ -671,9 +674,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
 
     def data_conditioned_model():
         with Filter(
-            filter_config=ContinuousTimeDPFConfig(
-                n_particles=int(2_500 * _PF_PARTICLES_SCALE)
-            )
+            filter_config=ContinuousTimeDPFConfig(n_particles=_n_particles(2_500))
         ):
             return continuous_time_LTI_gaussian(
                 obs_times=obs_times,
