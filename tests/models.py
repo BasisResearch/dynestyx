@@ -469,7 +469,7 @@ def discrete_time_lti_simplified_model(
     """Discrete-time LTI using LTI_discrete factory: only alpha = A[0,0] is sampled."""
     alpha = numpyro.sample("alpha", dist.Uniform(-0.7, 0.7))
     state_dim = 2
-    A = jnp.array([[alpha, 0.0], [0.0, 0.8]])
+    A = jnp.array([[alpha, 0.1], [0.1, 0.8]])
     Q = 0.1 * jnp.eye(state_dim)
     H = jnp.array([[1.0, 0.0]])
     R = jnp.array([[0.5**2]])

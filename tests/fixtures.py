@@ -911,13 +911,22 @@ def data_conditioned_jumpy_controls_ode():
 
 @pytest.fixture(
     params=[
-        (uc, ft) for uc in [False, True] for ft in ["kf", "taylor_kf", "ekf", "ukf"]
+        (False, "kf", "cd_dynamax"),
+        (False, "kf", "cuthbert"),
+        (False, "ekf", "cuthbert"),
+        (False, "ekf", "cd_dynamax"),
+        (False, "ukf", "cd_dynamax"),
+        (True, "kf", "cd_dynamax"),
+        (True, "kf", "cuthbert"),
+        (True, "ekf", "cuthbert"),
+        (True, "ekf", "cd_dynamax"),
+        (True, "ukf", "cd_dynamax"),
     ],
     ids=lambda p: f"controls={p[0]},filter={p[1]}",
 )
 def data_conditioned_discrete_time_lti_kf(request):
     """Discrete-time LTI model using Filter (kf, taylor_kf, ekf, ukf)."""
-    use_controls, filter_type = request.param
+    use_controls, filter_type, filter_source = request.param
     rng_key = jr.PRNGKey(0)
 
     # Always split into 5 keys to keep randomness consistent
@@ -960,10 +969,9 @@ def data_conditioned_discrete_time_lti_kf(request):
     # Build conditioned model
     def data_conditioned_model():
         config = {
-            "kf": KFConfig(),
-            "taylor_kf": EKFConfig(filter_source="cuthbert"),
-            "ekf": EKFConfig(filter_source="cd_dynamax"),
-            "ukf": UKFConfig(),
+            "kf": KFConfig(filter_source=filter_source),
+            "ekf": EKFConfig(filter_source=filter_source),
+            "ukf": UKFConfig(filter_source=filter_source),
         }[filter_type]
         with Filter(filter_config=config):
             return discrete_time_lti_model(
@@ -1027,15 +1035,17 @@ def data_conditioned_discrete_time_lti_simplified(request):
 
 @pytest.fixture(
     params=[
-        (False, "kf"),
-        (False, "pf"),
-        (True, "kf"),
-        (True, "pf"),
+        (False, "kf", "cd_dynamax"),
+        (False, "pf", "cuthbert"),
+        (True, "kf", "cd_dynamax"),
+        (True, "pf", "cuthbert"),
+        (False, "kf", "cuthbert"),
+        (True, "kf", "cuthbert"),
     ]
 )
 def data_conditioned_discrete_time_lti_simplified_science(request):
     """Discrete-time LTI using LTI_discrete factory. filter_type: 'kf' or 'pf'."""
-    use_controls, filter_type = request.param
+    use_controls, filter_type, filter_source = request.param
     rng_key = jr.PRNGKey(0)
 
     data_init_key, mcmc_key, ctrl_key = jr.split(rng_key, 3)
@@ -1069,7 +1079,11 @@ def data_conditioned_discrete_time_lti_simplified_science(request):
 
     obs_values = synthetic["observations"].squeeze(0)
 
-    config = KFConfig() if filter_type == "kf" else PFConfig(n_particles=2_000)
+    config = (
+        KFConfig(filter_source=filter_source)
+        if filter_type == "kf"
+        else PFConfig(n_particles=2_000, filter_source=filter_source)
+    )
 
     def data_conditioned_model():
         with Filter(filter_config=config):
