@@ -3,19 +3,25 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 
 from cuthbert import filter as cuthbert_filter
-from cuthbert.gaussian import taylor
+from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import particle_filter
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
     EnKFConfig,
+    KFConfig,
     PFConfig,
     _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
-from dynestyx.models import DynamicalModel
+from dynestyx.models import (
+    DynamicalModel,
+    LinearGaussianObservation,
+    LinearGaussianStateEvolution,
+)
 from dynestyx.utils import (
     _should_record_field,
     _validate_control_dim,
@@ -54,7 +60,7 @@ def run_discrete_filter(
     ctrl_values=None,
     **kwargs,
 ) -> None:
-    """Run discrete-time filter via cuthbert (Taylor KF, particle filter)."""
+    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter)."""
 
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = _config_to_record_kwargs(filter_config)
@@ -88,12 +94,14 @@ def run_discrete_filter(
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
             )
         filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, KFConfig):
+        filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
     elif isinstance(filter_config, (EKFConfig, EnKFConfig)):
         filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
     else:
         raise ValueError(
             f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected EKFConfig, PFConfig, or EnKFConfig."
+            "Expected KFConfig, EKFConfig, PFConfig, or EnKFConfig."
         )
 
     states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
@@ -134,6 +142,76 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
         ess_threshold=ess_threshold,
     )
     return pf
+
+
+def _cuthbert_filter_kalman(
+    dynamics: DynamicalModel, filter_kwargs: dict | None = None
+):
+    if filter_kwargs is None:
+        filter_kwargs = {}
+
+    if not (
+        isinstance(dynamics.state_evolution, LinearGaussianStateEvolution)
+        and isinstance(dynamics.observation_model, LinearGaussianObservation)
+        and isinstance(dynamics.initial_condition, dist.MultivariateNormal)
+    ):
+        raise TypeError(
+            "cuthbert Kalman filter expects a DynamicalModel with "
+            "LinearGaussianStateEvolution and LinearGaussianObservation, and "
+            "initial_condition as MultivariateNormal."
+        )
+
+    evo = dynamics.state_evolution
+    obs = dynamics.observation_model
+    ic = dynamics.initial_condition
+
+    state_dim = dynamics.state_dim
+    obs_dim = dynamics.observation_dim
+
+    m0 = jnp.reshape(jnp.atleast_1d(jnp.asarray(ic.loc)), (state_dim,))
+    chol_P0 = jnp.linalg.cholesky(jnp.asarray(ic.covariance_matrix))
+
+    A = jnp.asarray(evo.A)
+    chol_Q = jnp.linalg.cholesky(jnp.asarray(evo.cov))
+
+    H = jnp.asarray(obs.H)
+    chol_R = jnp.linalg.cholesky(jnp.asarray(obs.R))
+
+    evo_bias = (
+        jnp.zeros((state_dim,), dtype=m0.dtype)
+        if evo.bias is None
+        else jnp.reshape(jnp.atleast_1d(jnp.asarray(evo.bias)), (state_dim,))
+    )
+    obs_bias = (
+        jnp.zeros((obs_dim,), dtype=m0.dtype)
+        if obs.bias is None
+        else jnp.reshape(jnp.atleast_1d(jnp.asarray(obs.bias)), (obs_dim,))
+    )
+
+    B = None if evo.B is None else jnp.asarray(evo.B)
+    D = None if obs.D is None else jnp.asarray(obs.D)
+
+    def get_init_params(mi: CuthbertInputs):
+        return m0, chol_P0
+
+    def get_dynamics_params(mi: CuthbertInputs):
+        c = evo_bias
+        if B is not None:
+            c = c + B @ jnp.atleast_1d(jnp.asarray(mi.u_prev))
+        return A, c, chol_Q
+
+    def get_observation_params(mi: CuthbertInputs):
+        d = obs_bias
+        if D is not None:
+            d = d + D @ jnp.atleast_1d(jnp.asarray(mi.u))
+        y = jnp.atleast_1d(jnp.asarray(mi.y))
+        return H, d, chol_R, y
+
+    return kalman.build_filter(
+        get_init_params,  # type: ignore
+        get_dynamics_params,  # type: ignore
+        get_observation_params,  # type: ignore
+    )
 
 
 def _cuthbert_filter_taylor_kf(
