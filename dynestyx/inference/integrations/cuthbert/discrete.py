@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+from cuthbertlib.resampling import adaptive, systematic
 
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import kalman, taylor
@@ -16,7 +17,6 @@ from dynestyx.inference.filter_configs import (
     PFConfig,
     _config_to_record_kwargs,
 )
-from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
@@ -133,13 +133,16 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
 
     ess_threshold = filter_kwargs.get("ess_threshold", 0.7)
 
+    resampling_fn = adaptive.ess_decorator(systematic.resampling, ess_threshold)
+    # TOOD: Add in SG
+
     pf = particle_filter.build_filter(
         init_sample=init_sample,  # type: ignore
         propagate_sample=propagate_sample,  # type: ignore
         log_potential=log_potential,  # type: ignore
         n_filter_particles=int(filter_kwargs.get("n_filter_particles", 1_000)),
-        resampling_fn=systematic_resampling.resampling,  # type: ignore
-        ess_threshold=ess_threshold,
+        resampling_fn=resampling_fn,  # type: ignore
+        consume_first_observation=True,
     )
     return pf
 
@@ -198,6 +201,7 @@ def _cuthbert_filter_kalman(
         c = evo_bias
         if B is not None:
             c = c + B @ jnp.atleast_1d(jnp.asarray(mi.u_prev))
+
         return A, c, chol_Q
 
     def get_observation_params(mi: CuthbertInputs):
@@ -211,6 +215,7 @@ def _cuthbert_filter_kalman(
         get_init_params,  # type: ignore
         get_dynamics_params,  # type: ignore
         get_observation_params,  # type: ignore
+        consume_first_observation=True,
     )
 
 
@@ -269,6 +274,7 @@ def _cuthbert_filter_taylor_kf(
         associative=False,
         rtol=rtol,
         ignore_nan_dims=True,
+        consume_first_observation=True,
     )
     return kf
 
