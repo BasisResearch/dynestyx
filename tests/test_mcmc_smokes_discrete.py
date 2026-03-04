@@ -5,6 +5,7 @@ This module tests MCMC inference pipelines for discrete-time models using
 the new discrete-time filtering capabilities via bootstrap particle filters.
 """
 
+import jax
 import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH
@@ -18,6 +19,13 @@ from tests.fixtures import (
 
 NUM_SAMPLES = 10
 NUM_WARMUP = 10
+
+
+@pytest.fixture(scope="module", autouse=True)
+def config():
+    jax.config.update("jax_enable_x64", True)
+    yield
+    jax.config.update("jax_enable_x64", False)
 
 
 def test_discrete_time_l63_taylor_kf_mcmc_smoke(
@@ -58,9 +66,6 @@ def test_discrete_time_l63_pf_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.xfail(
-    reason="Cuthbert KF numerics in backward pass are sometimes unstable."
-)
 def test_discrete_time_lti_kf_mcmc_smoke(
     data_conditioned_discrete_time_lti_kf,  # noqa: F811
 ) -> None:
