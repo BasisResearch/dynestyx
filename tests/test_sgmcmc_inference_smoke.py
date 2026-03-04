@@ -1,70 +1,46 @@
-import blackjax
-import jax
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
-from numpyro.infer.util import initialize_model
 
-from tests.fixtures import data_conditioned_continuous_time_stochastic_l63  # noqa: F401
+from dynestyx.inference.filter_configs import ContinuousTimeEnKFConfig, EKFConfig
+from dynestyx.inference.mcmc import FilterBasedMCMC
+from dynestyx.inference.mcmc_configs import SGLDConfig
+from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63_model
 
 
-@pytest.mark.parametrize("num_samples", [5])
-def test_sgmcmc_inference_smoke(
-    data_conditioned_continuous_time_stochastic_l63,  # noqa: F811
-    num_samples,
-):
+@pytest.mark.parametrize(
+    ("model", "filter_config", "target"),
+    [
+        (continuous_time_stochastic_l63_model, ContinuousTimeEnKFConfig(), "rho"),
+        (discrete_time_l63_model, EKFConfig(filter_source="cuthbert"), "rho"),
+    ],
+)
+def test_sgmcmc_inference_smoke(model, filter_config, target):
     """Smoke test version - minimal samples to verify code runs without errors."""
-    (data_conditioned_model, true_params, synthetic, _, _) = (
-        data_conditioned_continuous_time_stochastic_l63
+    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.1)
+    obs_values = jnp.zeros((obs_times.shape[0], 1))
+
+    inference = FilterBasedMCMC(
+        filter_config=filter_config,
+        mcmc_config=SGLDConfig(
+            num_samples=5,
+            num_warmup=5,
+            num_chains=1,
+            mcmc_source="blackjax",
+            step_size=1e-4,
+            schedule_power=0.55,
+        ),
+        model=model,
+    )
+    posterior_samples = inference.run(
+        rng_key=jr.PRNGKey(0),
+        obs_times=obs_times,
+        obs_values=obs_values,
     )
 
-    rng_key, init_key = jax.random.split(jax.random.PRNGKey(0))
-    init_params, potential_fn_gen, postprocess_fn, *_ = initialize_model(
-        init_key,
-        data_conditioned_model,
-        model_args=(),
-        dynamic_args=True,
-    )
-
-    def logdensity_fn(position):
-        return -potential_fn_gen()(position)
-
-    def grad_estimator(x, _):
-        return jax.grad(logdensity_fn)(x)
-
-    initial_position = init_params.z
-
-    sgld = blackjax.sgld(grad_estimator)
-    position = sgld.init(initial_position)
-
-    def schedule_fn(k):
-        return 1e-4 * jnp.ones(k.shape)
-
-    num_steps = num_samples
-    schedule = schedule_fn(jnp.arange(1, num_steps + 1))
-
-    def inference_loop(rng_key, step, initial_position, num_samples, step_sizes):
-        position = initial_position
-        positions = []
-
-        _step = jax.jit(step)
-        for i in range(num_samples):
-            rng_key, step_key = jr.split(rng_key)
-            position = step(step_key, position, None, step_sizes[i])
-            positions.append(position)
-
-        return positions
-
-    positions = inference_loop(
-        jax.random.PRNGKey(0), sgld.step, position, num_steps, schedule
-    )
-    posterior_samples = {
-        k: jnp.stack([positions[i][k] for i in range(len(positions))])
-        for k in positions[0].keys()
-    }
-
-    assert "rho" in posterior_samples
-    posterior_rho = posterior_samples["rho"]
-    assert len(posterior_rho) == num_samples
-    assert not jnp.isnan(posterior_rho).any()
-    assert not jnp.isinf(posterior_rho).any()
+    assert target in posterior_samples
+    values = posterior_samples[target]
+    assert values.shape[0] == 1
+    assert values.shape[1] == 5
+    assert not jnp.isnan(values).any()
+    assert not jnp.isinf(values).any()
