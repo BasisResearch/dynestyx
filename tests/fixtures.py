@@ -1,6 +1,18 @@
+import os
+
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
+
+# Scale factor for particle filter particle counts.
+_PF_PARTICLES_SCALE = float(os.environ.get("DYNESTYX_PF_PARTICLES_SCALE", "1.0"))
+_MIN_PARTICLES = 10
+
+
+def _n_particles(base: int) -> int:
+    return max(_MIN_PARTICLES, int(base * _PF_PARTICLES_SCALE))
+
+
 from numpyro.infer import Predictive
 
 from dynestyx.discretizers import Discretizer
@@ -263,7 +275,7 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
 
     # Build conditioned model
     def data_conditioned_model():
-        with Filter(filter_config=PFConfig(n_particles=3_000)):
+        with Filter(filter_config=PFConfig(n_particles=_n_particles(3_000))):
             return discrete_time_l63_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -394,7 +406,9 @@ def data_conditioned_continuous_time_l63_dpf(request):
     # Build conditioned model
     # ---------------------------------------------------------
     def data_conditioned_model():
-        with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=1_000)):
+        with Filter(
+            filter_config=ContinuousTimeDPFConfig(n_particles=_n_particles(1_000))
+        ):
             return continuous_time_stochastic_l63_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -658,7 +672,9 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     obs_values = synthetic["observations"].squeeze(0)
 
     def data_conditioned_model():
-        with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=2_500)):
+        with Filter(
+            filter_config=ContinuousTimeDPFConfig(n_particles=_n_particles(2_500))
+        ):
             return continuous_time_LTI_gaussian(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -1161,7 +1177,9 @@ def data_conditioned_continuous_time_lti_simplified_science(request):
     config = (
         ContinuousTimeKFConfig()
         if filter_type == "kf"
-        else ContinuousTimeDPFConfig(n_particles=2_000)
+        else ContinuousTimeDPFConfig(
+            n_particles=2_000,
+        )
     )
 
     def data_conditioned_model():

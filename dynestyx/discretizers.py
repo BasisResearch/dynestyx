@@ -4,7 +4,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import vmap
 
-from dynestyx.handlers import HandlesSelf, sample
+from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
@@ -174,7 +174,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         super().__init__()
         self.discretize = discretize
 
-    @implements(sample)
+    @implements(_sample_intp)
     def _sample_ds(
         self,
         name: str,
