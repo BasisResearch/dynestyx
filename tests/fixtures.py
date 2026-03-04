@@ -922,7 +922,7 @@ def data_conditioned_jumpy_controls_ode():
         (True, "ekf", "cd_dynamax"),
         (True, "ukf", "cd_dynamax"),
     ],
-    ids=lambda p: f"controls={p[0]},filter={p[1]}",
+    ids=lambda p: f"controls={p[0]},filter={p[1]},source={p[2]}",
 )
 def data_conditioned_discrete_time_lti_kf(request):
     """Discrete-time LTI model using Filter (kf, taylor_kf, ekf, ukf)."""
