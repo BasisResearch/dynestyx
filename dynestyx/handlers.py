@@ -11,12 +11,36 @@ from dynestyx.models import (
     DynamicalModel,
 )
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _get_dynamics_with_t0, _validate_site_sorting
 
 T = TypeVar("T")
 
 
-@defop
 def sample(
+    name: str,
+    dynamics: DynamicalModel,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array | None = None,
+    ctrl_times: jax.Array | None = None,
+    ctrl_values: jax.Array | None = None,
+    **kwargs,
+) -> FunctionOfTime:
+    _validate_site_sorting(obs_times, ctrl_times)
+    dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times)
+    return _sample_intp(
+        name,
+        dynamics_with_t0,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        **kwargs,
+    )
+
+
+@defop
+def _sample_intp(
     name: str,
     dynamics: DynamicalModel,
     *,
