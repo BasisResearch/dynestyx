@@ -1,6 +1,7 @@
 import math
 
 import diffrax as dfx
+import equinox as eqx
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
@@ -117,3 +118,49 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
         Value at index t_idx, or None if values is None
     """
     return values[t_idx] if values is not None else None
+
+
+def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array) -> DynamicalModel:
+    """Return dynamics with t0 filled in from obs_times[0].
+
+    If ``dynamics.t0`` is already set, it must match ``obs_times[0]`` exactly;
+    otherwise a ``ValueError`` is raised. If it is ``None``, it is filled in
+    from ``obs_times[0]`` (kept as a JAX scalar so the result is jittable).
+    """
+    inferred_t0 = obs_times[0]
+    if dynamics.t0 is not None:
+        # JIT-safe validation against user-provided t0.
+        _ = eqx.error_if(
+            inferred_t0,
+            inferred_t0 != jnp.asarray(dynamics.t0),
+            f"dynamics.t0={dynamics.t0!r} does not match obs_times[0]. "
+            "Either set t0=None to auto-infer from obs_times, or ensure they agree.",
+        )
+        # Return dynamics with original t0
+        return dynamics
+    else:
+        # Return dynamics with auto-inferred t0
+        return eqx.tree_at(
+            lambda m: m.t0, dynamics, inferred_t0, is_leaf=lambda x: x is None
+        )
+
+
+def _validate_site_sorting(obs_times: Array | None, ctrl_times: Array | None) -> None:
+    """Validate that obs_times and ctrl_times are strictly increasing.
+
+    Raises:
+        ValueError: If obs_times or ctrl_times are not strictly increasing.
+    """
+    if obs_times is not None and len(obs_times) > 1:
+        _ = eqx.error_if(
+            obs_times,
+            jnp.any(obs_times[:-1] >= obs_times[1:]),
+            "obs_times must be strictly increasing",
+        )
+
+    if ctrl_times is not None and len(ctrl_times) > 1:
+        _ = eqx.error_if(
+            ctrl_times,
+            jnp.any(ctrl_times[:-1] >= ctrl_times[1:]),
+            "ctrl_times must be strictly increasing",
+        )
