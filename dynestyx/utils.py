@@ -145,11 +145,13 @@ def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array) -> Dynamic
         )
 
 
-def _validate_site_sorting(obs_times: Array | None, ctrl_times: Array | None) -> None:
-    """Validate that obs_times and ctrl_times are strictly increasing.
+def _validate_site_sorting(
+    obs_times: Array | None, ctrl_times: Array | None, predict_times: Array | None
+) -> None:
+    """Validate that site time arrays are strictly increasing.
 
     Raises:
-        ValueError: If obs_times or ctrl_times are not strictly increasing.
+        ValueError: If obs_times, ctrl_times, or predict_times are not strictly increasing.
     """
     if obs_times is not None and len(obs_times) > 1:
         _ = eqx.error_if(
@@ -163,4 +165,11 @@ def _validate_site_sorting(obs_times: Array | None, ctrl_times: Array | None) ->
             ctrl_times,
             jnp.any(ctrl_times[:-1] >= ctrl_times[1:]),
             "ctrl_times must be strictly increasing",
+        )
+
+    if predict_times is not None and len(predict_times) > 1:
+        _ = eqx.error_if(
+            predict_times,
+            jnp.any(predict_times[:-1] >= predict_times[1:]),
+            "predict_times must be strictly increasing",
         )

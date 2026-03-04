@@ -373,7 +373,11 @@ def test_t0_stored_when_provided() -> None:
 
 
 def _run_model_with_simulator(
-    dynamics, obs_times=None, ctrl_times=None, ctrl_values=None
+    dynamics,
+    obs_times=None,
+    predict_times=None,
+    ctrl_times=None,
+    ctrl_values=None,
 ):
     """Run a dynamics model inside DiscreteTimeSimulator and return the trace."""
 
@@ -382,6 +386,7 @@ def _run_model_with_simulator(
             "f",
             dynamics,
             obs_times=obs_times,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
@@ -425,3 +430,12 @@ def test_ctrl_times_strictly_increasing_validation() -> None:
         match="ctrl_times must be strictly increasing",
     ):
         _run_model_with_simulator(_simple_discrete_model(), ctrl_times=ctrl_times)
+
+
+def test_predict_times_strictly_increasing_validation() -> None:
+    predict_times = jnp.array([3.0, 2.0, 5.0])
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match="predict_times must be strictly increasing",
+    ):
+        _run_model_with_simulator(_simple_discrete_model(), predict_times=predict_times)

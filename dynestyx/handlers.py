@@ -22,6 +22,7 @@ def sample(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array | None = None,
+    predict_times: jax.Array | None = None,
     ctrl_times: jax.Array | None = None,
     ctrl_values: jax.Array | None = None,
     **kwargs,
@@ -40,6 +41,7 @@ def sample(
         dynamics: Dynamical model to sample from.
         obs_times: Times at which to sample the observations.
         obs_values: Values of the observations at the given times.
+        predict_times: Times at which downstream handlers may produce predictions.
         ctrl_times: Times at which to sample the controls.
         ctrl_values: Values of the controls at the given times.
         **kwargs: Additional keyword arguments.
@@ -47,7 +49,7 @@ def sample(
     Returns:
         FunctionOfTime: A function of time that samples from the dynamical model.
     """
-    _validate_site_sorting(obs_times, ctrl_times)
+    _validate_site_sorting(obs_times, ctrl_times, predict_times)
 
     # Initial dynamics may not have t0, which is then inferred from obs_times
     dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times)
@@ -58,6 +60,7 @@ def sample(
         dynamics_with_t0,
         obs_times=obs_times,
         obs_values=obs_values,
+        predict_times=predict_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         **kwargs,
@@ -71,6 +74,7 @@ def _sample_intp(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array | None = None,
+    predict_times: jax.Array | None = None,
     ctrl_times: jax.Array | None = None,
     ctrl_values: jax.Array | None = None,
     **kwargs,
@@ -88,6 +92,7 @@ def _sample_intp(
         dynamics: Dynamical model to sample from.
         obs_times: Times at which to sample the observations.
         obs_values: Values of the observations at the given times.
+        predict_times: Times at which downstream handlers may produce predictions.
         ctrl_times: Times at which to sample the controls.
         ctrl_values: Values of the controls at the given times.
         **kwargs: Additional keyword arguments.

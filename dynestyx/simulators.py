@@ -51,6 +51,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -60,6 +61,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -69,6 +71,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -81,6 +84,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -94,6 +98,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -109,6 +114,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -125,6 +131,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             obs_times: Observation times. Required by all concrete simulators.
             obs_values: Optional observations. If provided, observation sites
                 are conditioned via `obs=...`.
+            predict_times: Optional prediction times.
             ctrl_times: Optional control times.
             ctrl_values: Optional control values aligned to `ctrl_times`.
 
@@ -217,6 +224,7 @@ class SDESimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -242,6 +250,7 @@ class SDESimulator(BaseSimulator):
                 Required.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
+            predict_times: Optional prediction times.
             ctrl_times: Optional control times.
             ctrl_values: Optional control values aligned to `ctrl_times`.
 
@@ -372,6 +381,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -391,6 +401,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             dynamics: Discrete-time `DynamicalModel` to unroll.
             obs_times: Discrete observation indices/times. Required.
             obs_values: Optional observations for conditioning.
+            predict_times: Optional prediction times.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
 
@@ -579,6 +590,7 @@ class ODESimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -597,6 +609,7 @@ class ODESimulator(BaseSimulator):
                 Required.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
+            predict_times: Optional prediction times.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
 
@@ -702,6 +715,7 @@ class Simulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -713,6 +727,7 @@ class Simulator(BaseSimulator):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
@@ -725,6 +740,7 @@ class Simulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        predict_times=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
@@ -748,6 +764,7 @@ class Simulator(BaseSimulator):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            predict_times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,
