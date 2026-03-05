@@ -1,5 +1,6 @@
 """BlackJAX implementations for filter-based posterior inference."""
 
+import blackjax
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -7,7 +8,6 @@ from jax.flatten_util import ravel_pytree
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model
 
-import blackjax
 from dynestyx.inference.mcmc_configs import HMCConfig, NUTSConfig, SGLDConfig
 
 

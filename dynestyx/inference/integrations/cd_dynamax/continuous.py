@@ -3,7 +3,6 @@
 import jax
 import jax.numpy as jnp
 import numpyro
-
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -12,6 +11,7 @@ from cd_dynamax import (
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
+
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,

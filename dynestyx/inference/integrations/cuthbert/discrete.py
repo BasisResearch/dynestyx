@@ -3,10 +3,10 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpyro
-
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import taylor
 from cuthbert.smc import particle_filter
+
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
