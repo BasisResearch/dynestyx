@@ -60,7 +60,8 @@ def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -
 
 
 def _validate_controls(
-    obs_times: Array,
+    obs_times: Array | None,
+    predict_times: Array | None,
     ctrl_times: Array | None,
     ctrl_values: Array | None,
 ) -> None:
@@ -70,6 +71,7 @@ def _validate_controls(
     Raises:
         ValueError: If control times length doesn't match observation times length.
     """
+    
     if ctrl_times is None:
         if ctrl_values is not None:
             raise ValueError(
@@ -82,12 +84,15 @@ def _validate_controls(
             "ctrl_times is not None, but ctrl_values is None. "
             "Provide both ctrl_times and ctrl_values together."
         )
-    if len(ctrl_times) != len(obs_times):
-        raise ValueError(
-            f"Control times length ({len(ctrl_times)}) must match "
-            f"observation times length ({len(obs_times)})"
-        )
 
+    if obs_times is None and predict_times is None:
+        raise ValueError("At least one of obs_times or predict_times must be provided")
+
+    total_obs_pred_times = jnp.union1d(obs_times, predict_times)
+    if jnp.setxor1d(ctrl_times, total_obs_pred_times).size > 0:
+        raise ValueError(
+            f"Control times and the union of obs_times and predict_times must be the same."
+        )
 
 def _build_control_path(
     ctrl_times: Array, ctrl_values: Array, obs_times: Array
@@ -120,14 +125,20 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
     return values[t_idx] if values is not None else None
 
 
-def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array) -> DynamicalModel:
+def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array, predict_times: Array) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
-    If ``dynamics.t0`` is already set, it must match ``obs_times[0]`` exactly;
+    If ``dynamics.t0`` is already set, it must match the earlier of``obs_times[0]`` or ``predict_times[0]`` exactly;
     otherwise a ``ValueError`` is raised. If it is ``None``, it is filled in
-    from ``obs_times[0]`` (kept as a JAX scalar so the result is jittable).
+    from ``obs_times[0]`` or ``predict_times[0]`` (kept as a JAX scalar so the result is jittable).
     """
-    inferred_t0 = obs_times[0]
+    if obs_times is None:
+        inferred_t0 = predict_times[0]
+    elif predict_times is None:
+        inferred_t0 = obs_times[0]
+    else:
+        inferred_t0 = jnp.minimum(obs_times[0], predict_times[0])
+
     if dynamics.t0 is not None:
         # JIT-safe validation against user-provided t0.
         _ = eqx.error_if(

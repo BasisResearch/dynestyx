@@ -22,9 +22,9 @@ from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _build_control_path,
     _get_val_or_None,
-    _validate_control_dim,
-    _validate_controls,
 )
+
+import warnings
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -53,8 +53,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> FunctionOfTime:
+
         self._add_solved_sites(
             name,
             dynamics,
@@ -62,6 +64,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
             **kwargs,
         )
         return fwd(
@@ -71,6 +74,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
             **kwargs,
         )
 
@@ -83,11 +87,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ):
         # Only simulate if we have observation times
-        if obs_times is None:
-            return
+        if predict_times is None:
+            warnings.warn("predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs.")
+            return 
 
         # Run the simulator
         simulated = self._simulate(
@@ -96,6 +102,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
             **kwargs,
         )
 
@@ -111,6 +118,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll `dynamics` as a NumPyro model.
@@ -127,7 +135,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 are conditioned via `obs=...`.
             ctrl_times: Optional control times.
             ctrl_values: Optional control values aligned to `ctrl_times`.
-
+            predict_times: Optional prediction times. If provided, prediction sites are
+                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
         Returns:
             dict[str, State]: Mapping from deterministic site names to
                 trajectories. Conventionally includes `"times"`, `"states"`,
@@ -219,6 +228,7 @@ class SDESimulator(BaseSimulator):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         """
@@ -244,7 +254,8 @@ class SDESimulator(BaseSimulator):
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
             ctrl_values: Optional control values aligned to `ctrl_times`.
-
+            predict_times: Optional prediction times. If provided, prediction sites are
+                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
         Returns:
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
@@ -266,12 +277,17 @@ class SDESimulator(BaseSimulator):
                 "Use ODESimulator for deterministic dynamics."
             )
 
-        if obs_times is None:
-            raise ValueError("obs_times must be provided")
-        times = obs_times
+        if obs_times is not None:
+            raise ValueError("obs_times must not be provided to an SDESimulator; it cannot be used for inference. \
+                Please use a filter, or discretize the SDE and use a DiscreteTimeSimulator. \
+                A natural example forthcoming (i.e., to be implemented) is the SimulatedLikelihoodDiscretizer.")
+        
+        if predict_times is None:
+            warnings.warn("predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs.")
+            # TODO: Handle this case.
+            raise NotImplementedError("this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs.") 
 
-        _validate_controls(times, ctrl_times, ctrl_values)
-        _validate_control_dim(dynamics, ctrl_values)
+        times = predict_times
 
         initial_state = numpyro.sample("x_0", dynamics.initial_condition)
 
@@ -334,6 +350,7 @@ class SDESimulator(BaseSimulator):
         states = states_sol
         _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))
 
+        # TODO: Change this to include previous states (e.g., from filter)
         return {"times": times, "states": states, "observations": emissions}
 
 
@@ -374,6 +391,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll a discrete-time model as a NumPyro model.
@@ -393,15 +411,20 @@ class DiscreteTimeSimulator(BaseSimulator):
             obs_values: Optional observations for conditioning.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
-
+            predict_times: Optional prediction times. If provided, prediction sites are
+                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
         Returns:
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
         """
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
+        if obs_times is None and predict_times is None:
+            raise NotImplementedError("this should no-op, but not sure what to return yet.")
 
-        _validate_controls(obs_times, ctrl_times, ctrl_values)
+        if predict_times is None:
+            warnings.warn("predict_times is not provided to a DiscreteTimeSimulator; DiscreteTimeSimulator will simply return its inputs.")
+            # TODO: Handle this case.
+            raise NotImplementedError("this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs.") 
+
 
         T = len(obs_times)
         if T < 1:
@@ -606,8 +629,6 @@ class ODESimulator(BaseSimulator):
         """
         if obs_times is None:
             raise ValueError("obs_times must be provided, but got None")
-
-        _validate_controls(obs_times, ctrl_times, ctrl_values)
 
         T = len(obs_times)
 

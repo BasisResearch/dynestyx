@@ -31,6 +31,8 @@ from dynestyx.utils import (
     _validate_controls,
 )
 
+import numpyro.distributions as dist
+
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 ContinuousTimeFilterConfig = (
@@ -178,7 +180,7 @@ def run_continuous_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Run continuous-time filter via CD-Dynamax.
 
     Args:
@@ -191,6 +193,9 @@ def run_continuous_filter(
         obs_values: Observed values.
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
+
+    Returns:
+        list[numpyro.distributions.Distribution]: A list of distributions for the filtered states.
     """
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
@@ -240,3 +245,22 @@ def run_continuous_filter(
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
     _add_filter_sites(name, filter_config, filtered)
+
+    if isinstance(cd_dynamax_model, ContDiscreteNonlinearGaussianSSM):
+        return [
+            numpyro.distribution.MultivariateNormal(
+                filtered.filtered_means[i],
+                filtered.filtered_covariances[i],
+            )
+            for i in range(filtered.filtered_means.shape[0])
+        ]
+    else:
+        # PF, which has filtered.particles and filtered.log_weights
+        def _make_mixture(particles, log_weights):
+            mixing_dist = dist.Categorical(logits=log_weights)
+            component_dists = dist.Delta(particles)
+            return dist.MixtureSameFamily(mixing_dist, component_dists)
+        return [
+            _make_mixture(filtered.particles[i], filtered.log_weights[i])
+            for i in range(filtered.particles.shape[0])
+        ]
