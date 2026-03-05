@@ -11,7 +11,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
-from dynestyx.handlers import HandlesSelf, sample
+from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -43,7 +43,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
           `obs=...`.
     """
 
-    @implements(sample)
+    @implements(_sample_intp)
     def _sample_ds(
         self,
         name: str,
