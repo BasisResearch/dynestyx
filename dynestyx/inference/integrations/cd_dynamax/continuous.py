@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -30,8 +31,6 @@ from dynestyx.utils import (
     _validate_control_dim,
     _validate_controls,
 )
-
-import numpyro.distributions as dist
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -260,6 +259,7 @@ def run_continuous_filter(
             mixing_dist = dist.Categorical(logits=log_weights)
             component_dists = dist.Delta(particles)
             return dist.MixtureSameFamily(mixing_dist, component_dists)
+
         return [
             _make_mixture(filtered.particles[i], filtered.log_weights[i])
             for i in range(filtered.particles.shape[0])

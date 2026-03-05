@@ -11,7 +11,12 @@ from dynestyx.models import (
     DynamicalModel,
 )
 from dynestyx.types import FunctionOfTime
-from dynestyx.utils import _get_dynamics_with_t0, _validate_site_sorting, _validate_controls, _validate_control_dim
+from dynestyx.utils import (
+    _get_dynamics_with_t0,
+    _validate_control_dim,
+    _validate_controls,
+    _validate_site_sorting,
+)
 
 T = TypeVar("T")
 
@@ -52,13 +57,21 @@ def sample(
     # Rule: obs_times must be accompanied with obs_values, which should be the same length.
     if obs_times is None and predict_times is None:
         raise ValueError("At least one of obs_times or predict_times must be provided")
-        
-    if (obs_times is None and obs_values is not None) or (obs_times is not None and obs_values is None):
-        raise ValueError("obs_times and obs_values must be provided together, or both None")
-    
-    if obs_times is not None and obs_values is not None and len(obs_times) != len(obs_values):
+
+    if (obs_times is None and obs_values is not None) or (
+        obs_times is not None and obs_values is None
+    ):
+        raise ValueError(
+            "obs_times and obs_values must be provided together, or both None"
+        )
+
+    if (
+        obs_times is not None
+        and obs_values is not None
+        and len(obs_times) != len(obs_values)
+    ):
         raise ValueError("obs_times and obs_values must be the same length")
-    
+
     _validate_site_sorting(obs_times, ctrl_times)
     _validate_controls(obs_times, predict_times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)

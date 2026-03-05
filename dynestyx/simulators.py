@@ -1,6 +1,7 @@
 """NumPyro-aware simulators/unrollers for dynamical models."""
 
 import dataclasses
+import warnings
 from collections.abc import Callable
 
 import diffrax as dfx
@@ -23,8 +24,6 @@ from dynestyx.utils import (
     _build_control_path,
     _get_val_or_None,
 )
-
-import warnings
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -92,8 +91,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     ):
         # Only simulate if we have observation times
         if predict_times is None:
-            warnings.warn("predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs.")
-            return 
+            warnings.warn(
+                "predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs."
+            )
+            return
 
         # Run the simulator
         simulated = self._simulate(
@@ -278,14 +279,20 @@ class SDESimulator(BaseSimulator):
             )
 
         if obs_times is not None:
-            raise ValueError("obs_times must not be provided to an SDESimulator; it cannot be used for inference. \
+            raise ValueError(
+                "obs_times must not be provided to an SDESimulator; it cannot be used for inference. \
                 Please use a filter, or discretize the SDE and use a DiscreteTimeSimulator. \
-                A natural example forthcoming (i.e., to be implemented) is the SimulatedLikelihoodDiscretizer.")
-        
+                A natural example forthcoming (i.e., to be implemented) is the SimulatedLikelihoodDiscretizer."
+            )
+
         if predict_times is None:
-            warnings.warn("predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs.")
+            warnings.warn(
+                "predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs."
+            )
             # TODO: Handle this case.
-            raise NotImplementedError("this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs.") 
+            raise NotImplementedError(
+                "this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs."
+            )
 
         times = predict_times
 
@@ -418,13 +425,18 @@ class DiscreteTimeSimulator(BaseSimulator):
                 `"observations"` trajectories.
         """
         if obs_times is None and predict_times is None:
-            raise NotImplementedError("this should no-op, but not sure what to return yet.")
+            raise NotImplementedError(
+                "this should no-op, but not sure what to return yet."
+            )
 
         if predict_times is None:
-            warnings.warn("predict_times is not provided to a DiscreteTimeSimulator; DiscreteTimeSimulator will simply return its inputs.")
+            warnings.warn(
+                "predict_times is not provided to a DiscreteTimeSimulator; DiscreteTimeSimulator will simply return its inputs."
+            )
             # TODO: Handle this case.
-            raise NotImplementedError("this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs.") 
-
+            raise NotImplementedError(
+                "this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs."
+            )
 
         T = len(obs_times)
         if T < 1:

@@ -71,7 +71,7 @@ def _validate_controls(
     Raises:
         ValueError: If control times length doesn't match observation times length.
     """
-    
+
     if ctrl_times is None:
         if ctrl_values is not None:
             raise ValueError(
@@ -91,8 +91,9 @@ def _validate_controls(
     total_obs_pred_times = jnp.union1d(obs_times, predict_times)
     if jnp.setxor1d(ctrl_times, total_obs_pred_times).size > 0:
         raise ValueError(
-            f"Control times and the union of obs_times and predict_times must be the same."
+            "Control times and the union of obs_times and predict_times must be the same."
         )
+
 
 def _build_control_path(
     ctrl_times: Array, ctrl_values: Array, obs_times: Array
@@ -125,7 +126,9 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
     return values[t_idx] if values is not None else None
 
 
-def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array, predict_times: Array) -> DynamicalModel:
+def _get_dynamics_with_t0(
+    dynamics: DynamicalModel, obs_times: Array, predict_times: Array
+) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
     If ``dynamics.t0`` is already set, it must match the earlier of``obs_times[0]`` or ``predict_times[0]`` exactly;
