@@ -44,3 +44,34 @@ def test_sgmcmc_inference_smoke(model, filter_config, target):
     assert values.shape[1] == 5
     assert not jnp.isnan(values).any()
     assert not jnp.isinf(values).any()
+
+
+def test_sgmcmc_inference_smoke_multiple_chains():
+    """Smoke test with multiple chains to verify chain axis handling."""
+    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.1)
+    obs_values = jnp.zeros((obs_times.shape[0], 1))
+
+    inference = FilterBasedMCMC(
+        filter_config=ContinuousTimeEnKFConfig(),
+        mcmc_config=SGLDConfig(
+            num_samples=4,
+            num_warmup=4,
+            num_chains=2,
+            mcmc_source="blackjax",
+            step_size=1e-4,
+            schedule_power=0.55,
+        ),
+        model=continuous_time_stochastic_l63_model,
+    )
+    posterior_samples = inference.run(
+        rng_key=jr.PRNGKey(1),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    assert "rho" in posterior_samples
+    values = posterior_samples["rho"]
+    assert values.shape[0] == 2
+    assert values.shape[1] == 4
+    assert not jnp.isnan(values).any()
+    assert not jnp.isinf(values).any()
