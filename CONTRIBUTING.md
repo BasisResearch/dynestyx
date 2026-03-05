@@ -26,13 +26,27 @@ Use this when you already have a concrete proposed change. Follow the steps belo
 
 ## 1) Setup
 
+Fork `dynestyx` to your GitHub account first:
+
+1. Go to [github.com/BasisResearch/dynestyx](https://github.com/BasisResearch/dynestyx).
+2. Click **Fork** (top-right).
+3. Choose your GitHub account as the destination.
+
+Then in your terminal, clone your fork and add the original repo as `upstream`:
+
 ```bash
 git clone https://github.com/<your-username>/dynestyx.git
 cd dynestyx
+git remote add upstream https://github.com/BasisResearch/dynestyx.git
+git remote -v
 uv venv
 source .venv/bin/activate
-uv pip install -e ".[dev]"
+uv sync --dev --all-extras
 ```
+
+You should see:
+- `origin` -> `https://github.com/<your-username>/dynestyx.git`
+- `upstream` -> `https://github.com/BasisResearch/dynestyx.git`
 
 ## 2) Create a branch
 
