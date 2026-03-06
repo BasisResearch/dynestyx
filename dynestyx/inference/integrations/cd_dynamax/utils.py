@@ -2,7 +2,6 @@ from typing import Any
 
 import jax.numpy as jnp
 import numpyro.distributions as dist
-
 from cd_dynamax import (
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
@@ -12,6 +11,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.builders import (
     build_params as build_cdlgssm_params,
 )
+
 from dynestyx.models import (
     AffineDrift,
     ContinuousTimeStateEvolution,

@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
-
 from cd_dynamax.dynamax.linear_gaussian_ssm.builders import build_params
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     PosteriorGSSMFiltered,
@@ -19,6 +18,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_filter,
 )
+
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,

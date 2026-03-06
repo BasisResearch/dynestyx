@@ -4,6 +4,9 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+from cuthbert import filter as cuthbert_filter
+from cuthbert.gaussian import kalman, taylor
+from cuthbert.smc import particle_filter
 from cuthbertlib.resampling import (
     adaptive,
     multinomial,
@@ -11,9 +14,6 @@ from cuthbertlib.resampling import (
     systematic,
 )
 
-from cuthbert import filter as cuthbert_filter
-from cuthbert.gaussian import kalman, taylor
-from cuthbert.smc import particle_filter
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,

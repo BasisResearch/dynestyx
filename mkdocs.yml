@@ -58,6 +58,8 @@ nav:
       - Inference:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/filter_configs.md
+        - MCMC: api_reference/public/inference/mcmc.md
+        - MCMCConfigs: api_reference/public/inference/mcmc_configs.md
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
       - Handlers:
@@ -80,6 +82,9 @@ nav:
       - Inference:
         - Filters: api_reference/developer/inference/filters.md
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
+        - MCMC: api_reference/developer/inference/mcmc.md
+        - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
+        - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md
       - Discretizers:
         - Discretizer: api_reference/developer/discretizers/discretizer.md
       - Simulators:
