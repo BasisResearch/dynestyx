@@ -12,7 +12,6 @@ from cuthbert.smc import particle_filter
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
-    EnKFConfig,
     KFConfig,
     PFConfig,
     _config_to_record_kwargs,
@@ -96,12 +95,12 @@ def run_discrete_filter(
         filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
     elif isinstance(filter_config, KFConfig):
         filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
-    elif isinstance(filter_config, (EKFConfig, EnKFConfig)):
+    elif isinstance(filter_config, EKFConfig):
         filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
     else:
         raise ValueError(
             f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, PFConfig, or EnKFConfig."
+            "Expected KFConfig, EKFConfig, PFConfig."
         )
 
     states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
