@@ -492,15 +492,12 @@ def jumpy_controls_model(
     ctrl_times=None,
     ctrl_values=None,
 ):
-    dynamics = DynamicalModel(
-        control_dim=1,
-        initial_condition=dist.MultivariateNormal(0.0, 1.0 * jnp.eye(1)),
-        state_evolution=lambda x, u, t_now, t_next: dist.MultivariateNormal(
-            x + u, 0.01 * jnp.eye(1)
-        ),
-        observation_model=LinearGaussianObservation(
-            H=jnp.array([[1.0]]), R=jnp.array([[0.1**2]])
-        ),
+    dynamics = LTI_discrete(
+        A=jnp.array([[1.0]]),
+        Q=0.01 * jnp.eye(1),
+        H=jnp.array([[1.0]]),
+        R=jnp.array([[0.1**2]]),
+        B=jnp.array([[1.0]]),
     )
 
     dsx.sample(
