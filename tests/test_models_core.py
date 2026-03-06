@@ -1,8 +1,12 @@
+import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
+import numpyro.handlers as nhandlers
 import pytest
 
+import dynestyx as dsx
 from dynestyx.models.core import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.simulators import DiscreteTimeSimulator
 
 
 def _initial_condition_2d() -> dist.MultivariateNormal:
@@ -340,3 +344,84 @@ def test_dirichlet_initial_condition_state_dim_override_mismatch_raises() -> Non
             control_dim=0,
             state_dim=k + 1,
         )
+
+
+# ---------------------------------------------------------------------------
+# t0 field and simulator validation tests
+# ---------------------------------------------------------------------------
+
+
+def _simple_discrete_model(t0=None):
+    """Minimal 1-D discrete-time DynamicalModel for t0 tests."""
+    return DynamicalModel(
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.1),
+        control_dim=0,
+        t0=t0,
+    )
+
+
+def test_t0_defaults_to_none() -> None:
+    model = _simple_discrete_model()
+    assert model.t0 is None
+
+
+def test_t0_stored_when_provided() -> None:
+    model = _simple_discrete_model(t0=2.5)
+    assert model.t0 == 2.5
+
+
+def _run_model_with_simulator(
+    dynamics, obs_times=None, ctrl_times=None, ctrl_values=None
+):
+    """Run a dynamics model inside DiscreteTimeSimulator and return the trace."""
+
+    def model():
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
+
+    with DiscreteTimeSimulator():
+        tr = nhandlers.trace(nhandlers.seed(model, rng_seed=0)).get_trace()
+    return tr
+
+
+def test_t0_no_error_when_matching_obs_times() -> None:
+    obs_times = jnp.array([3.0, 4.0, 5.0])
+    dynamics = _simple_discrete_model(t0=3.0)
+    # Should not raise
+    _run_model_with_simulator(dynamics, obs_times=obs_times)
+
+
+def test_t0_mismatch_raises_informative_error() -> None:
+    obs_times = jnp.array([3.0, 4.0, 5.0])
+    dynamics = _simple_discrete_model(t0=0.0)
+
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match=r"dynamics\.t0=0\.0 does not match obs_times\[0\]",
+    ):
+        _run_model_with_simulator(dynamics, obs_times=obs_times)
+
+
+def test_obs_times_strictly_increasing_validation() -> None:
+    obs_times = jnp.array([3.0, 2.0, 5.0])
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match="obs_times must be strictly increasing",
+    ):
+        _run_model_with_simulator(_simple_discrete_model(), obs_times=obs_times)
+
+
+def test_ctrl_times_strictly_increasing_validation() -> None:
+    ctrl_times = jnp.array([3.0, 2.0, 5.0])
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match="ctrl_times must be strictly increasing",
+    ):
+        _run_model_with_simulator(_simple_discrete_model(), ctrl_times=ctrl_times)
