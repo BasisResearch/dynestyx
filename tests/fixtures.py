@@ -23,6 +23,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EKFConfig,
+    EnKFConfig,
     KFConfig,
     PFConfig,
     UKFConfig,
@@ -791,7 +792,9 @@ def data_conditioned_discrete_time_l63_auto(request):
     return data_conditioned_model, true_params, synthetic, use_controls
 
 
-def data_conditioned_jumpy_controls():
+def data_conditioned_jumpy_controls(
+    filter_type: str = "ekf", filter_source: str = "cuthbert"
+):
     rng_key = jr.PRNGKey(0)
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
         rng_key, 5
@@ -819,7 +822,27 @@ def data_conditioned_jumpy_controls():
     obs_values = synthetic["observations"].squeeze(0)
 
     def data_conditioned_model():
-        with Filter(filter_config=EKFConfig(record_filtered_states_mean=True)):
+        config = {
+            "kf": KFConfig(
+                record_filtered_states_mean=True, filter_source=filter_source
+            ),
+            "ekf": EKFConfig(
+                record_filtered_states_mean=True, filter_source=filter_source
+            ),
+            "enkf": EnKFConfig(
+                record_filtered_states_mean=True,
+                filter_source=filter_source,
+            ),
+            "ukf": UKFConfig(
+                record_filtered_states_mean=True, filter_source=filter_source
+            ),
+            "pf": PFConfig(
+                record_filtered_states_mean=True,
+                n_particles=_n_particles(3_000),
+                filter_source=filter_source,
+            ),
+        }[filter_type]
+        with Filter(filter_config=config):
             return jumpy_controls_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
