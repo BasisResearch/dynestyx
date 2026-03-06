@@ -23,7 +23,6 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EKFConfig,
-    EnKFConfig,
     KFConfig,
     PFConfig,
     UKFConfig,
@@ -828,10 +827,6 @@ def data_conditioned_jumpy_controls(
             ),
             "ekf": EKFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
-            ),
-            "enkf": EnKFConfig(
-                record_filtered_states_mean=True,
-                filter_source=filter_source,
             ),
             "ukf": UKFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
