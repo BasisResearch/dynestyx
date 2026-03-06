@@ -4,7 +4,12 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
-from cuthbertlib.resampling import adaptive, systematic
+from cuthbertlib.resampling import (
+    adaptive,
+    multinomial,
+    stop_gradient_decorator,
+    systematic,
+)
 
 from cuthbert import filter as cuthbert_filter
 from cuthbert.gaussian import kalman, taylor
@@ -44,6 +49,10 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     if isinstance(config, PFConfig):
         kwargs["n_filter_particles"] = config.n_particles
         kwargs["ess_threshold"] = config.ess_threshold_ratio
+        kwargs["resampling_base_method"] = config.resampling_method.base_method
+        kwargs["resampling_differential_method"] = (
+            config.resampling_method.differential_method
+        )
     return kwargs
 
 
@@ -131,9 +140,32 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
         return jnp.asarray(edist.log_prob(mi.y)).sum()
 
     ess_threshold = filter_kwargs.get("ess_threshold", 0.7)
+    base_method = filter_kwargs.get("resampling_base_method", "systematic")
+    if base_method == "systematic":
+        base_resampling_fn = systematic.resampling
+    elif base_method == "multinomial":
+        base_resampling_fn = multinomial.resampling
+    else:
+        raise ValueError(
+            f"Unsupported cuthbert PF base resampling method: {base_method!r}. "
+            "Expected one of: 'systematic', 'multinomial'."
+        )
 
-    resampling_fn = adaptive.ess_decorator(systematic.resampling, ess_threshold)
-    # TOOD: Add in SG
+    differential_method = filter_kwargs.get(
+        "resampling_differential_method", "stop_gradient"
+    )
+    if differential_method == "stop_gradient":
+        base_resampling_fn = stop_gradient_decorator(base_resampling_fn)
+    elif differential_method == "straight_through":
+        pass
+    else:
+        raise ValueError(
+            "Unsupported cuthbert PF differential resampling method: "
+            f"{differential_method!r}. Expected one of: "
+            "'stop_gradient', 'straight_through'."
+        )
+
+    resampling_fn = adaptive.ess_decorator(base_resampling_fn, ess_threshold)
 
     pf = particle_filter.build_filter(
         init_sample=init_sample,  # type: ignore
