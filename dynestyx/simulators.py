@@ -820,30 +820,6 @@ class Simulator(BaseSimulator):
         **kwargs,
     ) -> dict[str, State]:
         if self.simulator is None:
-            raise ValueError("Simulator not initialized. This shouldn't happen.")
-
-        return self.simulator._simulate(
-            name,
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
-        )
-
-    def _add_solved_sites(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        **kwargs,
-    ):
-        if self.simulator is None:
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
                 if dynamics.state_evolution.diffusion_coefficient is None:
                     self.simulator = ODESimulator(*self.args, **self.kwargs)
@@ -857,7 +833,7 @@ class Simulator(BaseSimulator):
                     + "If using a generic function as a state evolution, you must specify the type of simulator manually."
                 )
 
-        return self.simulator._add_solved_sites(
+        return self.simulator._simulate(
             name,
             dynamics,
             obs_times=obs_times,

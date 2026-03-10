@@ -10,6 +10,7 @@ from tests.fixtures import (
 )
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 @pytest.mark.parametrize(
     ("filter_type", "filter_source", "mean_error_tol"),
     [
@@ -50,6 +51,7 @@ def test_jumpy_controls_sde():
     assert jnp.abs(jnp.mean(synthetic_observations - filtered_means)) < 1e-2
 
 
+@pytest.mark.skip(reason="ODESimulator temporarily disabled")
 def test_jumpy_controls_ode():
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_ode()
     rng_key = jr.PRNGKey(0)

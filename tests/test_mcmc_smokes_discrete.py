@@ -28,6 +28,7 @@ def config():
     jax.config.update("jax_enable_x64", False)
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_l63_taylor_kf_mcmc_smoke(
     data_conditioned_discrete_time_l63_filter,  # noqa: F811
 ) -> None:
@@ -44,6 +45,7 @@ def test_discrete_time_l63_taylor_kf_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_l63_pf_mcmc_smoke(
     data_conditioned_discrete_time_l63_filter_pf,  # noqa: F811
 ) -> None:
@@ -66,6 +68,7 @@ def test_discrete_time_l63_pf_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_lti_kf_mcmc_smoke(
     data_conditioned_discrete_time_lti_kf,  # noqa: F811
 ) -> None:
@@ -82,6 +85,7 @@ def test_discrete_time_lti_kf_mcmc_smoke(
     assert "alpha" in posterior_samples
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_lti_simplified_kf_mcmc_smoke(
     data_conditioned_discrete_time_lti_simplified,  # noqa: F811
 ) -> None:

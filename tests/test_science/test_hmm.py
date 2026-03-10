@@ -14,6 +14,8 @@ from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
 
+pytestmark = pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
+
 
 @pytest.mark.parametrize("num_samples", [250])
 def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811

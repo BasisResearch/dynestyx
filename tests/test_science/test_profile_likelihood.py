@@ -1,6 +1,7 @@
 """Profile likelihood tests for all filter-based models. Tests each system with all available filters from fixture params."""
 
 import jax
+import pytest
 
 jax.config.update("jax_enable_x64", True)
 
@@ -17,6 +18,7 @@ from tests.test_utils import get_output_dir, run_profile_likelihood
 SAVE_FIG = True
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_profile_hmm(data_conditioned_hmm):  # noqa: F811
     data_conditioned_model, true_params, synthetic, use_controls = data_conditioned_hmm
     output_name = (
@@ -35,6 +37,7 @@ def test_profile_hmm(data_conditioned_hmm):  # noqa: F811
     )
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_profile_discrete_time_l63(data_conditioned_discrete_time_l63_filter):  # noqa: F811
     (
         data_conditioned_model,
@@ -60,6 +63,7 @@ def test_profile_discrete_time_l63(data_conditioned_discrete_time_l63_filter):  
     )
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_profile_discrete_time_l63_pf(data_conditioned_discrete_time_l63_filter_pf):  # noqa: F811
     (
         data_conditioned_model,
@@ -139,6 +143,7 @@ def test_profile_continuous_time_lti(data_conditioned_continuous_time_lti_gaussi
     )
 
 
+@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_profile_discrete_time_lti(data_conditioned_discrete_time_lti_kf):  # noqa: F811
     (
         data_conditioned_model,

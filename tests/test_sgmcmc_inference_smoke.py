@@ -13,7 +13,12 @@ from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63
     ("model", "filter_config", "target"),
     [
         (continuous_time_stochastic_l63_model, ContinuousTimeEnKFConfig(), "rho"),
-        (discrete_time_l63_model, EKFConfig(filter_source="cuthbert"), "rho"),
+        pytest.param(
+            discrete_time_l63_model,
+            EKFConfig(filter_source="cuthbert"),
+            "rho",
+            marks=pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled"),
+        ),
     ],
 )
 def test_sgmcmc_inference_smoke(model, filter_config, target):

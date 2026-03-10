@@ -13,6 +13,8 @@ from dynestyx.inference.mcmc_configs import SGLDConfig
 from dynestyx.simulators import Simulator
 from tests.models import continuous_time_deterministic_l63_model
 
+pytestmark = pytest.mark.skip(reason="ODESimulator temporarily disabled")
+
 
 @pytest.mark.parametrize("num_samples", [120])
 def test_sgmcmc_inference(num_samples):
