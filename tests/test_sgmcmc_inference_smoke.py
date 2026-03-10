@@ -3,7 +3,8 @@ import jax.random as jr
 import pytest
 
 from dynestyx.inference.filter_configs import ContinuousTimeEnKFConfig, EKFConfig
-from dynestyx.inference.mcmc import FilterBasedMCMC
+from dynestyx.inference.filters import Filter
+from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63_model
 
@@ -20,23 +21,23 @@ def test_sgmcmc_inference_smoke(model, filter_config, target):
     obs_times = jnp.arange(start=0.0, stop=1.0, step=0.1)
     obs_values = jnp.zeros((obs_times.shape[0], 1))
 
-    inference = FilterBasedMCMC(
-        filter_config=filter_config,
-        mcmc_config=SGLDConfig(
-            num_samples=5,
-            num_warmup=5,
-            num_chains=1,
-            mcmc_source="blackjax",
-            step_size=1e-4,
-            schedule_power=0.55,
-        ),
-        model=model,
-    )
-    posterior_samples = inference.run(
-        rng_key=jr.PRNGKey(0),
-        obs_times=obs_times,
-        obs_values=obs_values,
-    )
+    with Filter(filter_config):
+        inference = MCMCInference(
+            mcmc_config=SGLDConfig(
+                num_samples=5,
+                num_warmup=5,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=1e-4,
+                schedule_power=0.55,
+            ),
+            model=model,
+        )
+        posterior_samples = inference.run(
+            rng_key=jr.PRNGKey(0),
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
 
     assert target in posterior_samples
     values = posterior_samples[target]
@@ -51,23 +52,23 @@ def test_sgmcmc_inference_smoke_multiple_chains():
     obs_times = jnp.arange(start=0.0, stop=1.0, step=0.1)
     obs_values = jnp.zeros((obs_times.shape[0], 1))
 
-    inference = FilterBasedMCMC(
-        filter_config=ContinuousTimeEnKFConfig(),
-        mcmc_config=SGLDConfig(
-            num_samples=4,
-            num_warmup=4,
-            num_chains=2,
-            mcmc_source="blackjax",
-            step_size=1e-4,
-            schedule_power=0.55,
-        ),
-        model=continuous_time_stochastic_l63_model,
-    )
-    posterior_samples = inference.run(
-        rng_key=jr.PRNGKey(1),
-        obs_times=obs_times,
-        obs_values=obs_values,
-    )
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=SGLDConfig(
+                num_samples=4,
+                num_warmup=4,
+                num_chains=2,
+                mcmc_source="blackjax",
+                step_size=1e-4,
+                schedule_power=0.55,
+            ),
+            model=continuous_time_stochastic_l63_model,
+        )
+        posterior_samples = inference.run(
+            rng_key=jr.PRNGKey(1),
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
 
     assert "rho" in posterior_samples
     values = posterior_samples["rho"]

@@ -1,80 +1,100 @@
 from numpyro.infer import HMC, MCMC, NUTS
 
-from dynestyx.inference.filters import Filter
 from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
 from dynestyx.inference.mcmc_configs import HMCConfig, NUTSConfig, SGLDConfig
 
 
-class FilterBasedMCMC:
-    """Run parameter inference with a filtering-based likelihood.
+class MCMCInference:
+    """Provides a high-level interface for MCMC inference, consistent between NumPyro and BlackJAX backends.
 
-    This class wraps a model in `Filter(...)` and dispatches to the selected
-    MCMC backend defined by `mcmc_config`.
+    Models must take in `obs_times`, `obs_values`, `ctrl_times`, `ctrl_values` as arguments (and optionally, `*model_args`, `**model_kwargs`).
 
     Attributes:
-        filter_config: Configuration passed to `Filter`.
         mcmc_config: Sampler configuration dataclass (`NUTSConfig`,
             `HMCConfig`, or `SGLDConfig`).
         model: Callable probabilistic model with signature
-            `model(obs_times=..., obs_values=..., *model_args)`.
+            `model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)`.
     """
 
-    def __init__(self, filter_config, mcmc_config, model):
-        self.filter_config = filter_config
+    def __init__(self, mcmc_config, model):
         self.mcmc_config = mcmc_config
         self.model = model
 
-    def run(self, rng_key, obs_times, obs_values, *model_args):
+    def run(
+        self,
+        rng_key,
+        obs_times,
+        obs_values,
+        ctrl_times=None,
+        ctrl_values=None,
+        *model_args,
+        **model_kwargs,
+    ):
         """Run inference and return posterior samples.
 
         Args:
             rng_key: JAX PRNG key.
             obs_times: Observation times.
             obs_values: Observation values.
+            ctrl_times: Control times.
+            ctrl_values: Control values.
             *model_args: Additional positional arguments passed to `model`.
+            **model_kwargs: Additional keyword arguments passed to `model`.
 
         Returns:
             Dict-like pytree of posterior samples.
         """
 
-        def data_conditioned_model(obs_times=None, obs_values=None):
-            with Filter(self.filter_config):
-                return self.model(
-                    obs_times=obs_times, obs_values=obs_values, *model_args
-                )
-
         if self.mcmc_config.mcmc_source == "numpyro":
             return _numpyro_mcmc(
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
-                data_conditioned_model=data_conditioned_model,
+                model=self.model,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                *model_args,
+                **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
             return _blackjax_mcmc(
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
-                data_conditioned_model=data_conditioned_model,
+                model=self.model,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                *model_args,
+                **model_kwargs,
             )
         else:
             raise ValueError(f"Invalid MCMC source: {self.mcmc_config.mcmc_source}")
 
 
-def _numpyro_mcmc(mcmc_config, rng_key, data_conditioned_model, obs_times, obs_values):
+def _numpyro_mcmc(
+    mcmc_config,
+    rng_key,
+    model,
+    obs_times,
+    obs_values,
+    ctrl_times=None,
+    ctrl_values=None,
+    *model_args,
+    **model_kwargs,
+):
     """Run NumPyro-based MCMC (`NUTS` or `HMC`) and return samples."""
     if isinstance(mcmc_config, NUTSConfig):
         mcmc = MCMC(
-            NUTS(data_conditioned_model),
+            NUTS(model),
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
             num_chains=mcmc_config.num_chains,
         )
     elif isinstance(mcmc_config, HMCConfig):
         mcmc = MCMC(
-            HMC(data_conditioned_model),
+            HMC(model),
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
             step_size=mcmc_config.step_size,
@@ -83,18 +103,40 @@ def _numpyro_mcmc(mcmc_config, rng_key, data_conditioned_model, obs_times, obs_v
         )
     else:
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    mcmc.run(rng_key, obs_times, obs_values)
+    mcmc.run(
+        rng_key,
+        obs_times,
+        obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        *model_args,
+        **model_kwargs,
+    )
     return mcmc.get_samples()
 
 
-def _blackjax_mcmc(mcmc_config, rng_key, data_conditioned_model, obs_times, obs_values):
+def _blackjax_mcmc(
+    mcmc_config,
+    rng_key,
+    model,
+    obs_times,
+    obs_values,
+    ctrl_times=None,
+    ctrl_values=None,
+    *model_args,
+    **model_kwargs,
+):
     """Run BlackJAX-based inference via the BlackJAX integration module."""
     if not isinstance(mcmc_config, NUTSConfig | HMCConfig | SGLDConfig):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
     return run_blackjax_mcmc(
         mcmc_config=mcmc_config,
         rng_key=rng_key,
-        data_conditioned_model=data_conditioned_model,
+        model=model,
         obs_times=obs_times,
         obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        *model_args,
+        **model_kwargs,
     )

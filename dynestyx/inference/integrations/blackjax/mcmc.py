@@ -42,7 +42,15 @@ def _run_scan_multiple_chains(chain_keys, kernel, initial_states, num_steps):
 
 
 def run_blackjax_mcmc(
-    mcmc_config, rng_key, data_conditioned_model, obs_times, obs_values
+    mcmc_config,
+    rng_key,
+    model,
+    obs_times,
+    obs_values,
+    ctrl_times=None,
+    ctrl_values=None,
+    *model_args,
+    **model_kwargs,
 ):
     """Run BlackJAX-based inference (`NUTS`, `HMC`, or `SGLD`) and return samples."""
     rng_key, init_key_master = jr.split(rng_key)
@@ -50,8 +58,9 @@ def run_blackjax_mcmc(
 
     init_params, potential_fn_gen, postprocess_fn, *_ = initialize_model(
         rng_key=init_keys,
-        model=data_conditioned_model,
-        model_args=(obs_times, obs_values),
+        model=model,
+        model_args=(obs_times, obs_values, ctrl_times, ctrl_values, *model_args),
+        model_kwargs=model_kwargs,
         dynamic_args=True,
         init_strategy=init_to_median,
     )
