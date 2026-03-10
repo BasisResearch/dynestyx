@@ -34,6 +34,7 @@ nav:
       - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - Deep Dives:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
+      - Comparing MCMC algorithms with MCMCInference: deep_dives/mcmc_inference_algorithm_comparison.ipynb
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
   - API Reference: 
