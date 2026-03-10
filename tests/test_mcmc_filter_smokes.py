@@ -6,7 +6,13 @@ from numpyro.infer import Predictive
 
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import HMCConfig, NUTSConfig, SGLDConfig
+from dynestyx.inference.mcmc_configs import (
+    AdjustedMCLMCDynamicConfig,
+    HMCConfig,
+    MALAConfig,
+    NUTSConfig,
+    SGLDConfig,
+)
 from dynestyx.simulators import Simulator
 from tests.models import continuous_time_stochastic_l63_model
 
@@ -71,4 +77,40 @@ def test_filter_based_sgmcmc_smoke():
             model=continuous_time_stochastic_l63_model,
         )
         posterior_samples = inference.run(jr.PRNGKey(2), obs_times, obs_values)
+    assert "rho" in posterior_samples
+
+
+def test_filter_based_mala_smoke():
+    obs_times, obs_values = _make_data()
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=MALAConfig(
+                num_samples=8,
+                num_warmup=8,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=1e-3,
+            ),
+            model=continuous_time_stochastic_l63_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(3), obs_times, obs_values)
+    assert "rho" in posterior_samples
+
+
+def test_filter_based_adjusted_mclmc_dynamic_smoke():
+    obs_times, obs_values = _make_data()
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=AdjustedMCLMCDynamicConfig(
+                num_samples=8,
+                num_warmup=8,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=1e-3,
+                integration_steps_min=1,
+                integration_steps_max=4,
+            ),
+            model=continuous_time_stochastic_l63_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(4), obs_times, obs_values)
     assert "rho" in posterior_samples

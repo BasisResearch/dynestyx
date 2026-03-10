@@ -8,7 +8,13 @@ from jax.flatten_util import ravel_pytree
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model
 
-from dynestyx.inference.mcmc_configs import HMCConfig, NUTSConfig, SGLDConfig
+from dynestyx.inference.mcmc_configs import (
+    AdjustedMCLMCDynamicConfig,
+    HMCConfig,
+    MALAConfig,
+    NUTSConfig,
+    SGLDConfig,
+)
 
 
 def _has_chain_axis(initial_positions, num_chains: int) -> bool:
@@ -41,6 +47,45 @@ def _run_scan_multiple_chains(chain_keys, kernel, initial_states, num_steps):
     return run_many(chain_keys, kernel, initial_states, num_steps)
 
 
+def _run_blackjax(
+    mcmc_key,
+    algorithm,
+    initial_positions,
+    has_chain_axis: bool,
+    num_chains: int,
+    num_steps: int,
+    transform_fn,
+    num_warmup: int = 0,
+    init_state_keys=None,
+):
+    if init_state_keys is None:
+        initial_states = (
+            jax.vmap(algorithm.init, in_axes=(0,))(initial_positions)
+            if has_chain_axis
+            else algorithm.init(initial_positions)
+        )
+    else:
+        initial_states = (
+            jax.vmap(algorithm.init, in_axes=(0, 0))(initial_positions, init_state_keys)
+            if has_chain_axis
+            else algorithm.init(initial_positions, init_state_keys[0])
+        )
+
+    chain_keys = jr.split(mcmc_key, num_chains)
+    full_states = _run_scan_multiple_chains(
+        chain_keys, algorithm.step, initial_states, num_steps
+    )
+    constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
+
+    if num_warmup == 0:
+        return constrained
+
+    def _remove_warmup(samples):
+        return {k: v[num_warmup:] for k, v in samples.items()}
+
+    return jax.vmap(_remove_warmup)(constrained)
+
+
 def run_blackjax_mcmc(
     mcmc_config,
     rng_key,
@@ -52,7 +97,7 @@ def run_blackjax_mcmc(
     *model_args,
     **model_kwargs,
 ):
-    """Run BlackJAX-based inference (`NUTS`, `HMC`, or `SGLD`) and return samples."""
+    """Run BlackJAX-based inference and return posterior samples."""
     rng_key, init_key_master = jr.split(rng_key)
     init_keys = jr.split(init_key_master, mcmc_config.num_chains)
 
@@ -82,16 +127,15 @@ def run_blackjax_mcmc(
             warmup_key, warmup_position, num_steps=mcmc_config.num_warmup
         )
         nuts = blackjax.nuts(logdensity_fn, **warmup_parameters)
-        initial_states = (
-            jax.vmap(nuts.init, in_axes=(0,))(initial_positions)
-            if has_chain_axis
-            else nuts.init(initial_positions)
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=nuts,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples,
+            transform_fn=transform_fn,
         )
-        chain_keys = jr.split(mcmc_key, mcmc_config.num_chains)
-        full_states = _run_scan_multiple_chains(
-            chain_keys, nuts.step, initial_states, mcmc_config.num_samples
-        )
-        return jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
 
     if isinstance(mcmc_config, HMCConfig):
         metric_position = (
@@ -107,25 +151,17 @@ def run_blackjax_mcmc(
             inv_mass_matrix,
             mcmc_config.num_steps,
         )
-        initial_states = (
-            jax.vmap(hmc.init, in_axes=(0,))(initial_positions)
-            if has_chain_axis
-            else hmc.init(initial_positions)
-        )
         rng_key, mcmc_key = jr.split(rng_key)
-        chain_keys = jr.split(mcmc_key, mcmc_config.num_chains)
-        full_states = _run_scan_multiple_chains(
-            chain_keys,
-            hmc.step,
-            initial_states,
-            mcmc_config.num_samples + mcmc_config.num_warmup,
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=hmc,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
+            transform_fn=transform_fn,
+            num_warmup=mcmc_config.num_warmup,
         )
-        constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
-
-        def _remove_warmup(samples):
-            return {k: v[mcmc_config.num_warmup :] for k, v in samples.items()}
-
-        return jax.vmap(_remove_warmup)(constrained)
 
     if isinstance(mcmc_config, SGLDConfig):
 
@@ -164,5 +200,46 @@ def run_blackjax_mcmc(
         rng_key, mcmc_key = jr.split(rng_key)
         chain_keys = jr.split(mcmc_key, mcmc_config.num_chains)
         return jax.vmap(_run_chain)(chain_keys, initial_positions)
+
+    if isinstance(mcmc_config, MALAConfig):
+        mala = blackjax.mala(logdensity_fn, step_size=mcmc_config.step_size)
+        rng_key, mcmc_key = jr.split(rng_key)
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=mala,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
+            transform_fn=transform_fn,
+            num_warmup=mcmc_config.num_warmup,
+        )
+
+    if isinstance(mcmc_config, AdjustedMCLMCDynamicConfig):
+        adjusted_mclmc_dynamic = blackjax.adjusted_mclmc_dynamic(
+            logdensity_fn,
+            step_size=mcmc_config.step_size,
+            L_proposal_factor=mcmc_config.L_proposal_factor,
+            divergence_threshold=mcmc_config.divergence_threshold,
+            integration_steps_fn=lambda key: jr.randint(
+                key,
+                (),
+                mcmc_config.integration_steps_min,
+                mcmc_config.integration_steps_max,
+            ),
+        )
+        rng_key, init_state_key, mcmc_key = jr.split(rng_key, 3)
+        init_state_keys = jr.split(init_state_key, mcmc_config.num_chains)
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=adjusted_mclmc_dynamic,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
+            transform_fn=transform_fn,
+            num_warmup=mcmc_config.num_warmup,
+            init_state_keys=init_state_keys,
+        )
 
     raise ValueError(f"Invalid MCMC config: {mcmc_config}")

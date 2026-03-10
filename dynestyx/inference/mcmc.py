@@ -1,7 +1,13 @@
 from numpyro.infer import HMC, MCMC, NUTS
 
 from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
-from dynestyx.inference.mcmc_configs import HMCConfig, NUTSConfig, SGLDConfig
+from dynestyx.inference.mcmc_configs import (
+    AdjustedMCLMCDynamicConfig,
+    HMCConfig,
+    MALAConfig,
+    NUTSConfig,
+    SGLDConfig,
+)
 
 
 class MCMCInference:
@@ -11,7 +17,8 @@ class MCMCInference:
 
     Attributes:
         mcmc_config: Sampler configuration dataclass (`NUTSConfig`,
-            `HMCConfig`, or `SGLDConfig`).
+            `HMCConfig`, `SGLDConfig`, `MALAConfig`, or
+            `AdjustedMCLMCDynamicConfig`).
         model: Callable probabilistic model with signature
             `model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)`.
     """
@@ -127,7 +134,10 @@ def _blackjax_mcmc(
     **model_kwargs,
 ):
     """Run BlackJAX-based inference via the BlackJAX integration module."""
-    if not isinstance(mcmc_config, NUTSConfig | HMCConfig | SGLDConfig):
+    if not isinstance(
+        mcmc_config,
+        NUTSConfig | HMCConfig | SGLDConfig | MALAConfig | AdjustedMCLMCDynamicConfig,
+    ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
     return run_blackjax_mcmc(
         mcmc_config=mcmc_config,
