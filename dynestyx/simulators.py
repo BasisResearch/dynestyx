@@ -67,7 +67,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if filtered_times is not None:
             sim_results = []
-            for f_idx, (filtered_time, filtered_dist) in enumerate(zip(filtered_times, filtered_dists)):
+            for f_idx, (filtered_time, filtered_dist) in enumerate(
+                zip(filtered_times, filtered_dists)
+            ):
                 print(f"{f_idx} / {len(filtered_times)}")
                 dynamics_with_filtered_time = eqx.tree_at(
                     lambda m: m.t0,
@@ -84,24 +86,30 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
                 sub_predict_times = predict_times[predict_times >= filtered_time]
                 if f_idx + 1 < len(filtered_times):
-                    sub_predict_times = sub_predict_times[sub_predict_times < filtered_times[f_idx + 1]]
-                
+                    sub_predict_times = sub_predict_times[
+                        sub_predict_times < filtered_times[f_idx + 1]
+                    ]
+
                 if sub_predict_times is not None:
-                    sim_results.append(self._simulate(
-                        f"{name}_{f_idx}",
-                        dynamics_with_filtered_ic,
-                        obs_times=None,
-                        obs_values=None,
-                        ctrl_times=ctrl_times,
-                        ctrl_values=ctrl_values,
-                        predict_times=sub_predict_times,
-                    ))
-                
+                    sim_results.append(
+                        self._simulate(
+                            f"{name}_{f_idx}",
+                            dynamics_with_filtered_ic,
+                            obs_times=None,
+                            obs_values=None,
+                            ctrl_times=ctrl_times,
+                            ctrl_values=ctrl_values,
+                            predict_times=sub_predict_times,
+                        )
+                    )
+
             # Collapse the results together
             sim_results = {
                 "times": jnp.concatenate([result["times"] for result in sim_results]),
                 "states": jnp.concatenate([result["states"] for result in sim_results]),
-                "observations": jnp.concatenate([result["observations"] for result in sim_results]),
+                "observations": jnp.concatenate(
+                    [result["observations"] for result in sim_results]
+                ),
             }
 
         else:
@@ -751,7 +759,7 @@ class Simulator(BaseSimulator):
         self.args = args
         self.kwargs = kwargs
 
-        self.simulator : BaseSimulator | None = None
+        self.simulator: BaseSimulator | None = None
 
     def _simulate(
         self,
