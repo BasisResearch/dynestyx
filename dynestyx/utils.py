@@ -5,7 +5,7 @@ import equinox as eqx
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
-from jax import Array
+from jax import Array, lax
 
 from dynestyx.models import DynamicalModel
 
@@ -88,11 +88,25 @@ def _validate_controls(
     if obs_times is None and predict_times is None:
         raise ValueError("At least one of obs_times or predict_times must be provided")
 
-    total_obs_pred_times = jnp.union1d(obs_times, predict_times)
-    if jnp.setxor1d(ctrl_times, total_obs_pred_times).size > 0:
-        raise ValueError(
-            "Control times and the union of obs_times and predict_times must be the same."
-        )
+    if obs_times is None:
+        total_obs_pred_times = predict_times
+    elif predict_times is None:
+        total_obs_pred_times = obs_times
+    else:
+        total_obs_pred_times = jnp.union1d(obs_times, predict_times)
+    # Use trace-safe check: same length and sorted arrays match.
+    # (Avoid jnp.setxor1d/jnp.unique which have data-dependent output shapes and fail under JIT.)
+    len_mismatch = ctrl_times.shape[0] != total_obs_pred_times.shape[0]
+    values_mismatch = lax.cond(
+        len_mismatch,
+        lambda: jnp.array(True),
+        lambda: ~jnp.allclose(jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)),
+    )
+    _ = eqx.error_if(
+        ctrl_times,
+        jnp.logical_or(len_mismatch, values_mismatch),
+        "Control times and the union of obs_times and predict_times must be the same.",
+    )
 
 
 def _build_control_path(

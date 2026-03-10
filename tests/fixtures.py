@@ -13,6 +13,18 @@ def _n_particles(base: int) -> int:
     return max(_MIN_PARTICLES, int(base * _PF_PARTICLES_SCALE))
 
 
+def _normalize_synthetic(synthetic: dict) -> dict:
+    """Add 'times', 'states', 'observations' aliases for deterministic sites."""
+    result = dict(synthetic)
+    if "f_times" in result and "times" not in result:
+        result["times"] = result["f_times"]
+    if "f_states" in result and "states" not in result:
+        result["states"] = result["f_states"]
+    if "f_observations" in result and "observations" not in result:
+        result["observations"] = result["f_observations"]
+    return result
+
+
 from numpyro.infer import Predictive
 
 from dynestyx.discretizers import Discretizer
@@ -70,14 +82,15 @@ def data_conditioned_hmm(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"A": true_A, "mu": true_mu, "sigma": true_sigma}
@@ -89,11 +102,13 @@ def data_conditioned_hmm(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     # Prefer indexing rather than squeeze, to keep (T, obs_dim)
@@ -131,14 +146,15 @@ def data_conditioned_discrete_time_l63(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -150,11 +166,13 @@ def data_conditioned_discrete_time_l63(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -189,14 +207,15 @@ def data_conditioned_discrete_time_l63_filter(request):
     true_rho = 28.0
 
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -208,11 +227,13 @@ def data_conditioned_discrete_time_l63_filter(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -245,14 +266,15 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
     true_rho = 28.0
 
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -264,11 +286,13 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -312,14 +336,15 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -331,11 +356,13 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -374,14 +401,15 @@ def data_conditioned_continuous_time_l63_dpf(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -393,11 +421,13 @@ def data_conditioned_continuous_time_l63_dpf(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -434,14 +464,15 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
+    predict_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"rho": jnp.array(true_rho)}
@@ -453,11 +484,13 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -483,7 +516,8 @@ def data_conditioned_continuous_time_potential_dynamics(request):
     rng_key = jr.PRNGKey(0)
     data_init_key, _solver_key, _mcmc_key, _pred_key = jr.split(rng_key, 4)
 
-    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    obs_times = predict_times
 
     true_params = {"alpha": jnp.array(0.8), "beta": jnp.array(0.6)}
     predictive = Predictive(
@@ -494,10 +528,12 @@ def data_conditioned_continuous_time_potential_dynamics(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            mode=mode,
-            obs_times=obs_times,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                mode=mode,
+                predict_times=predict_times,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -526,16 +562,24 @@ def data_conditioned_stochastic_volatility(request):
     ctrl_times = None
     ctrl_values = None
 
-    def model(obs_times=None, obs_values=None, ctrl_times=None, ctrl_values=None):
+    def model(
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        predict_times=None,
+    ):
         return stochastic_volatility(
             identity_observation=identity_observation,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
         )
 
     true_params = {"phi": jnp.array(true_phi)}
+    predict_times = obs_times
     predictive = Predictive(
         model,
         params=true_params,
@@ -544,11 +588,13 @@ def data_conditioned_stochastic_volatility(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -588,14 +634,15 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     )
 
     true_rho = 2.0
-    obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -606,11 +653,13 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -644,14 +693,15 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     )
 
     true_rho = 2.0
-    obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -662,11 +712,13 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -696,14 +748,15 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
     )
 
     true_rho = 28.0
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -715,11 +768,13 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
 
     with DiscreteTimeSimulator():
         with Discretizer():
-            synthetic = predictive(
-                data_init_key,
-                obs_times=obs_times,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
+            synthetic = _normalize_synthetic(
+                predictive(
+                    data_init_key,
+                    predict_times=predict_times,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
             )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -750,14 +805,15 @@ def data_conditioned_discrete_time_l63_auto(request):
     )
 
     true_rho = 28.0
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -769,11 +825,13 @@ def data_conditioned_discrete_time_l63_auto(request):
 
     with Simulator():
         with Discretizer():
-            synthetic = predictive(
-                data_init_key,
-                obs_times=obs_times,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
+            synthetic = _normalize_synthetic(
+                predictive(
+                    data_init_key,
+                    predict_times=predict_times,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
             )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -804,18 +862,21 @@ def data_conditioned_jumpy_controls(
         exclude_deterministic=False,
     )
 
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
-    ctrl_values = jnp.ones((len(obs_times), 1)) * 100  # control_dim=1
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    obs_times = predict_times
+    ctrl_values = jnp.ones((len(predict_times), 1)) * 100  # control_dim=1
     for i in range(1, len(ctrl_values), 2):
         ctrl_values = ctrl_values.at[i, 0].set(-100)
-    ctrl_times = obs_times
+    ctrl_times = predict_times
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -859,17 +920,20 @@ def data_conditioned_jumpy_controls_sde():
         exclude_deterministic=False,
     )
 
-    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
-    controls = jnp.ones((len(obs_times),)) * 100
+    predict_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    obs_times = predict_times
+    controls = jnp.ones((len(predict_times),)) * 100
     for i in range(1, len(controls), 2):
         controls = controls.at[i].set(-controls[i])
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=obs_times,
-            ctrl_values=controls,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=predict_times,
+                ctrl_values=controls,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -899,17 +963,20 @@ def data_conditioned_jumpy_controls_ode():
         exclude_deterministic=False,
     )
 
-    obs_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
-    controls = jnp.ones((len(obs_times),)) * 100
+    predict_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    obs_times = predict_times
+    controls = jnp.ones((len(predict_times),)) * 100
     for i in range(1, len(controls), 2):
         controls = controls.at[i].set(-controls[i])
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=obs_times,
-            ctrl_values=controls,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=predict_times,
+                ctrl_values=controls,
+            )
         )
     obs_values = synthetic["observations"].squeeze(0)
 
@@ -956,14 +1023,15 @@ def data_conditioned_discrete_time_lti_kf(request):
     true_alpha = 0.4
 
     # Generate observations at some times
-    obs_times = jnp.arange(start=0.0, stop=20.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=20.0, step=1.0)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     # Generate synthetic data
     true_params = {"alpha": jnp.array(true_alpha)}
@@ -975,11 +1043,13 @@ def data_conditioned_discrete_time_lti_kf(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
@@ -1012,14 +1082,15 @@ def data_conditioned_discrete_time_lti_simplified(request):
 
     true_alpha = 0.4
     # Longer timeseries (~200 obs) so data inform alpha more, like continuous LTI
-    obs_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"alpha": jnp.array(true_alpha)}
     predictive = Predictive(
@@ -1030,11 +1101,13 @@ def data_conditioned_discrete_time_lti_simplified(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -1070,14 +1143,15 @@ def data_conditioned_discrete_time_lti_simplified_science(request):
 
     true_alpha = 0.4
     # Longer timeseries (~200 obs) so data inform alpha more, like continuous LTI
-    obs_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"alpha": jnp.array(true_alpha)}
     predictive = Predictive(
@@ -1088,11 +1162,13 @@ def data_conditioned_discrete_time_lti_simplified_science(request):
     )
 
     with DiscreteTimeSimulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -1124,14 +1200,15 @@ def data_conditioned_continuous_time_lti_simplified(request):
     data_init_key, data_solver_key, ctrl_key = jr.split(rng_key, 3)
 
     true_rho = 2.0
-    obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -1142,11 +1219,13 @@ def data_conditioned_continuous_time_lti_simplified(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)
@@ -1179,14 +1258,15 @@ def data_conditioned_continuous_time_lti_simplified_science(request):
     data_init_key, data_solver_key, ctrl_key = jr.split(rng_key, 3)
 
     true_rho = 2.0
-    obs_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    obs_times = predict_times
 
     ctrl_times = None
     ctrl_values = None
     if use_controls:
         control_dim = 1
-        ctrl_values = jr.normal(ctrl_key, shape=(len(obs_times), control_dim))
-        ctrl_times = obs_times
+        ctrl_values = jr.normal(ctrl_key, shape=(len(predict_times), control_dim))
+        ctrl_times = predict_times
 
     true_params = {"rho": jnp.array(true_rho)}
     predictive = Predictive(
@@ -1197,11 +1277,13 @@ def data_conditioned_continuous_time_lti_simplified_science(request):
     )
 
     with Simulator():
-        synthetic = predictive(
-            data_init_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+        synthetic = _normalize_synthetic(
+            predictive(
+                data_init_key,
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
         )
 
     obs_values = synthetic["observations"].squeeze(0)

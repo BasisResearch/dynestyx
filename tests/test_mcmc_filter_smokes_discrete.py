@@ -12,7 +12,8 @@ from tests.models import discrete_time_lti_simplified_model
 
 
 def _make_data():
-    obs_times = jnp.arange(start=0.0, stop=30.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=30.0, step=1.0)
+    obs_times = predict_times
     true_params = {"alpha": jnp.array(0.35)}
     predictive = Predictive(
         discrete_time_lti_simplified_model,
@@ -21,8 +22,8 @@ def _make_data():
         exclude_deterministic=False,
     )
     with DiscreteTimeSimulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    return obs_times, synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    return obs_times, synthetic["f_observations"].squeeze(0)
 
 
 def test_filter_based_discrete_nuts_smoke():
