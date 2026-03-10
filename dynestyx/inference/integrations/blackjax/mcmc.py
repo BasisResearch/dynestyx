@@ -1,14 +1,18 @@
 """BlackJAX implementations for filter-based posterior inference."""
 
+from collections.abc import Callable
+
 import blackjax
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+from blackjax.types import ArrayTree
 from jax.flatten_util import ravel_pytree
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model
 
 from dynestyx.inference.mcmc_configs import (
+    BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
@@ -56,21 +60,21 @@ def _run_scan_multiple_chains(chain_keys, kernel, initial_states, num_steps):
 
 
 def _run_blackjax(
-    mcmc_key,
-    algorithm,
-    initial_positions,
+    mcmc_key: jnp.ndarray,
+    algorithm: blackjax.base.SamplingAlgorithm,
+    initial_positions: ArrayTree,
     has_chain_axis: bool,
     num_chains: int,
     num_steps: int,
-    transform_fn,
+    transform_fn: Callable,
     num_warmup: int = 0,
-    init_state_keys=None,
-):
+    init_state_keys: jnp.ndarray | None = None,
+) -> dict:
     if init_state_keys is None:
         initial_states = (
-            jax.vmap(algorithm.init, in_axes=(0,))(initial_positions)
+            jax.vmap(algorithm.init, in_axes=(0,))(initial_positions)  # type: ignore[call-arg]
             if has_chain_axis
-            else algorithm.init(initial_positions)
+            else algorithm.init(initial_positions)  # type: ignore[call-arg]
         )
     else:
         initial_states = (
@@ -95,16 +99,16 @@ def _run_blackjax(
 
 
 def run_blackjax_mcmc(
-    mcmc_config,
-    rng_key,
-    model,
-    obs_times,
-    obs_values,
-    ctrl_times=None,
-    ctrl_values=None,
+    mcmc_config: BaseMCMCConfig,
+    rng_key: jnp.ndarray,
+    model: Callable,
+    obs_times: jnp.ndarray,
+    obs_values: jnp.ndarray,
+    ctrl_times: jnp.ndarray | None = None,
+    ctrl_values: jnp.ndarray | None = None,
     *model_args,
     **model_kwargs,
-):
+) -> dict:
     """Run BlackJAX-based inference and return posterior samples."""
     rng_key, init_key_master = jr.split(rng_key)
     init_keys = jr.split(init_key_master, mcmc_config.num_chains)
@@ -131,7 +135,7 @@ def run_blackjax_mcmc(
             else initial_positions
         )
         rng_key, warmup_key, mcmc_key = jr.split(rng_key, 3)
-        ((_, warmup_parameters), _) = warmup.run(
+        ((_, warmup_parameters), _) = warmup.run(  # type: ignore
             warmup_key, warmup_position, num_steps=mcmc_config.num_warmup
         )
         nuts = blackjax.nuts(logdensity_fn, **warmup_parameters)

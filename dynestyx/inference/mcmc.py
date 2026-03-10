@@ -1,7 +1,11 @@
+from collections.abc import Callable
+
+import jax.numpy as jnp
 from numpyro.infer import HMC, MCMC, NUTS
 
 from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
 from dynestyx.inference.mcmc_configs import (
+    BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
@@ -21,20 +25,20 @@ class MCMCInference:
             `model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)`.
     """
 
-    def __init__(self, mcmc_config, model):
+    def __init__(self, mcmc_config: BaseMCMCConfig, model: Callable):
         self.mcmc_config = mcmc_config
         self.model = model
 
     def run(
         self,
-        rng_key,
-        obs_times,
-        obs_values,
-        ctrl_times=None,
-        ctrl_values=None,
+        rng_key: jnp.ndarray,
+        obs_times: jnp.ndarray,
+        obs_values: jnp.ndarray,
+        ctrl_times: jnp.ndarray | None = None,
+        ctrl_values: jnp.ndarray | None = None,
         *model_args,
         **model_kwargs,
-    ):
+    ) -> dict:
         """Run inference and return posterior samples.
 
         Args:
@@ -51,7 +55,7 @@ class MCMCInference:
         """
 
         if self.mcmc_config.mcmc_source == "numpyro":
-            return _numpyro_mcmc(
+            return _numpyro_mcmc(  # type: ignore
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
                 model=self.model,
@@ -63,7 +67,7 @@ class MCMCInference:
                 **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
-            return _blackjax_mcmc(
+            return _blackjax_mcmc(  # type: ignore
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
                 model=self.model,
@@ -79,16 +83,16 @@ class MCMCInference:
 
 
 def _numpyro_mcmc(
-    mcmc_config,
-    rng_key,
-    model,
-    obs_times,
-    obs_values,
-    ctrl_times=None,
-    ctrl_values=None,
+    mcmc_config: BaseMCMCConfig,
+    rng_key: jnp.ndarray,
+    model: Callable,
+    obs_times: jnp.ndarray,
+    obs_values: jnp.ndarray,
+    ctrl_times: jnp.ndarray | None = None,
+    ctrl_values: jnp.ndarray | None = None,
     *model_args,
     **model_kwargs,
-):
+) -> dict:
     """Run NumPyro-based MCMC (`NUTS` or `HMC`) and return samples."""
     if isinstance(mcmc_config, NUTSConfig):
         mcmc = MCMC(
@@ -110,7 +114,7 @@ def _numpyro_mcmc(
         )
     else:
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    mcmc.run(
+    mcmc.run(  # type: ignore
         rng_key,
         obs_times,
         obs_values,
@@ -123,23 +127,23 @@ def _numpyro_mcmc(
 
 
 def _blackjax_mcmc(
-    mcmc_config,
-    rng_key,
-    model,
-    obs_times,
-    obs_values,
-    ctrl_times=None,
-    ctrl_values=None,
+    mcmc_config: BaseMCMCConfig,
+    rng_key: jnp.ndarray,
+    model: Callable,
+    obs_times: jnp.ndarray,
+    obs_values: jnp.ndarray,
+    ctrl_times: jnp.ndarray | None = None,
+    ctrl_values: jnp.ndarray | None = None,
     *model_args,
     **model_kwargs,
-):
+) -> dict:
     """Run BlackJAX-based inference via the BlackJAX integration module."""
     if not isinstance(
         mcmc_config,
         NUTSConfig | HMCConfig | SGLDConfig | MALAConfig,
     ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    return run_blackjax_mcmc(
+    return run_blackjax_mcmc(  # type: ignore
         mcmc_config=mcmc_config,
         rng_key=rng_key,
         model=model,
