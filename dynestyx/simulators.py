@@ -91,6 +91,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 zip(filtered_times, filtered_dists)
             ):
                 print(f"{f_idx} / {len(filtered_times)}")
+                print(f"Filtered time: {filtered_time}")
                 dynamics_with_filtered_time = eqx.tree_at(
                     lambda m: m.t0,
                     dynamics,
@@ -111,7 +112,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                         sub_predict_times < filtered_times[f_idx + 1]
                     ]
 
+                print(f"sub_predict_times: {sub_predict_times}")
                 if len(sub_predict_times) > 0:
+                    print("Running simulation.")
                     # we know that t0 < all sub_predict_times
                     sim_results.append(
                         self._simulate(
@@ -124,6 +127,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                             predict_times=sub_predict_times,
                         )
                     )
+                else:
+                    print("Skipping simulation.")
 
             # Collapse the results together
             sim_results = {
@@ -361,6 +366,22 @@ class SDESimulator(BaseSimulator):
             )
         else:
             control_path_eval = lambda t: None
+
+        # No integration interval when t0 >= t1; emit from initial condition
+        t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        if t0 >= times[-1]:
+            t = times[0]
+            u_t = control_path_eval(t)
+            y_t = numpyro.sample(
+                f"{name}_y_0",
+                dynamics.observation_model(x=initial_state, u=u_t, t=t),
+                obs=_get_val_or_None(obs_values, 0),
+            )
+            return {
+                "times": times,
+                "states": jnp.expand_dims(initial_state, axis=0),
+                "observations": jnp.expand_dims(y_t, axis=0),
+            }
 
         def _drift(t, y, args):
             u_t = args(t)
