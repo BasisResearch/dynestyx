@@ -1,14 +1,23 @@
 """BlackJAX implementations for filter-based posterior inference."""
 
+from collections.abc import Callable
+
 import blackjax
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+from blackjax.types import ArrayTree
 from jax.flatten_util import ravel_pytree
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model
 
-from dynestyx.inference.mcmc_configs import HMCConfig, NUTSConfig, SGLDConfig
+from dynestyx.inference.mcmc_configs import (
+    BaseMCMCConfig,
+    HMCConfig,
+    MALAConfig,
+    NUTSConfig,
+    SGLDConfig,
+)
 
 
 def _has_chain_axis(initial_positions, num_chains: int) -> bool:
@@ -33,6 +42,15 @@ def _run_scan_kernel(rng_key, kernel, initial_state, num_steps):
 
 
 def _run_scan_multiple_chains(chain_keys, kernel, initial_states, num_steps):
+    if chain_keys.shape[0] == 1:
+        single_states = _run_scan_kernel(
+            chain_keys[0],
+            kernel,
+            jax.tree_util.tree_map(lambda x: x[0], initial_states),
+            num_steps,
+        )
+        return jax.tree_util.tree_map(lambda x: x[None, ...], single_states)
+
     run_many = jax.pmap(
         _run_scan_kernel,
         in_axes=(0, None, 0, None),
@@ -41,17 +59,65 @@ def _run_scan_multiple_chains(chain_keys, kernel, initial_states, num_steps):
     return run_many(chain_keys, kernel, initial_states, num_steps)
 
 
+def _run_blackjax(
+    mcmc_key: jnp.ndarray,
+    algorithm: blackjax.base.SamplingAlgorithm,
+    initial_positions: ArrayTree,
+    has_chain_axis: bool,
+    num_chains: int,
+    num_steps: int,
+    transform_fn: Callable,
+    num_warmup: int = 0,
+    init_state_keys: jnp.ndarray | None = None,
+) -> dict:
+    if init_state_keys is None:
+        initial_states = (
+            jax.vmap(algorithm.init, in_axes=(0,))(initial_positions)  # type: ignore[call-arg]
+            if has_chain_axis
+            else algorithm.init(initial_positions)  # type: ignore[call-arg]
+        )
+    else:
+        initial_states = (
+            jax.vmap(algorithm.init, in_axes=(0, 0))(initial_positions, init_state_keys)
+            if has_chain_axis
+            else algorithm.init(initial_positions, init_state_keys[0])
+        )
+
+    chain_keys = jr.split(mcmc_key, num_chains)
+    full_states = _run_scan_multiple_chains(
+        chain_keys, algorithm.step, initial_states, num_steps
+    )
+    constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
+
+    if num_warmup == 0:
+        return constrained
+
+    def _remove_warmup(samples):
+        return {k: v[num_warmup:] for k, v in samples.items()}
+
+    return jax.vmap(_remove_warmup)(constrained)
+
+
 def run_blackjax_mcmc(
-    mcmc_config, rng_key, data_conditioned_model, obs_times, obs_values
-):
-    """Run BlackJAX-based inference (`NUTS`, `HMC`, or `SGLD`) and return samples."""
+    mcmc_config: BaseMCMCConfig,
+    rng_key: jnp.ndarray,
+    model: Callable,
+    obs_times: jnp.ndarray,
+    obs_values: jnp.ndarray,
+    ctrl_times: jnp.ndarray | None = None,
+    ctrl_values: jnp.ndarray | None = None,
+    *model_args,
+    **model_kwargs,
+) -> dict:
+    """Run BlackJAX-based inference and return posterior samples."""
     rng_key, init_key_master = jr.split(rng_key)
     init_keys = jr.split(init_key_master, mcmc_config.num_chains)
 
     init_params, potential_fn_gen, postprocess_fn, *_ = initialize_model(
         rng_key=init_keys,
-        model=data_conditioned_model,
-        model_args=(obs_times, obs_values),
+        model=model,
+        model_args=(obs_times, obs_values, ctrl_times, ctrl_values, *model_args),
+        model_kwargs=model_kwargs,
         dynamic_args=True,
         init_strategy=init_to_median,
     )
@@ -69,20 +135,19 @@ def run_blackjax_mcmc(
             else initial_positions
         )
         rng_key, warmup_key, mcmc_key = jr.split(rng_key, 3)
-        ((_, warmup_parameters), _) = warmup.run(
+        ((_, warmup_parameters), _) = warmup.run(  # type: ignore
             warmup_key, warmup_position, num_steps=mcmc_config.num_warmup
         )
         nuts = blackjax.nuts(logdensity_fn, **warmup_parameters)
-        initial_states = (
-            jax.vmap(nuts.init, in_axes=(0,))(initial_positions)
-            if has_chain_axis
-            else nuts.init(initial_positions)
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=nuts,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples,
+            transform_fn=transform_fn,
         )
-        chain_keys = jr.split(mcmc_key, mcmc_config.num_chains)
-        full_states = _run_scan_multiple_chains(
-            chain_keys, nuts.step, initial_states, mcmc_config.num_samples
-        )
-        return jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
 
     if isinstance(mcmc_config, HMCConfig):
         metric_position = (
@@ -98,25 +163,17 @@ def run_blackjax_mcmc(
             inv_mass_matrix,
             mcmc_config.num_steps,
         )
-        initial_states = (
-            jax.vmap(hmc.init, in_axes=(0,))(initial_positions)
-            if has_chain_axis
-            else hmc.init(initial_positions)
-        )
         rng_key, mcmc_key = jr.split(rng_key)
-        chain_keys = jr.split(mcmc_key, mcmc_config.num_chains)
-        full_states = _run_scan_multiple_chains(
-            chain_keys,
-            hmc.step,
-            initial_states,
-            mcmc_config.num_samples + mcmc_config.num_warmup,
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=hmc,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
+            transform_fn=transform_fn,
+            num_warmup=mcmc_config.num_warmup,
         )
-        constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
-
-        def _remove_warmup(samples):
-            return {k: v[mcmc_config.num_warmup :] for k, v in samples.items()}
-
-        return jax.vmap(_remove_warmup)(constrained)
 
     if isinstance(mcmc_config, SGLDConfig):
 
@@ -155,5 +212,19 @@ def run_blackjax_mcmc(
         rng_key, mcmc_key = jr.split(rng_key)
         chain_keys = jr.split(mcmc_key, mcmc_config.num_chains)
         return jax.vmap(_run_chain)(chain_keys, initial_positions)
+
+    if isinstance(mcmc_config, MALAConfig):
+        mala = blackjax.mala(logdensity_fn, step_size=mcmc_config.step_size)
+        rng_key, mcmc_key = jr.split(rng_key)
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            algorithm=mala,
+            initial_positions=initial_positions,
+            has_chain_axis=has_chain_axis,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
+            transform_fn=transform_fn,
+            num_warmup=mcmc_config.num_warmup,
+        )
 
     raise ValueError(f"Invalid MCMC config: {mcmc_config}")

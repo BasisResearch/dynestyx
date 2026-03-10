@@ -1,11 +1,11 @@
-"""Smoke tests for FilterBasedMCMC on discrete-time models."""
+"""Smoke tests for MCMCInference on discrete-time models."""
 
 import jax.numpy as jnp
 import jax.random as jr
 from numpyro.infer import Predictive
 
-from dynestyx.inference.filter_configs import KFConfig
-from dynestyx.inference.mcmc import FilterBasedMCMC
+from dynestyx.inference.filters import Filter
+from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import NUTSConfig, SGLDConfig
 from dynestyx.simulators import DiscreteTimeSimulator
 from tests.models import discrete_time_lti_simplified_model
@@ -27,30 +27,30 @@ def _make_data():
 
 def test_filter_based_discrete_nuts_smoke():
     obs_times, obs_values = _make_data()
-    inference = FilterBasedMCMC(
-        filter_config=KFConfig(filter_source="cd_dynamax"),
-        mcmc_config=NUTSConfig(
-            num_samples=10, num_warmup=10, num_chains=1, mcmc_source="numpyro"
-        ),
-        model=discrete_time_lti_simplified_model,
-    )
-    posterior_samples = inference.run(jr.PRNGKey(0), obs_times, obs_values)
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=NUTSConfig(
+                num_samples=10, num_warmup=10, num_chains=1, mcmc_source="numpyro"
+            ),
+            model=discrete_time_lti_simplified_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(0), obs_times, obs_values)
     assert "alpha" in posterior_samples
 
 
 def test_filter_based_discrete_sgmcmc_smoke():
     obs_times, obs_values = _make_data()
-    inference = FilterBasedMCMC(
-        filter_config=KFConfig(filter_source="cd_dynamax"),
-        mcmc_config=SGLDConfig(
-            num_samples=10,
-            num_warmup=10,
-            num_chains=1,
-            mcmc_source="blackjax",
-            step_size=5e-5,
-            schedule_power=0.6,
-        ),
-        model=discrete_time_lti_simplified_model,
-    )
-    posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=SGLDConfig(
+                num_samples=10,
+                num_warmup=10,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=5e-5,
+                schedule_power=0.6,
+            ),
+            model=discrete_time_lti_simplified_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
     assert "alpha" in posterior_samples

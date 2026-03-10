@@ -10,6 +10,7 @@ Welcome to the `dynestyx` examples page
 ## Gallery
 
 - [SDEs with Non-Gaussian Observations](tutorials/sde_non_gaussian_observations.ipynb)
+- [Comparing Different MCMC Algorithms](deep_dives/mcmc_inference_algorithm_comparison.ipynb)
 - [HUGE speedups if you assume perfect observations](deep_dives/l63_speedup_dirac_vs_enkf.ipynb)
 - [SINDy (Sparse identification of non-linear dynamics)](deep_dives/fhn_sparse_id.ipynb)
 - Using `Discretizer` to go from continuous-time -> discrete - Coming soon!

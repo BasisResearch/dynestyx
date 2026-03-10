@@ -7,8 +7,8 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
-from dynestyx.inference.filter_configs import ContinuousTimeEnKFConfig
-from dynestyx.inference.mcmc import FilterBasedMCMC
+from dynestyx.inference.filters import Filter
+from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from dynestyx.simulators import Simulator
 from tests.models import continuous_time_deterministic_l63_model
@@ -28,19 +28,19 @@ def test_sgmcmc_inference(num_samples):
         synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
     obs_values = synthetic["observations"].squeeze(0)
 
-    inference = FilterBasedMCMC(
-        filter_config=ContinuousTimeEnKFConfig(),
-        mcmc_config=SGLDConfig(
-            num_samples=num_samples,
-            num_warmup=num_samples,
-            num_chains=1,
-            mcmc_source="blackjax",
-            step_size=8e-5,
-            schedule_power=0.6,
-        ),
-        model=continuous_time_deterministic_l63_model,
-    )
-    posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=SGLDConfig(
+                num_samples=num_samples,
+                num_warmup=num_samples,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=8e-5,
+                schedule_power=0.6,
+            ),
+            model=continuous_time_deterministic_l63_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
 
     posterior_rho = posterior_samples["rho"][0]
     assert posterior_rho.shape[0] == num_samples

@@ -5,8 +5,8 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
-from dynestyx.inference.filter_configs import KFConfig
-from dynestyx.inference.mcmc import FilterBasedMCMC
+from dynestyx.inference.filters import Filter
+from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from dynestyx.simulators import DiscreteTimeSimulator
 from tests.models import discrete_time_lti_simplified_model
@@ -26,19 +26,19 @@ def test_sgmcmc_inference(num_samples):
         synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
     obs_values = synthetic["observations"].squeeze(0)
 
-    inference = FilterBasedMCMC(
-        filter_config=KFConfig(filter_source="cd_dynamax"),
-        mcmc_config=SGLDConfig(
-            num_samples=num_samples,
-            num_warmup=num_samples,
-            num_chains=1,
-            mcmc_source="blackjax",
-            step_size=5e-5,
-            schedule_power=0.6,
-        ),
-        model=discrete_time_lti_simplified_model,
-    )
-    posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=SGLDConfig(
+                num_samples=num_samples,
+                num_warmup=num_samples,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=5e-5,
+                schedule_power=0.6,
+            ),
+            model=discrete_time_lti_simplified_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
 
     posterior_alpha = posterior_samples["alpha"][0]
     assert posterior_alpha.shape[0] == num_samples

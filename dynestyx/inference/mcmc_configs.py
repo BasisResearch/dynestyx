@@ -12,7 +12,8 @@ class BaseMCMCConfig:
     """Shared configuration options inherited by all MCMC configs.
 
     You do not instantiate this class directly; use one of the concrete
-    subclasses (`NUTSConfig`, `HMCConfig`, `SGLDConfig`).
+    subclasses (`NUTSConfig`, `HMCConfig`, `SGLDConfig`, `MALAConfig`,
+    `AdjustedMCLMCDynamicConfig`).
 
     Attributes:
         num_samples (int): Number of post-warmup samples to return.
@@ -68,3 +69,39 @@ class SGLDConfig(BaseMCMCConfig):
 
     step_size: float = 1e-4
     schedule_power: float = 0.55
+
+
+@dataclasses.dataclass
+class MALAConfig(BaseMCMCConfig):
+    """Metropolis-Adjusted Langevin Algorithm (MALA) configuration.
+
+    Attributes:
+        step_size (float): Proposal step size used by `blackjax.mala`.
+    """
+
+    step_size: float = 1e-2
+
+
+@dataclasses.dataclass
+class AdjustedMCLMCDynamicConfig(BaseMCMCConfig):
+    """Dynamic adjusted MCLMC (MHMCHMC) configuration.
+
+    This maps to `blackjax.adjusted_mclmc_dynamic(...)` and uses its
+    top-level API arguments.
+
+    Attributes:
+        step_size (float): Integrator step size.
+        L_proposal_factor (float): Proposal length scaling factor.
+        divergence_threshold (float): Energy-difference threshold used to flag
+            divergences.
+        integration_steps_min (int): Minimum random integration steps per
+            proposal.
+        integration_steps_max (int): Exclusive upper bound for random
+            integration steps per proposal.
+    """
+
+    step_size: float = 1e-2
+    L_proposal_factor: float = float("inf")
+    divergence_threshold: float = 1000.0
+    integration_steps_min: int = 1
+    integration_steps_max: int = 10
