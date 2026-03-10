@@ -6,7 +6,7 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSS
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 
-from dynestyx.handlers import HandlesSelf, sample
+from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
@@ -46,7 +46,7 @@ type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
     """Base for filter handlers."""
 
-    @implements(sample)
+    @implements(_sample_intp)
     def _sample_ds(
         self,
         name: str,
