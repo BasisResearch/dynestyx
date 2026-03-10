@@ -26,11 +26,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cdlgssm_params,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -199,8 +195,6 @@ def run_continuous_filter(
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
         obs_times_arr = obs_times_arr[:, None]
-    _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
 
     control_dim = dynamics.control_dim
     ctrl_vals = (
@@ -245,9 +239,11 @@ def run_continuous_filter(
 
     _add_filter_sites(name, filter_config, filtered)
 
-    if isinstance(cd_dynamax_model, ContDiscreteNonlinearGaussianSSM):
+    if isinstance(cd_dynamax_model, ContDiscreteNonlinearGaussianSSM) or isinstance(
+        filter_config, ContinuousTimeKFConfig
+    ):
         return [
-            numpyro.distribution.MultivariateNormal(
+            dist.MultivariateNormal(
                 filtered.filtered_means[i],
                 filtered.filtered_covariances[i],
             )

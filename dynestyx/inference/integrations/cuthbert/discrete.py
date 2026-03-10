@@ -16,11 +16,7 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.integrations.cuthbert.patches import systematic_resampling
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 
 class CuthbertInputs(NamedTuple):
@@ -65,9 +61,6 @@ def run_discrete_filter(
         return
 
     times = obs_times
-
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
 
     if ctrl_values is None:
         control_dim = dynamics.control_dim

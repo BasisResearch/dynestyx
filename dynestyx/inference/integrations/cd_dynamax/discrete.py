@@ -32,11 +32,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
@@ -89,10 +85,7 @@ def _filter_discrete_time_dynamax_kf(
 ) -> None:
     """Run dynamax Kalman filter for LTI_discretetime and add factor + sites."""
     emissions = obs_values
-    times = jnp.asarray(obs_times)
     T1 = emissions.shape[0]
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
     control_dim = dynamics.control_dim
     if ctrl_values is not None:
         inputs = ctrl_values
@@ -122,10 +115,7 @@ def _run_nlgssm_filter(
 ) -> None:
     """Common setup for EKF/UKF: get emissions/inputs, run filter, add factor + sites."""
     emissions = obs_values
-    times = jnp.asarray(obs_times)
     T1 = emissions.shape[0]
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
     control_dim = dynamics.control_dim
     inputs = ctrl_values if ctrl_values is not None else jnp.zeros((T1, control_dim))
 
