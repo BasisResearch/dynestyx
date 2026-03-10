@@ -9,7 +9,6 @@ from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model
 
 from dynestyx.inference.mcmc_configs import (
-    AdjustedMCLMCDynamicConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
@@ -39,6 +38,15 @@ def _run_scan_kernel(rng_key, kernel, initial_state, num_steps):
 
 
 def _run_scan_multiple_chains(chain_keys, kernel, initial_states, num_steps):
+    if chain_keys.shape[0] == 1:
+        single_states = _run_scan_kernel(
+            chain_keys[0],
+            kernel,
+            jax.tree_util.tree_map(lambda x: x[0], initial_states),
+            num_steps,
+        )
+        return jax.tree_util.tree_map(lambda x: x[None, ...], single_states)
+
     run_many = jax.pmap(
         _run_scan_kernel,
         in_axes=(0, None, 0, None),
@@ -213,33 +221,6 @@ def run_blackjax_mcmc(
             num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
             transform_fn=transform_fn,
             num_warmup=mcmc_config.num_warmup,
-        )
-
-    if isinstance(mcmc_config, AdjustedMCLMCDynamicConfig):
-        adjusted_mclmc_dynamic = blackjax.adjusted_mclmc_dynamic(
-            logdensity_fn,
-            step_size=mcmc_config.step_size,
-            L_proposal_factor=mcmc_config.L_proposal_factor,
-            divergence_threshold=mcmc_config.divergence_threshold,
-            integration_steps_fn=lambda key: jr.randint(
-                key,
-                (),
-                mcmc_config.integration_steps_min,
-                mcmc_config.integration_steps_max,
-            ),
-        )
-        rng_key, init_state_key, mcmc_key = jr.split(rng_key, 3)
-        init_state_keys = jr.split(init_state_key, mcmc_config.num_chains)
-        return _run_blackjax(
-            mcmc_key=mcmc_key,
-            algorithm=adjusted_mclmc_dynamic,
-            initial_positions=initial_positions,
-            has_chain_axis=has_chain_axis,
-            num_chains=mcmc_config.num_chains,
-            num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
-            transform_fn=transform_fn,
-            num_warmup=mcmc_config.num_warmup,
-            init_state_keys=init_state_keys,
         )
 
     raise ValueError(f"Invalid MCMC config: {mcmc_config}")
