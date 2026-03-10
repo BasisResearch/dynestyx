@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Callable
 
 import diffrax as dfx
+import equinox as eqx
 import jax.numpy as jnp
 import numpyro
 from effectful.ops.semantics import fwd
@@ -53,19 +54,72 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
+        filtered_times=None,
+        filtered_dists=None,
         **kwargs,
     ) -> FunctionOfTime:
+        # Only simulate if we have observation times
+        if predict_times is None:
+            warnings.warn(
+                "predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs."
+            )
+            return
 
-        self._add_solved_sites(
-            name,
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            predict_times=predict_times,
-            **kwargs,
-        )
+        if filtered_times is not None:
+            sim_results = []
+            for f_idx, (filtered_time, filtered_dist) in enumerate(zip(filtered_times, filtered_dists)):
+                print(f"{f_idx} / {len(filtered_times)}")
+                dynamics_with_filtered_time = eqx.tree_at(
+                    lambda m: m.t0,
+                    dynamics,
+                    filtered_time,
+                    is_leaf=lambda x: x is None,
+                )
+                dynamics_with_filtered_ic = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    dynamics_with_filtered_time,
+                    filtered_dist,
+                    is_leaf=lambda x: x is None,
+                )
+
+                sub_predict_times = predict_times[predict_times >= filtered_time]
+                if f_idx + 1 < len(filtered_times):
+                    sub_predict_times = sub_predict_times[sub_predict_times < filtered_times[f_idx + 1]]
+                
+                if sub_predict_times is not None:
+                    sim_results.append(self._simulate(
+                        f"{name}_{f_idx}",
+                        dynamics_with_filtered_ic,
+                        obs_times=None,
+                        obs_values=None,
+                        ctrl_times=ctrl_times,
+                        ctrl_values=ctrl_values,
+                        predict_times=sub_predict_times,
+                    ))
+                
+            # Collapse the results together
+            sim_results = {
+                "times": jnp.concatenate([result["times"] for result in sim_results]),
+                "states": jnp.concatenate([result["states"] for result in sim_results]),
+                "observations": jnp.concatenate([result["observations"] for result in sim_results]),
+            }
+
+        else:
+            sim_results = self._simulate(
+                name,
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                predict_times=predict_times,
+                **kwargs,
+            )
+
+        # Add the results from the simulator as deterministic sites
+        for site_name, trajectory in sim_results.items():
+            numpyro.deterministic(f"{name}_{site_name}", trajectory)
+
         return fwd(
             name,
             dynamics,
@@ -77,42 +131,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             **kwargs,
         )
 
-    def _add_solved_sites(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        **kwargs,
-    ):
-        # Only simulate if we have observation times
-        if predict_times is None:
-            warnings.warn(
-                "predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs."
-            )
-            return
-
-        # Run the simulator
-        simulated = self._simulate(
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            predict_times=predict_times,
-            **kwargs,
-        )
-
-        # Add the results from the simulator as deterministic sites
-        for site_name, trajectory in simulated.items():
-            numpyro.deterministic(site_name, trajectory)
-
     def _simulate(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
         obs_times=None,
@@ -223,6 +244,7 @@ class SDESimulator(BaseSimulator):
 
     def _simulate(
         self,
+        name: str,
         dynamics,
         *,
         obs_times=None,
@@ -296,7 +318,7 @@ class SDESimulator(BaseSimulator):
 
         times = predict_times
 
-        initial_state = numpyro.sample("x_0", dynamics.initial_condition)
+        initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
@@ -348,7 +370,7 @@ class SDESimulator(BaseSimulator):
             t = times[t_idx]
             u_t = control_path_eval(t)
             y_t = numpyro.sample(
-                f"y_{t_idx}",
+                f"{name}_y_{t_idx}",
                 dynamics.observation_model(x=x_t, u=u_t, t=t),
                 obs=_get_val_or_None(obs_values, t_idx),
             )
@@ -392,6 +414,7 @@ class DiscreteTimeSimulator(BaseSimulator):
 
     def _simulate(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
         obs_times=None,
@@ -447,8 +470,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
             obs_values is not None
         ):
-            numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
-            numpyro.deterministic("y_0", obs_values[0])
+            numpyro.sample(f"{name}_x_0", dynamics.initial_condition, obs=obs_values[0])
+            numpyro.deterministic(f"{name}_y_0", obs_values[0])
             if T == 1:
                 # No transitions exist for a single-timepoint trajectory.
                 return {
@@ -502,12 +525,12 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # Default: scan over time
         # Sample initial state
-        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
+        x_prev: State = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)  # type: ignore
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)
         y_0 = numpyro.sample(
-            "y_0",
+            f"{name}_y_0",
             dynamics.observation_model(x_prev, u_0, obs_times[0]),
             obs=_get_val_or_None(obs_values, 0),
         )
@@ -519,13 +542,13 @@ class DiscreteTimeSimulator(BaseSimulator):
             u_next = _get_val_or_None(ctrl_values, t_idx + 1)
             # Sample next state
             x_t = numpyro.sample(
-                f"x_{t_idx + 1}",
+                f"{name}_x_{t_idx + 1}",
                 dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
             )
 
             # Sample observation
             y_t = numpyro.sample(
-                f"y_{t_idx + 1}",
+                f"{name}_y_{t_idx + 1}",
                 dynamics.observation_model(x=x_t, u=u_next, t=t_next),
                 obs=_get_val_or_None(obs_values, t_idx + 1),
             )
@@ -610,6 +633,7 @@ class ODESimulator(BaseSimulator):
 
     def _simulate(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
         obs_times=None,
@@ -645,7 +669,7 @@ class ODESimulator(BaseSimulator):
         T = len(obs_times)
 
         # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
+        x_prev = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
 
         # Create drift function that interpolates controls
         if ctrl_times is not None and ctrl_values is not None:
@@ -727,10 +751,11 @@ class Simulator(BaseSimulator):
         self.args = args
         self.kwargs = kwargs
 
-        self.simulator = None
+        self.simulator : BaseSimulator | None = None
 
     def _simulate(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
         obs_times=None,
@@ -743,6 +768,7 @@ class Simulator(BaseSimulator):
             raise ValueError("Simulator not initialized. This shouldn't happen.")
 
         return self.simulator._simulate(
+            name,
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
