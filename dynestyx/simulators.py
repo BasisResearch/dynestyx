@@ -24,6 +24,7 @@ from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _build_control_path,
     _get_val_or_None,
+    _validate_site_sorting,
 )
 
 
@@ -66,7 +67,26 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             return
 
         if filtered_times is not None:
+            _validate_site_sorting(filtered_times, name="filtered_times")
             sim_results = []
+
+            # First generate any needed predictions before the first filtered time
+            sub_predict_times = predict_times[predict_times < filtered_times[0]]
+            if len(sub_predict_times) > 0:
+                print("Generating predictions before the first filtered time")
+                sim_results.append(
+                    self._simulate(
+                        f"{name}_0",
+                        dynamics,
+                        obs_times=None,
+                        obs_values=None,
+                        ctrl_times=ctrl_times,
+                        ctrl_values=ctrl_values,
+                        predict_times=sub_predict_times,
+                    )
+                )
+
+            # Then generate predictions between filtered times (start counting from 1 since we already did the first one)
             for f_idx, (filtered_time, filtered_dist) in enumerate(
                 zip(filtered_times, filtered_dists)
             ):
@@ -85,15 +105,17 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 )
 
                 sub_predict_times = predict_times[predict_times >= filtered_time]
+                # If we are not the last filtered time, we need to generate predictions only up to the next filtered time
                 if f_idx + 1 < len(filtered_times):
                     sub_predict_times = sub_predict_times[
                         sub_predict_times < filtered_times[f_idx + 1]
                     ]
 
-                if sub_predict_times is not None:
+                if len(sub_predict_times) > 0:
+                    # we know that t0 < all sub_predict_times
                     sim_results.append(
                         self._simulate(
-                            f"{name}_{f_idx}",
+                            f"{name}_{f_idx + 1}",
                             dynamics_with_filtered_ic,
                             obs_times=None,
                             obs_values=None,
@@ -105,9 +127,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
             # Collapse the results together
             sim_results = {
-                "times": jnp.concatenate([result["times"] for result in sim_results]),
-                "states": jnp.concatenate([result["states"] for result in sim_results]),
-                "observations": jnp.concatenate(
+                "predicted_times": jnp.concatenate(
+                    [result["times"] for result in sim_results]
+                ),
+                "predicted_states": jnp.concatenate(
+                    [result["states"] for result in sim_results]
+                ),
+                "predicted_observations": jnp.concatenate(
                     [result["observations"] for result in sim_results]
                 ),
             }
@@ -351,7 +377,7 @@ class SDESimulator(BaseSimulator):
             )
 
         bm = dfx.VirtualBrownianTree(
-            t0=times[0],
+            t0=dynamics.t0,
             t1=times[-1],
             tol=self.tol_vbt,
             shape=(dynamics.state_evolution.bm_dim,),
@@ -364,7 +390,7 @@ class SDESimulator(BaseSimulator):
 
         sol = dfx.diffeqsolve(
             terms,
-            t0=times[0],
+            t0=dynamics.t0,
             t1=times[-1],
             y0=initial_state,
             args=control_path_eval,

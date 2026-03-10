@@ -72,7 +72,10 @@ def sample(
     ):
         raise ValueError("obs_times and obs_values must be the same length")
 
-    _validate_site_sorting(obs_times, ctrl_times)
+    _validate_site_sorting(obs_times, name="obs_times")
+    _validate_site_sorting(ctrl_times, name="ctrl_times")
+    _validate_site_sorting(predict_times, name="predict_times")
+
     _validate_controls(obs_times, predict_times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 

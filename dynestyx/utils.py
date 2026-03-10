@@ -159,22 +159,11 @@ def _get_dynamics_with_t0(
         )
 
 
-def _validate_site_sorting(obs_times: Array | None, ctrl_times: Array | None) -> None:
-    """Validate that obs_times and ctrl_times are strictly increasing.
-
-    Raises:
-        ValueError: If obs_times or ctrl_times are not strictly increasing.
-    """
-    if obs_times is not None and len(obs_times) > 1:
+def _validate_site_sorting(times: Array | None, name: str) -> None:
+    """Validate that times are strictly increasing."""
+    if times is not None and len(times) > 1:
         _ = eqx.error_if(
-            obs_times,
-            jnp.any(obs_times[:-1] >= obs_times[1:]),
-            "obs_times must be strictly increasing",
-        )
-
-    if ctrl_times is not None and len(ctrl_times) > 1:
-        _ = eqx.error_if(
-            ctrl_times,
-            jnp.any(ctrl_times[:-1] >= ctrl_times[1:]),
-            "ctrl_times must be strictly increasing",
+            times,
+            jnp.any(times[:-1] >= times[1:]),
+            f"{name} must be strictly increasing",
         )
