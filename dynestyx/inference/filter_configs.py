@@ -9,7 +9,7 @@ import jax.random as jr
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
-FilterSource = Literal["cuthbert", "cd_dynamax", "dynestyx"]
+FilterSource = Literal["cuthbert", "cd_dynamax", "dynestyx", "pfjax"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
 FilterStateOrder = Literal["zeroth", "first", "second"]
 
@@ -226,7 +226,7 @@ class PFConfig(BaseFilterConfig):
         ess_threshold_ratio (float): Resampling fires when the effective
             sample size drops below `ess_threshold_ratio * n_particles`.
             `1.0` → always resample; `0.0` → never. Defaults to `0.7`.
-        filter_source (FilterSource): Backend. Defaults to `"cuthbert"`, which is currently the only available implementation.
+        filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
         At each step, particles are propagated through the transition and
@@ -262,6 +262,25 @@ class PFConfig(BaseFilterConfig):
     )
     ess_threshold_ratio: float = 0.7
     filter_source: FilterSource = "cuthbert"
+
+
+@dataclasses.dataclass
+class MarginalPFConfig(PFConfig):
+    r"""Marginal Particle Filter (MPF / Rao-Blackwellized PF) for discrete-time models.
+
+    This configuration targets the PFJax marginal particle filter (`particle_filter_rb`),
+    which computes particle weights via mixture-based corrections and can reduce variance
+    relative to standard bootstrap PF in some settings.
+
+    Attributes:
+        stop_proposal_gradient (bool): Whether to stop gradients through proposal
+            sampling and proposal log-density terms (PFJax `stop_proposal_gradient`).
+            Defaults to `True`.
+        filter_source (FilterSource): Backend. Defaults to `"pfjax"`.
+    """
+
+    stop_proposal_gradient: bool = True
+    filter_source: FilterSource = "pfjax"
 
 
 @dataclasses.dataclass
@@ -602,6 +621,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 DiscreteTimeConfigs: tuple[type, ...] = (
     EnKFConfig,
     PFConfig,
+    MarginalPFConfig,
     EKFConfig,
     KFConfig,
     UKFConfig,
