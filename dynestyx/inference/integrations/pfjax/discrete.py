@@ -6,6 +6,8 @@ import jax.numpy as jnp
 import numpyro
 from jax import lax, random
 from jax.scipy.special import logsumexp
+from pfjax.particle_filter import particle_filter as pfjax_particle_filter
+from pfjax.particle_filter import particle_filter_rb as pfjax_particle_filter_rb
 
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
@@ -20,8 +22,6 @@ from dynestyx.utils import (
     _validate_control_dim,
     _validate_controls,
 )
-from pfjax.particle_filter import particle_filter as pfjax_particle_filter
-from pfjax.particle_filter import particle_filter_rb as pfjax_particle_filter_rb
 
 
 def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
