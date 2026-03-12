@@ -239,9 +239,7 @@ def run_continuous_filter(
 
     _add_filter_sites(name, filter_config, filtered)
 
-    if isinstance(cd_dynamax_model, ContDiscreteNonlinearGaussianSSM) or isinstance(
-        filter_config, ContinuousTimeKFConfig
-    ):
+    if not isinstance(filter_config, ContinuousTimeDPFConfig):
         return [
             dist.MultivariateNormal(
                 filtered.filtered_means[i],
