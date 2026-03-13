@@ -1,9 +1,6 @@
 """Smoke tests for MCMCInference on discrete-time models."""
 
 import jax.numpy as jnp
-import pytest
-
-pytestmark = pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 import jax.random as jr
 from numpyro.infer import Predictive
 

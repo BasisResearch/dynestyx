@@ -496,10 +496,10 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
 
     # ---------------------------------------------------------
-    # Build conditioned model
+    # Build conditioned model (Filter + Simulator: avoids NUTS/Uniform tracer issue)
     # ---------------------------------------------------------
     def data_conditioned_model():
-        with Simulator():
+        with Filter(filter_config=ContinuousTimeEKFConfig()):
             return continuous_time_deterministic_l63_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -539,7 +539,7 @@ def data_conditioned_continuous_time_potential_dynamics(request):
     obs_values = synthetic["observations"].squeeze(0)
 
     def data_conditioned_model():
-        with Simulator():
+        with Filter(filter_config=ContinuousTimeEKFConfig()):
             return continuous_time_potential_dynamics_model(
                 mode=mode,
                 obs_times=obs_times,

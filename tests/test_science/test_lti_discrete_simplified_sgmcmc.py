@@ -1,9 +1,6 @@
 """Science tests for LTI_discrete with SGMCMC."""
 
 import jax.numpy as jnp
-import pytest
-
-pytestmark = pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 import jax.random as jr
 import pytest
 from numpyro.infer import Predictive

@@ -6,7 +6,6 @@ ensuring that all MCMC inference pipelines can run with minimal parameters.
 """
 
 import jax.random as jr
-import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
 from tests.fixtures import (
@@ -28,7 +27,6 @@ NUM_SAMPLES = 10
 NUM_WARMUP = 10
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_hmm_mcmc_smoke(
     data_conditioned_hmm,  # noqa: F811
 ) -> None:
@@ -44,7 +42,6 @@ def test_hmm_mcmc_smoke(
     assert "sigma" in posterior_samples
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_l63_mcmc_smoke(
     data_conditioned_discrete_time_l63,  # noqa: F811
 ) -> None:
@@ -60,7 +57,6 @@ def test_discrete_time_l63_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_l63_auto_mcmc_smoke(
     data_conditioned_discrete_time_l63_auto,  # noqa: F811
 ) -> None:
@@ -77,7 +73,6 @@ def test_discrete_time_l63_auto_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
     data_conditioned_discrete_time_l63_auto_dirac_obs,  # noqa: F811
 ) -> None:
@@ -94,7 +89,6 @@ def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_stochastic_volatility_mcmc_smoke(
     data_conditioned_stochastic_volatility,  # noqa: F811
 ) -> None:
@@ -125,7 +119,6 @@ def test_continuous_time_stochastic_l63_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.skip(reason="ODESimulator temporarily disabled")
 def test_continuous_time_deterministic_l63_mcmc_smoke(
     data_conditioned_continuous_time_deterministic_l63,  # noqa: F811
 ) -> None:
@@ -141,7 +134,6 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.skip(reason="ODESimulator temporarily disabled")
 def test_continuous_time_potential_dynamics_mcmc_smoke(
     data_conditioned_continuous_time_potential_dynamics,  # noqa: F811
 ) -> None:
@@ -189,7 +181,6 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
     assert "rho" in posterior_samples
 
 
-@pytest.mark.skip(reason="ODESimulator temporarily disabled")
 def test_continuous_time_lti_simplified_mcmc_smoke(
     data_conditioned_continuous_time_lti_simplified,  # noqa: F811
 ) -> None:

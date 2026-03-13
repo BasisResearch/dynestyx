@@ -398,7 +398,6 @@ def _run_model_with_simulator(
     return tr
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_t0_no_error_when_matching_obs_times() -> None:
     predict_times = jnp.array([3.0, 4.0, 5.0])
     dynamics = _simple_discrete_model(t0=3.0)
@@ -406,7 +405,6 @@ def test_t0_no_error_when_matching_obs_times() -> None:
     _run_model_with_simulator(dynamics, predict_times=predict_times)
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_t0_mismatch_raises_informative_error() -> None:
     predict_times = jnp.array([3.0, 4.0, 5.0])
     dynamics = _simple_discrete_model(t0=0.0)
@@ -418,7 +416,6 @@ def test_t0_mismatch_raises_informative_error() -> None:
         _run_model_with_simulator(dynamics, predict_times=predict_times)
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_obs_times_strictly_increasing_validation() -> None:
     predict_times = jnp.array([3.0, 2.0, 5.0])
     with pytest.raises(
@@ -428,11 +425,17 @@ def test_obs_times_strictly_increasing_validation() -> None:
         _run_model_with_simulator(_simple_discrete_model(), predict_times=predict_times)
 
 
-@pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 def test_ctrl_times_strictly_increasing_validation() -> None:
     ctrl_times = jnp.array([3.0, 2.0, 5.0])
+    ctrl_values = jnp.zeros((3, 1))
+    predict_times = jnp.array([3.0, 4.0, 5.0])
     with pytest.raises(
         (ValueError, eqx.EquinoxRuntimeError),
         match="ctrl_times must be strictly increasing",
     ):
-        _run_model_with_simulator(_simple_discrete_model(), ctrl_times=ctrl_times)
+        _run_model_with_simulator(
+            _simple_discrete_model(),
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+        )

@@ -56,7 +56,7 @@ def model(phi=None, obs_times=None, obs_values=None):
 
 obs_times = jnp.arange(0.0, 100.0, 1.0)
 with DiscreteTimeSimulator():
-    samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), phi=0.9, obs_times=obs_times)
+    samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), phi=0.9, predict_times=obs_times)
 ```
 
 ## Quick Example: Inference
@@ -68,7 +68,7 @@ from dynestyx import Filter
 from dynestyx.inference.filters import ContinuousTimeEnKFConfig
 from numpyro.infer import MCMC, NUTS
 
-obs_values = samples["observations"][0]
+obs_values = samples["f_observations"][0]
 
 def inference_model():
     with Filter(filter_config=ContinuousTimeEnKFConfig(n_particles=25)):

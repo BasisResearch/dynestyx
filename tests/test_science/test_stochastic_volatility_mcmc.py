@@ -9,8 +9,6 @@ import pytest
 from numpyro.infer import MCMC, NUTS
 
 from tests.fixtures import data_conditioned_stochastic_volatility  # noqa: F401
-
-pytestmark = pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True

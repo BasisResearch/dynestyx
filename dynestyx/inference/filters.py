@@ -54,6 +54,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
+        filtered_dists = None
         if not (obs_times is None or obs_values is None):
             filtered_dists = self._add_log_factors(
                 name,

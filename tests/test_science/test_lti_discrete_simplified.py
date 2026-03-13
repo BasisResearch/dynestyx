@@ -9,8 +9,6 @@ from numpyro.infer import MCMC, NUTS, BarkerMH
 from tests.fixtures import (
     data_conditioned_discrete_time_lti_simplified_science,  # noqa: F401
 )
-
-pytestmark = pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled")
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True

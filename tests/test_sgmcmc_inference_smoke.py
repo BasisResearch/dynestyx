@@ -17,7 +17,6 @@ from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63
             discrete_time_l63_model,
             EKFConfig(filter_source="cuthbert"),
             "rho",
-            marks=pytest.mark.skip(reason="DiscreteTimeSimulator temporarily disabled"),
         ),
     ],
 )
