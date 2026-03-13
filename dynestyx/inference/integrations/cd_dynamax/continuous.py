@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -25,11 +26,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cdlgssm_params,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -178,7 +175,7 @@ def run_continuous_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Run continuous-time filter via CD-Dynamax.
 
     Args:
@@ -191,12 +188,13 @@ def run_continuous_filter(
         obs_values: Observed values.
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
+
+    Returns:
+        list[numpyro.distributions.Distribution]: A list of distributions for the filtered states.
     """
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
         obs_times_arr = obs_times_arr[:, None]
-    _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
 
     control_dim = dynamics.control_dim
     ctrl_vals = (
@@ -240,3 +238,29 @@ def run_continuous_filter(
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
     _add_filter_sites(name, filter_config, filtered)
+
+    if not isinstance(filter_config, ContinuousTimeDPFConfig):
+        return [
+            dist.MultivariateNormal(
+                filtered.filtered_means[i],
+                filtered.filtered_covariances[i],
+            )
+            for i in range(filtered.filtered_means.shape[0])
+        ]
+    else:
+        # PF, which has filtered.particles and filtered.log_weights
+        def _make_mixture(particles, log_weights):
+            n_particles = log_weights.shape[-1]
+            # MixtureSameFamily requires component_dists batch shape last dim = mixture_size.
+            # Delta(v) with default event_dim=0 uses full v.shape as batch_shape.
+            # We need batch (n_particles,) and event (state_dim,), so use event_dim=1.
+            if particles.shape[0] != n_particles:
+                particles = jnp.swapaxes(particles, -2, -1)
+            mixing_dist = dist.Categorical(logits=log_weights)
+            component_dists = dist.Delta(particles, event_dim=1)
+            return dist.MixtureSameFamily(mixing_dist, component_dists)
+
+        return [
+            _make_mixture(filtered.particles[i], filtered.log_weights[i])
+            for i in range(filtered.particles.shape[0])
+        ]

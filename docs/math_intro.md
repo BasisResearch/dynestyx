@@ -76,7 +76,7 @@ import jax.random as jr
 obs_times = jnp.arange(0.0, 1.0, 0.1)
 
 with SDESimulator():  # Specify how the SDE will be simulated/solved
-    sampled_trajectory = continuous_discrete_model(obs_times=obs_times)  # Obtain samples
+    sampled_trajectory = continuous_discrete_model(predict_times=obs_times)  # Obtain samples
 ```
 
 To instead simulate from a discrete-time system, we would write 
@@ -85,7 +85,7 @@ To instead simulate from a discrete-time system, we would write
 from dynestyx.simulators import DiscreteTimeSimulator
 
 with DiscreteTimeSimulator():  # Specify how the discrete-time system will be simulated
-    sampled_trajectory = discrete_time_model(obs_times=obs_times)  # Obtain samples
+    sampled_trajectory = discrete_time_model(predict_times=obs_times)  # Obtain samples
 ```
 
 Simulating from a dynamical model essentially "unrolls" it into a standard `numpyro` probabilistic program. For Bayesian inference of dynamical systems, however, this is a rather inefficient way to do things; in the next section, we review Bayesian inference of dynamical systems, and discuss the way we perform inference more efficiently in `dynestyx`.

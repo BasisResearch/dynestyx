@@ -8,7 +8,7 @@ from jax.scipy.special import logsumexp
 
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import _should_record_field, _validate_controls
+from dynestyx.utils import _should_record_field
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
@@ -195,7 +195,6 @@ def _filter_hmm(
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
     """
-    _validate_controls(obs_times, ctrl_times, ctrl_values)
 
     log_pi, log_A_seq, log_emit_seq = hmm_log_components(
         dynamics,

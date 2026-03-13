@@ -26,11 +26,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 
 class CuthbertInputs(NamedTuple):
@@ -67,25 +63,29 @@ def run_discrete_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
-    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter)."""
+) -> list[dist.Distribution]:
+    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
+    Returns:
+        list[dist.Distribution]: Filtered state distributions at each obs time.
+    """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = _config_to_record_kwargs(filter_config)
 
     ys = obs_values
     t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
     if t1 == 0:
-        return
+        return []
 
     times = obs_times
-
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
 
     if ctrl_values is None:
         control_dim = dynamics.control_dim
         ctrl_values = jnp.zeros((t1, control_dim), dtype=ys.dtype)
+    elif ctrl_values.shape[0] > t1:
+        # ctrl spans union of obs_times and predict_times; filter needs ctrl at obs_times only
+        inds = jnp.searchsorted(ctrl_times, times, side="left")
+        ctrl_values = ctrl_values[inds]
 
     dt0 = times[1] - times[0]
     time_prev = jnp.concatenate([times[:1] - dt0, times[:-1]], axis=0)
@@ -120,8 +120,29 @@ def run_discrete_filter(
 
     if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
+        # PF: mixture of deltas
+        particles = states.particles
+        if particles.ndim == 2:
+            particles = particles[..., None]
+        log_weights = states.log_weights
+        log_weights_norm = log_weights - jax.scipy.special.logsumexp(
+            log_weights, axis=1, keepdims=True
+        )
+        result = []
+        for i in range(particles.shape[0]):
+            mixing = dist.Categorical(logits=log_weights_norm[i])
+            comps = dist.Delta(particles[i], event_dim=1)
+            result.append(dist.MixtureSameFamily(mixing, comps))
+        return result
     else:
         _add_sites_taylor_kf(name, states, record_kwargs)
+        # KF/EKF: states.mean (T+1, state_dim), states.chol_cov (T+1, state_dim, state_dim)
+        chol_t = jnp.transpose(states.chol_cov, (0, 2, 1))
+        cov = jnp.matmul(states.chol_cov, chol_t)
+        return [
+            dist.MultivariateNormal(states.mean[i], covariance_matrix=cov[i])
+            for i in range(states.mean.shape[0])
+        ]
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):

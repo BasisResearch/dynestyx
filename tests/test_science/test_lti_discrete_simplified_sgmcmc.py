@@ -14,7 +14,8 @@ from tests.models import discrete_time_lti_simplified_model
 
 @pytest.mark.parametrize("num_samples", [160])
 def test_sgmcmc_inference(num_samples):
-    obs_times = jnp.arange(start=0.0, stop=60.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=60.0, step=1.0)
+    obs_times = predict_times
     true_params = {"alpha": jnp.array(0.35)}
     predictive = Predictive(
         discrete_time_lti_simplified_model,
@@ -23,8 +24,8 @@ def test_sgmcmc_inference(num_samples):
         exclude_deterministic=False,
     )
     with DiscreteTimeSimulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    obs_values = synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    obs_values = synthetic["f_observations"].squeeze(0)
 
     with Filter():
         inference = MCMCInference(

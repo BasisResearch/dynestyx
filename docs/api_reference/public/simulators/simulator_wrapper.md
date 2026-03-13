@@ -43,7 +43,7 @@
     with Simulator():
         prior_pred = Predictive(model, num_samples=5)(
             jr.PRNGKey(0),
-            obs_times=obs_times,
+            predict_times=obs_times,
         )
     print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f', 'observations', 'phi', 'states', 'times', ...]
     print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # e.g. first axis is num_samples=5
@@ -70,7 +70,7 @@
     # Deterministic trajectory keys like 'states'/'observations' are in posterior predictive output.
     with Simulator():
         post_pred = Predictive(model, posterior_samples=posterior)(
-            jr.PRNGKey(2), obs_times=obs_times
+            jr.PRNGKey(2), predict_times=obs_times
         )
     print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'states', 'observations', 'times'
     print("Posterior predictive shapes:", {k: v.shape for k, v in post_pred.items()})

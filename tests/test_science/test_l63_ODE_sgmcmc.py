@@ -16,7 +16,8 @@ from tests.models import continuous_time_deterministic_l63_model
 
 @pytest.mark.parametrize("num_samples", [120])
 def test_sgmcmc_inference(num_samples):
-    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.01)
+    predict_times = jnp.arange(start=0.0, stop=2.0, step=0.01)
+    obs_times = predict_times
     true_params = {"rho": jnp.array(28.0)}
     predictive = Predictive(
         continuous_time_deterministic_l63_model,
@@ -25,8 +26,8 @@ def test_sgmcmc_inference(num_samples):
         exclude_deterministic=False,
     )
     with Simulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    obs_values = synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    obs_values = synthetic["f_observations"].squeeze(0)
 
     with Filter():
         inference = MCMCInference(

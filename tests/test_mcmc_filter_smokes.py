@@ -17,7 +17,8 @@ from tests.models import continuous_time_stochastic_l63_model
 
 
 def _make_data():
-    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    obs_times = predict_times
     true_params = {"rho": jnp.array(28.0)}
     predictive = Predictive(
         continuous_time_stochastic_l63_model,
@@ -26,8 +27,8 @@ def _make_data():
         exclude_deterministic=False,
     )
     with Simulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    return obs_times, synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    return obs_times, synthetic["f_observations"].squeeze(0)
 
 
 def test_filter_based_mcmc_nuts_smoke():

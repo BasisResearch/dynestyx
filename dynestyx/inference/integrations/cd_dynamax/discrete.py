@@ -32,11 +32,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
@@ -86,18 +82,18 @@ def _filter_discrete_time_dynamax_kf(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Run dynamax Kalman filter for LTI_discretetime and add factor + sites."""
     emissions = obs_values
-    times = jnp.asarray(obs_times)
     T1 = emissions.shape[0]
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
     control_dim = dynamics.control_dim
-    if ctrl_values is not None:
-        inputs = ctrl_values
-    else:
+    if ctrl_values is None:
         inputs = jnp.zeros((T1, control_dim))
+    elif ctrl_values.shape[0] > T1:
+        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        inputs = ctrl_values[inds]
+    else:
+        inputs = ctrl_values
 
     params = _lti_to_lgssm_params(dynamics)
     posterior = lgssm_filter(params, emissions, inputs=inputs)
@@ -106,6 +102,15 @@ def _filter_discrete_time_dynamax_kf(
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
     _add_kf_sites(name, posterior, record_kwargs)
+
+    if posterior.filtered_means is None or posterior.filtered_covariances is None:
+        return []
+    return [
+        dist.MultivariateNormal(
+            posterior.filtered_means[i], posterior.filtered_covariances[i]
+        )
+        for i in range(posterior.filtered_means.shape[0])
+    ]
 
 
 def _run_nlgssm_filter(
@@ -119,15 +124,19 @@ def _run_nlgssm_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Common setup for EKF/UKF: get emissions/inputs, run filter, add factor + sites."""
     emissions = obs_values
-    times = jnp.asarray(obs_times)
     T1 = emissions.shape[0]
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
     control_dim = dynamics.control_dim
-    inputs = ctrl_values if ctrl_values is not None else jnp.zeros((T1, control_dim))
+    if ctrl_values is None:
+        inputs = jnp.zeros((T1, control_dim))
+    elif ctrl_values.shape[0] > T1:
+        # ctrl spans union of obs_times and predict_times; filter needs ctrl at obs_times only
+        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        inputs = ctrl_values[inds]
+    else:
+        inputs = ctrl_values
 
     params_nl = gaussian_to_nlgssm_params(dynamics)
     posterior = run_filter(params_nl, emissions, inputs)
@@ -136,6 +145,15 @@ def _run_nlgssm_filter(
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
     _add_kf_sites(name, posterior, record_kwargs)
+
+    if posterior.filtered_means is None or posterior.filtered_covariances is None:
+        return []
+    return [
+        dist.MultivariateNormal(
+            posterior.filtered_means[i], posterior.filtered_covariances[i]
+        )
+        for i in range(posterior.filtered_means.shape[0])
+    ]
 
 
 def _filter_discrete_time_dynamax_ekf(
@@ -149,7 +167,7 @@ def _filter_discrete_time_dynamax_ekf(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Run dynamax EKF for LTI and add factor + sites."""
 
     def run_filter(params_nl, emissions, inputs):
@@ -157,7 +175,7 @@ def _filter_discrete_time_dynamax_ekf(
             params_nl, emissions, num_iter=num_iter, inputs=inputs
         )
 
-    _run_nlgssm_filter(
+    return _run_nlgssm_filter(
         name,
         dynamics,
         record_kwargs,
@@ -181,7 +199,7 @@ def _filter_discrete_time_dynamax_ukf(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Run dynamax UKF for LTI and add factor + sites."""
     if hyperparams is None:
         hyperparams = UKFHyperParams()
@@ -191,7 +209,7 @@ def _filter_discrete_time_dynamax_ukf(
             params_nl, emissions, hyperparams=hyperparams, inputs=inputs
         )
 
-    _run_nlgssm_filter(
+    return _run_nlgssm_filter(
         name,
         dynamics,
         record_kwargs,
@@ -244,17 +262,11 @@ def run_discrete_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).
 
-    Args:
-        name: Name of the factor.
-        dynamics: Dynamical model to filter.
-        filter_config: KFConfig, EKFConfig, or UKFConfig.
-        obs_times: Observation times.
-        obs_values: Observed values.
-        ctrl_times: Control times (optional).
-        ctrl_values: Control values (optional).
+    Returns:
+        list[dist.Distribution]: Filtered state distributions at each obs time.
     """
     record_kwargs = _config_to_record_kwargs(filter_config)
     filter_kwargs = dict(
@@ -266,9 +278,11 @@ def run_discrete_filter(
     )
 
     if isinstance(filter_config, KFConfig):
-        _filter_discrete_time_dynamax_kf(name, dynamics, record_kwargs, **filter_kwargs)
+        return _filter_discrete_time_dynamax_kf(
+            name, dynamics, record_kwargs, **filter_kwargs
+        )
     elif isinstance(filter_config, EKFConfig):
-        _filter_discrete_time_dynamax_ekf(
+        return _filter_discrete_time_dynamax_ekf(
             name, dynamics, record_kwargs, **filter_kwargs
         )
     elif isinstance(filter_config, UKFConfig):
@@ -277,7 +291,7 @@ def run_discrete_filter(
             beta=filter_config.beta,
             kappa=filter_config.kappa,
         )
-        _filter_discrete_time_dynamax_ukf(
+        return _filter_discrete_time_dynamax_ukf(
             name, dynamics, record_kwargs, hyperparams=hyperparams, **filter_kwargs
         )
     else:
