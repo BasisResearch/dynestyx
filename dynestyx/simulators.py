@@ -12,7 +12,7 @@ import jax.random as jr
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jax import Array
+from jax import Array, lax
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
@@ -72,17 +72,24 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             _validate_site_sorting(filtered_times, name="filtered_times")
             sim_results = []
 
+            def _ctrl_for_segment(sub_times):
+                if ctrl_times is None or ctrl_values is None:
+                    return None, None
+                inds = jnp.searchsorted(ctrl_times, sub_times, side="left")
+                return sub_times, ctrl_values[inds]
+
             # First generate any needed predictions before the first filtered time
             sub_predict_times = predict_times[predict_times < filtered_times[0]]
             if len(sub_predict_times) > 0:
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_predict_times)
                 sim_results.append(
                     self._simulate(
                         f"{name}_0",
                         dynamics,
                         obs_times=None,
                         obs_values=None,
-                        ctrl_times=ctrl_times,
-                        ctrl_values=ctrl_values,
+                        ctrl_times=ctrl_t_seg,
+                        ctrl_values=ctrl_v_seg,
                         predict_times=sub_predict_times,
                     )
                 )
@@ -113,14 +120,15 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
                 if len(sub_predict_times) > 0:
                     # we know that t0 < all sub_predict_times
+                    ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_predict_times)
                     sim_results.append(
                         self._simulate(
                             f"{name}_{f_idx + 1}",
                             dynamics_with_filtered_ic,
                             obs_times=None,
                             obs_values=None,
-                            ctrl_times=ctrl_times,
-                            ctrl_values=ctrl_values,
+                            ctrl_times=ctrl_t_seg,
+                            ctrl_values=ctrl_v_seg,
                             predict_times=sub_predict_times,
                         )
                     )
@@ -129,10 +137,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             times_list = [r["times"] for r in sim_results]
             states_list = [r["states"] for r in sim_results]
             obs_list = [r["observations"] for r in sim_results]
-            # For n_simulations > 1, states/observations have shape (n_sim, T, dim)
-            # so concatenate along axis=1 (time). For n_simulations=1, axis=0.
+            # For n_simulations > 1, states/observations have shape (n_sim, T) or (n_sim, T, dim)
+            # so concatenate along axis=1 (time). For n_simulations=1, shape (T,) or (T, dim), axis=0.
             states_ndim = states_list[0].ndim
-            axis = 1 if states_ndim == 3 else 0
+            axis = 1 if states_ndim >= 3 else 0
             sim_results = {
                 "predicted_times": jnp.concatenate(times_list),
                 "predicted_states": jnp.concatenate(states_list, axis=axis),
@@ -219,45 +227,50 @@ def _solve_de(
     t0 is explicit (may differ from model's t0, e.g. for predict_times from filter).
     """
     t1 = saveat_times[-1]
-    if t0 >= t1:
+
+    # Use lax.cond to avoid TracerBoolConversionError when t0/t1 are traced
+    def _early_return():
         return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
 
-    diffusion = dynamics.state_evolution.diffusion_coefficient
+    def _solve():
+        diffusion = dynamics.state_evolution.diffusion_coefficient
 
-    def _drift(t, y, args):
-        u_t = args(t) if args is not None else None
-        return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
+        def _drift(t, y, args):
+            u_t = args(t) if args is not None else None
+            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
 
-    if diffusion is None:
-        terms = dfx.ODETerm(_drift)
-    else:
-        k_bm, _ = jr.split(key, 2)
-        bm = dfx.VirtualBrownianTree(
+        if diffusion is None:
+            terms = dfx.ODETerm(_drift)
+        else:
+            k_bm, _ = jr.split(key, 2)
+            bm = dfx.VirtualBrownianTree(
+                t0=t0,
+                t1=t1,
+                tol=tol_vbt,
+                shape=(dynamics.state_evolution.bm_dim,),
+                key=k_bm,
+            )
+
+            def _diffusion(t, y, args):
+                u_t = args(t) if args is not None else None
+                return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+
+            terms = dfx.MultiTerm(  # type: ignore
+                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
+            )
+
+        sol = dfx.diffeqsolve(
+            terms,
             t0=t0,
             t1=t1,
-            tol=tol_vbt,
-            shape=(dynamics.state_evolution.bm_dim,),
-            key=k_bm,
+            y0=x0,
+            saveat=dfx.SaveAt(ts=saveat_times),
+            args=control_path_eval,
+            **diffeqsolve_settings,
         )
+        return sol.ys
 
-        def _diffusion(t, y, args):
-            u_t = args(t) if args is not None else None
-            return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
-
-        terms = dfx.MultiTerm(  # type: ignore
-            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-        )
-
-    sol = dfx.diffeqsolve(
-        terms,
-        t0=t0,
-        t1=t1,
-        y0=x0,
-        saveat=dfx.SaveAt(ts=saveat_times),
-        args=control_path_eval,
-        **diffeqsolve_settings,
-    )
-    return sol.ys
+    return lax.cond(t0 >= t1, _early_return, _solve)
 
 
 def _emit_observations(

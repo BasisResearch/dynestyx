@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
 
@@ -183,7 +184,7 @@ def _filter_hmm(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Exact HMM marginal likelihood via forward filtering.
 
     Args:
@@ -194,6 +195,10 @@ def _filter_hmm(
         obs_values: Observed values.
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
+
+    Returns:
+        List of Categorical distributions p(x_t | y_{1:t}) at each obs time,
+        for use with Filter + DiscreteTimeSimulator rollout.
     """
 
     log_pi, log_A_seq, log_emit_seq = hmm_log_components(
@@ -229,3 +234,9 @@ def _filter_hmm(
             f"{name}_filtered_states",
             jnp.exp(log_filt_seq),  # (T, K)
         )
+
+    # Return filtered distributions for Filter + DiscreteTimeSimulator rollout
+    return [
+        dist.Categorical(probs=jnp.exp(log_filt_seq[i]))
+        for i in range(log_filt_seq.shape[0])
+    ]
