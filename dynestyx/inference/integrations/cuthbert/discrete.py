@@ -128,11 +128,11 @@ def run_discrete_filter(
         log_weights_norm = log_weights - jax.scipy.special.logsumexp(
             log_weights, axis=1, keepdims=True
         )
-        result = []
+        result: list[dist.Distribution] = []
         for i in range(particles.shape[0]):
             mixing = dist.Categorical(logits=log_weights_norm[i])
             comps = dist.Delta(particles[i], event_dim=1)
-            result.append(dist.MixtureSameFamily(mixing, comps))
+            result.append(dist.MixtureSameFamily(mixing, comps))  # type: ignore[arg-type]
         return result
     else:
         _add_sites_taylor_kf(name, states, record_kwargs)

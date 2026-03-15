@@ -253,7 +253,7 @@ def _filter_discrete_time(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
     Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig (cd-dynamax)
@@ -307,7 +307,7 @@ def _filter_continuous_time(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.
 
     Supports: EnKF, DPF, EKF, UKF (inferred from config type).

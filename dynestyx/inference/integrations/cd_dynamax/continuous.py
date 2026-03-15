@@ -240,15 +240,20 @@ def run_continuous_filter(
     _add_filter_sites(name, filter_config, filtered)
 
     if not isinstance(filter_config, ContinuousTimeDPFConfig):
-        return [
-            dist.MultivariateNormal(
-                filtered.filtered_means[i],
-                filtered.filtered_covariances[i],
+        means = filtered.filtered_means
+        covs = filtered.filtered_covariances
+        if means is None or covs is None:
+            raise ValueError(
+                "Filtered means/covariances unexpectedly None for non-DPF config"
             )
-            for i in range(filtered.filtered_means.shape[0])
+        return [
+            dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])
         ]
     else:
-        # PF, which has filtered.particles and filtered.log_weights
+        # PF: filtered has particles and log_weights (DPF-specific, not in base type)
+        particles = filtered.particles  # type: ignore[attr-defined]
+        log_weights = filtered.log_weights  # type: ignore[attr-defined]
+
         def _make_mixture(particles, log_weights):
             n_particles = log_weights.shape[-1]
             # MixtureSameFamily requires component_dists batch shape last dim = mixture_size.
@@ -256,11 +261,11 @@ def run_continuous_filter(
             # We need batch (n_particles,) and event (state_dim,), so use event_dim=1.
             if particles.shape[0] != n_particles:
                 particles = jnp.swapaxes(particles, -2, -1)
-            mixing_dist = dist.Categorical(logits=log_weights)
-            component_dists = dist.Delta(particles, event_dim=1)
-            return dist.MixtureSameFamily(mixing_dist, component_dists)
+            mixing_dist = dist.Categorical(logits=log_weights)  # type: ignore
+            component_dists = dist.Delta(particles, event_dim=1)  # type: ignore
+            return dist.MixtureSameFamily(mixing_dist, component_dists)  # type: ignore
 
         return [
-            _make_mixture(filtered.particles[i], filtered.log_weights[i])
-            for i in range(filtered.particles.shape[0])
+            _make_mixture(particles[i], log_weights[i])
+            for i in range(particles.shape[0])
         ]

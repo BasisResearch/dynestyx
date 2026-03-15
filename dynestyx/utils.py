@@ -94,6 +94,8 @@ def _validate_controls(
         total_obs_pred_times = obs_times
     else:
         total_obs_pred_times = jnp.union1d(obs_times, predict_times)
+    assert total_obs_pred_times is not None
+
     # Use trace-safe check: same length and sorted arrays match.
     # (Avoid jnp.setxor1d/jnp.unique which have data-dependent output shapes and fail under JIT.)
     len_mismatch = ctrl_times.shape[0] != total_obs_pred_times.shape[0]
@@ -141,7 +143,7 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
 
 
 def _get_dynamics_with_t0(
-    dynamics: DynamicalModel, obs_times: Array, predict_times: Array
+    dynamics: DynamicalModel, obs_times: Array | None, predict_times: Array | None
 ) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
@@ -150,6 +152,7 @@ def _get_dynamics_with_t0(
     from ``obs_times[0]`` or ``predict_times[0]`` (kept as a JAX scalar so the result is jittable).
     """
     if obs_times is None:
+        assert predict_times is not None
         inferred_t0 = predict_times[0]
     elif predict_times is None:
         inferred_t0 = obs_times[0]

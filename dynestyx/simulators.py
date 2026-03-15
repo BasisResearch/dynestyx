@@ -63,10 +63,18 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     ) -> FunctionOfTime:
         # Need times to simulate: predict_times or obs_times
         if predict_times is None and obs_times is None:
-            return
+            return fwd(
+                name,
+                dynamics,
+                **kwargs,
+            )
         # For filter rollout, need predict_times
         if filtered_times is not None and predict_times is None:
-            return
+            return fwd(
+                name,
+                dynamics,
+                **kwargs,
+            )
 
         if filtered_times is not None and filtered_dists is not None:
             _validate_site_sorting(filtered_times, name="filtered_times")
@@ -141,14 +149,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             # so concatenate along axis=1 (time). For n_simulations=1, shape (T,) or (T, dim), axis=0.
             states_ndim = states_list[0].ndim
             axis = 1 if states_ndim >= 3 else 0
-            sim_results = {
+            sim_results_dict = {
                 "predicted_times": jnp.concatenate(times_list),
                 "predicted_states": jnp.concatenate(states_list, axis=axis),
                 "predicted_observations": jnp.concatenate(obs_list, axis=axis),
             }
 
         else:
-            sim_results = self._simulate(
+            sim_results_dict = self._simulate(
                 name,
                 dynamics,
                 obs_times=obs_times,
@@ -160,7 +168,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             )
 
         # Add the results from the simulator as deterministic sites
-        for site_name, trajectory in sim_results.items():
+        for site_name, trajectory in sim_results_dict.items():
             numpyro.deterministic(f"{name}_{site_name}", trajectory)
 
         return fwd(
@@ -491,7 +499,7 @@ class SDESimulator(BaseSimulator):
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
 
-        def _run_one_from_x0(key, x0):
+        def _run_one_from_x0(key: Array, x0: Array) -> tuple[Array, Array]:
             k_solve, k_obs = jr.split(key, 2)
             states_sol = _solve_de(
                 dynamics,
@@ -508,16 +516,18 @@ class SDESimulator(BaseSimulator):
             )
             return states_sol, emissions
 
+        prng_key = numpyro.prng_key()
+        if prng_key is None:
+            raise ValueError("PRNG key required for simulation")
         if n_sim == 1:
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
-            key = numpyro.prng_key()
-            states, emissions = _run_one_from_x0(key, initial_state)
+            states, emissions = _run_one_from_x0(prng_key, jnp.asarray(initial_state))
             return {"times": times, "states": states, "observations": emissions}
 
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
-        keys = jr.split(numpyro.prng_key(), n_sim)
-        states, emissions = jax.vmap(_run_one_from_x0)(keys, initial_state)
+        keys = jr.split(prng_key, n_sim)
+        states, emissions = jax.vmap(_run_one_from_x0)(keys, jnp.asarray(initial_state))
         return {"times": times, "states": states, "observations": emissions}
 
 
@@ -669,7 +679,10 @@ class DiscreteTimeSimulator(BaseSimulator):
                 initial_state = numpyro.sample(
                     f"{name}_x_0", dynamics.initial_condition
                 )
-            keys = jr.split(numpyro.prng_key(), n_sim)
+            prng_key = numpyro.prng_key()
+            if prng_key is None:
+                raise ValueError("PRNG key required for n_simulations > 1")
+            keys = jr.split(prng_key, n_sim)
 
             def _run_one(key, x0):
                 keys_t = jr.split(key, T)
@@ -837,8 +850,9 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        x0_arr: Array = jnp.asarray(x0)
         states = _solve_de(
-            dynamics, t0, times, x0, control_path_eval, self.diffeqsolve_settings
+            dynamics, t0, times, x0_arr, control_path_eval, self.diffeqsolve_settings
         )
         observations = _emit_observations(
             name, dynamics, states, times, obs_values, control_path_eval
