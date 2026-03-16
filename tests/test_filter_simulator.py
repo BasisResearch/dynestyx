@@ -22,6 +22,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeEnKFConfig,
 )
 from tests.fixtures import (
+    _squeeze_sim_dims,
     data_conditioned_jumpy_controls,
     data_conditioned_jumpy_controls_ode,
     data_conditioned_jumpy_controls_sde,
@@ -35,7 +36,7 @@ def test_filter_sdesimulator_known_params():
     with trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
-    synthetic_obs = synthetic["observations"][0, ...]
+    synthetic_obs = synthetic["observations"]
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_obs.shape == filtered_means.shape
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
@@ -49,7 +50,7 @@ def test_filter_odesimulator_known_params():
     with trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
-    synthetic_obs = synthetic["observations"][0, ...]
+    synthetic_obs = synthetic["observations"]
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_obs.shape == filtered_means.shape
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
@@ -67,7 +68,7 @@ def test_filter_discretetimesimulator_known_params(filter_type):
     with trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
-    synthetic_obs = synthetic["observations"][0, ...]
+    synthetic_obs = synthetic["observations"]
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_obs.shape == filtered_means.shape
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
@@ -116,7 +117,7 @@ def test_filter_sdesimulator_predict_times_n_simulations():
             exclude_deterministic=False,
         )
         sim = pred(rng_key, predict_times=obs_times)
-    obs_values = jnp.array(sim["f_observations"].squeeze(0))
+    obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
 
     # Filter + SDESimulator with n_simulations
     substituted = numpyro.handlers.substitute(
@@ -165,7 +166,7 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
             exclude_deterministic=False,
         )
         sim = pred(rng_key, predict_times=predict_times)
-    obs_values = jnp.array(sim["f_observations"].squeeze(0))
+    obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
 
     # Filter + DiscreteTimeSimulator with n_simulations and predict_times
     substituted = numpyro.handlers.substitute(
@@ -190,4 +191,4 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
     assert "f_predicted_observations" in tr
     assert "f_filtered_states_mean" in tr
     pred_states = tr["f_predicted_states"]["value"]
-    assert pred_states.shape == (n_sim, len(predict_times), 2)
+    assert pred_states.shape == (n_sim, len(predict_times), 2), pred_states.shape

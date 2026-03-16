@@ -3,12 +3,14 @@
 import dataclasses
 import warnings
 from collections.abc import Callable
+from typing import cast
 
 import diffrax as dfx
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -69,7 +71,26 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if filtered_times is not None and filtered_dists is not None:
             _validate_site_sorting(filtered_times, name="filtered_times")
-            sim_results = []
+            n_pred = len(predict_times)
+
+            def _extract_times(mask: Array, empty_fill: Array) -> Array:
+                """JAX-safe fixed-size extract used in tracer fallback path.
+
+                This path preserves static shapes under lax.map/jit, but can be slower
+                because empty segments still evaluate with full-size `predict_times`.
+                """
+                n_valid = jnp.sum(mask)
+                valid_max = jnp.max(jnp.where(mask, predict_times, -jnp.inf))
+                fill = jnp.where(jnp.isfinite(valid_max), valid_max, empty_fill)
+                extracted = jnp.extract(
+                    mask, predict_times, size=n_pred, fill_value=fill
+                )
+                # Pad positions must be strictly increasing for ODE/SDE control paths
+                pad_start = fill + 1
+                is_valid_pos = jnp.arange(n_pred) < n_valid
+                pad_vals = pad_start + (jnp.arange(n_pred) - n_valid)
+                result = jnp.where(is_valid_pos, extracted, pad_vals)
+                return lax.cond(n_valid > 0, lambda: result, lambda: predict_times)
 
             def _ctrl_for_segment(sub_times):
                 if ctrl_times is None or ctrl_values is None:
@@ -77,10 +98,72 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 inds = jnp.searchsorted(ctrl_times, sub_times, side="left")
                 return sub_times, ctrl_values[inds]
 
-            # First generate any needed predictions before the first filtered time
-            sub_predict_times = predict_times[predict_times < filtered_times[0]]
-            if len(sub_predict_times) > 0:
-                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_predict_times)
+            sim_results = []
+            seg_masks = []
+
+            # Fast path: use host-side segment IDs so we only simulate non-empty segments
+            # and pass true segment lengths (sum lengths = n_pred).
+            # This avoids O(n_filtered * n_pred) behavior.
+            used_fast_path = False
+            try:
+                pt_host = np.asarray(jax.device_get(predict_times))
+                ft_host = np.asarray(jax.device_get(filtered_times))
+                seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
+                present_seg_ids = [int(s) for s in np.unique(seg_ids_host)]
+
+                for seg_id in present_seg_ids:
+                    mask_host = seg_ids_host == seg_id
+                    if not np.any(mask_host):
+                        continue
+
+                    mask_seg = jnp.asarray(mask_host)
+                    sub = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
+
+                    if seg_id < 0:
+                        dynamics_seg = dynamics
+                        seg_name = f"{name}_0"
+                    else:
+                        filtered_time = filtered_times[seg_id]
+                        filtered_dist = filtered_dists[seg_id]
+                        dynamics_with_filtered_time = eqx.tree_at(
+                            lambda m: m.t0,
+                            dynamics,
+                            filtered_time,
+                            is_leaf=lambda x: x is None,
+                        )
+                        dynamics_seg = eqx.tree_at(
+                            lambda m: m.initial_condition,
+                            dynamics_with_filtered_time,
+                            filtered_dist,
+                            is_leaf=lambda x: x is None,
+                        )
+                        seg_name = f"{name}_{seg_id + 1}"
+
+                    ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
+                    sim_results.append(
+                        self._simulate(
+                            seg_name,
+                            dynamics_seg,
+                            obs_times=None,
+                            obs_values=None,
+                            ctrl_times=ctrl_t_seg,
+                            ctrl_values=ctrl_v_seg,
+                            predict_times=sub,
+                        )
+                    )
+                    seg_masks.append(mask_seg)
+
+                used_fast_path = len(sim_results) > 0
+            except Exception:
+                used_fast_path = False
+
+            if not used_fast_path:
+                # Tracer-safe fallback path with fixed-size segments.
+                # First segment: times before first filtered time
+                mask0 = predict_times < filtered_times[0]
+                seg_masks.append(mask0)  # for filtering concatenated output
+                sub0 = _extract_times(mask0, empty_fill=filtered_times[0])
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub0)
                 sim_results.append(
                     self._simulate(
                         f"{name}_0",
@@ -89,37 +172,38 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                         obs_values=None,
                         ctrl_times=ctrl_t_seg,
                         ctrl_values=ctrl_v_seg,
-                        predict_times=sub_predict_times,
+                        predict_times=sub0,
                     )
                 )
 
-            # Then generate predictions between filtered times (start counting from 1 since we already did the first one)
-            for f_idx, (filtered_time, filtered_dist) in enumerate(
-                zip(filtered_times, filtered_dists)
-            ):
-                dynamics_with_filtered_time = eqx.tree_at(
-                    lambda m: m.t0,
-                    dynamics,
-                    filtered_time,
-                    is_leaf=lambda x: x is None,
-                )
-                dynamics_with_filtered_ic = eqx.tree_at(
-                    lambda m: m.initial_condition,
-                    dynamics_with_filtered_time,
-                    filtered_dist,
-                    is_leaf=lambda x: x is None,
-                )
+                # Segments between filtered times (index-based to avoid JAX array chunk iterator
+                # which fails under lax.map when len(filtered_times) > 100)
+                n_filtered = int(filtered_times.shape[0])
+                for f_idx in range(n_filtered):
+                    filtered_time = filtered_times[f_idx]
+                    filtered_dist = filtered_dists[f_idx]
+                    dynamics_with_filtered_time = eqx.tree_at(
+                        lambda m: m.t0,
+                        dynamics,
+                        filtered_time,
+                        is_leaf=lambda x: x is None,
+                    )
+                    dynamics_with_filtered_ic = eqx.tree_at(
+                        lambda m: m.initial_condition,
+                        dynamics_with_filtered_time,
+                        filtered_dist,
+                        is_leaf=lambda x: x is None,
+                    )
 
-                sub_predict_times = predict_times[predict_times >= filtered_time]
-                # If we are not the last filtered time, we need to generate predictions only up to the next filtered time
-                if f_idx + 1 < len(filtered_times):
-                    sub_predict_times = sub_predict_times[
-                        sub_predict_times < filtered_times[f_idx + 1]
-                    ]
+                    mask_seg = predict_times >= filtered_time
+                    if f_idx + 1 < len(filtered_times):
+                        mask_seg = mask_seg & (
+                            predict_times < filtered_times[f_idx + 1]
+                        )
+                    sub = _extract_times(mask_seg, empty_fill=filtered_time)
+                    seg_masks.append(mask_seg)
 
-                if len(sub_predict_times) > 0:
-                    # we know that t0 < all sub_predict_times
-                    ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_predict_times)
+                    ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
                     sim_results.append(
                         self._simulate(
                             f"{name}_{f_idx + 1}",
@@ -128,23 +212,52 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                             obs_values=None,
                             ctrl_times=ctrl_t_seg,
                             ctrl_values=ctrl_v_seg,
-                            predict_times=sub_predict_times,
+                            predict_times=sub,
                         )
                     )
 
-            # Collapse the results together
-            times_list = [r["times"] for r in sim_results]
+            # Merge segment results into predict_times order.
+            # Each segment has fixed-size output (n_pred) with valid entries first, padded.
+            # Use seg_masks to scatter each segment's values into the correct positions.
             states_list = [r["states"] for r in sim_results]
             obs_list = [r["observations"] for r in sim_results]
-            # For n_simulations > 1, states/observations have shape (n_sim, T) or (n_sim, T, dim)
-            # so concatenate along axis=1 (time). For n_simulations=1, shape (T,) or (T, dim), axis=0.
-            states_ndim = states_list[0].ndim
-            axis = 1 if states_ndim >= 3 else 0
+
+            def _merge_segments(arr_list, seg_masks):
+                """Merge segment arrays: at each position i, take value from segment with mask_s[i]=True."""
+                first = arr_list[0]
+                if first.ndim == 3:
+                    out = jnp.zeros(
+                        (first.shape[0], n_pred, first.shape[2]), dtype=first.dtype
+                    )
+                elif first.ndim == 2:
+                    out = jnp.zeros((n_pred, first.shape[1]), dtype=first.dtype)
+                else:
+                    out = jnp.zeros((n_pred,), dtype=first.dtype)
+                for arr, mask in zip(arr_list, seg_masks):
+                    cumsum = jnp.cumsum(mask)
+                    local_idx = jnp.where(mask, cumsum - 1, 0)
+                    if arr.ndim == 3:
+                        gathered = arr[:, local_idx, :]
+                        mask_bc = jnp.expand_dims(
+                            jnp.expand_dims(mask, 0), -1
+                        )  # (1, T, 1)
+                    elif arr.ndim == 2:
+                        gathered = arr[local_idx, :]
+                        mask_bc = jnp.expand_dims(mask, -1)  # (T, 1)
+                    else:
+                        gathered = arr[local_idx]
+                        mask_bc = mask
+                    out = jnp.where(mask_bc, gathered, out)
+                return out
+
             sim_results_dict = {
-                "predicted_times": jnp.concatenate(times_list),
-                "predicted_states": jnp.concatenate(states_list, axis=axis),
-                "predicted_observations": jnp.concatenate(obs_list, axis=axis),
+                "predicted_states": _merge_segments(states_list, seg_masks),
+                "predicted_observations": _merge_segments(obs_list, seg_masks),
             }
+            n_sim_out = sim_results_dict["predicted_states"].shape[0]
+            sim_results_dict["predicted_times"] = jnp.broadcast_to(
+                jnp.expand_dims(predict_times, axis=0), (n_sim_out, len(predict_times))
+            )
 
         else:
             sim_results_dict = self._simulate(
@@ -280,6 +393,7 @@ def _emit_observations(
     obs_values: Array | None,
     control_path_eval: Callable[[Array], Array | None],
     key=None,
+    n_sim_site: int | None = None,
 ) -> Array:
     """Emit observations. ODE: numpyro.sample with obs=. SDE: dist.sample(key).
 
@@ -307,11 +421,23 @@ def _emit_observations(
             x_t = states[t_idx]
             t = times[t_idx]
             u_t = ctrl(t)
-            y_t = numpyro.sample(
-                f"{name}_y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
-            )
+            obs_t = _get_val_or_None(obs_values, t_idx)
+            if n_sim_site == 1 and obs_t is not None:
+                obs_t = jnp.expand_dims(obs_t, axis=0)
+            if n_sim_site is not None:
+                with numpyro.plate(f"{name}_n_simulations", n_sim_site):
+                    y_t_site = numpyro.sample(
+                        f"{name}_y_{t_idx}",
+                        dynamics.observation_model(x=x_t, u=u_t, t=t),
+                        obs=obs_t,
+                    )
+                y_t = y_t_site[0] if n_sim_site == 1 else y_t_site
+            else:
+                y_t = numpyro.sample(
+                    f"{name}_y_{t_idx}",
+                    dynamics.observation_model(x=x_t, u=u_t, t=t),
+                    obs=obs_t,
+                )
             return carry, y_t
 
         _, observations = nscan(_step, None, jnp.arange(T))
@@ -511,15 +637,26 @@ class SDESimulator(BaseSimulator):
         if prng_key is None:
             raise ValueError("PRNG key required for simulation")
         if n_sim == 1:
-            initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
-            states, emissions = _run_one_from_x0(prng_key, jnp.asarray(initial_state))
-            return {"times": times, "states": states, "observations": emissions}
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                initial_state = numpyro.sample(
+                    f"{name}_x_0", dynamics.initial_condition
+                )
+            initial_state_arr = cast(Array, jnp.asarray(initial_state))
+            states, emissions = _run_one_from_x0(prng_key, initial_state_arr[0])
+            # Always return (n_sim, T, ...) for consistent shaping
+            states = jnp.expand_dims(states, axis=0)
+            emissions = jnp.expand_dims(emissions, axis=0)
+            times_exp = jnp.expand_dims(times, axis=0)
+            return {"times": times_exp, "states": states, "observations": emissions}
 
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
         keys = jr.split(prng_key, n_sim)
         states, emissions = jax.vmap(_run_one_from_x0)(keys, jnp.asarray(initial_state))
-        return {"times": times, "states": states, "observations": emissions}
+        times_exp = jnp.broadcast_to(
+            jnp.expand_dims(times, axis=0), (n_sim, len(times))
+        )
+        return {"times": times_exp, "states": states, "observations": emissions}
 
 
 @dataclasses.dataclass
@@ -611,14 +748,22 @@ class DiscreteTimeSimulator(BaseSimulator):
         if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
             obs_values is not None
         ):
-            numpyro.sample(f"{name}_x_0", dynamics.initial_condition, obs=obs_values[0])
-            numpyro.deterministic(f"{name}_y_0", obs_values[0])
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                numpyro.sample(
+                    f"{name}_x_0",
+                    dynamics.initial_condition,
+                    obs=jnp.expand_dims(obs_values[0], axis=0),
+                )
+            numpyro.deterministic(f"{name}_y_0", jnp.expand_dims(obs_values[0], axis=0))
+            times_exp = jnp.expand_dims(times, axis=0)
             if T == 1:
                 # No transitions exist for a single-timepoint trajectory.
+                # Always return (n_sim, T, ...) for consistent shaping
+                obs_exp = jnp.expand_dims(obs_values, axis=0)
                 return {
-                    "times": times,
-                    "states": obs_values,
-                    "observations": obs_values,
+                    "times": times_exp,
+                    "states": obs_exp,
+                    "observations": obs_exp,
                 }
 
             # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
@@ -658,10 +803,12 @@ class DiscreteTimeSimulator(BaseSimulator):
                 obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
                 numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
 
+            # Always return (n_sim, T, ...) for consistent shaping
+            obs_exp = jnp.expand_dims(obs_values, axis=0)
             return {
-                "times": times,
-                "states": obs_values,
-                "observations": obs_values,
+                "times": times_exp,
+                "states": obs_exp,
+                "observations": obs_exp,
             }
 
         # n_simulations > 1: vmap over scan with dist.sample (no numpyro.sample in body)
@@ -705,32 +852,54 @@ class DiscreteTimeSimulator(BaseSimulator):
                 return states, observations
 
             states, observations = jax.vmap(_run_one)(keys, initial_state)
-            return {"times": times, "states": states, "observations": observations}
+            times_exp = jnp.broadcast_to(
+                jnp.expand_dims(times, axis=0), (n_sim, len(times))
+            )
+            return {"times": times_exp, "states": states, "observations": observations}
 
         # Default: scan over time (n_simulations == 1)
-        x_prev: State = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)  # type: ignore
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            x_prev_site: State = numpyro.sample(  # type: ignore
+                f"{name}_x_0", dynamics.initial_condition
+            )
+        x_prev = x_prev_site[0]
 
         u_0 = _get_val_or_None(ctrl_values, 0)
-        y_0 = numpyro.sample(
-            f"{name}_y_0",
-            dynamics.observation_model(x_prev, u_0, times[0]),
-            obs=_get_val_or_None(obs_values, 0),
-        )
+        obs_0 = _get_val_or_None(obs_values, 0)
+        if obs_0 is not None:
+            obs_0 = jnp.expand_dims(obs_0, axis=0)
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            y_0_site = numpyro.sample(
+                f"{name}_y_0",
+                dynamics.observation_model(x_prev, u_0, times[0]),
+                obs=obs_0,
+            )
+        y_0_arr = cast(Array, jnp.asarray(y_0_site))
+        y_0 = y_0_arr[0]
 
         def _step(x_prev, t_idx):
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
             u_now = _get_val_or_None(ctrl_values, t_idx)
             u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-            x_t = numpyro.sample(
-                f"{name}_x_{t_idx + 1}",
-                dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
-            )
-            y_t = numpyro.sample(
-                f"{name}_y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=u_next, t=t_next),
-                obs=_get_val_or_None(obs_values, t_idx + 1),
-            )
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x_t_site = numpyro.sample(
+                    f"{name}_x_{t_idx + 1}",
+                    dynamics.state_evolution(
+                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                    ),
+                )
+            x_t = x_t_site[0]
+            obs_next = _get_val_or_None(obs_values, t_idx + 1)
+            if obs_next is not None:
+                obs_next = jnp.expand_dims(obs_next, axis=0)
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                y_t_site = numpyro.sample(
+                    f"{name}_y_{t_idx + 1}",
+                    dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                    obs=obs_next,
+                )
+            y_t = y_t_site[0]
             return x_t, (x_t, y_t)
 
         _, scan_outputs = nscan(_step, x_prev, jnp.arange(T - 1))
@@ -740,8 +909,11 @@ class DiscreteTimeSimulator(BaseSimulator):
         y_0_expanded = jnp.expand_dims(y_0, axis=0)
         states = jnp.concatenate([x_0_expanded, scan_states], axis=0)
         observations = jnp.concatenate([y_0_expanded, scan_observations], axis=0)
-
-        return {"times": times, "states": states, "observations": observations}
+        # Always return (n_sim, T, ...) for consistent shaping
+        states = jnp.expand_dims(states, axis=0)
+        observations = jnp.expand_dims(observations, axis=0)
+        times_exp = jnp.expand_dims(times, axis=0)
+        return {"times": times_exp, "states": states, "observations": observations}
 
 
 class ODESimulator(BaseSimulator):
@@ -750,6 +922,11 @@ class ODESimulator(BaseSimulator):
     This unrolls a `ContinuousTimeStateEvolution` with **no diffusion** by solving
     an ODE using Diffrax and then emitting observations at `obs_times` as NumPyro
     sample sites. Solver options can be configured via the constructor.
+
+    n_simulations: Number of independent trajectory simulations. When > 1,
+        samples multiple initial conditions and runs the ODE from each; states
+        and observations have shape (n_simulations, T, ...). When 1, shape is
+        (1, T, ...) for consistency.
 
     Controls:
         If `ctrl_times` / `ctrl_values` are provided at the `dsx.sample(...)` site,
@@ -771,6 +948,7 @@ class ODESimulator(BaseSimulator):
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         dt0: float = 1e-3,
         max_steps: int = 100_000,
+        n_simulations: int = 1,
     ):
         """Configure ODE integration settings.
 
@@ -785,6 +963,8 @@ class ODESimulator(BaseSimulator):
             dt0: Initial step size passed to
                 [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
             max_steps: Hard cap on solver steps.
+            n_simulations: Number of independent trajectory simulations. When > 1,
+                states and observations have shape (n_simulations, T, ...).
         """
         self.diffeqsolve_settings = {
             "solver": solver,
@@ -793,6 +973,7 @@ class ODESimulator(BaseSimulator):
             "dt0": dt0,
             "max_steps": max_steps,
         }
+        self.n_simulations = n_simulations
 
     def _simulate(
         self,
@@ -831,8 +1012,11 @@ class ODESimulator(BaseSimulator):
         if times is None:
             raise ValueError("obs_times or predict_times must be provided")
 
-        # Sample initial state
-        x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+        n_sim = self.n_simulations
+        if n_sim > 1 and obs_values is not None:
+            raise ValueError(
+                "n_simulations > 1 is only supported when obs_values is None (forward simulation)"
+            )
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
@@ -841,15 +1025,53 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
-        x0_arr: Array = jnp.asarray(x0)
-        states = _solve_de(
-            dynamics, t0, times, x0_arr, control_path_eval, self.diffeqsolve_settings
-        )
-        observations = _emit_observations(
-            name, dynamics, states, times, obs_values, control_path_eval
-        )
 
-        return {"times": times, "states": states, "observations": observations}
+        def _run_one(x0: Array, *, obs_key=None):
+            states = _solve_de(
+                dynamics,
+                t0,
+                times,
+                x0,
+                control_path_eval,
+                self.diffeqsolve_settings,
+            )
+            observations = _emit_observations(
+                name,
+                dynamics,
+                states,
+                times,
+                obs_values,
+                control_path_eval,
+                key=obs_key,
+                n_sim_site=1 if obs_key is None else None,
+            )
+            return states, observations
+
+        if n_sim == 1:
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+            x0_site_arr = cast(Array, jnp.asarray(x0))
+            x0_arr: Array = x0_site_arr[0]
+            states, observations = _run_one(x0_arr)
+            # Always return (n_sim, T, ...) for consistent shaping
+            states = jnp.expand_dims(states, axis=0)
+            observations = jnp.expand_dims(observations, axis=0)
+            times_exp = jnp.expand_dims(times, axis=0)
+            return {"times": times_exp, "states": states, "observations": observations}
+
+        with numpyro.plate(f"{name}_n_simulations", n_sim):
+            initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+        prng_key = numpyro.prng_key()
+        if prng_key is None:
+            raise ValueError("PRNG key required for n_simulations > 1")
+        obs_keys = jr.split(prng_key, n_sim)
+        states, observations = jax.vmap(_run_one)(
+            jnp.asarray(initial_state), obs_key=obs_keys
+        )
+        times_exp = jnp.broadcast_to(
+            jnp.expand_dims(times, axis=0), (n_sim, len(times))
+        )
+        return {"times": times_exp, "states": states, "observations": observations}
 
 
 class Simulator(BaseSimulator):

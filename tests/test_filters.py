@@ -30,7 +30,9 @@ def test_jumpy_controls(filter_type, filter_source, mean_error_tol):
     with trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
-    synthetic_observations = synthetic["observations"][0, ...]
+    synthetic_observations = synthetic[
+        "observations"
+    ]  # (T, obs_dim) after _normalize_synthetic
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_observations.shape == filtered_means.shape
     assert jnp.allclose(synthetic_observations, filtered_means, atol=1e0)
@@ -43,7 +45,9 @@ def test_jumpy_controls_sde():
     with trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
-    synthetic_observations = synthetic["observations"][0, ...]
+    synthetic_observations = synthetic[
+        "observations"
+    ]  # (T, obs_dim) after _normalize_synthetic
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_observations.shape == filtered_means.shape
     assert jnp.allclose(synthetic_observations, filtered_means, atol=1e0)
@@ -56,7 +60,9 @@ def test_jumpy_controls_ode():
     with trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
-    synthetic_observations = synthetic["observations"][0, ...]
+    synthetic_observations = synthetic[
+        "observations"
+    ]  # (T, obs_dim) after _normalize_synthetic
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_observations.shape == filtered_means.shape
     assert jnp.allclose(synthetic_observations, filtered_means, atol=1e0)

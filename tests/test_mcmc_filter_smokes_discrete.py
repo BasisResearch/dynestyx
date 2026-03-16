@@ -8,6 +8,7 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import NUTSConfig, SGLDConfig
 from dynestyx.simulators import DiscreteTimeSimulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
 
 
@@ -23,7 +24,7 @@ def _make_data():
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
-    return obs_times, synthetic["f_observations"].squeeze(0)
+    return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
 
 
 def test_filter_based_discrete_nuts_smoke():

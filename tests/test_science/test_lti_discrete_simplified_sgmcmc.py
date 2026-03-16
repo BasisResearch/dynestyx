@@ -9,6 +9,7 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from dynestyx.simulators import DiscreteTimeSimulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
 
 
@@ -25,7 +26,7 @@ def test_sgmcmc_inference(num_samples):
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
-    obs_values = synthetic["f_observations"].squeeze(0)
+    obs_values = _squeeze_sim_dims(synthetic["f_observations"])
 
     with Filter():
         inference = MCMCInference(

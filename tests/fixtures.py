@@ -13,15 +13,28 @@ def _n_particles(base: int) -> int:
     return max(_MIN_PARTICLES, int(base * _PF_PARTICLES_SCALE))
 
 
+def _squeeze_sim_dims(arr):
+    """Remove leading (num_samples, n_simulations) dims when size 1 for backward compat.
+    Preserves trailing (T, obs_dim) / (T, state_dim) shape."""
+    while arr.ndim >= 2 and arr.shape[0] == 1:
+        arr = arr[0]
+    return arr
+
+
 def _normalize_synthetic(synthetic: dict) -> dict:
-    """Add 'times', 'states', 'observations' aliases for deterministic sites."""
+    """Add 'times', 'states', 'observations' aliases for deterministic sites.
+
+    Simulators now always return (n_sim, T, ...) for states/observations.
+    When from Predictive with num_samples=1, n_sim=1, we squeeze to (T, ...)
+    for backward-compatible obs_values/states in fixtures.
+    """
     result = dict(synthetic)
     if "f_times" in result and "times" not in result:
-        result["times"] = result["f_times"]
+        result["times"] = _squeeze_sim_dims(result["f_times"])
     if "f_states" in result and "states" not in result:
-        result["states"] = result["f_states"]
+        result["states"] = _squeeze_sim_dims(result["f_states"])
     if "f_observations" in result and "observations" not in result:
-        result["observations"] = result["f_observations"]
+        result["observations"] = _squeeze_sim_dims(result["f_observations"])
     return result
 
 
@@ -111,8 +124,7 @@ def data_conditioned_hmm(request):
             )
         )
 
-    # Prefer indexing rather than squeeze, to keep (T, obs_dim)
-    obs_values = synthetic["observations"][0]  # (T,)
+    obs_values = synthetic["observations"]  # (T,) after _normalize_synthetic
 
     # ---------------------------------------------------------
     # Build conditioned model
@@ -175,7 +187,7 @@ def data_conditioned_discrete_time_l63(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # ---------------------------------------------------------
     # Build conditioned model
@@ -236,7 +248,7 @@ def data_conditioned_discrete_time_l63_filter(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # Build conditioned model
     def data_conditioned_model():
@@ -295,7 +307,7 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # Build conditioned model
     def data_conditioned_model():
@@ -365,7 +377,7 @@ def data_conditioned_continuous_time_stochastic_l63(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # ---------------------------------------------------------
     # Build conditioned model
@@ -430,7 +442,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # ---------------------------------------------------------
     # Build conditioned model
@@ -493,7 +505,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # ---------------------------------------------------------
     # Build conditioned model (Filter + Simulator: avoids NUTS/Uniform tracer issue)
@@ -536,7 +548,7 @@ def data_conditioned_continuous_time_potential_dynamics(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Filter(filter_config=ContinuousTimeEKFConfig()):
@@ -597,7 +609,7 @@ def data_conditioned_stochastic_volatility(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with DiscreteTimeSimulator():
@@ -662,7 +674,7 @@ def data_conditioned_continuous_time_lti_gaussian(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         config = {
@@ -721,7 +733,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Filter(
@@ -777,7 +789,7 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
                 )
             )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with DiscreteTimeSimulator():
@@ -834,7 +846,7 @@ def data_conditioned_discrete_time_l63_auto(request):
                 )
             )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Simulator():
@@ -879,7 +891,7 @@ def data_conditioned_jumpy_controls(
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         config = {
@@ -937,7 +949,7 @@ def data_conditioned_jumpy_controls_sde():
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Filter(
@@ -980,7 +992,7 @@ def data_conditioned_jumpy_controls_ode():
                 ctrl_values=controls,
             )
         )
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Filter(
@@ -1055,7 +1067,7 @@ def data_conditioned_discrete_time_lti_kf(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # shape (T, obs_dim)
+    obs_values = synthetic["observations"]  # (T, obs_dim) after _normalize_synthetic
 
     # Build conditioned model
     def data_conditioned_model():
@@ -1113,7 +1125,7 @@ def data_conditioned_discrete_time_lti_simplified(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Filter(filter_config=KFConfig()):
@@ -1174,7 +1186,7 @@ def data_conditioned_discrete_time_lti_simplified_science(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     config = (
         KFConfig(filter_source=filter_source)
@@ -1231,7 +1243,7 @@ def data_conditioned_continuous_time_lti_simplified(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     def data_conditioned_model():
         with Filter(filter_config=ContinuousTimeKFConfig()):
@@ -1289,7 +1301,7 @@ def data_conditioned_continuous_time_lti_simplified_science(request):
             )
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = synthetic["observations"]
 
     config = (
         ContinuousTimeKFConfig()

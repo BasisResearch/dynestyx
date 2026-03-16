@@ -13,6 +13,7 @@ from dynestyx.inference.mcmc_configs import (
     SGLDConfig,
 )
 from dynestyx.simulators import Simulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import continuous_time_stochastic_l63_model
 
 
@@ -28,7 +29,7 @@ def _make_data():
     )
     with Simulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
-    return obs_times, synthetic["f_observations"].squeeze(0)
+    return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
 
 
 def test_filter_based_mcmc_nuts_smoke():

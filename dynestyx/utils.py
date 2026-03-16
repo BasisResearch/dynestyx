@@ -93,7 +93,11 @@ def _validate_controls(
     elif predict_times is None:
         total_obs_pred_times = obs_times
     else:
-        total_obs_pred_times = jnp.union1d(obs_times, predict_times)
+        # Skip union when traced (jnp.union1d/jnp.unique fail under lax.map/vmap)
+        try:
+            total_obs_pred_times = jnp.union1d(obs_times, predict_times)
+        except Exception:
+            return  # ConcretizationTypeError etc. when arrays are traced
     assert total_obs_pred_times is not None
 
     # Use trace-safe check: same length and sorted arrays match.
