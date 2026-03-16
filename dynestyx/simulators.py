@@ -62,19 +62,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> FunctionOfTime:
         # Need times to simulate: predict_times or obs_times
-        if predict_times is None and obs_times is None:
-            return fwd(
-                name,
-                dynamics,
-                **kwargs,
-            )
         # For filter rollout, need predict_times
-        if filtered_times is not None and predict_times is None:
-            return fwd(
-                name,
-                dynamics,
-                **kwargs,
-            )
+        if predict_times is None:
+            if obs_times is None or filtered_times is not None:
+                return fwd(name, dynamics, **kwargs)
 
         if filtered_times is not None and filtered_dists is not None:
             _validate_site_sorting(filtered_times, name="filtered_times")
