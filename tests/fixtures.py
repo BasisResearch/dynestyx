@@ -904,6 +904,7 @@ def data_conditioned_jumpy_controls(
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                predict_times=predict_times,
             )
 
     return data_conditioned_model, synthetic
@@ -947,6 +948,7 @@ def data_conditioned_jumpy_controls_sde():
                 obs_values=obs_values,
                 ctrl_times=obs_times,
                 ctrl_values=controls,
+                predict_times=predict_times,
             )
 
     return data_conditioned_model, synthetic
@@ -989,6 +991,7 @@ def data_conditioned_jumpy_controls_ode():
                 obs_values=obs_values,
                 ctrl_times=obs_times,
                 ctrl_values=controls,
+                predict_times=predict_times,
             )
 
     return data_conditioned_model, synthetic

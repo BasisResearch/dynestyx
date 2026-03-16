@@ -897,6 +897,7 @@ class Simulator(BaseSimulator):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         if self.simulator is None:
@@ -920,5 +921,6 @@ class Simulator(BaseSimulator):
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
             **kwargs,
         )
