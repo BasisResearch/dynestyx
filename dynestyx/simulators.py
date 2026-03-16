@@ -121,121 +121,56 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
             sim_results = []
             seg_masks = []
-
             # Fast path: use host-side segment IDs so we only simulate non-empty segments
             # and pass true segment lengths (sum lengths = n_pred).
             # This avoids O(n_filtered * n_pred) behavior.
-            used_fast_path = False
-            try:
-                pt_host = np.asarray(jax.device_get(predict_times))
-                ft_host = np.asarray(jax.device_get(filtered_times))
-                seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
-                present_seg_ids = [int(s) for s in np.unique(seg_ids_host)]
+            pt_host = np.asarray(jax.device_get(predict_times))
+            ft_host = np.asarray(jax.device_get(filtered_times))
+            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
+            present_seg_ids = [int(s) for s in np.unique(seg_ids_host)]
 
-                for seg_id in present_seg_ids:
-                    mask_host = seg_ids_host == seg_id
-                    if not np.any(mask_host):
-                        continue
+            for seg_id in present_seg_ids:
+                mask_host = seg_ids_host == seg_id
+                if not np.any(mask_host):
+                    continue
 
-                    mask_seg = jnp.asarray(mask_host)
-                    sub = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
+                mask_seg = jnp.asarray(mask_host)
+                sub = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
 
-                    if seg_id < 0:
-                        dynamics_seg = dynamics
-                        seg_name = f"{name}_0"
-                    else:
-                        filtered_time = filtered_times[seg_id]
-                        filtered_dist = filtered_dists[seg_id]
-                        dynamics_with_filtered_time = eqx.tree_at(
-                            lambda m: m.t0,
-                            dynamics,
-                            filtered_time,
-                            is_leaf=lambda x: x is None,
-                        )
-                        dynamics_seg = eqx.tree_at(
-                            lambda m: m.initial_condition,
-                            dynamics_with_filtered_time,
-                            filtered_dist,
-                            is_leaf=lambda x: x is None,
-                        )
-                        seg_name = f"{name}_{seg_id + 1}"
-
-                    ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
-                    sim_results.append(
-                        self._simulate(
-                            seg_name,
-                            dynamics_seg,
-                            obs_times=None,
-                            obs_values=None,
-                            ctrl_times=ctrl_t_seg,
-                            ctrl_values=ctrl_v_seg,
-                            predict_times=sub,
-                        )
-                    )
-                    seg_masks.append(mask_seg)
-
-                used_fast_path = len(sim_results) > 0
-            except Exception:
-                used_fast_path = False
-
-            if not used_fast_path:
-                # Tracer-safe fallback path with fixed-size segments.
-                # First segment: times before first filtered time
-                mask0 = predict_times < filtered_times[0]
-                seg_masks.append(mask0)  # for filtering concatenated output
-                sub0 = _extract_times(mask0, empty_fill=filtered_times[0])
-                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub0)
-                sim_results.append(
-                    self._simulate(
-                        f"{name}_0",
-                        dynamics,
-                        obs_times=None,
-                        obs_values=None,
-                        ctrl_times=ctrl_t_seg,
-                        ctrl_values=ctrl_v_seg,
-                        predict_times=sub0,
-                    )
-                )
-
-                # Segments between filtered times (index-based to avoid JAX array chunk iterator
-                # which fails under lax.map when len(filtered_times) > 100)
-                n_filtered = int(filtered_times.shape[0])
-                for f_idx in range(n_filtered):
-                    filtered_time = filtered_times[f_idx]
-                    filtered_dist = filtered_dists[f_idx]
+                if seg_id < 0:
+                    dynamics_seg = dynamics
+                    seg_name = f"{name}_0"
+                else:
+                    filtered_time = filtered_times[seg_id]
+                    filtered_dist = filtered_dists[seg_id]
                     dynamics_with_filtered_time = eqx.tree_at(
                         lambda m: m.t0,
                         dynamics,
                         filtered_time,
                         is_leaf=lambda x: x is None,
                     )
-                    dynamics_with_filtered_ic = eqx.tree_at(
+                    dynamics_seg = eqx.tree_at(
                         lambda m: m.initial_condition,
                         dynamics_with_filtered_time,
                         filtered_dist,
                         is_leaf=lambda x: x is None,
                     )
+                    seg_name = f"{name}_{seg_id + 1}"
 
-                    mask_seg = predict_times >= filtered_time
-                    if f_idx + 1 < len(filtered_times):
-                        mask_seg = mask_seg & (
-                            predict_times < filtered_times[f_idx + 1]
-                        )
-                    sub = _extract_times(mask_seg, empty_fill=filtered_time)
-                    seg_masks.append(mask_seg)
-
-                    ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
-                    sim_results.append(
-                        self._simulate(
-                            f"{name}_{f_idx + 1}",
-                            dynamics_with_filtered_ic,
-                            obs_times=None,
-                            obs_values=None,
-                            ctrl_times=ctrl_t_seg,
-                            ctrl_values=ctrl_v_seg,
-                            predict_times=sub,
-                        )
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
+                sim_results.append(
+                    self._simulate(
+                        seg_name,
+                        dynamics_seg,
+                        obs_times=None,
+                        obs_values=None,
+                        ctrl_times=ctrl_t_seg,
+                        ctrl_values=ctrl_v_seg,
+                        predict_times=sub,
                     )
+                )
+                seg_masks.append(mask_seg)
+
 
             # Merge segment results into predict_times order.
             # Each segment has fixed-size output (n_pred) with valid entries first, padded.
