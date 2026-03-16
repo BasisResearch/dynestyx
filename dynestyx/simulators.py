@@ -577,22 +577,6 @@ class SDESimulator(BaseSimulator):
         prng_key = numpyro.prng_key()
         if prng_key is None:
             raise ValueError("PRNG key required for simulation")
-        if n_sim == 1:
-            with numpyro.plate(f"{name}_n_simulations", 1):
-                initial_state = numpyro.sample(
-                    f"{name}_x_0", dynamics.initial_condition
-                )
-            initial_state_arr = cast(Array, jnp.asarray(initial_state))
-            states, emissions = _run_one_from_x0(prng_key, initial_state_arr[0])
-            # Always return (n_sim, T, ...) for consistent shaping
-            states = jnp.expand_dims(states, axis=0)
-            emissions = jnp.expand_dims(emissions, axis=0)
-            return {
-                "times": _tile_times(times, 1),
-                "states": states,
-                "observations": emissions,
-            }
-
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
         keys = jr.split(prng_key, n_sim)
@@ -992,24 +976,25 @@ class ODESimulator(BaseSimulator):
             )
             return states, observations
 
-        if n_sim == 1:
+        if obs_values is not None:
+            # Conditioning mode (n_sim must be 1 due to guard above).
+            # Uses numpyro.sample per observation site to support obs= conditioning.
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
-            x0_site_arr = cast(Array, jnp.asarray(x0))
-            x0_arr: Array = x0_site_arr[0]
+            x0_arr: Array = jnp.asarray(x0)[0]
             states, observations = _run_one(x0_arr)
-            # Always return (n_sim, T, ...) for consistent shaping
             return {
                 "times": _tile_times(times, 1),
                 "states": jnp.expand_dims(states, axis=0),
                 "observations": jnp.expand_dims(observations, axis=0),
             }
 
+        # Forward simulation (obs_values is None): vmap over all n_sim, including 1.
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
         prng_key = numpyro.prng_key()
         if prng_key is None:
-            raise ValueError("PRNG key required for n_simulations > 1")
+            raise ValueError("PRNG key required for simulation")
         obs_keys = jr.split(prng_key, n_sim)
         states, observations = jax.vmap(_run_one)(
             jnp.asarray(initial_state), obs_key=obs_keys
