@@ -43,7 +43,7 @@
     with ODESimulator():
         prior_pred = Predictive(model, num_samples=5)(jr.PRNGKey(0), predict_times=obs_times)
     print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f_observations', 'f_states', 'f_times', 'sigma_y', 'theta', ...]
-    print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # e.g. first axis is num_samples=5
+    print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1
     ```
 
 ??? example "NUTS with ODESimulator"

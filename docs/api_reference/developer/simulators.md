@@ -20,13 +20,24 @@ Simulators (also called *unrollers*) turn a `DynamicalModel` into explicit NumPy
       `SDESimulator` is usually a poor inference strategy.
 
 !!! note "Deterministic sites"
-    When a simulator runs (i.e., when `obs_times` is provided), it records:
-    - `"times"`: the observation-time grid used for unrolling,
-    - `"states"`: the latent trajectory on that grid,
-    - `"observations"`: sampled (or conditioned) emissions on that grid.
+    When a simulator runs (i.e., when `obs_times` or `predict_times` is provided),
+    it records deterministic sites named `"{name}_{key}"` where `name` is the first
+    argument to `dsx.sample(name, dynamics, ...)` (conventionally `"f"`):
 
-    If `obs_times` is omitted, no simulation is performed and these deterministic
-    sites are not added.
+    - `"f_times"`: the time grid, shape `(n_sim, T)`,
+    - `"f_states"`: the latent trajectory, shape `(n_sim, T, state_dim)`,
+    - `"f_observations"`: sampled or conditioned emissions, shape `(n_sim, T, obs_dim)`.
+
+    If `predict_times` is provided alongside filtered posteriors (filter-rollout mode),
+    the additional keys `"f_predicted_states"`, `"f_predicted_times"`, and
+    `"f_predicted_observations"` are also recorded.
+
+    Under `numpyro.infer.Predictive(model, num_samples=N)`, NumPyro prepends a leading
+    `num_samples` axis, giving final shapes `(num_samples, n_sim, T, dim)`.
+    Use `dynestyx.flatten_draws` to collapse the `(num_samples, n_sim)` prefix into one
+    axis for plotting or downstream analysis.
+
+    If `obs_times` is omitted, no simulation is performed and these sites are not added.
 
 ## Simulators
 
