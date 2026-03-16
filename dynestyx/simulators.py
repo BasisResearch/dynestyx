@@ -94,25 +94,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             _validate_site_sorting(filtered_times, name="filtered_times")
             n_pred = len(predict_times)
 
-            def _extract_times(mask: Array, empty_fill: Array) -> Array:
-                """JAX-safe fixed-size extract used in tracer fallback path.
-
-                This path preserves static shapes under lax.map/jit, but can be slower
-                because empty segments still evaluate with full-size `predict_times`.
-                """
-                n_valid = jnp.sum(mask)
-                valid_max = jnp.max(jnp.where(mask, predict_times, -jnp.inf))
-                fill = jnp.where(jnp.isfinite(valid_max), valid_max, empty_fill)
-                extracted = jnp.extract(
-                    mask, predict_times, size=n_pred, fill_value=fill
-                )
-                # Pad positions must be strictly increasing for ODE/SDE control paths
-                pad_start = fill + 1
-                is_valid_pos = jnp.arange(n_pred) < n_valid
-                pad_vals = pad_start + (jnp.arange(n_pred) - n_valid)
-                result = jnp.where(is_valid_pos, extracted, pad_vals)
-                return lax.cond(n_valid > 0, lambda: result, lambda: predict_times)
-
             def _ctrl_for_segment(sub_times):
                 if ctrl_times is None or ctrl_values is None:
                     return None, None
