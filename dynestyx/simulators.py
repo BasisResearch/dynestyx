@@ -67,7 +67,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         - If `obs_times` is None, the handler is a no-op.
         - If `obs_values` is provided, observation sample sites are conditioned via
           `obs=...`.
+        - Conditioning (`obs_values is not None`) is only supported for
+          ``n_simulations == 1``.  Subclasses that permit conditioning enforce this
+          via the base-class guard in ``_sample_ds``; they do not need to duplicate
+          the check themselves.
     """
+
+    n_simulations: int = 1
 
     @implements(_sample_intp)
     def _sample_ds(
@@ -192,6 +198,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             sim_results_dict["predicted_times"] = _tile_times(predict_times, n_sim_out)
 
         else:
+            if self.n_simulations > 1 and obs_values is not None:
+                raise ValueError(
+                    "n_simulations > 1 is only supported when obs_values is None "
+                    "(forward simulation only)"
+                )
             sim_results_dict = self._simulate(
                 name,
                 dynamics,
@@ -648,10 +659,6 @@ class DiscreteTimeSimulator(BaseSimulator):
             raise ValueError("obs_times must contain at least one timepoint")
 
         n_sim = self.n_simulations
-        if n_sim > 1 and obs_values is not None:
-            raise ValueError(
-                "n_simulations > 1 is only supported when obs_values is None (forward simulation)"
-            )
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
@@ -922,10 +929,6 @@ class ODESimulator(BaseSimulator):
             raise ValueError("obs_times or predict_times must be provided")
 
         n_sim = self.n_simulations
-        if n_sim > 1 and obs_values is not None:
-            raise ValueError(
-                "n_simulations > 1 is only supported when obs_values is None (forward simulation)"
-            )
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
