@@ -14,27 +14,30 @@ def _n_particles(base: int) -> int:
 
 
 def _squeeze_sim_dims(arr):
-    """Remove leading (num_samples, n_simulations) dims when size 1 for backward compat.
-    Preserves trailing (T, obs_dim) / (T, state_dim) shape."""
-    while arr.ndim >= 2 and arr.shape[0] == 1:
-        arr = arr[0]
-    return arr
+    """Extract a single trajectory from a ``(num_samples, n_sim, T, ...)`` array.
+
+    All fixture data is generated with ``num_samples=1`` and ``n_sim=1``, so
+    ``arr[0, 0]`` is the canonical single-trajectory view.  The two leading
+    singleton axes are dropped, leaving ``(T, ...)``.
+    """
+    return arr[0, 0]
 
 
 def _normalize_synthetic(synthetic: dict) -> dict:
     """Add 'times', 'states', 'observations' aliases for deterministic sites.
 
-    Simulators now always return (n_sim, T, ...) for states/observations.
-    When from Predictive with num_samples=1, n_sim=1, we squeeze to (T, ...)
-    for backward-compatible obs_values/states in fixtures.
+    Simulators return ``(n_sim, T, ...)`` and Predictive adds a leading
+    ``num_samples`` axis.  Fixtures always use ``num_samples=1, n_sim=1``, so
+    we index ``[0, 0]`` to get a plain ``(T, ...)`` array for use as
+    ``obs_values`` in conditioned models.
     """
     result = dict(synthetic)
     if "f_times" in result and "times" not in result:
-        result["times"] = _squeeze_sim_dims(result["f_times"])
+        result["times"] = result["f_times"][0, 0]
     if "f_states" in result and "states" not in result:
-        result["states"] = _squeeze_sim_dims(result["f_states"])
+        result["states"] = result["f_states"][0, 0]
     if "f_observations" in result and "observations" not in result:
-        result["observations"] = _squeeze_sim_dims(result["f_observations"])
+        result["observations"] = result["f_observations"][0, 0]
     return result
 
 

@@ -26,7 +26,6 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeEnKFConfig,
     KFConfig,
 )
-from tests.fixtures import _squeeze_sim_dims
 from tests.models import (
     continuous_time_stochastic_l63_model,
     discrete_time_lti_simplified_model,
@@ -47,7 +46,7 @@ def _gen_obs_sde():
             exclude_deterministic=False,
         )
         sim = pred(rng, predict_times=obs_times)
-    obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
+    obs_values = sim["f_observations"][0, 0]
     return obs_times, obs_values, predict_times, 3  # state_dim
 
 
@@ -64,7 +63,7 @@ def _gen_obs_discrete():
             exclude_deterministic=False,
         )
         sim = pred(rng, predict_times=obs_times)
-    obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
+    obs_values = sim["f_observations"][0, 0]
     return obs_times, obs_values, predict_times, 2  # state_dim
 
 
@@ -90,7 +89,7 @@ def _gen_obs_ode():
             ctrl_times=obs_times,
             ctrl_values=ctrl_values[: len(obs_times)],
         )
-    obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
+    obs_values = sim["f_observations"][0, 0]
     return obs_times, obs_values, predict_times, 1, ctrl_times, ctrl_values
 
 
@@ -225,7 +224,7 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
             exclude_deterministic=False,
         )
         train_samples = train_pred(jr.PRNGKey(123), predict_times=obs_times)
-    obs_values = jnp.array(_squeeze_sim_dims(train_samples["f_observations"]))
+    obs_values = train_samples["f_observations"][0, 0]
 
     predictive = Predictive(
         discrete_time_lti_simplified_model,

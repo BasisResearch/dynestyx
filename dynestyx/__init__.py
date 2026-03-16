@@ -22,6 +22,7 @@ from dynestyx.simulators import (
     SDESimulator,
     Simulator,
 )
+from dynestyx.utils import flatten_draws
 
 __all__ = [
     "ContinuousTimeStateEvolution",
@@ -35,6 +36,7 @@ __all__ = [
     "Discretizer",
     "ObservationModel",
     "Filter",
+    "flatten_draws",
     "sample",
     "DiracIdentityObservation",
     "LinearGaussianObservation",

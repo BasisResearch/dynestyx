@@ -32,6 +32,27 @@ from dynestyx.utils import (
 )
 
 
+def _tile_times(times: Array, n_sim: int) -> Array:
+    """Return times tiled to shape (n_sim, T)."""
+    return jnp.broadcast_to(jnp.expand_dims(times, axis=0), (n_sim, len(times)))
+
+
+def _ensure_trailing_dim(arr: Array) -> Array:
+    """Ensure simulator output has a trailing state/obs dimension.
+
+    All simulator outputs should have shape ``(n_sim, T, dim)``.  For scalar
+    states or observations (e.g. HMM discrete latent variables), the array
+    arrives with shape ``(n_sim, T)`` — ndim==2.  This adds a trailing
+    singleton to give ``(n_sim, T, 1)``, consistent with the ndim==3 contract
+    required by ``_merge_segments`` and the rest of the pipeline.  A future
+    one-hot encoding upgrade can then widen that last axis to ``num_states``.
+
+    Arrays that already carry a trailing dimension (ndim==3) are returned
+    unchanged.
+    """
+    return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
+
+
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -223,30 +244,28 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             obs_list = [r["observations"] for r in sim_results]
 
             def _merge_segments(arr_list, seg_masks):
-                """Merge segment arrays: at each position i, take value from segment with mask_s[i]=True."""
+                """Merge per-segment arrays into a single output array.
+
+                At each position ``i`` in the merged output, the value is taken
+                from the unique segment whose mask has ``mask[i] == True``.
+
+                All arrays must have shape ``(n_sim, T_seg, state_dim)`` — the
+                ndim==3 contract guaranteed by ``_ensure_trailing_dim``.
+                """
                 first = arr_list[0]
-                if first.ndim == 3:
-                    out = jnp.zeros(
-                        (first.shape[0], n_pred, first.shape[2]), dtype=first.dtype
-                    )
-                elif first.ndim == 2:
-                    out = jnp.zeros((n_pred, first.shape[1]), dtype=first.dtype)
-                else:
-                    out = jnp.zeros((n_pred,), dtype=first.dtype)
+                assert first.ndim == 3, (
+                    f"_merge_segments expects ndim==3 arrays (n_sim, T, D), got ndim={first.ndim} "
+                    f"with shape {first.shape}. Ensure _ensure_trailing_dim is applied before "
+                    "calling this function."
+                )
+                out = jnp.zeros(
+                    (first.shape[0], n_pred, first.shape[2]), dtype=first.dtype
+                )
                 for arr, mask in zip(arr_list, seg_masks):
                     cumsum = jnp.cumsum(mask)
                     local_idx = jnp.where(mask, cumsum - 1, 0)
-                    if arr.ndim == 3:
-                        gathered = arr[:, local_idx, :]
-                        mask_bc = jnp.expand_dims(
-                            jnp.expand_dims(mask, 0), -1
-                        )  # (1, T, 1)
-                    elif arr.ndim == 2:
-                        gathered = arr[local_idx, :]
-                        mask_bc = jnp.expand_dims(mask, -1)  # (T, 1)
-                    else:
-                        gathered = arr[local_idx]
-                        mask_bc = mask
+                    gathered = arr[:, local_idx, :]
+                    mask_bc = jnp.expand_dims(jnp.expand_dims(mask, 0), -1)  # (1, T, 1)
                     out = jnp.where(mask_bc, gathered, out)
                 return out
 
@@ -255,9 +274,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 "predicted_observations": _merge_segments(obs_list, seg_masks),
             }
             n_sim_out = sim_results_dict["predicted_states"].shape[0]
-            sim_results_dict["predicted_times"] = jnp.broadcast_to(
-                jnp.expand_dims(predict_times, axis=0), (n_sim_out, len(predict_times))
-            )
+            sim_results_dict["predicted_times"] = _tile_times(predict_times, n_sim_out)
 
         else:
             sim_results_dict = self._simulate(
@@ -393,13 +410,14 @@ def _emit_observations(
     obs_values: Array | None,
     control_path_eval: Callable[[Array], Array | None],
     key=None,
-    n_sim_site: int | None = None,
 ) -> Array:
-    """Emit observations. ODE: numpyro.sample with obs=. SDE: dist.sample(key).
+    """Emit observations. ODE: numpyro.sample with obs=. SDE/vmap: dist.sample(key).
 
-    When key is None (ODE path), uses numpyro.sample and supports obs= conditioning.
-    When key is not None (SDE path), samples from dist; obs_values must be None
-    (caller errors earlier).
+    When key is None (ODE n_sim=1 path), uses numpyro.sample and supports obs=
+    conditioning. Returns array of shape (T, obs_dim).
+
+    When key is not None (SDE or ODE n_sim>1 vmap path), samples from dist directly;
+    obs_values must be None (callers enforce this). Returns array of shape (T, obs_dim).
     """
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     T = len(times)
@@ -422,22 +440,11 @@ def _emit_observations(
             t = times[t_idx]
             u_t = ctrl(t)
             obs_t = _get_val_or_None(obs_values, t_idx)
-            if n_sim_site == 1 and obs_t is not None:
-                obs_t = jnp.expand_dims(obs_t, axis=0)
-            if n_sim_site is not None:
-                with numpyro.plate(f"{name}_n_simulations", n_sim_site):
-                    y_t_site = numpyro.sample(
-                        f"{name}_y_{t_idx}",
-                        dynamics.observation_model(x=x_t, u=u_t, t=t),
-                        obs=obs_t,
-                    )
-                y_t = y_t_site[0] if n_sim_site == 1 else y_t_site
-            else:
-                y_t = numpyro.sample(
-                    f"{name}_y_{t_idx}",
-                    dynamics.observation_model(x=x_t, u=u_t, t=t),
-                    obs=obs_t,
-                )
+            y_t = numpyro.sample(
+                f"{name}_y_{t_idx}",
+                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                obs=obs_t,
+            )
             return carry, y_t
 
         _, observations = nscan(_step, None, jnp.arange(T))
@@ -646,17 +653,21 @@ class SDESimulator(BaseSimulator):
             # Always return (n_sim, T, ...) for consistent shaping
             states = jnp.expand_dims(states, axis=0)
             emissions = jnp.expand_dims(emissions, axis=0)
-            times_exp = jnp.expand_dims(times, axis=0)
-            return {"times": times_exp, "states": states, "observations": emissions}
+            return {
+                "times": _tile_times(times, 1),
+                "states": states,
+                "observations": emissions,
+            }
 
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
         keys = jr.split(prng_key, n_sim)
         states, emissions = jax.vmap(_run_one_from_x0)(keys, jnp.asarray(initial_state))
-        times_exp = jnp.broadcast_to(
-            jnp.expand_dims(times, axis=0), (n_sim, len(times))
-        )
-        return {"times": times_exp, "states": states, "observations": emissions}
+        return {
+            "times": _tile_times(times, n_sim),
+            "states": states,
+            "observations": emissions,
+        }
 
 
 @dataclasses.dataclass
@@ -755,13 +766,12 @@ class DiscreteTimeSimulator(BaseSimulator):
                     obs=jnp.expand_dims(obs_values[0], axis=0),
                 )
             numpyro.deterministic(f"{name}_y_0", jnp.expand_dims(obs_values[0], axis=0))
-            times_exp = jnp.expand_dims(times, axis=0)
             if T == 1:
                 # No transitions exist for a single-timepoint trajectory.
-                # Always return (n_sim, T, ...) for consistent shaping
-                obs_exp = jnp.expand_dims(obs_values, axis=0)
+                # Always return (n_sim, T, state_dim) for consistent shaping
+                obs_exp = _ensure_trailing_dim(jnp.expand_dims(obs_values, axis=0))
                 return {
-                    "times": times_exp,
+                    "times": _tile_times(times, 1),
                     "states": obs_exp,
                     "observations": obs_exp,
                 }
@@ -803,10 +813,10 @@ class DiscreteTimeSimulator(BaseSimulator):
                 obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
                 numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
 
-            # Always return (n_sim, T, ...) for consistent shaping
-            obs_exp = jnp.expand_dims(obs_values, axis=0)
+            # Always return (n_sim, T, state_dim) for consistent shaping
+            obs_exp = _ensure_trailing_dim(jnp.expand_dims(obs_values, axis=0))
             return {
-                "times": times_exp,
+                "times": _tile_times(times, 1),
                 "states": obs_exp,
                 "observations": obs_exp,
             }
@@ -852,10 +862,11 @@ class DiscreteTimeSimulator(BaseSimulator):
                 return states, observations
 
             states, observations = jax.vmap(_run_one)(keys, initial_state)
-            times_exp = jnp.broadcast_to(
-                jnp.expand_dims(times, axis=0), (n_sim, len(times))
-            )
-            return {"times": times_exp, "states": states, "observations": observations}
+            return {
+                "times": _tile_times(times, n_sim),
+                "states": _ensure_trailing_dim(states),
+                "observations": _ensure_trailing_dim(observations),
+            }
 
         # Default: scan over time (n_simulations == 1)
         with numpyro.plate(f"{name}_n_simulations", 1):
@@ -909,11 +920,12 @@ class DiscreteTimeSimulator(BaseSimulator):
         y_0_expanded = jnp.expand_dims(y_0, axis=0)
         states = jnp.concatenate([x_0_expanded, scan_states], axis=0)
         observations = jnp.concatenate([y_0_expanded, scan_observations], axis=0)
-        # Always return (n_sim, T, ...) for consistent shaping
-        states = jnp.expand_dims(states, axis=0)
-        observations = jnp.expand_dims(observations, axis=0)
-        times_exp = jnp.expand_dims(times, axis=0)
-        return {"times": times_exp, "states": states, "observations": observations}
+        # Always return (n_sim, T, state_dim) for consistent shaping
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+        }
 
 
 class ODESimulator(BaseSimulator):
@@ -1043,7 +1055,6 @@ class ODESimulator(BaseSimulator):
                 obs_values,
                 control_path_eval,
                 key=obs_key,
-                n_sim_site=1 if obs_key is None else None,
             )
             return states, observations
 
@@ -1054,10 +1065,11 @@ class ODESimulator(BaseSimulator):
             x0_arr: Array = x0_site_arr[0]
             states, observations = _run_one(x0_arr)
             # Always return (n_sim, T, ...) for consistent shaping
-            states = jnp.expand_dims(states, axis=0)
-            observations = jnp.expand_dims(observations, axis=0)
-            times_exp = jnp.expand_dims(times, axis=0)
-            return {"times": times_exp, "states": states, "observations": observations}
+            return {
+                "times": _tile_times(times, 1),
+                "states": jnp.expand_dims(states, axis=0),
+                "observations": jnp.expand_dims(observations, axis=0),
+            }
 
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
@@ -1068,10 +1080,11 @@ class ODESimulator(BaseSimulator):
         states, observations = jax.vmap(_run_one)(
             jnp.asarray(initial_state), obs_key=obs_keys
         )
-        times_exp = jnp.broadcast_to(
-            jnp.expand_dims(times, axis=0), (n_sim, len(times))
-        )
-        return {"times": times_exp, "states": states, "observations": observations}
+        return {
+            "times": _tile_times(times, n_sim),
+            "states": states,
+            "observations": observations,
+        }
 
 
 class Simulator(BaseSimulator):
@@ -1093,6 +1106,13 @@ class Simulator(BaseSimulator):
         - If structure cannot be inferred (e.g., a generic callable state
           evolution), routing may fail and you should instantiate a concrete
           simulator class directly.
+
+    Warning:
+        The concrete simulator type is determined lazily on the **first call** and
+        cached in ``self.simulator``. Re-using the same ``Simulator`` instance
+        across models with different ``state_evolution`` types (e.g., first an ODE
+        model, then an SDE model) will silently reuse the wrong backend. If you
+        need to switch model types, create a new ``Simulator()`` instance.
     """
 
     def __init__(self, *args, **kwargs):

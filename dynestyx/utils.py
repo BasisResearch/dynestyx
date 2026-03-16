@@ -9,6 +9,30 @@ from jax import Array, lax
 
 from dynestyx.models import DynamicalModel
 
+
+def flatten_draws(arr: Array) -> Array:
+    """Merge the leading ``(num_samples, n_sim)`` axes of a simulator output into one.
+
+    Simulators return arrays of shape ``(n_sim, T, ...)``. After wrapping the
+    model in :class:`~numpyro.infer.Predictive` with ``num_samples=N``, the
+    output becomes ``(N, n_sim, T, ...)``.  This helper collapses both draw axes
+    so that all ``N * n_sim`` trajectories can be treated uniformly — useful for
+    computing credible intervals or plotting fans.
+
+    Args:
+        arr: Array of shape ``(num_samples, n_sim, ...)``.
+
+    Returns:
+        Array of shape ``(num_samples * n_sim, ...)``.
+
+    Example:
+        >>> states = samples["f_states"]      # (num_samples, n_sim, T, state_dim)
+        >>> draws = flatten_draws(states)      # (num_samples * n_sim, T, state_dim)
+        >>> lo, hi = jnp.percentile(draws, jnp.array([5.0, 95.0]), axis=0)
+    """
+    return arr.reshape((-1,) + arr.shape[2:])
+
+
 type SSMType = CDNLGSSM | CDNLSSM
 
 _CONTROL_EXTEND_EPSILON = 1e-5
