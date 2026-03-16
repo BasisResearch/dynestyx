@@ -53,6 +53,35 @@ def _ensure_trailing_dim(arr: Array) -> Array:
     return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
 
 
+def _merge_segments(
+    arr_list: list[Array],
+    seg_masks: list[Array],
+    n_pred: int,
+) -> Array:
+    """Merge per-segment arrays into a single ``(n_sim, n_pred, state_dim)`` array.
+
+    At each position ``i`` in the output, the value is taken from the unique
+    segment whose boolean mask has ``mask[i] == True``.
+
+    All input arrays must satisfy the ndim==3 contract ``(n_sim, T_seg, state_dim)``
+    guaranteed by :func:`_ensure_trailing_dim`.
+    """
+    first = arr_list[0]
+    assert first.ndim == 3, (
+        f"_merge_segments expects ndim==3 arrays (n_sim, T, D), got ndim={first.ndim} "
+        f"with shape {first.shape}. Ensure _ensure_trailing_dim is applied before "
+        "calling this function."
+    )
+    out = jnp.zeros((first.shape[0], n_pred, first.shape[2]), dtype=first.dtype)
+    for arr, mask in zip(arr_list, seg_masks):
+        cumsum = jnp.cumsum(mask)
+        local_idx = jnp.where(mask, cumsum - 1, 0)
+        gathered = arr[:, local_idx, :]
+        mask_bc = jnp.expand_dims(jnp.expand_dims(mask, 0), -1)  # (1, T, 1)
+        out = jnp.where(mask_bc, gathered, out)
+    return out
+
+
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -96,7 +125,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             if obs_times is None or filtered_times is not None:
                 return fwd(name, dynamics, **kwargs)
 
-        if filtered_times is not None and filtered_dists is not None:
+        filter_rollout = filtered_times is not None and filtered_dists is not None
+
+        if filter_rollout:
             _validate_site_sorting(filtered_times, name="filtered_times")
             n_pred = len(predict_times)
 
@@ -106,11 +137,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 inds = jnp.searchsorted(ctrl_times, sub_times, side="left")
                 return sub_times, ctrl_values[inds]
 
-            sim_results = []
+            seg_results = []
             seg_masks = []
-            # Fast path: use host-side segment IDs so we only simulate non-empty segments
-            # and pass true segment lengths (sum lengths = n_pred).
-            # This avoids O(n_filtered * n_pred) behavior.
+            # Host-side segment IDs: only simulate non-empty segments and pass true
+            # segment lengths (sum = n_pred). Avoids O(n_filtered * n_pred) JAX work.
             pt_host = np.asarray(jax.device_get(predict_times))
             ft_host = np.asarray(jax.device_get(filtered_times))
             seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
@@ -145,7 +175,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     seg_name = f"{name}_{seg_id + 1}"
 
                 ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
-                sim_results.append(
+                seg_results.append(
                     self._simulate(
                         seg_name,
                         dynamics_seg,
@@ -158,44 +188,16 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 )
                 seg_masks.append(mask_seg)
 
-            # Merge segment results into predict_times order.
-            # Each segment has fixed-size output (n_pred) with valid entries first, padded.
-            # Use seg_masks to scatter each segment's values into the correct positions.
-            states_list = [r["states"] for r in sim_results]
-            obs_list = [r["observations"] for r in sim_results]
-
-            def _merge_segments(arr_list, seg_masks):
-                """Merge per-segment arrays into a single output array.
-
-                At each position ``i`` in the merged output, the value is taken
-                from the unique segment whose mask has ``mask[i] == True``.
-
-                All arrays must have shape ``(n_sim, T_seg, state_dim)`` — the
-                ndim==3 contract guaranteed by ``_ensure_trailing_dim``.
-                """
-                first = arr_list[0]
-                assert first.ndim == 3, (
-                    f"_merge_segments expects ndim==3 arrays (n_sim, T, D), got ndim={first.ndim} "
-                    f"with shape {first.shape}. Ensure _ensure_trailing_dim is applied before "
-                    "calling this function."
-                )
-                out = jnp.zeros(
-                    (first.shape[0], n_pred, first.shape[2]), dtype=first.dtype
-                )
-                for arr, mask in zip(arr_list, seg_masks):
-                    cumsum = jnp.cumsum(mask)
-                    local_idx = jnp.where(mask, cumsum - 1, 0)
-                    gathered = arr[:, local_idx, :]
-                    mask_bc = jnp.expand_dims(jnp.expand_dims(mask, 0), -1)  # (1, T, 1)
-                    out = jnp.where(mask_bc, gathered, out)
-                return out
-
-            sim_results_dict = {
-                "predicted_states": _merge_segments(states_list, seg_masks),
-                "predicted_observations": _merge_segments(obs_list, seg_masks),
+            # Scatter each segment's output into the global predict_times order.
+            merge = lambda key: _merge_segments(
+                [r[key] for r in seg_results], seg_masks, n_pred
+            )
+            results = {
+                "predicted_states": merge("states"),
+                "predicted_observations": merge("observations"),
             }
-            n_sim_out = sim_results_dict["predicted_states"].shape[0]
-            sim_results_dict["predicted_times"] = _tile_times(predict_times, n_sim_out)
+            n_sim_out = results["predicted_states"].shape[0]
+            results["predicted_times"] = _tile_times(predict_times, n_sim_out)
 
         else:
             if self.n_simulations > 1 and obs_values is not None:
@@ -203,7 +205,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     "n_simulations > 1 is only supported when obs_values is None "
                     "(forward simulation only)"
                 )
-            sim_results_dict = self._simulate(
+            results = self._simulate(
                 name,
                 dynamics,
                 obs_times=obs_times,
@@ -215,7 +217,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             )
 
         # Add the results from the simulator as deterministic sites
-        for site_name, trajectory in sim_results_dict.items():
+        for site_name, trajectory in results.items():
             numpyro.deterministic(f"{name}_{site_name}", trajectory)
 
         return fwd(
