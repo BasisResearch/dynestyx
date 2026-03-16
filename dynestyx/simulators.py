@@ -739,6 +739,17 @@ class DiscreteTimeSimulator(BaseSimulator):
                 "observations": obs_exp,
             }
 
+        def _step_dists(x_prev, t_idx):
+            """Compute transition distribution and step metadata from a single state."""
+            t_now = times[t_idx]
+            t_next = times[t_idx + 1]
+            u_now = _get_val_or_None(ctrl_values, t_idx)
+            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+            trans_dist = dynamics.state_evolution(
+                x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+            )
+            return t_next, u_next, trans_dist
+
         # n_simulations > 1: vmap over scan with dist.sample (no numpyro.sample in body)
         if n_sim > 1:
             with numpyro.plate(f"{name}_n_simulations", n_sim):
@@ -756,16 +767,11 @@ class DiscreteTimeSimulator(BaseSimulator):
                 def _step(carry, t_idx):
                     x_prev = carry
                     k_trans, k_obs = jr.split(keys_t[t_idx], 2)
-                    t_now = times[t_idx]
-                    t_next = times[t_idx + 1]
-                    u_now = _get_val_or_None(ctrl_values, t_idx)
-                    u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-                    trans = dynamics.state_evolution(
-                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                    t_next, u_next, trans_dist = _step_dists(x_prev, t_idx)
+                    x_t = trans_dist.sample(k_trans)
+                    y_t = dynamics.observation_model(x=x_t, u=u_next, t=t_next).sample(
+                        k_obs
                     )
-                    x_t = trans.sample(k_trans)
-                    obs_dist = dynamics.observation_model(x=x_t, u=u_next, t=t_next)
-                    y_t = obs_dist.sample(k_obs)
                     return x_t, (x_t, y_t)
 
                 u_0 = _get_val_or_None(ctrl_values, 0)
@@ -807,17 +813,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         y_0 = y_0_arr[0]
 
         def _step(x_prev, t_idx):
-            t_now = times[t_idx]
-            t_next = times[t_idx + 1]
-            u_now = _get_val_or_None(ctrl_values, t_idx)
-            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+            t_next, u_next, trans_dist = _step_dists(x_prev, t_idx)
             with numpyro.plate(f"{name}_n_simulations", 1):
-                x_t_site = numpyro.sample(
-                    f"{name}_x_{t_idx + 1}",
-                    dynamics.state_evolution(
-                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
-                    ),
-                )
+                x_t_site = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
             x_t = x_t_site[0]
             obs_next = _get_val_or_None(obs_values, t_idx + 1)
             if obs_next is not None:
