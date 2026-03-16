@@ -171,7 +171,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 )
                 seg_masks.append(mask_seg)
 
-
             # Merge segment results into predict_times order.
             # Each segment has fixed-size output (n_pred) with valid entries first, padded.
             # Use seg_masks to scatter each segment's values into the correct positions.
