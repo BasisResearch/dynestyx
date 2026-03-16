@@ -565,3 +565,49 @@ def jumpy_controls_model_ode(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
+
+
+def particle_sde_gaussian_potential_model(
+    N=3,
+    D=2,
+    K=2,
+    sigma=0.5,
+    obs_times=None,
+    obs_values=None,
+):
+    """N particles in D dimensions with drift = -grad(V), V = sum of weighted Gaussians.
+
+    Learnable parameters: centers (K, D) and strengths (K,) of the Gaussian components.
+    Diffusion is diagonal with known sigma.
+    """
+    centers = numpyro.sample(
+        "centers", dist.Normal(0.0, 3.0).expand([K, D]).to_event(2)
+    )
+    strengths = numpyro.sample(
+        "strengths", dist.LogNormal(0.0, 1.0).expand([K]).to_event(1)
+    )
+
+    def potential(x, u, t):
+        particles = x.reshape(N, D)
+        V = 0.0
+        for k in range(K):
+            diff = particles - centers[k]
+            V = V - strengths[k] * jnp.sum(jnp.exp(-0.5 * jnp.sum(diff**2, axis=-1)))
+        return V
+
+    state_dim = N * D
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(state_dim),
+            covariance_matrix=2.0**2 * jnp.eye(state_dim),
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            potential=potential,
+            use_negative_gradient=True,
+            diffusion_coefficient=lambda x, u, t: sigma * jnp.eye(state_dim),
+        ),
+        observation_model=DiracIdentityObservation(),
+    )
+
+    dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
