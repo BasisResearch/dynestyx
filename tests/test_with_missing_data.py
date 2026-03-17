@@ -49,9 +49,7 @@ def _apply_missingness_pattern(
 @pytest.mark.parametrize("use_controls", [False, True])
 @pytest.mark.parametrize(
     "missingness_pattern",
-    [
-        "none", "random", "sequential", "block"
-    ],
+    ["none", "random", "sequential", "block"],
 )
 @pytest.mark.parametrize("num_samples", [250])
 def test_lti_system_missing_data_science(
@@ -177,9 +175,7 @@ def test_lti_system_missing_data_science(
 
 @pytest.mark.parametrize(
     "missingness_pattern",
-    [
-        "none", "random", "sequential", "block"
-    ],
+    ["none", "random", "sequential", "block"],
 )
 @pytest.mark.parametrize("num_steps", [5000])
 def test_particle_sde_missing_data_svi(

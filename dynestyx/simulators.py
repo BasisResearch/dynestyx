@@ -27,6 +27,7 @@ from dynestyx.utils import (
     _validate_controls,
 )
 
+
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -414,9 +415,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         # using numpy (concrete indexing, no tracers) before entering the
         # plate.  state_evolution handles non-unit dt from skipped rows.
         has_no_obs = obs_values is None
-        has_missing_data = (
-            not has_no_obs and np.isnan(np.asarray(obs_values)).any()
-        )
+        has_missing_data = not has_no_obs and np.isnan(np.asarray(obs_values)).any()
 
         if has_missing_data:
             # Only entire-row missingness is supported; raise on partial.
@@ -445,7 +444,10 @@ class DiscreteTimeSimulator(BaseSimulator):
                     "removing missing data"
                 )
 
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and not has_no_obs:
+        if (
+            isinstance(dynamics.observation_model, DiracIdentityObservation)
+            and not has_no_obs
+        ):
             numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
             numpyro.deterministic("y_0", obs_values[0])
             if T == 1:
