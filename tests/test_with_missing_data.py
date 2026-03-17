@@ -50,25 +50,7 @@ def _apply_missingness_pattern(
 @pytest.mark.parametrize(
     "missingness_pattern",
     [
-        "none",
-        pytest.param(
-            "random",
-            marks=pytest.mark.xfail(
-                reason="Missing data not yet supported", strict=True
-            ),
-        ),
-        pytest.param(
-            "sequential",
-            marks=pytest.mark.xfail(
-                reason="Missing data not yet supported", strict=True
-            ),
-        ),
-        pytest.param(
-            "block",
-            marks=pytest.mark.xfail(
-                reason="Missing data not yet supported", strict=True
-            ),
-        ),
+        "none", "random", "sequential", "block"
     ],
 )
 @pytest.mark.parametrize("num_samples", [250])
@@ -196,19 +178,7 @@ def test_lti_system_missing_data_science(
 @pytest.mark.parametrize(
     "missingness_pattern",
     [
-        "none",
-        pytest.param(
-            "random",
-            marks=pytest.mark.xfail(reason="Dirac obs + NaN unsupported", strict=True),
-        ),
-        pytest.param(
-            "sequential",
-            marks=pytest.mark.xfail(reason="Dirac obs + NaN unsupported", strict=True),
-        ),
-        pytest.param(
-            "block",
-            marks=pytest.mark.xfail(reason="Dirac obs + NaN unsupported", strict=True),
-        ),
+        "none", "random", "sequential", "block"
     ],
 )
 @pytest.mark.parametrize("num_steps", [5000])
