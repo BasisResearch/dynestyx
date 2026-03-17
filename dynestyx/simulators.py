@@ -27,40 +27,6 @@ from dynestyx.utils import (
     _validate_controls,
 )
 
-def _sample_with_nan_mask(name, dist, obs_values, idx):
-    """Sample from ``dist``, conditioning on ``obs_values[idx]``.
-
-    Handles entirely-missing observations (all-NaN rows) via
-    ``numpyro.factor``.  When observed, the factor corrects the
-    log-density so the effective contribution equals
-    ``dist.log_prob(obs)``.  When missing, the sample is drawn freely
-    from ``dist``.
-
-    If ``obs_values`` is None, samples unconditionally.
-
-    Note: partial missingness (some but not all components NaN in a row) must
-    be caught *before* calling this function.
-    """
-    if obs_values is None:
-        return numpyro.sample(name, dist)
-    obs = obs_values[idx]
-    is_missing = jnp.isnan(obs).all()
-    obs_filled = jnp.where(jnp.isnan(obs), 0.0, obs)
-    # Always sample from the distribution (latent site).
-    x_sampled = numpyro.sample(name, dist)
-    # Correct the log-density: observed rows get log_prob(obs) instead
-    # of log_prob(x_sampled); missing rows get no correction (0).
-    numpyro.factor(
-        f"{name}_obs",
-        jnp.where(
-            is_missing,
-            0.0,
-            dist.log_prob(obs_filled) - dist.log_prob(x_sampled),
-        ),
-    )
-    return jnp.where(is_missing, x_sampled, obs_filled)
-
-
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -358,11 +324,10 @@ class SDESimulator(BaseSimulator):
             x_t = states_sol[t_idx]
             t = times[t_idx]
             u_t = control_path_eval(t)
-            y_t = _sample_with_nan_mask(
+            y_t = numpyro.sample(
                 f"y_{t_idx}",
                 dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs_values,
-                t_idx,
+                obs=_get_val_or_None(obs_values, t_idx),
             )
             return carry, y_t
 
@@ -464,20 +429,23 @@ class DiscreteTimeSimulator(BaseSimulator):
                     "Partial missingness (some but not all components NaN in a "
                     "row) is not yet supported. Only entire-row NaN is allowed."
                 )
+            # Filter to observed rows using numpy (concrete indexing, no
+            # tracers).  state_evolution handles non-unit dt from skipped
+            # rows.  Both the Dirac plate path and the default scan path
+            # operate on the filtered arrays.
+            observed_mask = ~all_nan_per_row
+            obs_values = jnp.array(obs_np[observed_mask])
+            obs_times = jnp.array(np.asarray(obs_times)[observed_mask])
+            if ctrl_values is not None:
+                ctrl_values = jnp.array(np.asarray(ctrl_values)[observed_mask])
+            T = len(obs_times)
+            if T < 1:
+                raise ValueError(
+                    "obs_times must contain at least one timepoint after "
+                    "removing missing data"
+                )
 
         if isinstance(dynamics.observation_model, DiracIdentityObservation) and not has_no_obs:
-            # When missing rows exist, filter to observed rows using numpy
-            # (concrete, no tracers).  state_evolution handles non-unit dt
-            # from skipped rows.  When no missing data, use arrays as-is.
-            if has_missing_data:
-                obs_np = np.asarray(obs_values)
-                observed_mask = ~np.isnan(obs_np).all(axis=1)
-                obs_values = jnp.array(obs_np[observed_mask])
-                obs_times = jnp.array(np.asarray(obs_times)[observed_mask])
-                if ctrl_values is not None:
-                    ctrl_values = jnp.array(np.asarray(ctrl_values)[observed_mask])
-                T = len(obs_times)
-
             numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
             numpyro.deterministic("y_0", obs_values[0])
             if T == 1:
@@ -537,11 +505,10 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # sample initial observation
         u_0 = _get_val_or_None(ctrl_values, 0)
-        y_0 = _sample_with_nan_mask(
+        y_0 = numpyro.sample(
             "y_0",
             dynamics.observation_model(x_prev, u_0, obs_times[0]),
-            obs_values,
-            0,
+            obs=_get_val_or_None(obs_values, 0),
         )
 
         def _step(x_prev, t_idx):
@@ -555,12 +522,11 @@ class DiscreteTimeSimulator(BaseSimulator):
                 dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
             )
 
-            # Sample observation (with NaN masking for missing rows)
-            y_t = _sample_with_nan_mask(
+            # Sample observation
+            y_t = numpyro.sample(
                 f"y_{t_idx + 1}",
                 dynamics.observation_model(x=x_t, u=u_next, t=t_next),
-                obs_values,
-                t_idx + 1,
+                obs=_get_val_or_None(obs_values, t_idx + 1),
             )
             return x_t, (x_t, y_t)
 
@@ -721,12 +687,11 @@ class ODESimulator(BaseSimulator):
             x_t = x_sol[t_idx]
             t = obs_times[t_idx]
             u_t = None if args is None else args(t)
-            # Sample observation (with NaN masking for missing rows)
-            y_t = _sample_with_nan_mask(
+            # Sample observation
+            y_t = numpyro.sample(
                 f"y_{t_idx}",
                 dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs_values,
-                t_idx,
+                obs=_get_val_or_None(obs_values, t_idx),
             )
             return carry, y_t
 
