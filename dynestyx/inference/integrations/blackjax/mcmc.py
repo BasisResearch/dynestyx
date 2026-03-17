@@ -6,6 +6,7 @@ import blackjax
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+from jax.flatten_util import ravel_pytree
 from numpyro import handlers
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model, potential_energy
@@ -196,33 +197,58 @@ def run_blackjax_mcmc(
         )
 
     if isinstance(mcmc_config, HMCConfig):
-        rng_key, warmup_key, warmup_density_key, mcmc_key = jr.split(rng_key, 4)
-        warmup = blackjax.window_adaptation(
-            blackjax.hmc,
-            make_logdensity(warmup_density_key),
-            num_integration_steps=mcmc_config.num_steps,
-        )
-        warmup_position = (
+        ref_position = (
             jax.tree_util.tree_map(lambda x: x[0], initial_positions)
             if has_chain_axis
             else initial_positions
         )
-        ((_, warmup_parameters), _) = warmup.run(  # type: ignore
-            warmup_key, warmup_position, num_steps=mcmc_config.num_warmup
-        )
 
-        def make_hmc(density_key):
-            return blackjax.hmc(make_logdensity(density_key), **warmup_parameters)
+        if mcmc_config.adapt:
+            rng_key, warmup_key, warmup_density_key, mcmc_key = jr.split(rng_key, 4)
+            warmup = blackjax.window_adaptation(
+                blackjax.hmc,
+                make_logdensity(warmup_density_key),
+                num_integration_steps=mcmc_config.num_steps,
+            )
+            ((_, warmup_parameters), _) = warmup.run(  # type: ignore
+                warmup_key, ref_position, num_steps=mcmc_config.num_warmup
+            )
 
-        return _run_blackjax(
-            mcmc_key=mcmc_key,
-            make_algorithm=make_hmc,
-            initial_positions=initial_positions,
-            has_chain_axis=has_chain_axis,
-            num_chains=mcmc_config.num_chains,
-            num_steps=mcmc_config.num_samples,
-            transform_fn=transform_fn,
-        )
+            def make_hmc(density_key):
+                return blackjax.hmc(make_logdensity(density_key), **warmup_parameters)
+
+            return _run_blackjax(
+                mcmc_key=mcmc_key,
+                make_algorithm=make_hmc,
+                initial_positions=initial_positions,
+                has_chain_axis=has_chain_axis,
+                num_chains=mcmc_config.num_chains,
+                num_steps=mcmc_config.num_samples,
+                transform_fn=transform_fn,
+            )
+        else:
+            flat, _ = ravel_pytree(ref_position)
+            inv_mass_matrix = jnp.eye(flat.shape[0])
+
+            def make_hmc(density_key):
+                return blackjax.hmc(
+                    make_logdensity(density_key),
+                    mcmc_config.step_size,
+                    inv_mass_matrix,
+                    mcmc_config.num_steps,
+                )
+
+            rng_key, mcmc_key = jr.split(rng_key)
+            return _run_blackjax(
+                mcmc_key=mcmc_key,
+                make_algorithm=make_hmc,
+                initial_positions=initial_positions,
+                has_chain_axis=has_chain_axis,
+                num_chains=mcmc_config.num_chains,
+                num_steps=mcmc_config.num_samples + mcmc_config.num_warmup,
+                transform_fn=transform_fn,
+                num_warmup=mcmc_config.num_warmup,
+            )
 
     if isinstance(mcmc_config, SGLDConfig):
         initial_positions = (
