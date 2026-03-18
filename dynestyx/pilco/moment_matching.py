@@ -12,7 +12,7 @@ def _inv(A: Array) -> Array:
     return jnp.linalg.inv(A + _JITTER * jnp.eye(A.shape[0]))
 
 
-def compute_mean_and_q(nu: Array, s: Array, ls_sq: Array, sig_var: float) -> Array:
+def compute_mean_and_q(nu: Array, s: Array, ls_sq: Array, sig_var: Array | float) -> Array:
     """Expected kernel evaluations $q$ for uncertain input (Eq. 15)."""
     sL = s + jnp.diag(ls_sq)
     sL_inv = _inv(sL)
@@ -22,7 +22,7 @@ def compute_mean_and_q(nu: Array, s: Array, ls_sq: Array, sig_var: float) -> Arr
 
 
 def compute_Q_matrix(
-    nu: Array, s: Array, ls_sq_a: Array, ls_sq_b: Array, sv_a: float, sv_b: float
+    nu: Array, s: Array, ls_sq_a: Array, ls_sq_b: Array, sv_a: Array | float, sv_b: Array | float
 ) -> Array:
     """$Q$ matrix for covariance prediction (Eq. 22)."""
     d = nu.shape[1]
@@ -138,7 +138,7 @@ def gp_log_marginal_likelihood(
         noise_variance: Per-output noise variance, shape ``(D,)``.
     """
     n, D = Y.shape
-    total = 0.0
+    total: Array = jnp.array(0.0)
     for a in range(D):
         K = K_fn(X, X, a)
         L = jnp.linalg.cholesky(K + noise_variance[a] * jnp.eye(n) + 1e-6 * jnp.eye(n))

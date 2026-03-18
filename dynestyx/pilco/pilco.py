@@ -18,9 +18,12 @@ from dynestyx import DiscreteTimeSimulator
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import DiracIdentityObservation
+from dynestyx.pilco.controllers import LinearController, RBFController
 from dynestyx.pilco.mgpr import MGPR
 from dynestyx.pilco.rewards import ExponentialReward
 from dynestyx.types import FunctionOfTime
+
+Controller = LinearController | RBFController
 
 
 @dataclasses.dataclass
@@ -148,7 +151,7 @@ class PILCO(eqx.Module):
     """
 
     mgpr: MGPR
-    controller: eqx.Module
+    controller: Controller
     reward: ExponentialReward
     horizon: int
     m_init: Array
@@ -159,7 +162,7 @@ class PILCO(eqx.Module):
         self,
         X: Array,
         Y: Array,
-        controller: eqx.Module,
+        controller: Controller,
         reward: ExponentialReward,
         horizon: int = 25,
         m_init: Array | None = None,
