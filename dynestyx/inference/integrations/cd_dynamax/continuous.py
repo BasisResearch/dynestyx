@@ -25,6 +25,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
 
@@ -253,19 +254,6 @@ def run_continuous_filter(
         # PF: filtered has particles and log_weights (DPF-specific, not in base type)
         particles = filtered.particles  # type: ignore[attr-defined]
         log_weights = filtered.log_weights  # type: ignore[attr-defined]
-
-        def _make_mixture(particles, log_weights):
-            n_particles = log_weights.shape[-1]
-            # MixtureSameFamily requires component_dists batch shape last dim = mixture_size.
-            # Delta(v) with default event_dim=0 uses full v.shape as batch_shape.
-            # We need batch (n_particles,) and event (state_dim,), so use event_dim=1.
-            if particles.shape[0] != n_particles:
-                particles = jnp.swapaxes(particles, -2, -1)
-            mixing_dist = dist.Categorical(logits=log_weights)  # type: ignore
-            component_dists = dist.Delta(particles, event_dim=1)  # type: ignore
-            return dist.MixtureSameFamily(mixing_dist, component_dists)  # type: ignore
-
-        return [
-            _make_mixture(particles[i], log_weights[i])
-            for i in range(particles.shape[0])
-        ]
+        if particles.ndim == 2:
+            particles = particles[..., None]
+        return particles_to_delta_mixtures(particles, log_weights)

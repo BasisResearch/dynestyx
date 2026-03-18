@@ -21,6 +21,7 @@ from dynestyx.inference.filter_configs import (
     PFConfig,
     _config_to_record_kwargs,
 )
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
@@ -73,17 +74,17 @@ def run_discrete_filter(
     record_kwargs = _config_to_record_kwargs(filter_config)
 
     ys = obs_values
-    t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
-    if t1 == 0:
+    T1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
+    if T1 == 0:
         return []
 
     times = obs_times
 
     if ctrl_values is None:
         control_dim = dynamics.control_dim
-        ctrl_values = jnp.zeros((t1, control_dim), dtype=ys.dtype)
-    elif ctrl_values.shape[0] > t1:
-        # ctrl spans union of obs_times and predict_times; filter needs ctrl at obs_times only
+        ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
+    elif ctrl_values.shape[0] > T1:
+        # Find controls aligned to obs_times.
         inds = jnp.searchsorted(ctrl_times, times, side="left")
         ctrl_values = ctrl_values[inds]
 
@@ -124,16 +125,7 @@ def run_discrete_filter(
         particles = states.particles
         if particles.ndim == 2:
             particles = particles[..., None]
-        log_weights = states.log_weights
-        log_weights_norm = log_weights - jax.scipy.special.logsumexp(
-            log_weights, axis=1, keepdims=True
-        )
-        result: list[dist.Distribution] = []
-        for i in range(particles.shape[0]):
-            mixing = dist.Categorical(logits=log_weights_norm[i])
-            comps = dist.Delta(particles[i], event_dim=1)
-            result.append(dist.MixtureSameFamily(mixing, comps))  # type: ignore[arg-type]
-        return result
+        return particles_to_delta_mixtures(particles, states.log_weights)
     else:
         _add_sites_taylor_kf(name, states, record_kwargs)
         # KF/EKF: states.mean (T+1, state_dim), states.chol_cov (T+1, state_dim, state_dim)
