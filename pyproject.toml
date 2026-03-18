@@ -80,5 +80,5 @@ select = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*"]
+module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*", "arviz.*"]
 follow_untyped_imports = true
