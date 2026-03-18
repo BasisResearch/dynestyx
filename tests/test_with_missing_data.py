@@ -156,7 +156,7 @@ def test_lti_system_missing_data_science(
     if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(
+        az.plot_prior_posterior(
             posterior_alpha, hdi_prob=0.95, ref_val=true_params["alpha"].item()
         )
         plt.savefig(OUTPUT_DIR / "posterior_alpha.png", dpi=150, bbox_inches="tight")
@@ -293,7 +293,7 @@ def test_particle_sde_missing_data_svi(
         init_centers = init_values["centers"]
 
         for k in range(K):
-            ax = az.plot_posterior(
+            ax = az.plot_prior_posterior(
                 posterior_centers[:, k, 0],
                 hdi_prob=0.95,
                 ref_val=true_centers[k, 0].item(),
@@ -314,7 +314,7 @@ def test_particle_sde_missing_data_svi(
         init_strengths = init_values["strengths"]
 
         for k in range(K):
-            ax = az.plot_posterior(
+            ax = az.plot_prior_posterior(
                 posterior_strengths[:, k],
                 hdi_prob=0.95,
                 ref_val=true_strengths[k].item(),
@@ -575,7 +575,7 @@ def test_lti_unroll_missing_rows(num_samples: int):
     "missingness_type",
     ["none", "block", "random_segment", "block_id_switch", "random_id_switch"],
 )
-@pytest.mark.parametrize("num_steps", [3000])
+@pytest.mark.parametrize("num_steps", [5000])
 def test_interacting_particles_partial_missingness_svi(
     missingness_type: str,
     num_steps: int,
@@ -584,7 +584,7 @@ def test_interacting_particles_partial_missingness_svi(
     rng_key = jr.PRNGKey(42)
     data_key, svi_key, missing_key = jr.split(rng_key, 3)
 
-    N = 4
+    N = 20
     sigma = 0.2
     obs_times = jnp.arange(start=0.0, stop=5.0, step=0.1)
 
@@ -610,9 +610,9 @@ def test_interacting_particles_partial_missingness_svi(
             obs_times=obs_times,
         )
 
-    obs_values = synthetic["observations"].squeeze(0)  # (T, N)
+    obs_values_clean = synthetic["observations"].squeeze(0)  # (T, N), no NaN
     obs_values = _apply_particle_trajectory_missingness(
-        obs_values, missingness_type, missing_key
+        obs_values_clean, missingness_type, missing_key
     )
 
     def data_conditioned_model():
@@ -623,6 +623,10 @@ def test_interacting_particles_partial_missingness_svi(
                 obs_times=obs_times,
                 obs_values=obs_values,
             )
+
+    OUTPUT_DIR = get_output_dir(
+        f"test_interacting_particles_partial_missingness_svi[{num_steps}-{missingness_type}]"
+    )
 
     init_values = {
         "loc": jnp.array(0.0),
@@ -658,3 +662,123 @@ def test_interacting_particles_partial_missingness_svi(
     assert jnp.abs(posterior_scale.mean() - true_scale) < tol, (
         f"scale not recovered: posterior mean {posterior_scale.mean():.3f} vs true {true_scale}"
     )
+
+    if SAVE_FIG and OUTPUT_DIR is not None:
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        plot_times = np.asarray(obs_times)  # (T,)
+        obs_np = np.asarray(obs_values)  # (T, N) with NaN at missing entries
+        clean_np = np.asarray(obs_values_clean)  # (T, N) ground truth, no NaN
+
+        # Posterior predictive: run with 200 parameter samples + obs_values to impute gaps
+        pp_param_samples = guide.sample_posterior(
+            jr.PRNGKey(2), svi_result.params, sample_shape=(200,)
+        )
+        pp_predictive = Predictive(
+            interacting_particles_gaussian_kernel_model,
+            posterior_samples=pp_param_samples,
+        )
+        with DiscreteTimeSimulator(unroll_missing=True):
+            pp_result = pp_predictive(
+                jr.PRNGKey(3),
+                N=N,
+                sigma=sigma,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+        pred_states = np.asarray(pp_result["states"])  # (200, T, N)
+
+        # Figure 1: Trajectories with missing-region shading and PP imputation
+        rng_plot = np.random.default_rng(seed=0)
+        plot_particles = sorted(rng_plot.choice(N, size=4, replace=False))
+
+        fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharey=True)
+        colors = ["C0", "C1", "C2", "C3"]
+
+        for (i, ax), col in zip(zip(plot_particles, axes.flat), colors):
+            # Shade missing intervals for this particle
+            missing = np.isnan(obs_np[:, i])
+            in_gap = False
+            gap_start_t = 0.0
+            for t in range(len(plot_times)):
+                if missing[t] and not in_gap:
+                    gap_start_t = plot_times[t]
+                    in_gap = True
+                elif not missing[t] and in_gap:
+                    ax.axvspan(
+                        gap_start_t, plot_times[t], color="orange", alpha=0.15, zorder=0
+                    )
+                    in_gap = False
+            if in_gap:
+                ax.axvspan(
+                    gap_start_t, plot_times[-1], color="orange", alpha=0.15, zorder=0
+                )
+
+            # Ground-truth trajectory (thin dashed)
+            ax.plot(
+                plot_times,
+                clean_np[:, i],
+                color="black",
+                lw=0.8,
+                ls="--",
+                alpha=0.5,
+                label="True",
+            )
+
+            # Observed data points (non-NaN only)
+            obs_mask = ~missing
+            ax.plot(
+                plot_times[obs_mask],
+                obs_np[obs_mask, i],
+                "o",
+                color=col,
+                ms=2.5,
+                alpha=0.8,
+                label="Observed",
+            )
+
+            # PP median + 90% CI (CI collapses at observed times where all samples agree)
+            pp_i = pred_states[:, :, i]  # (200, T)
+            pp_lo = np.percentile(pp_i, 5, axis=0)
+            pp_hi = np.percentile(pp_i, 95, axis=0)
+            pp_med = np.median(pp_i, axis=0)
+            ax.fill_between(
+                plot_times, pp_lo, pp_hi, color=col, alpha=0.25, label="PP 90% CI"
+            )
+            ax.plot(plot_times, pp_med, color=col, lw=1.2, label="PP median")
+
+            ax.set_title(f"Particle {i}")
+            ax.set_xlabel("time")
+            ax.set_ylabel("position")
+            if i == 0:
+                ax.legend(fontsize=7, loc="upper right")
+
+        fig.suptitle(
+            f"Posterior predictive imputation — {missingness_type} missingness",
+            fontsize=12,
+        )
+        fig.tight_layout()
+        plt.savefig(OUTPUT_DIR / "trajectories.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        # Figure 2: Parameter posteriors
+        fig2, (ax_loc, ax_scale) = plt.subplots(1, 2, figsize=(9, 3))
+        az.plot_prior_posterior(
+            np.asarray(posterior_loc),
+            hdi_prob=0.95,
+            ref_val=true_loc,
+            ax=ax_loc,
+        )
+        ax_loc.set_title("loc")
+        az.plot_prior_posterior(
+            np.asarray(posterior_scale),
+            hdi_prob=0.95,
+            ref_val=true_scale,
+            ax=ax_scale,
+        )
+        ax_scale.set_title("scale")
+        fig2.suptitle(f"Posterior — {missingness_type} missingness", fontsize=12)
+        fig2.tight_layout()
+        plt.savefig(OUTPUT_DIR / "posteriors.png", dpi=150, bbox_inches="tight")
+        plt.close(fig2)
