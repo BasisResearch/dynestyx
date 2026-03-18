@@ -232,11 +232,16 @@ class PILCO(eqx.Module):
             m_u, s_u, c_squash = squash_sin(m_u, s_u, self.max_action)
             c_xu = c_xu @ c_squash
 
+        # Ensure action covariance is PSD with jitter
+        s_u = (s_u + s_u.T) / 2.0 + 1e-6 * jnp.eye(m_u.shape[0])
+
         m_joint = jnp.concatenate([m_x, m_u])
         s_joint = jnp.block([
             [s_x, c_xu],
             [c_xu.T, s_u],
         ])
+        # Symmetrize joint covariance
+        s_joint = (s_joint + s_joint.T) / 2.0
 
         M_delta, S_delta, V_delta = self.mgpr.predict_given_factorizations(
             m_joint, s_joint
@@ -245,7 +250,12 @@ class PILCO(eqx.Module):
         s1 = s_joint[:state_dim, :]
         m_next = m_x + M_delta
         s_next = s_x + S_delta + s1 @ V_delta + (s1 @ V_delta).T
+        # Symmetrize
         s_next = (s_next + s_next.T) / 2.0
+        # Enforce PSD: eigendecompose, clamp eigenvalues, reconstruct
+        eigvals, eigvecs = jnp.linalg.eigh(s_next)
+        eigvals = jnp.maximum(eigvals, 1e-6)
+        s_next = eigvecs @ jnp.diag(eigvals) @ eigvecs.T
 
         return m_next, s_next
 

@@ -120,7 +120,6 @@ class RBFController(eqx.Module):
         """
         state_dim = m.shape[0]
         control_dim = self.weights.shape[1]
-        n_basis = self.centers.shape[0]
 
         Lambda = jnp.diag(self.lengthscales**2)
         Lambda_inv = jnp.diag(1.0 / self.lengthscales**2)
@@ -159,7 +158,6 @@ class RBFController(eqx.Module):
         s_u = self.weights.T @ Q @ self.weights - jnp.outer(m_u, m_u)
 
         # === Cross-covariance: cov[x, u] ===
-        weighted_nu = q[:, None] * nu  # (n_basis, state_dim)
         c_xu = jnp.zeros((state_dim, control_dim))
         for d in range(control_dim):
             w_q_nu = (self.weights[:, d] * q)[:, None] * nu  # (n_basis, state_dim)
@@ -185,7 +183,6 @@ def squash_sin(
         s_out: Squashed covariance, shape (control_dim, control_dim).
         c_out: Input-output cross-covariance, shape (control_dim, control_dim).
     """
-    d = m.shape[0]
     s_diag = jnp.diag(s)
 
     # E[sin(u)] = sin(m) * exp(-diag(s)/2)
@@ -195,7 +192,6 @@ def squash_sin(
     # cov[sin(u_i), sin(u_j)]
     # Using the identity for E[sin(u_i)sin(u_j)] and E[cos(u_i)cos(u_j)]
     lq = -(s_diag[:, None] + s_diag[None, :]) / 2.0
-    q = jnp.exp(lq)
 
     s_out = (
         jnp.exp(lq + s) * jnp.cos(m[:, None] - m[None, :])

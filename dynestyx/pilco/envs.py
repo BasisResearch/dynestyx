@@ -15,7 +15,6 @@ from jax import Array
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
-    ObservationModel,
 )
 from dynestyx.models.observations import DiracIdentityObservation, GaussianObservation
 from dynestyx.models.state_evolution import GaussianStateEvolution

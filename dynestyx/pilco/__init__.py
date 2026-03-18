@@ -22,7 +22,7 @@ References:
 
 from dynestyx.pilco.controllers import LinearController, RBFController, squash_sin
 from dynestyx.pilco.envs import InvertedPendulumEnv
-from dynestyx.pilco.mgpr import GPStateEvolution, MGPR
+from dynestyx.pilco.mgpr import MGPR, GPStateEvolution
 from dynestyx.pilco.pilco import PILCO, MomentMatchingPropagator
 from dynestyx.pilco.rewards import ExponentialReward
 

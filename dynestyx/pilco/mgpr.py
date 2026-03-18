@@ -54,15 +54,15 @@ class MGPR(eqx.Module):
 
     @property
     def lengthscales(self) -> Array:
-        return jnp.exp(self.log_lengthscales)
+        return jnp.exp(jnp.clip(self.log_lengthscales, -5.0, 5.0))
 
     @property
     def signal_variance(self) -> Array:
-        return jnp.exp(self.log_signal_variance)
+        return jnp.exp(jnp.clip(self.log_signal_variance, -5.0, 5.0))
 
     @property
     def noise_variance(self) -> Array:
-        return jnp.exp(self.log_noise_variance)
+        return jnp.exp(jnp.clip(self.log_noise_variance, -8.0, 2.0))
 
     @property
     def state_dim(self) -> int:
@@ -83,8 +83,9 @@ class MGPR(eqx.Module):
         """Compute K_inv and beta for output dimension a."""
         K = self._kernel_matrix(self.X, self.X, a)
         n = K.shape[0]
-        Ky = K + self.noise_variance[a] * jnp.eye(n)
-        L = jnp.linalg.cholesky(Ky + 1e-6 * jnp.eye(n))
+        noise = jnp.maximum(self.noise_variance[a], 1e-4)
+        Ky = K + noise * jnp.eye(n) + 1e-6 * jnp.eye(n)
+        L = jnp.linalg.cholesky(Ky)
         iK = jax.scipy.linalg.cho_solve((L, True), jnp.eye(n))
         beta = iK @ self.Y[:, a]
         return iK, beta
@@ -192,6 +193,9 @@ class MGPR(eqx.Module):
                 if a != b:
                     S = S.at[b, a].set(S_ab)
 
+        # Ensure diagonal is non-negative (numerical stability)
+        S = S + 1e-6 * jnp.eye(D)
+
         # === Input-output cross-covariance V ===
         V = jnp.zeros((input_dim, D))
         for a in range(D):
@@ -248,6 +252,11 @@ class GPStateEvolution(DiscreteTimeStateEvolution):
     def __init__(self, mgpr: MGPR):
         self.mgpr = mgpr
 
+    @property
+    def control_dim(self) -> int:
+        """Infer control dimension from GP input vs output dimensions."""
+        return self.mgpr.X.shape[1] - self.mgpr.state_dim
+
     def __call__(
         self,
         x: State,
@@ -255,8 +264,12 @@ class GPStateEvolution(DiscreteTimeStateEvolution):
         t_now: Time,
         t_next: Time,
     ):
+        # Build GP input: [state, action]
+        # If u is None but GP expects controls, pad with zeros
         if u is not None:
             x_tilde = jnp.concatenate([x, jnp.atleast_1d(u)])
+        elif self.control_dim > 0:
+            x_tilde = jnp.concatenate([x, jnp.zeros(self.control_dim)])
         else:
             x_tilde = x
 
