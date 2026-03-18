@@ -4,10 +4,30 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.0.1"
+description = "NumPyro integration for dynamical systems"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.12,<3.14"
+authors = [
+    { name = "Basis" },
+]
+keywords = [
+    "machine learning",
+    "statistics",
+    "dynamical systems",
+    "bayesian modeling",
+    "jax",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "effectful @ git+https://github.com/BasisResearch/effectful.git",
     "cuthbert @ git+https://github.com/DanWaxman/cuthbert.git@b56783de77ef62804b8458463a7bf907c1296017#subdirectory=pkg/cuthbert",
