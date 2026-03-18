@@ -5,6 +5,12 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from dynestyx.pilco.moment_matching import (
+    compute_cross_covariance,
+    compute_mean_and_q,
+    compute_Q_matrix,
+)
+
 
 class LinearController(eqx.Module):
     """
@@ -74,12 +80,6 @@ class RBFController(eqx.Module):
         as ``MGPR.predict_uncertain`` but with signal_variance=1
         (deterministic GP, iK=0).
         """
-        from dynestyx.pilco.moment_matching import (
-            compute_cross_covariance,
-            compute_mean_and_q,
-            compute_Q_matrix,
-        )
-
         state_dim = m.shape[0]
         control_dim = self.weights.shape[1]
         ls_sq = self.lengthscales**2

@@ -100,7 +100,7 @@ class InvertedPendulumEnv(eqx.Module):
             state_evolution=ContinuousTimeStateEvolution(drift=drift),
             observation_model=GaussianObservation(
                 h=lambda x, u, t: x,
-                R=obs_noise**2 * jnp.eye(2),
+                R=obs_noise**2 * jnp.eye(self.state_dim),
             ),
             control_dim=1,
         )
@@ -141,7 +141,7 @@ class InvertedPendulumEnv(eqx.Module):
             initial_condition=self._make_initial_condition(x0),
             state_evolution=GaussianStateEvolution(
                 F=transition_fn,
-                cov=process_noise**2 * jnp.eye(2),
+                cov=process_noise**2 * jnp.eye(self.state_dim),
             ),
             observation_model=DiracIdentityObservation(),
             control_dim=1,

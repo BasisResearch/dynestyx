@@ -341,13 +341,14 @@ class PILCO(eqx.Module):
             mgpr = eqx.apply_updates(mgpr, updates)
             return mgpr, new_opt_state, loss
 
+        optimizer = optax.adam(learning_rate)
+
         for restart in range(num_restarts):
             mgpr = (
                 self.mgpr
                 if restart == 0
                 else _randomize_hyperparams(self.mgpr, restart)
             )
-            optimizer = optax.adam(learning_rate)
             opt_state = optimizer.init(eqx.filter(mgpr, hp_filter))
 
             for _ in range(max_iters):
