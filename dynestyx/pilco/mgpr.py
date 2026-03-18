@@ -7,6 +7,11 @@ import numpyro.distributions as dist
 from jax import Array
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
+from dynestyx.pilco.moment_matching import (
+    compute_cross_covariance,
+    compute_mean_and_q,
+    compute_Q_matrix,
+)
 from dynestyx.types import Control, State, Time
 
 
@@ -72,18 +77,18 @@ class MGPR(eqx.Module):
         beta = iK @ self.Y[:, a]
         return iK, beta
 
-    def predict(self, x_star: Array) -> tuple[Array, Array]:
-        """GP posterior mean and variance for a deterministic input."""
+    def _predict_deterministic(self, x_star: Array) -> tuple[Array, Array]:
+        """GP posterior mean/variance for a deterministic input (used by GPStateEvolution)."""
         D = self.Y.shape[1]
         means = jnp.zeros(D)
         variances = jnp.zeros(D)
         for a in range(D):
             iK, beta = self._compute_factorizations(a)
             k_star = self._kernel_matrix(self.X, x_star[None, :], a).squeeze(-1)
-            mean_a = k_star @ beta
-            var_a = self.signal_variance[a] - k_star @ iK @ k_star
-            means = means.at[a].set(mean_a)
-            variances = variances.at[a].set(jnp.maximum(var_a, 1e-12))
+            means = means.at[a].set(k_star @ beta)
+            variances = variances.at[a].set(
+                jnp.maximum(self.signal_variance[a] - k_star @ iK @ k_star, 1e-12)
+            )
         return means, variances
 
     def predict_given_factorizations(
@@ -95,12 +100,6 @@ class MGPR(eqx.Module):
         Given $p(\\tilde{x}) = \\mathcal{N}(m, s)$, returns the predictive
         mean $M$, covariance $S$, and input-output cross-covariance $V$.
         """
-        from dynestyx.pilco.moment_matching import (
-            compute_cross_covariance,
-            compute_mean_and_q,
-            compute_Q_matrix,
-        )
-
         D = self.Y.shape[1]
         input_dim = self.X.shape[1]
 
@@ -204,7 +203,7 @@ class GPStateEvolution(DiscreteTimeStateEvolution):
         else:
             x_tilde = x
 
-        mean_delta, var_delta = self.mgpr.predict(x_tilde)
+        mean_delta, var_delta = self.mgpr._predict_deterministic(x_tilde)
         return dist.MultivariateNormal(
             loc=x + mean_delta,
             covariance_matrix=jnp.diag(var_delta),
