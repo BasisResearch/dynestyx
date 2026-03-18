@@ -226,6 +226,9 @@ def test_case2_simulator_filter_obs_only_runs():
             with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
                 model()
     assert "f_marginal_loglik" in tr
+    # Simulator should no-op without predict_times in this chained case.
+    assert "f_times" not in tr and "f_states" not in tr and "f_observations" not in tr
+    assert "f_predicted_times" not in tr and "f_predicted_states" not in tr
 
 
 def test_case2_simulator_filter_predict_times_only_runs():

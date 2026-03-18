@@ -90,10 +90,17 @@ def _validate_controls(
     ctrl_values: Array | None,
 ) -> None:
     """
-    Validate that ctrl_times/ctrl_values align with obs_times if provided.
+    Validate control inputs against model time grids.
+
+    Rules:
+    - ctrl_times and ctrl_values must be provided together (or both omitted).
+    - At least one of obs_times or predict_times must be provided.
+    - If both obs_times and predict_times are present, ctrl_times must match their union.
+    - Otherwise ctrl_times must match whichever single grid is provided.
+    - Matching is set-like (order-insensitive) and length-preserving.
 
     Raises:
-        ValueError: If control times length doesn't match observation times length.
+        ValueError: If controls are partially provided or no time grid is provided.
     """
 
     if ctrl_times is None:

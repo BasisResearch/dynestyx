@@ -1,7 +1,6 @@
 """NumPyro-aware simulators/unrollers for dynamical models."""
 
 import dataclasses
-import warnings
 from collections.abc import Callable
 from typing import cast
 
@@ -38,18 +37,7 @@ def _tile_times(times: Array, n_sim: int) -> Array:
 
 
 def _ensure_trailing_dim(arr: Array) -> Array:
-    """Ensure simulator output has a trailing state/obs dimension.
-
-    All simulator outputs should have shape ``(n_sim, T, dim)``.  For scalar
-    states or observations (e.g. HMM discrete latent variables), the array
-    arrives with shape ``(n_sim, T)`` — ndim==2.  This adds a trailing
-    singleton to give ``(n_sim, T, 1)``, consistent with the ndim==3 contract
-    required by ``_merge_segments`` and the rest of the pipeline.  A future
-    one-hot encoding upgrade can then widen that last axis to ``num_states``.
-
-    Arrays that already carry a trailing dimension (ndim==3) are returned
-    unchanged.
-    """
+    """Ensure simulator outputs follow shape (n_sim, T, dim)."""
     return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
 
 
@@ -58,13 +46,10 @@ def _merge_segments(
     seg_masks: list[Array],
     n_pred: int,
 ) -> Array:
-    """Merge per-segment arrays into a single ``(n_sim, n_pred, state_dim)`` array.
+    """Merge segment outputs into one array in predict-time order.
 
-    At each position ``i`` in the output, the value is taken from the unique
-    segment whose boolean mask has ``mask[i] == True``.
-
-    All input arrays must satisfy the ndim==3 contract ``(n_sim, T_seg, state_dim)``
-    guaranteed by :func:`_ensure_trailing_dim`.
+    Each segment contributes values only where its mask is True. Input arrays
+    must already be shaped (n_sim, T_seg, dim).
     """
     first = arr_list[0]
     assert first.ndim == 3, (
@@ -139,14 +124,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
             seg_results = []
             seg_masks = []
-            # Host-side segment IDs: only simulate non-empty segments and pass true
-            # segment lengths (sum = n_pred). Avoids O(n_filtered * n_pred) JAX work.
+            # Build segment ids on host once and simulate only non-empty segments.
             pt_host = np.asarray(jax.device_get(predict_times))
             ft_host = np.asarray(jax.device_get(filtered_times))
             seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
-            present_seg_ids = [int(s) for s in np.unique(seg_ids_host)]
-
-            for seg_id in present_seg_ids:
+            for seg_id in range(-1, len(ft_host)):
                 mask_host = seg_ids_host == seg_id
                 if not np.any(mask_host):
                     continue
@@ -278,14 +260,14 @@ def _solve_de(
     key=None,
     tol_vbt: float | None = None,
 ) -> Array:
-    """Solve DE (ODE or SDE) with a single diffeqsolve call.
+    """Solve one ODE/SDE trajectory with diffrax.
 
-    Branches on diffusion_coefficient: None -> ODE, else -> SDE.
-    t0 is explicit (may differ from model's t0, e.g. for predict_times from filter).
+    Uses ODE mode when diffusion is None, otherwise SDE mode. `t0` is explicit
+    so rollout segments can start from filtered times.
     """
     t1 = saveat_times[-1]
 
-    # Use lax.cond to avoid TracerBoolConversionError when t0/t1 are traced
+    # Keep the branch JAX-traceable when t0/t1 are traced.
     def _early_return():
         return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
 
@@ -339,14 +321,7 @@ def _emit_observations(
     control_path_eval: Callable[[Array], Array | None],
     key=None,
 ) -> Array:
-    """Emit observations. ODE: numpyro.sample with obs=. SDE/vmap: dist.sample(key).
-
-    When key is None (ODE n_sim=1 path), uses numpyro.sample and supports obs=
-    conditioning. Returns array of shape (T, obs_dim).
-
-    When key is not None (SDE or ODE n_sim>1 vmap path), samples from dist directly;
-    obs_values must be None (callers enforce this). Returns array of shape (T, obs_dim).
-    """
+    """Emit observations via numpyro.sample (conditioning) or dist.sample (vmap)."""
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     T = len(times)
 
@@ -523,15 +498,6 @@ class SDESimulator(BaseSimulator):
                 A natural example forthcoming (i.e., to be implemented) is the SimulatedLikelihoodDiscretizer."
             )
 
-        if predict_times is None:
-            warnings.warn(
-                "predict_times is not provided to an SDESimulator; SDESimulator will simply return its inputs."
-            )
-            # TODO: Handle this case.
-            raise NotImplementedError(
-                "this is to-be-implemented. Should pass forward whatever is from previous operator in **kwargs."
-            )
-
         if obs_values is not None:
             raise ValueError(
                 "obs_values conditioning is not supported for SDESimulator. "
@@ -551,7 +517,8 @@ class SDESimulator(BaseSimulator):
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
 
-        def _run_one_from_x0(key: Array, x0: Array) -> tuple[Array, Array]:
+        def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
+            """Simulate one SDE trajectory and its emissions."""
             k_solve, k_obs = jr.split(key, 2)
             states_sol = _solve_de(
                 dynamics,
@@ -574,7 +541,9 @@ class SDESimulator(BaseSimulator):
         with numpyro.plate(f"{name}_n_simulations", n_sim):
             initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
         keys = jr.split(prng_key, n_sim)
-        states, emissions = jax.vmap(_run_one_from_x0)(keys, jnp.asarray(initial_state))
+        states, emissions = jax.vmap(_sim_one_trajectory)(
+            keys, jnp.asarray(initial_state)
+        )
         return {
             "times": _tile_times(times, n_sim),
             "states": states,
@@ -740,7 +709,8 @@ class DiscreteTimeSimulator(BaseSimulator):
             )
             return t_next, u_next, trans_dist
 
-        # n_simulations > 1: vmap over scan with dist.sample (no numpyro.sample in body)
+        # n_simulations > 1: vmapped pure-JAX loop; avoid numpyro.sample in vmap body.
+        # can't do obs= conditioning with the lax.scan.
         if n_sim > 1:
             with numpyro.plate(f"{name}_n_simulations", n_sim):
                 initial_state = numpyro.sample(
@@ -751,7 +721,8 @@ class DiscreteTimeSimulator(BaseSimulator):
                 raise ValueError("PRNG key required for n_simulations > 1")
             keys = jr.split(prng_key, n_sim)
 
-            def _run_one(key, x0):
+            def _sim_one_trajectory(key, x0):
+                """Simulate one discrete trajectory and its emissions."""
                 keys_t = jr.split(key, T)
 
                 def _step(carry, t_idx):
@@ -775,14 +746,14 @@ class DiscreteTimeSimulator(BaseSimulator):
                 )
                 return states, observations
 
-            states, observations = jax.vmap(_run_one)(keys, initial_state)
+            states, observations = jax.vmap(_sim_one_trajectory)(keys, initial_state)
             return {
                 "times": _tile_times(times, n_sim),
                 "states": _ensure_trailing_dim(states),
                 "observations": _ensure_trailing_dim(observations),
             }
 
-        # Default: scan over time (n_simulations == 1)
+        # Default: scan over time (n_simulations == 1)...allows for obs= conditioning.
         with numpyro.plate(f"{name}_n_simulations", 1):
             x_prev_site: State = numpyro.sample(  # type: ignore
                 f"{name}_x_0", dynamics.initial_condition
@@ -940,7 +911,8 @@ class ODESimulator(BaseSimulator):
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
 
-        def _run_one(x0: Array, *, obs_key=None):
+        def _sim_one_trajectory(x0: Array, *, obs_key=None):
+            """Simulate one ODE trajectory and emit observations."""
             states = _solve_de(
                 dynamics,
                 t0,
@@ -966,7 +938,7 @@ class ODESimulator(BaseSimulator):
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
             x0_arr: Array = jnp.asarray(x0)[0]
-            states, observations = _run_one(x0_arr)
+            states, observations = _sim_one_trajectory(x0_arr)
             return {
                 "times": _tile_times(times, 1),
                 "states": jnp.expand_dims(states, axis=0),
@@ -980,7 +952,7 @@ class ODESimulator(BaseSimulator):
         if prng_key is None:
             raise ValueError("PRNG key required for simulation")
         obs_keys = jr.split(prng_key, n_sim)
-        states, observations = jax.vmap(_run_one)(
+        states, observations = jax.vmap(_sim_one_trajectory)(
             jnp.asarray(initial_state), obs_key=obs_keys
         )
         return {
