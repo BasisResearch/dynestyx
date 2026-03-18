@@ -38,11 +38,17 @@ class HMCConfig(BaseMCMCConfig):
 
     Attributes:
         step_size (float): Integrator step size used by the leapfrog solver.
+            Ignored when ``adapt=True`` (step size is tuned during warmup).
         num_steps (int): Number of leapfrog steps per HMC proposal.
+        adapt (bool): Whether to tune step size and mass matrix during warmup.
+            Defaults to ``True``. Set to ``False`` to use a fixed ``step_size``
+            and identity mass matrix (useful when warmup is expensive or the
+            step size is known in advance).
     """
 
     step_size: float = 1e-2
     num_steps: int = 10
+    adapt: bool = True
 
 
 @dataclasses.dataclass

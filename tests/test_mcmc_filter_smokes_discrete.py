@@ -2,6 +2,7 @@
 
 import jax.numpy as jnp
 import jax.random as jr
+import pytest
 from numpyro.infer import Predictive
 
 from dynestyx.inference.filters import Filter
@@ -38,14 +39,15 @@ def test_filter_based_discrete_nuts_smoke():
     assert "alpha" in posterior_samples
 
 
-def test_filter_based_discrete_sgmcmc_smoke():
+@pytest.mark.parametrize("num_chains", [1, 2])
+def test_filter_based_discrete_sgmcmc_smoke(num_chains):
     obs_times, obs_values = _make_data()
     with Filter():
         inference = MCMCInference(
             mcmc_config=SGLDConfig(
                 num_samples=10,
                 num_warmup=10,
-                num_chains=1,
+                num_chains=num_chains,
                 mcmc_source="blackjax",
                 step_size=5e-5,
                 schedule_power=0.6,
