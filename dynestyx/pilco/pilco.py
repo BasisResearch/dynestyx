@@ -1,23 +1,4 @@
-"""Main PILCO algorithm implementation.
-
-Orchestrates the GP dynamics model learning, moment-matching trajectory
-prediction, and gradient-based policy optimization. Deeply integrated with
-dynestyx via effectful handlers, ``DynamicalModel``, and NumPyro.
-
-Key integration points:
-
-- **Data collection** uses ``dsx.sample()`` + ``DiscreteTimeSimulator`` handler
-  with the environment's ``DynamicalModel`` -- no manual rollout loops.
-- **GP hyperparameter optimization** uses NumPyro's ``SVI`` with ``AutoDelta``
-  for MAP estimation of the GP log marginal likelihood.
-- **Trajectory prediction** uses the ``MomentMatchingPropagator`` effectful
-  handler, which interprets ``dsx.sample()`` via analytic Gaussian propagation.
-- **Policy optimization** differentiates through the moment matching graph.
-
-References:
-    Deisenroth, M. P. & Rasmussen, C. E. (2011). PILCO: A Model-Based and
-    Data-Efficient Approach to Policy Search. ICML, Algorithm 1.
-"""
+"""PILCO algorithm with dynestyx effectful handlers and NumPyro integration."""
 
 import dataclasses
 
@@ -42,29 +23,18 @@ from dynestyx.pilco.mgpr import MGPR
 from dynestyx.pilco.rewards import ExponentialReward
 from dynestyx.types import FunctionOfTime
 
-# ---------------------------------------------------------------------------
-# Effectful handler: MomentMatchingPropagator
-# ---------------------------------------------------------------------------
-
 
 @dataclasses.dataclass
 class MomentMatchingPropagator(ObjectInterpretation, HandlesSelf):
-    """Effectful handler that interprets ``dsx.sample`` via moment matching.
+    """
+    Effectful handler interpreting ``dsx.sample`` via analytic moment matching.
 
-    Instead of drawing samples from the dynamics (as ``Simulator`` does) or
-    computing a marginal likelihood (as ``Filter`` does), this handler propagates
-    a Gaussian state belief forward through the GP dynamics model using the
-    analytic moment matching equations from PILCO (Eqs. 10-23).
+    Instead of sampling trajectories (``Simulator``) or computing marginal
+    likelihoods (``Filter``), propagates a Gaussian state belief forward through
+    the GP dynamics using Eqs. 10-23 of Deisenroth & Rasmussen (2011).
 
-    The propagated trajectory (means, covariances) and cumulative expected
-    reward are recorded as ``numpyro.deterministic`` sites, following the same
-    pattern as dynestyx's ``Filter`` (which records ``f_marginal_loglik``,
-    ``f_filtered_states_mean``, etc.).
-
-    Usage::
-
-        with MomentMatchingPropagator(pilco=pilco):
-            model(obs_times=obs_times)
+    Records ``{name}_mm_means``, ``{name}_mm_covs_diag``, and
+    ``{name}_mm_reward`` as ``numpyro.deterministic`` sites.
     """
 
     pilco: "PILCO"
@@ -95,7 +65,6 @@ class MomentMatchingPropagator(ObjectInterpretation, HandlesSelf):
         )
 
     def _propagate_moments(self, name: str, obs_times: Array):
-        """Propagate Gaussian belief via moment matching and record as numpyro sites."""
         p = self.pilco
         m_x, s_x = p.m_init, p.s_init
 
@@ -116,11 +85,6 @@ class MomentMatchingPropagator(ObjectInterpretation, HandlesSelf):
         numpyro.deterministic(f"{name}_mm_reward", total_reward)
 
 
-# ---------------------------------------------------------------------------
-# Data collection via dynestyx
-# ---------------------------------------------------------------------------
-
-
 def collect_rollout(
     env_dynamics: DynamicalModel,
     obs_times: Array,
@@ -128,22 +92,7 @@ def collect_rollout(
     ctrl_times: Array | None = None,
     ctrl_values: Array | None = None,
 ) -> dict:
-    """Collect a trajectory using dynestyx's ``DiscreteTimeSimulator``.
-
-    Instead of manually looping ``env.step()``, this uses ``dsx.sample()``
-    inside a ``DiscreteTimeSimulator`` handler, keeping everything inside
-    the NumPyro / dynestyx framework.
-
-    Args:
-        env_dynamics: A ``DynamicalModel`` representing the true environment.
-        obs_times: Observation time grid.
-        key: PRNG key.
-        ctrl_times: Control times (aligned with obs_times).
-        ctrl_values: Control values, shape ``(T, control_dim)``.
-
-    Returns:
-        Dictionary with ``"states"`` and ``"observations"`` arrays.
-    """
+    """Collect a trajectory using ``dsx.sample()`` + ``DiscreteTimeSimulator``."""
 
     def _model(obs_times, ctrl_times=None, ctrl_values=None):
         return dsx.sample(
@@ -173,10 +122,7 @@ def collect_random_rollout(
     max_action: float,
     control_dim: int = 1,
 ) -> dict:
-    """Collect a trajectory with random controls via dynestyx.
-
-    Generates uniform random controls and calls :func:`collect_rollout`.
-    """
+    """Collect a trajectory with uniform random controls via ``dsx.sample()``."""
     k1, k2 = jax.random.split(key)
     T = len(obs_times)
     ctrl_values = jax.random.uniform(
@@ -191,33 +137,15 @@ def collect_random_rollout(
     )
 
 
-# ---------------------------------------------------------------------------
-# PILCO main class
-# ---------------------------------------------------------------------------
-
-
 class PILCO(eqx.Module):
-    """PILCO: Probabilistic Inference for Learning COntrol.
+    """
+    PILCO: Probabilistic Inference for Learning COntrol.
 
-    Deeply integrated with dynestyx and NumPyro:
-
-    - **GP dynamics** wraps as ``GPStateEvolution`` (a ``DiscreteTimeStateEvolution``),
-      usable with all dynestyx handlers via ``dsx.sample()``.
-    - **Data collection** via ``collect_rollout()`` using ``DiscreteTimeSimulator``
-      + ``dsx.sample()`` + ``Predictive``.
-    - **Trajectory prediction** via ``MomentMatchingPropagator`` effectful handler.
-    - **GP hyperparameter optimization** via NumPyro ``SVI`` + ``AutoDelta``
-      on the GP log marginal likelihood.
-    - **Policy optimization** via analytic gradients through moment matching.
-
-    Attributes:
-        mgpr: Multi-output GP dynamics model.
-        controller: Policy (``LinearController`` or ``RBFController``).
-        reward: Reward function.
-        horizon: Planning horizon (number of prediction steps).
-        m_init: Initial state mean.
-        s_init: Initial state covariance.
-        max_action: Maximum action for squashing (``None`` = no squashing).
+    The GP dynamics model wraps as ``GPStateEvolution``
+    (a ``DiscreteTimeStateEvolution``), usable with all dynestyx handlers.
+    Data collection uses ``collect_rollout()`` via ``dsx.sample()`` +
+    ``DiscreteTimeSimulator``. Trajectory prediction uses the
+    ``MomentMatchingPropagator`` effectful handler.
     """
 
     mgpr: MGPR
@@ -249,22 +177,17 @@ class PILCO(eqx.Module):
         self.max_action = max_action
 
     def set_data(self, X: Array, Y: Array) -> "PILCO":
-        """Return new PILCO with updated training data."""
         return eqx.tree_at(lambda p: p.mgpr, self, self.mgpr.set_data(X, Y))
-
-    # ------------------------------------------------------------------
-    # Dynestyx DynamicalModel conversion
-    # ------------------------------------------------------------------
 
     def to_dynamical_model(
         self,
         initial_condition=None,
         observation_model=None,
     ) -> DynamicalModel:
-        """Create a dynestyx ``DynamicalModel`` using the GP as state evolution.
+        """Create a ``DynamicalModel`` using the GP as state evolution.
 
-        The resulting model works with all dynestyx handlers:
-        ``DiscreteTimeSimulator``, ``Filter``, ``MomentMatchingPropagator``, etc.
+        Works with ``DiscreteTimeSimulator``, ``Filter``,
+        ``MomentMatchingPropagator``, etc.
         """
         state_dim = self.mgpr.state_dim
         control_dim = self.mgpr.X.shape[1] - state_dim
@@ -285,15 +208,13 @@ class PILCO(eqx.Module):
         )
 
     def make_numpyro_model(self):
-        """Create a NumPyro model that uses ``dsx.sample`` with the GP dynamics.
+        """Return a NumPyro model calling ``dsx.sample()`` with GP dynamics.
 
-        This model can be used with any dynestyx handler context::
+        Usable with any handler context::
 
-            # Sample trajectories from learned GP
             with DiscreteTimeSimulator():
                 Predictive(pilco.make_numpyro_model(), ...)(key, obs_times=...)
 
-            # Moment matching prediction
             with MomentMatchingPropagator(pilco=pilco):
                 Predictive(pilco.make_numpyro_model(), ...)(key, obs_times=...)
         """
@@ -311,12 +232,8 @@ class PILCO(eqx.Module):
 
         return _model
 
-    # ------------------------------------------------------------------
-    # Moment matching propagation (core PILCO math)
-    # ------------------------------------------------------------------
-
     def propagate(self, m_x: Array, s_x: Array) -> tuple[Array, Array]:
-        """Single-step state propagation via moment matching (Eqs. 10-12)."""
+        """Single-step moment matching propagation (Eqs. 10-12)."""
         state_dim = m_x.shape[0]
 
         m_u, s_u, c_xu = self.controller.compute_action(m_x, s_x)
@@ -353,7 +270,6 @@ class PILCO(eqx.Module):
     def predict(
         self, m_x: Array | None = None, s_x: Array | None = None
     ) -> tuple[Array, list[Array], list[Array]]:
-        """Predict trajectory and compute cumulative reward."""
         if m_x is None:
             m_x = self.m_init
         if s_x is None:
@@ -373,8 +289,6 @@ class PILCO(eqx.Module):
         return total_reward, means, covs
 
     def predict_jit(self, m_x: Array, s_x: Array) -> Array:
-        """JIT-friendly version returning only the total reward."""
-
         def step_fn(carry, _):
             m, s, reward = carry
             m_new, s_new = self.propagate(m, s)
@@ -386,22 +300,13 @@ class PILCO(eqx.Module):
         )
         return total_reward
 
-    # ------------------------------------------------------------------
-    # GP hyperparameter optimization (via NumPyro SVI + AutoDelta)
-    # ------------------------------------------------------------------
-
     def optimize_models(
         self,
         num_restarts: int = 3,
         max_iters: int = 200,
         learning_rate: float = 0.01,
     ) -> "PILCO":
-        """Optimize GP hyperparameters by maximizing log marginal likelihood.
-
-        Uses NumPyro-style MAP estimation: the GP log marginal likelihood is
-        treated as a NumPyro ``factor`` and optimized via ``numpyro.optim.Adam``.
-        This keeps the optimization inside the NumPyro framework.
-        """
+        """Optimize GP hyperparameters by maximizing log marginal likelihood."""
         best_mgpr = self.mgpr
         best_lml = -jnp.inf
 
@@ -444,20 +349,12 @@ class PILCO(eqx.Module):
 
         return eqx.tree_at(lambda p: p.mgpr, self, best_mgpr)
 
-    # ------------------------------------------------------------------
-    # Policy optimization
-    # ------------------------------------------------------------------
-
     def optimize_policy(
         self,
         max_iters: int = 100,
         learning_rate: float = 0.01,
     ) -> "PILCO":
-        """Optimize policy by maximizing expected cumulative reward.
-
-        Differentiates through the full moment matching graph
-        (Eqs. 10-12, 14-23, 24-25) via JAX autodiff.
-        """
+        """Optimize policy by maximizing expected cumulative reward."""
         ctrl_filter = jax.tree.map(lambda _: False, self)
         ctrl_filter = eqx.tree_at(
             lambda p: p.controller,
@@ -490,7 +387,6 @@ class PILCO(eqx.Module):
 
 
 def _randomize_hyperparams(mgpr: MGPR, seed: int) -> MGPR:
-    """Randomize GP hyperparameters for restart."""
     key = jax.random.PRNGKey(seed * 42)
     k1, k2, k3 = jax.random.split(key, 3)
     new_ls = mgpr.log_lengthscales + 0.5 * jax.random.normal(
