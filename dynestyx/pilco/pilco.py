@@ -18,7 +18,6 @@ from dynestyx import DiscreteTimeSimulator
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import DiracIdentityObservation
-from dynestyx.pilco.controllers import squash_sin
 from dynestyx.pilco.mgpr import MGPR
 from dynestyx.pilco.rewards import ExponentialReward
 from dynestyx.types import FunctionOfTime
@@ -239,7 +238,19 @@ class PILCO(eqx.Module):
         m_u, s_u, c_xu = self.controller.compute_action(m_x, s_x)
 
         if self.max_action is not None:
-            m_u, s_u, c_squash = squash_sin(m_u, s_u, self.max_action)
+            # Squash through sin() for bounded controls: u_sat = max_action * sin(u)
+            s_diag = jnp.diag(s_u)
+            e = jnp.exp(-0.5 * s_diag)
+            m_sin = self.max_action * e * jnp.sin(m_u)
+            lq = -(s_diag[:, None] + s_diag[None, :]) / 2.0
+            s_sin = (
+                jnp.exp(lq + s_u) * jnp.cos(m_u[:, None] - m_u[None, :])
+                - jnp.exp(lq - s_u) * jnp.cos(m_u[:, None] + m_u[None, :])
+            ) / 2.0
+            s_sin = self.max_action[:, None] * self.max_action[None, :] * s_sin
+            s_sin = s_sin - jnp.outer(m_sin, m_sin)
+            c_squash = jnp.diag(self.max_action * jnp.cos(m_u) * e)
+            m_u, s_u = m_sin, s_sin
             c_xu = c_xu @ c_squash
 
         s_u = (s_u + s_u.T) / 2.0 + 1e-6 * jnp.eye(m_u.shape[0])

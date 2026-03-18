@@ -68,49 +68,37 @@ class RBFController(eqx.Module):
         return phi @ self.weights
 
     def compute_action(self, m: Array, s: Array) -> tuple[Array, Array, Array]:
-        """Analytic moment matching through the RBF network."""
-        state_dim = m.shape[0]
-        control_dim = self.weights.shape[1]
+        """Analytic moment matching through the RBF network.
 
-        Lambda = jnp.diag(self.lengthscales**2)
-        Lambda_inv = jnp.diag(1.0 / self.lengthscales**2)
-        nu = self.centers - m[None, :]
-
-        # Mean
-        sL = s + Lambda
-        sL_inv = jnp.linalg.inv(sL + 1e-8 * jnp.eye(state_dim))
-        det_factor = jnp.linalg.det(sL) / jnp.prod(self.lengthscales**2)
-        quad = jnp.sum(nu @ sL_inv * nu, axis=-1)
-        q = jnp.exp(-0.5 * quad) / jnp.sqrt(jnp.maximum(det_factor, 1e-12))
-
-        m_u = q @ self.weights
-
-        # Covariance
-        R = s @ (2.0 * Lambda_inv) + jnp.eye(state_dim)
-        R_inv = jnp.linalg.inv(R + 1e-8 * jnp.eye(state_dim))
-        det_R = jnp.linalg.det(R)
-
-        nu_L = nu @ Lambda_inv
-        R_inv_s = R_inv @ s
-        t = nu_L @ R_inv_s
-        k_m = jnp.exp(-0.5 * jnp.sum(nu * nu_L, axis=-1))
-        q_diag = jnp.sum(nu_L * t, axis=-1)
-        q_cross = nu_L @ t.T
-
-        Q = (
-            k_m[:, None]
-            * k_m[None, :]
-            / jnp.sqrt(jnp.maximum(det_R, 1e-12))
-            * jnp.exp(0.5 * (q_diag[:, None] + q_diag[None, :] + 2.0 * q_cross))
+        Uses shared primitives from ``moment_matching`` -- the same math
+        as ``MGPR.predict_given_factorizations`` but with signal_variance=1
+        (deterministic GP, iK=0).
+        """
+        from dynestyx.pilco.moment_matching import (
+            compute_cross_covariance,
+            compute_mean_and_q,
+            compute_Q_matrix,
         )
 
+        state_dim = m.shape[0]
+        control_dim = self.weights.shape[1]
+        ls_sq = self.lengthscales**2
+        nu = self.centers - m[None, :]
+
+        # Mean: signal_variance=1 for deterministic RBF
+        q = compute_mean_and_q(nu, s, ls_sq, 1.0)
+        m_u = q @ self.weights
+
+        # Covariance: same lengthscales for a and b (single kernel)
+        Q = compute_Q_matrix(nu, s, ls_sq, ls_sq, 1.0, 1.0)
         s_u = self.weights.T @ Q @ self.weights - jnp.outer(m_u, m_u)
 
-        # Cross-covariance
+        # Cross-covariance per control dimension
         c_xu = jnp.zeros((state_dim, control_dim))
         for d in range(control_dim):
-            w_q_nu = (self.weights[:, d] * q)[:, None] * nu
-            c_xu = c_xu.at[:, d].set(s @ sL_inv @ jnp.sum(w_q_nu, axis=0))
+            c_xu = c_xu.at[:, d].set(
+                compute_cross_covariance(nu, s, ls_sq, self.weights[:, d], q)
+            )
 
         return m_u, s_u, c_xu
 
