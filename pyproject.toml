@@ -4,13 +4,35 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.0.1"
+description = "NumPyro integration for dynamical systems"
 readme = "README.md"
-requires-python = ">=3.12"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.14"
+authors = [
+    { name = "Basis" },
+]
+keywords = [
+    "machine learning",
+    "statistics",
+    "dynamical systems",
+    "bayesian modeling",
+    "jax",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
-    "cd-dynamax",
-    "effectful",
+    "effectful @ git+https://github.com/BasisResearch/effectful.git",
+    "cuthbert @ git+https://github.com/DanWaxman/cuthbert.git@b56783de77ef62804b8458463a7bf907c1296017#subdirectory=pkg/cuthbert",
+    "cuthbertlib @ git+https://github.com/DanWaxman/cuthbert.git@b56783de77ef62804b8458463a7bf907c1296017#subdirectory=pkg/cuthbertlib",
+    "cd-dynamax @ git+https://github.com/DanWaxman/cd_dynamax.git@dw-dpf",
     "matplotlib>=3.10.7",
     "numpyro>=0.19.0",
     "pytest>=9.0.1",
@@ -21,13 +43,15 @@ dependencies = [
     "jupyter>=1.1.1",
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
-    "cuthbert>=0.0.2",
     "jax>=0.6.2",
     "jaxlib>=0.6.2",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["dynestyx"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
@@ -56,5 +80,5 @@ select = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*"]
+module = ["cd_dynamax.*", "numpyro.*", "blackjax.*", "cuthbert.*", "cuthbertlib.*", "optax.*", "arviz.*"]
 follow_untyped_imports = true
