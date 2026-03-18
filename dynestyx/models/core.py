@@ -1,6 +1,7 @@
 """Core interfaces and base classes for dynamical models."""
 
 import dataclasses
+from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -375,3 +376,82 @@ class ObservationModel(eqx.Module):
             seed = kwargs.pop("seed")
             kwargs["key"] = seed
         return dist.sample(*args, **kwargs)
+
+    @abstractmethod
+    def __call__(self, x, u, t) -> DistributionT: ...
+
+    def masked_log_prob(
+        self,
+        y: jax.Array,
+        obs_mask: jax.Array,
+        x: Any,
+        u: Any = None,
+        t: Any = None,
+    ) -> jax.Array:
+        """Log p(y_obs | x) scoring only observed dimensions.
+
+        Args:
+            y: Observation with NaN replaced by safe values. Shape (obs_dim,).
+            obs_mask: Boolean array, True = observed. Shape (obs_dim,).
+            x: Latent state.
+            u: Control or None.
+            t: Time or None.
+
+        Returns:
+            Scalar log-probability summed over observed dims only.
+        """
+        import numpyro.distributions as _dist_mod
+
+        d = self(x, u, t)
+        # Unwrap Independent(base, 1) to get per-element log_probs
+        base = d
+        if isinstance(d, _dist_mod.Independent) and d.reinterpreted_batch_ndims == 1:
+            base = d.base_dist
+        per_dim_lp = base.log_prob(y)  # (obs_dim,) if base is element-wise
+        if jnp.ndim(per_dim_lp) == 0:
+            raise NotImplementedError(
+                f"{type(self).__name__}.masked_log_prob: distribution "
+                f"{type(d).__name__} does not decompose per-dimension. "
+                "Override masked_log_prob in the subclass."
+            )
+        return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
+
+
+class WithPartialMissingnessSupport:
+    """Mixin for DynamicalModels with particle birth/death semantics.
+
+    Models that mix this class into their dynamics object can provide a static
+    latent mask that tells the simulator which state dimensions are "alive"
+    (should be sampled from the transition) at each time step.
+
+    The simulator checks ``isinstance(dynamics, WithPartialMissingnessSupport)``
+    and calls ``compute_latent_mask`` to obtain the per-timestep mask before the
+    scan.  When the mixin is absent, all latent dimensions are always alive.
+
+    Example usage::
+
+        class MyParticleDynamics(DynamicalModel, WithPartialMissingnessSupport):
+            def compute_latent_mask(self, obs_values):
+                # obs_values: (T, state_dim) with NaN for absent particles
+                import numpy as np
+                T, N = obs_values.shape
+                mask = np.zeros((T, N), dtype=bool)
+                for i in range(N):
+                    present = ~np.isnan(obs_values[:, i])
+                    if present.any():
+                        first = np.argmax(present)
+                        last = len(present) - 1 - np.argmax(present[::-1])
+                        mask[first:last + 1, i] = True
+                return mask
+    """
+
+    def compute_latent_mask(self, obs_values) -> jax.Array:
+        """Return bool array (T, state_dim). True = sample this dim at this time step.
+
+        Args:
+            obs_values: Observation array of shape (T, obs_dim), may contain NaN.
+
+        Returns:
+            Boolean numpy array of shape (T, state_dim).
+        """
+        raise NotImplementedError

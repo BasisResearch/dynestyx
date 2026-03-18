@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
@@ -565,6 +566,69 @@ def jumpy_controls_model_ode(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
+
+
+def interacting_particles_gaussian_kernel_model(
+    N=4,
+    obs_times=None,
+    obs_values=None,
+    sigma: float = 0.2,
+    bg_centers=None,
+    bg_strengths=None,
+):
+    """N particles in 1D with pairwise Gaussian interaction kernel + known background potential.
+
+    Drift for particle i:
+        interaction: sum_j K(x_j - x_i; loc, scale) * (x_j - x_i) / N
+        background:  -grad V(x_i),  V = -sum_k bg_strengths[k] * exp(-0.5*||x_i - bg_centers[k]||^2)
+
+    where K(r; loc, scale) = exp(-0.5 * ((r - loc) / scale)^2).
+
+    Learnable parameters: loc (preferred displacement) and scale (kernel width).
+    Background potential parameters (bg_centers, bg_strengths) are KNOWN / fixed.
+    Observations are noise-free (DiracIdentityObservation); partial NaN rows
+    trigger the two-mask scan which samples latent states for unobserved particles.
+    """
+    if bg_centers is None:
+        bg_centers = jnp.array([[-2.0], [2.0]])  # (K, 1)
+    if bg_strengths is None:
+        bg_strengths = jnp.array([1.0, 1.0])  # (K,)
+
+    K_bg = bg_centers.shape[0]
+
+    loc = numpyro.sample("loc", dist.Normal(0.0, 2.0))
+    scale = numpyro.sample("scale", dist.LogNormal(0.0, 0.5))
+
+    def state_evolution(x, u, t_now, t_next):
+        dt = t_next - t_now
+        # Pairwise Gaussian interaction drift
+        r = x[None, :] - x[:, None]  # (N, N) r_ij = x_j - x_i
+        K_pair = jnp.exp(-0.5 * ((r - loc) / scale) ** 2)
+        interaction_drift = jnp.sum(K_pair * r, axis=1) / N  # (N,)
+
+        # Background Gaussian-mixture drift: -grad V per particle
+        def bg_drift_single(x_i):
+            g = jnp.zeros(())
+            for k in range(K_bg):
+                diff = x_i - bg_centers[k, 0]
+                g = g - bg_strengths[k] * (-diff) * jnp.exp(-0.5 * diff**2)
+            return -g
+
+        bg_drift = jax.vmap(bg_drift_single)(x)  # (N,)
+        drift = interaction_drift + bg_drift
+        return dist.MultivariateNormal(x + dt * drift, sigma**2 * dt * jnp.eye(N))
+
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(N),
+            covariance_matrix=4.0 * jnp.eye(N),
+        ),
+        state_evolution=state_evolution,
+        observation_model=DiracIdentityObservation(),
+    )
+
+    dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
 
 def particle_sde_gaussian_potential_model(
