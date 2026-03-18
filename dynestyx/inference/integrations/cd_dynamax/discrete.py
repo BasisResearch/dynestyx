@@ -88,11 +88,13 @@ def _filter_discrete_time_dynamax_kf(
     T1 = emissions.shape[0]
     control_dim = dynamics.control_dim
     if ctrl_values is None:
-        inputs = jnp.zeros((T1, control_dim))
+inputs = jnp.zeros((T1, control_dim))
     elif ctrl_values.shape[0] > T1:
+        # Find controls aligned to obs_times
         inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
     else:
+        # Controls should align exactly with obs_times
         inputs = ctrl_values
 
     params = _lti_to_lgssm_params(dynamics)
