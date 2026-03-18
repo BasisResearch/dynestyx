@@ -1,10 +1,4 @@
-"""Simple JAX-compatible environments for PILCO.
-
-Provides pure-JAX environment implementations that can be used for data
-collection in the PILCO loop. Each environment can produce a dynestyx
-``DynamicalModel`` (both continuous-time and discrete-time variants) for
-use with effectful handlers.
-"""
+"""JAX environments for PILCO, producing dynestyx ``DynamicalModel`` instances."""
 
 import equinox as eqx
 import jax
@@ -22,20 +16,12 @@ from dynestyx.types import Control, State, Time
 
 
 class InvertedPendulumEnv(eqx.Module):
-    """Inverted pendulum (swing-up) environment.
+    """
+    Inverted pendulum (swing-up) environment.
 
-    State: $[\\theta, \\dot\\theta]$ where $\\theta$ is the angle from upright.
-    Action: torque in $[-\\text{max\\_torque}, \\text{max\\_torque}]$.
-
-    The dynamics are:
-
-    $$\\ddot\\theta = \\frac{u - b\\dot\\theta + mgl\\sin(\\theta)}{ml^2}$$
-
-    Provides integration with dynestyx:
-    - ``to_continuous_dynamical_model()``: ContinuousTimeStateEvolution for use with
-      ``ODESimulator``/``SDESimulator`` effectful handlers
-    - ``to_discrete_dynamical_model()``: DiscreteTimeStateEvolution for use with
-      ``DiscreteTimeSimulator``/``Filter`` effectful handlers
+    State: $[\\theta, \\dot\\theta]$, action: torque.
+    Produces dynestyx ``DynamicalModel`` via ``to_continuous_dynamical_model()``
+    or ``to_discrete_dynamical_model()`` for use with effectful handlers.
     """
 
     mass: float = 1.0
@@ -46,7 +32,6 @@ class InvertedPendulumEnv(eqx.Module):
     max_torque: float = 2.0
 
     def step(self, state: Array, action: Array) -> Array:
-        """Simulate one step of the pendulum dynamics (Euler integration)."""
         theta, dtheta = state[0], state[1]
         u = jnp.clip(action.squeeze(), -self.max_torque, self.max_torque)
         ddtheta = (
@@ -59,8 +44,6 @@ class InvertedPendulumEnv(eqx.Module):
     def rollout(
         self, policy_fn, x0: Array, T: int, key: Array | None = None
     ) -> tuple[Array, Array, Array]:
-        """Roll out a policy for T steps."""
-
         def scan_fn(state, _):
             action = policy_fn(state)
             next_state = self.step(state, action)
@@ -73,7 +56,6 @@ class InvertedPendulumEnv(eqx.Module):
     def random_rollout(
         self, x0: Array, T: int, key: Array
     ) -> tuple[Array, Array, Array]:
-        """Roll out with random actions for T steps."""
         keys = jax.random.split(key, T)
 
         def scan_fn(state, k):
@@ -88,7 +70,6 @@ class InvertedPendulumEnv(eqx.Module):
         return all_states, actions, next_states
 
     def _make_initial_condition(self, x0: Array | None = None):
-        """Create initial condition distribution."""
         if x0 is not None:
             return dist.MultivariateNormal(loc=x0, covariance_matrix=0.01 * jnp.eye(2))
         return dist.MultivariateNormal(
@@ -98,15 +79,7 @@ class InvertedPendulumEnv(eqx.Module):
     def to_continuous_dynamical_model(
         self, x0: Array | None = None, obs_noise: float = 0.01
     ) -> DynamicalModel:
-        """Create a continuous-time dynestyx ``DynamicalModel``.
-
-        For use with ``ODESimulator`` or ``SDESimulator`` effectful handlers
-        via ``dsx.sample()``.
-
-        Args:
-            x0: Initial state mean (defaults to zeros).
-            obs_noise: Observation noise std dev.
-        """
+        """``ContinuousTimeStateEvolution`` for ``ODESimulator``/``SDESimulator``."""
         mass, length, g_val, b_val = self.mass, self.length, self.g, self.b
 
         def drift(x: State, u: Control, t: Time) -> State:
@@ -130,16 +103,11 @@ class InvertedPendulumEnv(eqx.Module):
     def to_discrete_dynamical_model(
         self, x0: Array | None = None, process_noise: float = 0.001
     ) -> DynamicalModel:
-        """Create a discrete-time dynestyx ``DynamicalModel``.
+        """``GaussianStateEvolution`` for ``DiscreteTimeSimulator``/``Filter``.
 
-        Uses Euler-integrated pendulum dynamics as a
-        ``GaussianStateEvolution`` (discrete-time). For use with
-        ``DiscreteTimeSimulator`` or ``Filter`` effectful handlers
-        via ``dsx.sample()``.
-
-        Args:
-            x0: Initial state mean (defaults to zeros).
-            process_noise: Process noise std dev for transition.
+        Uses dynestyx's ``GaussianStateEvolution(F=..., cov=...)`` which
+        returns $\\mathcal{N}(F(x, u, t, t'), Q)$ -- the same pattern used
+        throughout dynestyx for discrete-time Gaussian transitions.
         """
         mass, length, g_val, b_val, dt = (
             self.mass,
@@ -174,7 +142,5 @@ class InvertedPendulumEnv(eqx.Module):
             control_dim=1,
         )
 
-    # Backwards-compatible alias
     def to_dynamical_model(self, **kwargs) -> DynamicalModel:
-        """Alias for ``to_continuous_dynamical_model``."""
         return self.to_continuous_dynamical_model(**kwargs)

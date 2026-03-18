@@ -81,9 +81,7 @@ class RBFController(eqx.Module):
         sL_inv = jnp.linalg.inv(sL + 1e-8 * jnp.eye(state_dim))
         det_factor = jnp.linalg.det(sL) / jnp.prod(self.lengthscales**2)
         quad = jnp.sum(nu @ sL_inv * nu, axis=-1)
-        q = jnp.exp(-0.5 * quad) / jnp.sqrt(
-            jnp.maximum(det_factor, 1e-12)
-        )
+        q = jnp.exp(-0.5 * quad) / jnp.sqrt(jnp.maximum(det_factor, 1e-12))
 
         m_u = q @ self.weights
 
