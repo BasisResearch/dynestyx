@@ -88,7 +88,7 @@ def _filter_discrete_time_dynamax_kf(
     T1 = emissions.shape[0]
     control_dim = dynamics.control_dim
     if ctrl_values is None:
-inputs = jnp.zeros((T1, control_dim))
+        inputs = jnp.zeros((T1, control_dim))
     elif ctrl_values.shape[0] > T1:
         # Find controls aligned to obs_times
         inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
@@ -267,6 +267,15 @@ def run_discrete_filter(
     **kwargs,
 ) -> list[dist.Distribution]:
     """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).
+
+    Args:
+        name: Name of the factor.
+        dynamics: Dynamical model to filter.
+        filter_config: KFConfig, EKFConfig, or UKFConfig.
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
 
     Returns:
         list[dist.Distribution]: Filtered state distributions at each obs time.
