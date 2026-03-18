@@ -61,17 +61,6 @@ class LinearGaussianObservation(ObservationModel):
             loc += self.bias
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
 
-    def masked_log_prob(self, y, obs_mask, x, u=None, t=None):
-        # R must be diagonal; off-diagonal terms are ignored.
-        mu = jnp.dot(self.H, x)
-        if self.D is not None and u is not None:
-            mu = mu + jnp.dot(self.D, u)
-        if self.bias is not None:
-            mu = mu + self.bias
-        std = jnp.sqrt(jnp.diagonal(self.R, axis1=-2, axis2=-1))
-        per_dim_lp = dist.Normal(mu, std).log_prob(y)  # (obs_dim,)
-        return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
-
 
 class GaussianObservation(ObservationModel):
     """
@@ -105,11 +94,107 @@ class GaussianObservation(ObservationModel):
         loc = self.h(x, u, t)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
 
+
+class DiagonalLinearGaussianObservation(ObservationModel):
+    """
+    Linear-Gaussian observation model with diagonal noise covariance.
+
+    Observations are modeled as
+
+    $$
+    y_t \\sim \\mathcal{N}(H x_t + D u_t + b, \\mathrm{diag}(R_{\\mathrm{diag}})).
+    $$
+
+    Because the noise dims are independent, `masked_log_prob` is exact for any
+    obs mask — no sub-block extraction is required.
+    """
+
+    H: jax.Array
+    R_diag: jax.Array
+    D: jax.Array | None = None
+    bias: jax.Array | None = None
+
+    def __init__(
+        self,
+        H: jax.Array,
+        R_diag: jax.Array,
+        D: jax.Array | None = None,
+        bias: jax.Array | None = None,
+    ):
+        """
+        Args:
+            H (jax.Array): Observation matrix with shape $(d_y, d_x)$.
+            R_diag (jax.Array): Per-dimension noise variances with shape
+                $(d_y,)$.
+            D (jax.Array | None): Optional control matrix with shape
+                $(d_y, d_u)$.
+            bias (jax.Array | None): Optional additive bias with shape
+                $(d_y,)$.
+        """
+        self.H = H
+        self.R_diag = R_diag
+        self.D = D
+        self.bias = bias
+
+    def __call__(self, x, u, t):
+        loc = jnp.dot(self.H, x)
+        if self.D is not None and u is not None:
+            loc += jnp.dot(self.D, u)
+        if self.bias is not None:
+            loc += self.bias
+        return dist.Independent(dist.Normal(loc, jnp.sqrt(self.R_diag)), 1)
+
     def masked_log_prob(self, y, obs_mask, x, u=None, t=None):
-        # R must be diagonal; off-diagonal terms are ignored.
+        mu = jnp.dot(self.H, x)
+        if self.D is not None and u is not None:
+            mu = mu + jnp.dot(self.D, u)
+        if self.bias is not None:
+            mu = mu + self.bias
+        per_dim_lp = dist.Normal(mu, jnp.sqrt(self.R_diag)).log_prob(y)
+        return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
+
+
+class DiagonalGaussianObservation(ObservationModel):
+    """
+    Nonlinear Gaussian observation model with diagonal noise covariance.
+
+    Observations are modeled as
+
+    $$
+    y_t \\sim \\mathcal{N}(h(x_t, u_t, t), \\mathrm{diag}(R_{\\mathrm{diag}})),
+    $$
+
+    where $h$ is a user-provided measurement function.
+
+    Because the noise dims are independent, `masked_log_prob` is exact for any
+    obs mask — no sub-block extraction is required.
+    """
+
+    h: Callable[[State, Control, Time], Observation]
+    R_diag: jax.Array
+
+    def __init__(
+        self,
+        h: Callable[[State, Control, Time], jax.Array],
+        R_diag: jax.Array,
+    ):
+        """
+        Args:
+            h (Callable[[State, Control, Time], jax.Array]): Measurement
+                function mapping $(x, u, t)$ to the mean observation.
+            R_diag (jax.Array): Per-dimension noise variances with shape
+                $(d_y,)$.
+        """
+        self.h = h
+        self.R_diag = R_diag
+
+    def __call__(self, x, u, t):
+        loc = self.h(x, u, t)
+        return dist.Independent(dist.Normal(loc, jnp.sqrt(self.R_diag)), 1)
+
+    def masked_log_prob(self, y, obs_mask, x, u=None, t=None):
         mu = self.h(x, u, t)
-        std = jnp.sqrt(jnp.diagonal(self.R, axis1=-2, axis2=-1))
-        per_dim_lp = dist.Normal(mu, std).log_prob(y)  # (obs_dim,)
+        per_dim_lp = dist.Normal(mu, jnp.sqrt(self.R_diag)).log_prob(y)
         return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
 
 
@@ -132,6 +217,6 @@ class DiracIdentityObservation(ObservationModel):
     def masked_log_prob(self, y, obs_mask, x, u=None, t=None):
         raise NotImplementedError(
             "DiracIdentityObservation does not support partial missingness. "
-            "Use LinearGaussianObservation or GaussianObservation with small "
-            "sigma_obs instead."
+            "Use DiagonalLinearGaussianObservation or DiagonalGaussianObservation "
+            "with small sigma_obs instead."
         )

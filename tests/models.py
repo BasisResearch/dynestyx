@@ -579,12 +579,14 @@ def interacting_particles_gaussian_kernel_model(
     """N particles in 1D with pairwise Gaussian interaction kernel + known background potential.
 
     Drift for particle i:
-        interaction: sum_j K(x_j - x_i; loc, scale) * (x_j - x_i) / N
+        interaction: coefficient * sum_j K(x_j - x_i; scale) * (x_j - x_i) / N
         background:  -grad V(x_i),  V = -sum_k bg_strengths[k] * exp(-0.5*||x_i - bg_centers[k]||^2)
 
-    where K(r; loc, scale) = exp(-0.5 * ((r - loc) / scale)^2).
+    where K(r; scale) = exp(-0.5 * (r / scale)^2)  (kernel centred at r=0).
 
-    Learnable parameters: loc (preferred displacement) and scale (kernel width).
+    Learnable parameters:
+      coefficient – interaction amplitude; negative = repulsion (particles spread within wells)
+      scale       – kernel width (range of the interaction)
     Background potential parameters (bg_centers, bg_strengths) are KNOWN / fixed.
     Observations are noise-free (DiracIdentityObservation); partial NaN rows
     trigger the two-mask scan which samples latent states for unobserved particles.
@@ -596,15 +598,15 @@ def interacting_particles_gaussian_kernel_model(
 
     K_bg = bg_centers.shape[0]
 
-    loc = numpyro.sample("loc", dist.Normal(0.0, 2.0))
+    coefficient = numpyro.sample("coefficient", dist.Normal(0.0, 2.0))
     scale = numpyro.sample("scale", dist.LogNormal(0.0, 0.5))
 
     def state_evolution(x, u, t_now, t_next):
         dt = t_next - t_now
-        # Pairwise Gaussian interaction drift
+        # Pairwise Gaussian interaction drift (kernel centred at r=0)
         r = x[None, :] - x[:, None]  # (N, N) r_ij = x_j - x_i
-        K_pair = jnp.exp(-0.5 * ((r - loc) / scale) ** 2)
-        interaction_drift = jnp.sum(K_pair * r, axis=1) / N  # (N,)
+        K_pair = jnp.exp(-0.5 * (r / scale) ** 2)
+        interaction_drift = coefficient * jnp.sum(K_pair * r, axis=1) / N  # (N,)
 
         # Background Gaussian-mixture drift: -grad V per particle
         def bg_drift_single(x_i):
@@ -616,13 +618,16 @@ def interacting_particles_gaussian_kernel_model(
 
         bg_drift = jax.vmap(bg_drift_single)(x)  # (N,)
         drift = interaction_drift + bg_drift
-        return dist.MultivariateNormal(x + dt * drift, sigma**2 * dt * jnp.eye(N))
+        mean = x + dt * drift  # (N,) in scan, (N, T-1) in plate
+        std = jnp.sqrt(sigma**2 * dt) * jnp.ones_like(mean)
+        # Transpose so event_shape=(N,) and batch_shape=(T-1,) in plate;
+        # .T is a no-op on 1D arrays in scan.
+        return dist.Independent(dist.Normal(mean.T, std.T), 1)
 
     dynamics = DynamicalModel(
         control_dim=0,
-        initial_condition=dist.MultivariateNormal(
-            loc=jnp.zeros(N),
-            covariance_matrix=4.0 * jnp.eye(N),
+        initial_condition=dist.Independent(
+            dist.Normal(jnp.zeros(N), jnp.full(N, jnp.sqrt(8.0))), 1
         ),
         state_evolution=state_evolution,
         observation_model=DiracIdentityObservation(),

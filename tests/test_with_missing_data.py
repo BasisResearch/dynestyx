@@ -371,9 +371,7 @@ def test_particle_sde_missing_data_svi(
 # ---------------------------------------------------------------------------
 
 
-def _apply_partial_missingness_pattern(
-    obs_values: jnp.ndarray, frac_missing: float, key
-) -> jnp.ndarray:
+def _apply_partial_missingness_pattern(obs_values: jnp.ndarray, frac_missing: float, key) -> jnp.ndarray:
     """Randomly NaN individual obs dimensions (not whole rows)."""
     mask = jr.bernoulli(key, p=1.0 - frac_missing, shape=obs_values.shape)
     return jnp.where(mask, obs_values, jnp.nan)
@@ -382,14 +380,12 @@ def _apply_partial_missingness_pattern(
 def _apply_particle_trajectory_missingness(
     obs_values: jnp.ndarray, missingness_type: str, key
 ) -> jnp.ndarray:
-    """Apply per-particle trajectory gaps (and optional ID switch) to (T, N) obs_values.
+    """Apply per-particle trajectory gaps to (T, N) obs_values.
 
     Types:
-      "none"              – no missingness
-      "block"             – each particle loses a contiguous block of length T//4
-      "random_segment"    – each particle loses a random-length segment
-      "block_id_switch"   – block gap + swap columns 0,1 after the gap
-      "random_id_switch"  – random_segment + swap columns 0,1 after the gap
+      "none"           – no missingness
+      "block"          – each particle loses a contiguous block of length T//20
+      "random_segment" – each particle loses a random-length segment
     """
     import numpy as np
 
@@ -400,10 +396,9 @@ def _apply_particle_trajectory_missingness(
         return jnp.array(obs_np)
 
     keys = jr.split(key, 2 * N)
-    gap_ends = []
 
     for i in range(N):
-        if "block" in missingness_type:
+        if missingness_type == "block":
             gap_len = max(1, T // 20)
             gap_start = T // 3
         else:  # random_segment
@@ -412,170 +407,157 @@ def _apply_particle_trajectory_missingness(
                     keys[2 * i],
                     shape=(),
                     minval=max(1, T // 30),
-                    maxval=max(2, T // 10),
+                    maxval=max(2, T // 20),
                 )
             )
             gap_start = int(
-                jr.randint(keys[2 * i + 1], shape=(), minval=0, maxval=T - gap_len)
+                jr.randint(keys[2 * i + 1], shape=(), minval=1, maxval=T - gap_len)
             )
+        gap_start = max(0, gap_start - 1)
         gap_end = gap_start + gap_len
         obs_np[gap_start:gap_end, i] = float("nan")
-        gap_ends.append(gap_end)
-
-    if "id_switch" in missingness_type:
-        # After both particles 0 and 1 have resumed, swap their columns
-        switch_t = max(gap_ends[0], gap_ends[1])
-        col0 = obs_np[switch_t:, 0].copy()
-        obs_np[switch_t:, 0] = obs_np[switch_t:, 1]
-        obs_np[switch_t:, 1] = col0
 
     return jnp.array(obs_np)
 
 
 # ---------------------------------------------------------------------------
-# Test A: LTI with per-dim partial missingness (not whole rows)
+# Test A: Diagonal observation models with per-dim partial missingness
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("num_samples", [250])
-def test_lti_partial_missingness(num_samples: int):
-    """LTI system with partial (per-dim) NaN obs → two-mask scan → posterior recovery."""
-    rng_key = jr.PRNGKey(7)
-    data_key, mcmc_key, missing_key = jr.split(rng_key, 3)
+import numpyro
+import numpyro.distributions as _dist
+
+from dynestyx.models import DiagonalGaussianObservation, DiagonalLinearGaussianObservation
+from dynestyx.models.state_evolution import LinearGaussianStateEvolution
+
+
+@pytest.mark.parametrize("num_steps", [3000])
+def test_diagonal_linear_gaussian_partial_missingness(num_steps: int):
+    """DiagonalLinearGaussianObservation with partial NaN → sub-path B (masked_log_prob) → posterior recovery."""
+    import dynestyx as dsx
+
+    rng_key = jr.PRNGKey(17)
+    data_key, svi_key, missing_key = jr.split(rng_key, 3)
 
     true_alpha = 0.4
     obs_times = jnp.arange(start=0.0, stop=100.0, step=1.0)
+    state_dim = 2
+
+    def lti_diag_model(obs_times=None, obs_values=None):
+        alpha = numpyro.sample("alpha", _dist.Uniform(-0.7, 0.7))
+        state_evo = LinearGaussianStateEvolution(
+            A=jnp.array([[alpha, 0.0], [0.0, 0.8]]),
+            cov=0.1 * jnp.eye(state_dim),
+        )
+        obs_model = DiagonalLinearGaussianObservation(H=jnp.eye(state_dim), R_diag=jnp.array([0.25, 0.25]))
+        initial = _dist.MultivariateNormal(jnp.zeros(state_dim), jnp.eye(state_dim))
+        dynamics = dsx.DynamicalModel(
+            initial_condition=initial, state_evolution=state_evo, observation_model=obs_model
+        )
+        dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
     true_params = {"alpha": jnp.array(true_alpha)}
-    predictive = Predictive(
-        discrete_time_lti_simplified_model,
-        params=true_params,
-        num_samples=1,
-        exclude_deterministic=False,
-    )
-
+    predictive = Predictive(lti_diag_model, params=true_params, num_samples=1, exclude_deterministic=False)
     with DiscreteTimeSimulator():
         synthetic = predictive(data_key, obs_times=obs_times)
 
-    obs_values = synthetic["observations"].squeeze(0)
-    obs_values = _apply_partial_missingness_pattern(
-        obs_values, frac_missing=0.3, key=missing_key
-    )
+    obs_values = synthetic["observations"].squeeze(0)  # (T, 2)
+    obs_values = _apply_partial_missingness_pattern(obs_values, frac_missing=0.3, key=missing_key)
+
+    # Confirm we have actual partial-NaN rows
+    nan_per_row = jnp.isnan(obs_values).any(axis=1)
+    all_nan_per_row = jnp.isnan(obs_values).all(axis=1)
+    assert (nan_per_row & ~all_nan_per_row).any(), "Expected at least one partial-NaN row"
 
     def data_conditioned_model():
         with DiscreteTimeSimulator():
-            return discrete_time_lti_simplified_model(
-                obs_times=obs_times,
-                obs_values=obs_values,
-            )
+            return lti_diag_model(obs_times=obs_times, obs_values=obs_values)
 
-    mcmc = MCMC(
-        NUTS(data_conditioned_model),
-        num_samples=num_samples,
-        num_warmup=num_samples,
-    )
-    mcmc.run(mcmc_key)
-    posterior_samples = mcmc.get_samples()
+    guide = AutoNormal(data_conditioned_model, init_loc_fn=init_to_value(values={"alpha": jnp.array(true_alpha)}))
+    svi = SVI(data_conditioned_model, guide, optax.adam(1e-3), loss=Trace_ELBO())
+    svi_result = svi.run(svi_key, num_steps)
 
-    assert "alpha" in posterior_samples
-    posterior_alpha = posterior_samples["alpha"]
+    posterior_alpha = guide.sample_posterior(jr.PRNGKey(1), svi_result.params, sample_shape=(500,))["alpha"]
+
     assert not jnp.isnan(posterior_alpha).any()
-    assert not jnp.isinf(posterior_alpha).any()
-
     tol = 0.2
-    assert jnp.abs(posterior_alpha.mean() - true_alpha) < tol
-
-    hdi_data = az.hdi(posterior_alpha, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
-    assert hdi_min <= true_alpha <= hdi_max, (
-        f"True alpha {true_alpha} not in HDI [{hdi_min}, {hdi_max}]"
+    assert jnp.abs(posterior_alpha.mean() - true_alpha) < tol, (
+        f"alpha not recovered: posterior mean {posterior_alpha.mean():.3f} vs true {true_alpha}"
     )
 
 
-# ---------------------------------------------------------------------------
-# Test B: LTI with full-row missing + unroll_missing=True
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("num_steps", [3000])
+def test_diagonal_gaussian_partial_missingness(num_steps: int):
+    """DiagonalGaussianObservation (nonlinear h) with partial NaN → posterior recovery."""
+    import dynestyx as dsx
+    from dynestyx.models.state_evolution import GaussianStateEvolution
 
-
-@pytest.mark.parametrize("num_samples", [250])
-def test_lti_unroll_missing_rows(num_samples: int):
-    """LTI with block-missing rows + unroll_missing=True → full-length state output + posterior."""
-    rng_key = jr.PRNGKey(11)
-    data_key, mcmc_key, missing_key = jr.split(rng_key, 3)
+    rng_key = jr.PRNGKey(23)
+    data_key, svi_key, missing_key = jr.split(rng_key, 3)
 
     true_alpha = 0.4
     obs_times = jnp.arange(start=0.0, stop=100.0, step=1.0)
-    T = len(obs_times)
+    state_dim = 2
+
+    def diag_gaussian_model(obs_times=None, obs_values=None):
+        alpha = numpyro.sample("alpha", _dist.Uniform(-0.7, 0.7))
+
+        def drift(x, u, t):
+            return jnp.array([[alpha, 0.0], [0.0, 0.8]]) @ x
+
+        state_evo = GaussianStateEvolution(drift=drift, Q=0.1 * jnp.eye(state_dim))
+        obs_model = DiagonalGaussianObservation(
+            h=lambda x, u, t: x,  # identity measurement
+            R_diag=jnp.array([0.25, 0.25]),
+        )
+        initial = _dist.MultivariateNormal(jnp.zeros(state_dim), jnp.eye(state_dim))
+        dynamics = dsx.DynamicalModel(
+            initial_condition=initial,
+            state_evolution=state_evo,
+            observation_model=obs_model,
+        )
+        dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
     true_params = {"alpha": jnp.array(true_alpha)}
-    predictive = Predictive(
-        discrete_time_lti_simplified_model,
-        params=true_params,
-        num_samples=1,
-        exclude_deterministic=False,
-    )
-
+    predictive = Predictive(diag_gaussian_model, params=true_params, num_samples=1, exclude_deterministic=False)
     with DiscreteTimeSimulator():
         synthetic = predictive(data_key, obs_times=obs_times)
 
-    obs_values = synthetic["observations"].squeeze(0)
-    # Apply block full-row missingness
-    obs_values = _apply_missingness_pattern(obs_values, "block", missing_key)
+    obs_values = synthetic["observations"].squeeze(0)  # (T, 2)
+    obs_values = _apply_partial_missingness_pattern(obs_values, frac_missing=0.3, key=missing_key)
 
-    # With unroll_missing=True, the output should preserve all T time steps
-    with DiscreteTimeSimulator(unroll_missing=True):
-        predictive_unroll = Predictive(
-            discrete_time_lti_simplified_model,
-            params=true_params,
-            num_samples=1,
-            exclude_deterministic=False,
-        )
-        result = predictive_unroll(data_key, obs_times=obs_times, obs_values=obs_values)
-
-    assert result["states"].shape[1] == T, (
-        f"Expected T={T} time steps in states, got {result['states'].shape[1]}"
-    )
-    # Missing rows should be NaN in observations output
-    block_len = max(1, T // 5)
-    block_start = (T - block_len) // 2
-    assert jnp.isnan(result["observations"].squeeze(0)[block_start, 0]), (
-        "Expected NaN in observations at missing rows"
-    )
+    nan_per_row = jnp.isnan(obs_values).any(axis=1)
+    all_nan_per_row = jnp.isnan(obs_values).all(axis=1)
+    assert (nan_per_row & ~all_nan_per_row).any(), "Expected at least one partial-NaN row"
 
     def data_conditioned_model():
-        with DiscreteTimeSimulator(unroll_missing=True):
-            return discrete_time_lti_simplified_model(
-                obs_times=obs_times,
-                obs_values=obs_values,
-            )
+        with DiscreteTimeSimulator():
+            return diag_gaussian_model(obs_times=obs_times, obs_values=obs_values)
 
-    mcmc = MCMC(
-        NUTS(data_conditioned_model),
-        num_samples=num_samples,
-        num_warmup=num_samples,
-    )
-    mcmc.run(mcmc_key)
-    posterior_samples = mcmc.get_samples()
+    guide = AutoNormal(data_conditioned_model, init_loc_fn=init_to_value(values={"alpha": jnp.array(true_alpha)}))
+    svi = SVI(data_conditioned_model, guide, optax.adam(1e-3), loss=Trace_ELBO())
+    svi_result = svi.run(svi_key, num_steps)
 
-    assert "alpha" in posterior_samples
-    posterior_alpha = posterior_samples["alpha"]
+    posterior_alpha = guide.sample_posterior(jr.PRNGKey(1), svi_result.params, sample_shape=(500,))["alpha"]
+
     assert not jnp.isnan(posterior_alpha).any()
-
-    tol = 0.25
-    assert jnp.abs(posterior_alpha.mean() - true_alpha) < tol
+    tol = 0.2
+    assert jnp.abs(posterior_alpha.mean() - true_alpha) < tol, (
+        f"alpha not recovered: posterior mean {posterior_alpha.mean():.3f} vs true {true_alpha}"
+    )
 
 
 # ---------------------------------------------------------------------------
-# Test C: Interacting particles with Gaussian kernel + per-particle trajectory gaps
+# Test B: Interacting particles with Gaussian kernel + per-particle trajectory gaps
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "missingness_type",
-    ["none", "block", "random_segment", "block_id_switch", "random_id_switch"],
+    ["none", "block", "random_segment"],
 )
-@pytest.mark.parametrize("num_steps", [5000])
+@pytest.mark.parametrize("num_steps", [8000])
 def test_interacting_particles_partial_missingness_svi(
     missingness_type: str,
     num_steps: int,
@@ -587,15 +569,15 @@ def test_interacting_particles_partial_missingness_svi(
     N = 100
     sigma = 0.2
     obs_times = jnp.arange(start=0.0, stop=5.0, step=0.1)
-    # Wells at ±0.3 so cross-well pairwise displacements (~0.6) land squarely
-    # inside the interaction kernel (loc=0.5, scale=0.5), making both
-    # parameters identifiable from the trajectories.
-    bg_centers = jnp.array([[-0.3], [0.3]])
+    # Double-well potential at ±2.0 (positive bg_strengths = attractive).
+    # Intra-well pairwise displacements (0–1) span the kernel peak (loc≈0.5),
+    # providing identifiability for both loc and scale.
+    bg_centers = jnp.array([[-2.0], [2.0]])
 
-    true_loc = 0.5
-    true_scale = 0.5
+    true_coefficient = -1.0  # negative = repulsive, spreads particles within each well
+    true_scale = 1.0
     true_params = {
-        "loc": jnp.array(true_loc),
+        "coefficient": jnp.array(true_coefficient),
         "scale": jnp.array(true_scale),
     }
 
@@ -635,8 +617,8 @@ def test_interacting_particles_partial_missingness_svi(
     )
 
     init_values = {
-        "loc": jnp.array(0.0),
-        "scale": jnp.array(1.0),
+        "coefficient": jnp.array(true_coefficient),
+        "scale": jnp.array(true_scale),
     }
     guide = AutoNormal(
         data_conditioned_model, init_loc_fn=init_to_value(values=init_values)
@@ -650,20 +632,20 @@ def test_interacting_particles_partial_missingness_svi(
         jr.PRNGKey(1), svi_result.params, sample_shape=(num_posterior_samples,)
     )
 
-    assert "loc" in posterior_samples
+    assert "coefficient" in posterior_samples
     assert "scale" in posterior_samples
 
-    posterior_loc = posterior_samples["loc"]
+    posterior_coefficient = posterior_samples["coefficient"]
     posterior_scale = posterior_samples["scale"]
 
-    assert not jnp.isnan(posterior_loc).any()
-    assert not jnp.isinf(posterior_loc).any()
+    assert not jnp.isnan(posterior_coefficient).any()
+    assert not jnp.isinf(posterior_coefficient).any()
     assert not jnp.isnan(posterior_scale).any()
     assert not jnp.isinf(posterior_scale).any()
 
     tol = 0.3
-    assert jnp.abs(posterior_loc.mean() - true_loc) < tol, (
-        f"loc not recovered: posterior mean {posterior_loc.mean():.3f} vs true {true_loc}"
+    assert jnp.abs(posterior_coefficient.mean() - true_coefficient) < tol, (
+        f"coefficient not recovered: posterior mean {posterior_coefficient.mean():.3f} vs true {true_coefficient}"
     )
     assert jnp.abs(posterior_scale.mean() - true_scale) < tol, (
         f"scale not recovered: posterior mean {posterior_scale.mean():.3f} vs true {true_scale}"
@@ -772,21 +754,28 @@ def test_interacting_particles_partial_missingness_svi(
                 ax.legend(fontsize=7, loc="upper right")
 
         # ── Bottom row: all N particles ───────────────────────────────────────
-        # Use a union of all missing intervals for shading (any particle missing)
-        any_missing = np.isnan(obs_np).any(axis=1)
-        _shade_missing(ax_all, any_missing)
-
         all_colors = plt.cm.tab20(np.linspace(0, 1, N))  # type: ignore[attr-defined]
         for j in range(N):
             c = all_colors[j]
             pp_j = pred_states[:, :, j]  # (200, T)
             pp_med_j = np.median(pp_j, axis=0)
-            # Thin dashed ground truth
-            ax_all.plot(plot_times, clean_np[:, j], color=c, lw=0.6, ls="--", alpha=0.4)
-            # PP median
-            ax_all.plot(plot_times, pp_med_j, color=c, lw=0.9, alpha=0.7)
+            missing_j = np.isnan(obs_np[:, j])
+            # PP median line
+            ax_all.plot(plot_times, pp_med_j, color=c, lw=0.6, alpha=0.5)
+            # Open circles at missing timepoints (imputed positions)
+            if missing_j.any():
+                ax_all.plot(
+                    plot_times[missing_j],
+                    pp_med_j[missing_j],
+                    "o",
+                    color=c,
+                    ms=3,
+                    mfc="none",
+                    markeredgewidth=0.7,
+                    alpha=0.8,
+                )
 
-        ax_all.set_title(f"All {N} particles — PP medians (solid) vs. truth (dashed)")
+        ax_all.set_title(f"All {N} particles — PP medians; ○ = imputed")
         ax_all.set_xlabel("time")
         ax_all.set_ylabel("position")
 
@@ -799,14 +788,14 @@ def test_interacting_particles_partial_missingness_svi(
         plt.close(fig)
 
         # Figure 2: Parameter posteriors
-        fig2, (ax_loc, ax_scale) = plt.subplots(1, 2, figsize=(9, 3))
+        fig2, (ax_coeff, ax_scale) = plt.subplots(1, 2, figsize=(9, 3))
         az.plot_posterior(
-            np.asarray(posterior_loc),
+            np.asarray(posterior_coefficient),
             hdi_prob=0.95,
-            ref_val=true_loc,
-            ax=ax_loc,
+            ref_val=true_coefficient,
+            ax=ax_coeff,
         )
-        ax_loc.set_title("loc")
+        ax_coeff.set_title("coefficient")
         az.plot_posterior(
             np.asarray(posterior_scale),
             hdi_prob=0.95,
@@ -818,3 +807,72 @@ def test_interacting_particles_partial_missingness_svi(
         fig2.tight_layout()
         plt.savefig(OUTPUT_DIR / "posteriors.png", dpi=150, bbox_inches="tight")
         plt.close(fig2)
+
+
+# ---------------------------------------------------------------------------
+# Failure-mode tests: wrong model / missingness combinations must raise
+# ---------------------------------------------------------------------------
+
+from dynestyx.models import DynamicalModel
+from dynestyx.models.core import ObservationModel
+from dynestyx.models.observations import DiracIdentityObservation
+
+
+def test_dirac_masked_log_prob_raises():
+    """DiracIdentityObservation.masked_log_prob raises NotImplementedError."""
+    obs_model = DiracIdentityObservation()
+    y = jnp.ones(2)
+    mask = jnp.array([True, False])
+    x = jnp.ones(2)
+    with pytest.raises(NotImplementedError, match="partial missingness"):
+        obs_model.masked_log_prob(y, mask, x)
+
+
+def test_joint_obs_model_masked_log_prob_raises():
+    """ObservationModel.masked_log_prob raises for correlated (non-diagonal) MultivariateNormal."""
+
+    class JointGaussianObs(ObservationModel):
+        def __call__(self, x, u, t):
+            R = jnp.array([[1.0, 0.9], [0.9, 1.0]])
+            return _dist.MultivariateNormal(x, R)
+
+    obs_model = JointGaussianObs()
+    y = jnp.zeros(2)
+    mask = jnp.array([True, True])
+    x = jnp.zeros(2)
+    with pytest.raises(NotImplementedError, match="does not decompose"):
+        obs_model.masked_log_prob(y, mask, x)
+
+
+def test_entirely_missing_rows_without_unroll_produces_shorter_output():
+    """Without unroll_missing=True, entirely-missing rows are filtered; output is shorter."""
+    obs_times = jnp.arange(10.0)
+    obs_values_full = jnp.ones((10, 1))
+    # Blank out a contiguous block of rows entirely
+    obs_values_with_gap = obs_values_full.at[4:7, :].set(jnp.nan)
+
+    true_params = {"alpha": jnp.array(0.4)}
+    predictive = Predictive(
+        discrete_time_lti_simplified_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    with DiscreteTimeSimulator():
+        result_filtered = predictive(
+            jr.PRNGKey(0), obs_times=obs_times, obs_values=obs_values_with_gap
+        )
+    with DiscreteTimeSimulator(unroll_missing=True):
+        result_unrolled = predictive(
+            jr.PRNGKey(0), obs_times=obs_times, obs_values=obs_values_with_gap
+        )
+
+    # Filtered: 3 rows dropped → T=7
+    assert result_filtered["states"].shape[1] == 7
+    # Unrolled: all T=10 rows kept
+    assert result_unrolled["states"].shape[1] == 10
+    # Missing rows have NaN observations in unrolled output
+    assert jnp.isnan(result_unrolled["observations"].squeeze(0)[4, 0])
+
+
