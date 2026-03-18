@@ -180,3 +180,5 @@ dist/
 .output/
 
 *.ttf
+
+uv.lock
