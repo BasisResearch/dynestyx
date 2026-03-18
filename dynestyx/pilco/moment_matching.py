@@ -12,7 +12,9 @@ def _inv(A: Array) -> Array:
     return jnp.linalg.inv(A + _JITTER * jnp.eye(A.shape[0]))
 
 
-def compute_mean_and_q(nu: Array, s: Array, ls_sq: Array, sig_var: Array | float) -> Array:
+def compute_mean_and_q(
+    nu: Array, s: Array, ls_sq: Array, sig_var: Array | float
+) -> Array:
     """Expected kernel evaluations $q$ for uncertain input (Eq. 15)."""
     sL = s + jnp.diag(ls_sq)
     sL_inv = _inv(sL)
@@ -22,7 +24,12 @@ def compute_mean_and_q(nu: Array, s: Array, ls_sq: Array, sig_var: Array | float
 
 
 def compute_Q_matrix(
-    nu: Array, s: Array, ls_sq_a: Array, ls_sq_b: Array, sv_a: Array | float, sv_b: Array | float
+    nu: Array,
+    s: Array,
+    ls_sq_a: Array,
+    ls_sq_b: Array,
+    sv_a: Array | float,
+    sv_b: Array | float,
 ) -> Array:
     """$Q$ matrix for covariance prediction (Eq. 22)."""
     d = nu.shape[1]

@@ -322,7 +322,7 @@ class PILCO(eqx.Module):
     ) -> "PILCO":
         """Optimize GP hyperparameters by maximizing log marginal likelihood."""
         best_mgpr = self.mgpr
-        best_lml = -jnp.inf
+        best_lml: Array = jnp.array(-jnp.inf)
 
         hp_filter = jax.tree.map(lambda _: False, self.mgpr)
         hp_filter = eqx.tree_at(
