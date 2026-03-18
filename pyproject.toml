@@ -31,6 +31,7 @@ classifiers = [
 dependencies = [
     "effectful @ git+https://github.com/BasisResearch/effectful.git",
     "cuthbert @ git+https://github.com/DanWaxman/cuthbert.git@b56783de77ef62804b8458463a7bf907c1296017#subdirectory=pkg/cuthbert",
+    "cuthbertlib @ git+https://github.com/DanWaxman/cuthbert.git@b56783de77ef62804b8458463a7bf907c1296017#subdirectory=pkg/cuthbertlib",
     "cd-dynamax @ git+https://github.com/DanWaxman/cd_dynamax.git@dw-dpf",
     "matplotlib>=3.10.7",
     "numpyro>=0.19.0",
