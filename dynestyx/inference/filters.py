@@ -21,6 +21,7 @@ from dynestyx.inference.filter_configs import (
     HMMConfig,
     HMMConfigs,
     KFConfig,
+    MarginalPFConfig,
     PFConfig,
     PFResamplingConfig,
     UKFConfig,
@@ -32,6 +33,9 @@ from dynestyx.inference.integrations.cd_dynamax.discrete import (
 )
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
+)
+from dynestyx.inference.integrations.pfjax.discrete import (
+    run_discrete_filter as run_pfjax_discrete,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
@@ -250,10 +254,10 @@ def _filter_discrete_time(
     ctrl_values=None,
     **kwargs,
 ) -> None:
-    """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
+    """Discrete-time marginal likelihood via cuthbert, pfjax, or cd-dynamax.
 
     Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig (cd-dynamax)
-    or EKFConfig (cuthbert), PFConfig (cuthbert).
+    or EKFConfig (cuthbert), PFConfig (cuthbert or pfjax).
 
     Args:
         name: Name of the factor.
@@ -278,6 +282,18 @@ def _filter_discrete_time(
         )
     elif filter_config.filter_source == "cuthbert":
         run_cuthbert_discrete(
+            name,
+            dynamics,
+            filter_config,
+            key=key,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+    elif filter_config.filter_source == "pfjax":
+        run_pfjax_discrete(
             name,
             dynamics,
             filter_config,
@@ -342,6 +358,7 @@ __all__ = [
     "HMMConfig",
     "HMMConfigs",
     "KFConfig",
+    "MarginalPFConfig",
     "PFConfig",
     "PFResamplingConfig",
     "UKFConfig",
