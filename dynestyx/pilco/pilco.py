@@ -1,40 +1,139 @@
 """Main PILCO algorithm implementation.
 
 Orchestrates the GP dynamics model learning, moment-matching trajectory
-prediction, and gradient-based policy optimization.
+prediction, and gradient-based policy optimization. Integrates with dynestyx
+via effectful handlers and ``DynamicalModel``.
+
+The central handler is ``MomentMatchingPropagator``, an effectful interpretation
+of ``dsx.sample`` that replaces stochastic sampling with analytic Gaussian
+moment matching through the learned GP dynamics model. This follows the same
+pattern as dynestyx's ``Filter`` and ``Discretizer`` handlers.
 
 References:
     Deisenroth, M. P. & Rasmussen, C. E. (2011). PILCO: A Model-Based and
     Data-Efficient Approach to Policy Search. ICML, Algorithm 1.
 """
 
+import dataclasses
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import numpyro
 import optax
+from effectful.ops.semantics import fwd
+from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import Array
 
+from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.models import DynamicalModel
 from dynestyx.pilco.controllers import squash_sin
 from dynestyx.pilco.mgpr import MGPR
 from dynestyx.pilco.rewards import ExponentialReward
+from dynestyx.types import FunctionOfTime
+
+
+@dataclasses.dataclass
+class MomentMatchingPropagator(ObjectInterpretation, HandlesSelf):
+    """Effectful handler that interprets ``dsx.sample`` via moment matching.
+
+    Instead of drawing samples from the dynamics (as ``Simulator`` does) or
+    computing a marginal likelihood (as ``Filter`` does), this handler propagates
+    a Gaussian state belief forward through the GP dynamics model using the
+    analytic moment matching equations from PILCO (Eqs. 10-23).
+
+    This is PILCO's core innovation: rather than sampling trajectories, we
+    analytically compute the predictive distribution at each time step.
+
+    The propagated trajectory (means, covariances) and cumulative expected
+    reward are recorded as ``numpyro.deterministic`` sites.
+
+    Usage::
+
+        with MomentMatchingPropagator(pilco=pilco):
+            model(obs_times=obs_times)
+
+    Attributes:
+        pilco: The ``PILCO`` instance containing the GP model, controller,
+            reward function, and propagation settings.
+    """
+
+    pilco: "PILCO"
+
+    @implements(_sample_intp)
+    def _sample_ds(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        **kwargs,
+    ) -> FunctionOfTime:
+        if obs_times is not None:
+            self._propagate_moments(name, obs_times)
+
+        return fwd(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
+        )
+
+    def _propagate_moments(self, name: str, obs_times: Array):
+        """Propagate Gaussian belief via moment matching and record results.
+
+        Records:
+            - ``{name}_mm_means``: Predicted state means, shape ``(H+1, D)``.
+            - ``{name}_mm_covs_diag``: Diagonal of predicted covariances, shape ``(H+1, D)``.
+            - ``{name}_mm_reward``: Cumulative expected reward (scalar).
+        """
+        p = self.pilco
+        m_x, s_x = p.m_init, p.s_init
+
+        means = [m_x]
+        covs_diag = [jnp.diag(s_x)]
+        total_reward = jnp.array(0.0)
+
+        T = min(len(obs_times), p.horizon)
+        for _ in range(T):
+            m_x, s_x = p.propagate(m_x, s_x)
+            r, _ = p.reward(m_x, s_x)
+            total_reward = total_reward + r
+            means.append(m_x)
+            covs_diag.append(jnp.diag(s_x))
+
+        numpyro.deterministic(f"{name}_mm_means", jnp.stack(means))
+        numpyro.deterministic(f"{name}_mm_covs_diag", jnp.stack(covs_diag))
+        numpyro.deterministic(f"{name}_mm_reward", total_reward)
 
 
 class PILCO(eqx.Module):
     """PILCO: Probabilistic Inference for Learning COntrol.
 
-    Implements the full PILCO algorithm loop:
-    1. Learn GP dynamics model from data
-    2. Predict trajectory via moment matching
-    3. Optimize policy by maximizing expected cumulative reward
+    Implements the full PILCO algorithm (Algorithm 1) with deep integration
+    into the dynestyx framework:
+
+    - The GP dynamics model can be converted to a dynestyx
+      ``DiscreteTimeStateEvolution`` via ``self.mgpr.to_state_evolution()``,
+      enabling use with ``DiscreteTimeSimulator`` and ``Filter``.
+    - The ``MomentMatchingPropagator`` effectful handler implements
+      ``dsx.sample`` interpretation for PILCO's trajectory prediction.
+    - Data collection uses dynestyx ``DynamicalModel`` + ``Simulator`` handlers.
 
     Attributes:
         mgpr: Multi-output GP dynamics model.
-        controller: Policy (LinearController or RBFController).
+        controller: Policy (``LinearController`` or ``RBFController``).
         reward: Reward function.
         horizon: Planning horizon (number of prediction steps).
-        m_init: Initial state mean, shape (state_dim,).
-        s_init: Initial state covariance, shape (state_dim, state_dim).
-        max_action: Maximum action for squashing (None = no squashing).
+        m_init: Initial state mean, shape ``(state_dim,)``.
+        s_init: Initial state covariance, shape ``(state_dim, state_dim)``.
+        max_action: Maximum action for squashing (``None`` = no squashing).
     """
 
     mgpr: MGPR
@@ -56,18 +155,6 @@ class PILCO(eqx.Module):
         s_init: Array | None = None,
         max_action: Array | None = None,
     ):
-        """Initialize PILCO.
-
-        Args:
-            X: Training inputs [states, actions], shape (n, state_dim + control_dim).
-            Y: Training targets (state deltas), shape (n, state_dim).
-            controller: Policy module with compute_action method.
-            reward: Reward function.
-            horizon: Planning horizon.
-            m_init: Initial state mean. Defaults to first state in data.
-            s_init: Initial state covariance. Defaults to 0.1 * I.
-            max_action: Maximum action for sin-squashing. None disables squashing.
-        """
         state_dim = Y.shape[1]
         self.mgpr = MGPR(X, Y)
         self.controller = controller
@@ -84,69 +171,80 @@ class PILCO(eqx.Module):
         new_mgpr = self.mgpr.set_data(X, Y)
         return eqx.tree_at(lambda p: p.mgpr, self, new_mgpr)
 
+    def to_dynamical_model(
+        self,
+        initial_condition=None,
+        observation_model=None,
+    ) -> DynamicalModel:
+        """Create a dynestyx ``DynamicalModel`` using the GP as state evolution.
+
+        This allows the learned GP dynamics to be used with any dynestyx handler:
+        ``DiscreteTimeSimulator`` for trajectory sampling, ``Filter`` for state
+        estimation, etc.
+
+        Args:
+            initial_condition: NumPyro distribution over initial state.
+                Defaults to ``N(m_init, s_init)``.
+            observation_model: Dynestyx observation model.
+                Defaults to ``DiracIdentityObservation``.
+
+        Returns:
+            A ``DynamicalModel`` with GP-based discrete-time state evolution.
+        """
+        import numpyro.distributions as dist
+
+        from dynestyx.models.observations import DiracIdentityObservation
+
+        state_dim = self.mgpr.state_dim
+        control_dim = self.mgpr.X.shape[1] - state_dim
+
+        if initial_condition is None:
+            initial_condition = dist.MultivariateNormal(
+                loc=self.m_init,
+                covariance_matrix=self.s_init,
+            )
+        if observation_model is None:
+            observation_model = DiracIdentityObservation()
+
+        return DynamicalModel(
+            initial_condition=initial_condition,
+            state_evolution=self.mgpr.to_state_evolution(),
+            observation_model=observation_model,
+            control_dim=control_dim if control_dim > 0 else None,
+        )
+
     def propagate(
         self, m_x: Array, s_x: Array
     ) -> tuple[Array, Array]:
-        """Single-step state propagation via moment matching.
+        """Single-step state propagation via moment matching (Eqs. 10-12).
 
         1. Compute action distribution from controller
         2. Optionally squash through sin()
         3. Form joint state-action distribution
-        4. Predict state delta through GP
+        4. Predict state delta through GP moment matching
         5. Compute next state distribution
-
-        Implements Eqs. 10-12 of Deisenroth & Rasmussen (2011).
-
-        Args:
-            m_x: Current state mean, shape (state_dim,).
-            s_x: Current state covariance, shape (state_dim, state_dim).
-
-        Returns:
-            m_next: Next state mean, shape (state_dim,).
-            s_next: Next state covariance, shape (state_dim, state_dim).
         """
         state_dim = m_x.shape[0]
 
-        # 1. Get action distribution
         m_u, s_u, c_xu = self.controller.compute_action(m_x, s_x)
 
-        # 2. Optional squashing
         if self.max_action is not None:
             m_u, s_u, c_squash = squash_sin(m_u, s_u, self.max_action)
             c_xu = c_xu @ c_squash
 
-        # 3. Form joint [x, u] distribution
-        control_dim = m_u.shape[0]
         m_joint = jnp.concatenate([m_x, m_u])
         s_joint = jnp.block([
             [s_x, c_xu],
             [c_xu.T, s_u],
         ])
 
-        # 4. Predict delta through GP
         M_delta, S_delta, V_delta = self.mgpr.predict_given_factorizations(
             m_joint, s_joint
         )
 
-        # 5. Next state = current + delta (Eq. 10-11)
-        # Extract state portion of cross-covariance
-        # V_delta is (state_dim + control_dim, state_dim)
-        # We need cov[x, delta] which involves V_delta[:state_dim, :]
-        # plus the contribution through the action correlation (Eq. 12)
-
-        # Full input-output cross-covariance from the joint input
-        # s1 = cov[x, joint_input] = [s_x, c_xu] = s_joint[:state_dim, :]
-        s1 = s_joint[:state_dim, :]  # (state_dim, state_dim + control_dim)
-
-        m_next = m_x + M_delta  # Eq. 10
-        s_next = (
-            s_x
-            + S_delta
-            + s1 @ V_delta
-            + (s1 @ V_delta).T
-        )  # Eq. 11
-
-        # Symmetrize for numerical stability
+        s1 = s_joint[:state_dim, :]
+        m_next = m_x + M_delta
+        s_next = s_x + S_delta + s1 @ V_delta + (s1 @ V_delta).T
         s_next = (s_next + s_next.T) / 2.0
 
         return m_next, s_next
@@ -154,20 +252,7 @@ class PILCO(eqx.Module):
     def predict(
         self, m_x: Array | None = None, s_x: Array | None = None
     ) -> tuple[Array, list[Array], list[Array]]:
-        """Predict trajectory and compute cumulative reward.
-
-        Unrolls the moment matching for `horizon` steps and accumulates
-        the expected reward at each step.
-
-        Args:
-            m_x: Initial state mean. Defaults to self.m_init.
-            s_x: Initial state covariance. Defaults to self.s_init.
-
-        Returns:
-            total_reward: Cumulative expected reward (scalar).
-            means: List of state means at each step.
-            covs: List of state covariances at each step.
-        """
+        """Predict trajectory and compute cumulative reward."""
         if m_x is None:
             m_x = self.m_init
         if s_x is None:
@@ -189,10 +274,7 @@ class PILCO(eqx.Module):
     def predict_jit(
         self, m_x: Array, s_x: Array
     ) -> Array:
-        """JIT-friendly version that returns only the total reward.
-
-        Uses jax.lax.fori_loop for efficient compilation.
-        """
+        """JIT-friendly version returning only the total reward."""
 
         def step_fn(carry, _):
             m, s, reward = carry
@@ -211,20 +293,10 @@ class PILCO(eqx.Module):
         max_iters: int = 200,
         learning_rate: float = 0.01,
     ) -> "PILCO":
-        """Optimize GP hyperparameters by maximizing log marginal likelihood.
-
-        Args:
-            num_restarts: Number of random restarts.
-            max_iters: Maximum optimization iterations per restart.
-            learning_rate: Adam learning rate.
-
-        Returns:
-            New PILCO with optimized GP hyperparameters.
-        """
+        """Optimize GP hyperparameters by maximizing log marginal likelihood."""
         best_mgpr = self.mgpr
         best_lml = -jnp.inf
 
-        # Get the trainable parameters (hyperparameters only, not data)
         hp_filter = jax.tree.map(lambda _: False, self.mgpr)
         hp_filter = eqx.tree_at(
             lambda m: (m.log_lengthscales, m.log_signal_variance, m.log_noise_variance),
@@ -263,19 +335,10 @@ class PILCO(eqx.Module):
         max_iters: int = 100,
         learning_rate: float = 0.01,
     ) -> "PILCO":
-        """Optimize policy parameters by maximizing expected cumulative reward.
+        """Optimize policy by maximizing expected cumulative reward.
 
-        Uses Adam optimizer with analytic gradients through the moment matching
-        computation graph.
-
-        Args:
-            max_iters: Maximum optimization iterations.
-            learning_rate: Adam learning rate.
-
-        Returns:
-            New PILCO with optimized controller parameters.
+        Uses Adam with analytic gradients through the full moment matching graph.
         """
-        # Filter: only optimize controller parameters
         ctrl_filter = jax.tree.map(lambda _: False, self)
         ctrl_filter = eqx.tree_at(
             lambda p: p.controller, ctrl_filter,
@@ -309,15 +372,9 @@ def _randomize_hyperparams(mgpr: MGPR, seed: int) -> MGPR:
     """Randomize GP hyperparameters for restart."""
     key = jax.random.PRNGKey(seed * 42)
     k1, k2, k3 = jax.random.split(key, 3)
-    new_ls = mgpr.log_lengthscales + 0.5 * jax.random.normal(
-        k1, mgpr.log_lengthscales.shape
-    )
-    new_sv = mgpr.log_signal_variance + 0.5 * jax.random.normal(
-        k2, mgpr.log_signal_variance.shape
-    )
-    new_nv = mgpr.log_noise_variance + 0.5 * jax.random.normal(
-        k3, mgpr.log_noise_variance.shape
-    )
+    new_ls = mgpr.log_lengthscales + 0.5 * jax.random.normal(k1, mgpr.log_lengthscales.shape)
+    new_sv = mgpr.log_signal_variance + 0.5 * jax.random.normal(k2, mgpr.log_signal_variance.shape)
+    new_nv = mgpr.log_noise_variance + 0.5 * jax.random.normal(k3, mgpr.log_noise_variance.shape)
     return eqx.tree_at(
         lambda m: (m.log_lengthscales, m.log_signal_variance, m.log_noise_variance),
         mgpr,
