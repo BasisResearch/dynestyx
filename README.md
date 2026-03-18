@@ -1,8 +1,12 @@
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/BasisResearch/dynestyx/test.yml) ![GitHub License](https://img.shields.io/github/license/BasisResearch/dynestyx)
+
 # Welcome to Dynestyx
 
 ![dynestyx logo](docs/logo/dynestyx.gif)
 
 `dynestyx` is a library designed for Bayesian modeling and inference of dynamical systems. It is an extension of [NumPyro](https://num.pyro.ai/en/stable/), and incorporates a wide variety of state-of-the-art inference methods for state space models.
+
+To get started, you can [read the documentation](https://basisresearch.github.io/dynestyx) or go straight to the [quickstart](https://basisresearch.github.io/dynestyx/tutorials/quickstart/).
 
 ## Goals of `dynestyx`
 
