@@ -8,9 +8,8 @@ from jax import Array
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.pilco.moment_matching import (
-    compute_cross_covariance,
-    compute_mean_and_q,
-    compute_Q_matrix,
+    compute_predictive_moments,
+    gp_log_marginal_likelihood,
 )
 from dynestyx.types import Control, State, Time
 
@@ -20,11 +19,8 @@ class MGPR(eqx.Module):
     Multi-output GP Regression with SE-ARD kernels.
 
     Trains $D$ independent GPs on inputs $\\tilde{x} = [x^\\top, u^\\top]^\\top$
-    and targets $\\Delta = x_{t+1} - x_t$. Provides analytic moment matching
-    for propagating Gaussian uncertainty (Eqs. 14-23).
-
-    Converts to a dynestyx ``DiscreteTimeStateEvolution`` via
-    ``to_state_evolution()``.
+    and targets $\\Delta = x_{t+1} - x_t$. Converts to a dynestyx
+    ``DiscreteTimeStateEvolution`` via ``to_state_evolution()``.
     """
 
     X: Array
@@ -63,23 +59,32 @@ class MGPR(eqx.Module):
 
     def _kernel_matrix(self, X1: Array, X2: Array, a: int) -> Array:
         ls = self.lengthscales[a]
-        sv = self.signal_variance[a]
         diff = (X1[:, None, :] - X2[None, :, :]) / ls[None, None, :]
-        return sv * jnp.exp(-0.5 * jnp.sum(diff**2, axis=-1))
+        return self.signal_variance[a] * jnp.exp(-0.5 * jnp.sum(diff**2, axis=-1))
 
     def _compute_factorizations(self, a: int) -> tuple[Array, Array]:
         K = self._kernel_matrix(self.X, self.X, a)
         n = K.shape[0]
-        noise = jnp.maximum(self.noise_variance[a], 1e-4)
-        Ky = K + noise * jnp.eye(n) + 1e-6 * jnp.eye(n)
+        Ky = (
+            K
+            + jnp.maximum(self.noise_variance[a], 1e-4) * jnp.eye(n)
+            + 1e-6 * jnp.eye(n)
+        )
         L = jnp.linalg.cholesky(Ky)
         iK = jax.scipy.linalg.cho_solve((L, True), jnp.eye(n))
-        beta = iK @ self.Y[:, a]
-        return iK, beta
+        return iK, iK @ self.Y[:, a]
+
+    def _all_factorizations(self) -> tuple[list[Array], list[Array]]:
+        iKs, betas = [], []
+        for a in range(self.state_dim):
+            iK, beta = self._compute_factorizations(a)
+            iKs.append(iK)
+            betas.append(beta)
+        return iKs, betas
 
     def _predict_deterministic(self, x_star: Array) -> tuple[Array, Array]:
-        """GP posterior mean/variance for a deterministic input (used by GPStateEvolution)."""
-        D = self.Y.shape[1]
+        """GP posterior mean/variance for a deterministic input."""
+        D = self.state_dim
         means = jnp.zeros(D)
         variances = jnp.zeros(D)
         for a in range(D):
@@ -94,84 +99,17 @@ class MGPR(eqx.Module):
     def predict_given_factorizations(
         self, m: Array, s: Array
     ) -> tuple[Array, Array, Array]:
-        """
-        Moment matching for uncertain Gaussian input (Eqs. 14-23).
-
-        Given $p(\\tilde{x}) = \\mathcal{N}(m, s)$, returns the predictive
-        mean $M$, covariance $S$, and input-output cross-covariance $V$.
-        """
-        D = self.Y.shape[1]
-        input_dim = self.X.shape[1]
-
-        iKs = []
-        betas = []
-        for a in range(D):
-            iK, beta = self._compute_factorizations(a)
-            iKs.append(iK)
-            betas.append(beta)
-
+        """Moment matching for uncertain Gaussian input (Eqs. 14-23)."""
+        iKs, betas = self._all_factorizations()
         nu = self.X - m[None, :]
-
-        # Mean (Eq. 14-16)
-        M = jnp.zeros(D)
-        qs = []
-        for a in range(D):
-            q = compute_mean_and_q(
-                nu, s, self.lengthscales[a] ** 2, self.signal_variance[a]
-            )
-            qs.append(q)
-            M = M.at[a].set(betas[a] @ q)
-
-        # Covariance (Eq. 17-23)
-        S = jnp.zeros((D, D))
-        for a in range(D):
-            for b in range(a, D):
-                Q = compute_Q_matrix(
-                    nu,
-                    s,
-                    self.lengthscales[a] ** 2,
-                    self.lengthscales[b] ** 2,
-                    self.signal_variance[a],
-                    self.signal_variance[b],
-                )
-
-                S_ab = betas[a] @ Q @ betas[b] - M[a] * M[b]
-                if a == b:
-                    S_ab += self.signal_variance[a] - jnp.trace(iKs[a] @ Q)
-
-                S = S.at[a, b].set(S_ab)
-                if a != b:
-                    S = S.at[b, a].set(S_ab)
-
-        S = S + 1e-6 * jnp.eye(D)
-
-        # Input-output cross-covariance
-        V = jnp.zeros((input_dim, D))
-        for a in range(D):
-            V = V.at[:, a].set(
-                compute_cross_covariance(
-                    nu, s, self.lengthscales[a] ** 2, betas[a], qs[a]
-                )
-            )
-
-        return M, S, V
+        return compute_predictive_moments(
+            nu, s, self.lengthscales, self.signal_variance, betas, iKs
+        )
 
     def log_marginal_likelihood(self) -> Array:
-        D = self.Y.shape[1]
-        n = self.X.shape[0]
-        total = 0.0
-        for a in range(D):
-            K = self._kernel_matrix(self.X, self.X, a)
-            Ky = K + self.noise_variance[a] * jnp.eye(n)
-            L = jnp.linalg.cholesky(Ky + 1e-6 * jnp.eye(n))
-            alpha = jax.scipy.linalg.cho_solve((L, True), self.Y[:, a])
-            lml = (
-                -0.5 * self.Y[:, a] @ alpha
-                - jnp.sum(jnp.log(jnp.diag(L)))
-                - 0.5 * n * jnp.log(2.0 * jnp.pi)
-            )
-            total = total + lml
-        return total
+        return gp_log_marginal_likelihood(
+            self._kernel_matrix, self.X, self.Y, self.noise_variance
+        )
 
     def to_state_evolution(self) -> "GPStateEvolution":
         """Convert to a dynestyx ``DiscreteTimeStateEvolution``."""
@@ -179,14 +117,7 @@ class MGPR(eqx.Module):
 
 
 class GPStateEvolution(DiscreteTimeStateEvolution):
-    """
-    GP dynamics as a dynestyx ``DiscreteTimeStateEvolution``.
-
-    $$x_{t+1} \\sim \\mathcal{N}(x + \\mu_\\Delta(\\tilde{x}),
-    \\mathrm{diag}(\\sigma^2_\\Delta(\\tilde{x})))$$
-
-    Works with ``DiscreteTimeSimulator``, ``Filter``, etc.
-    """
+    """GP dynamics as a dynestyx ``DiscreteTimeStateEvolution``."""
 
     def __init__(self, mgpr: MGPR):
         self.mgpr = mgpr
@@ -205,6 +136,5 @@ class GPStateEvolution(DiscreteTimeStateEvolution):
 
         mean_delta, var_delta = self.mgpr._predict_deterministic(x_tilde)
         return dist.MultivariateNormal(
-            loc=x + mean_delta,
-            covariance_matrix=jnp.diag(var_delta),
+            loc=x + mean_delta, covariance_matrix=jnp.diag(var_delta)
         )
