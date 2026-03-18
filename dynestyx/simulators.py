@@ -116,47 +116,57 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             _validate_site_sorting(filtered_times, name="filtered_times")
             n_pred = len(predict_times)
 
+            # Build segment ids on host once.
+            # seg_id == -1 means "before first filtered time" (use model prior).
+            pt_host = np.asarray(jax.device_get(predict_times))
+            ft_host = np.asarray(jax.device_get(filtered_times))
+            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
+
             def _ctrl_for_segment(sub_times):
                 if ctrl_times is None or ctrl_values is None:
                     return None, None
                 inds = jnp.searchsorted(ctrl_times, sub_times, side="left")
                 return sub_times, ctrl_values[inds]
 
+            def _dynamics_for_segment(seg_id: int):
+                if seg_id < 0:
+                    return dynamics, f"{name}_0"
+
+                filtered_time = filtered_times[seg_id]
+                filtered_dist = filtered_dists[seg_id]
+                dynamics_with_filtered_time = eqx.tree_at(
+                    lambda m: m.t0,
+                    dynamics,
+                    filtered_time,
+                    is_leaf=lambda x: x is None,
+                )
+                dynamics_seg = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    dynamics_with_filtered_time,
+                    filtered_dist,
+                    is_leaf=lambda x: x is None,
+                )
+                return dynamics_seg, f"{name}_{seg_id + 1}"
+
             seg_results = []
             seg_masks = []
-            # Build segment ids on host once and simulate only non-empty segments.
-            pt_host = np.asarray(jax.device_get(predict_times))
-            ft_host = np.asarray(jax.device_get(filtered_times))
-            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
-            for seg_id in range(-1, len(ft_host)):
+            # Simulate one segment per present anchor (skip empty segments).
+            for seg_id in [int(s) for s in np.unique(seg_ids_host)]:
+                # mask_host[i] = True iff predict_times[i] belongs to this segment id.
+                # This is the global-to-segment membership mask over the full prediction grid.
                 mask_host = seg_ids_host == seg_id
+                # Some segment ids may not own any prediction times. np.any here is host-side,
+                # avoids traced bool conversion, and lets us skip empty segment solves.
                 if not np.any(mask_host):
                     continue
 
+                # Keep the same membership mask as a JAX array for scatter/merge later.
                 mask_seg = jnp.asarray(mask_host)
-                sub = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
+                # Extract just this segment's prediction times (variable-length sub-grid).
+                sub_times = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
+                dynamics_seg, seg_name = _dynamics_for_segment(seg_id)
 
-                if seg_id < 0:
-                    dynamics_seg = dynamics
-                    seg_name = f"{name}_0"
-                else:
-                    filtered_time = filtered_times[seg_id]
-                    filtered_dist = filtered_dists[seg_id]
-                    dynamics_with_filtered_time = eqx.tree_at(
-                        lambda m: m.t0,
-                        dynamics,
-                        filtered_time,
-                        is_leaf=lambda x: x is None,
-                    )
-                    dynamics_seg = eqx.tree_at(
-                        lambda m: m.initial_condition,
-                        dynamics_with_filtered_time,
-                        filtered_dist,
-                        is_leaf=lambda x: x is None,
-                    )
-                    seg_name = f"{name}_{seg_id + 1}"
-
-                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub)
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_times)
                 seg_results.append(
                     self._simulate(
                         seg_name,
@@ -165,7 +175,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                         obs_values=None,
                         ctrl_times=ctrl_t_seg,
                         ctrl_values=ctrl_v_seg,
-                        predict_times=sub,
+                        predict_times=sub_times,
                     )
                 )
                 seg_masks.append(mask_seg)
