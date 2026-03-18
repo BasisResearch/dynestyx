@@ -163,8 +163,12 @@ def run_blackjax_mcmc(
     initial_positions = init_params.z
     has_chain_axis = _has_chain_axis(initial_positions, mcmc_config.num_chains)
 
-    potential_fn = potential_fn_gen(obs_times, obs_values)
-    transform_fn = postprocess_fn(obs_times, obs_values)
+    potential_fn = potential_fn_gen(
+        obs_times, obs_values, ctrl_times, ctrl_values, *model_args, **model_kwargs
+    )
+    transform_fn = postprocess_fn(
+        obs_times, obs_values, ctrl_times, ctrl_values, *model_args, **model_kwargs
+    )
 
     def make_logdensity(density_key):
         return lambda position: -potential_fn(position, density_key)
