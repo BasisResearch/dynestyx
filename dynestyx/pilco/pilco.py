@@ -20,6 +20,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as npdist
 import optax
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -27,6 +28,7 @@ from jax import Array
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import DynamicalModel
+from dynestyx.models.observations import DiracIdentityObservation
 from dynestyx.pilco.controllers import squash_sin
 from dynestyx.pilco.mgpr import MGPR
 from dynestyx.pilco.rewards import ExponentialReward
@@ -161,9 +163,7 @@ class PILCO(eqx.Module):
         self.reward = reward
         self.horizon = horizon
         self.m_init = m_init if m_init is not None else X[0, :state_dim]
-        self.s_init = (
-            s_init if s_init is not None else 0.1 * jnp.eye(state_dim)
-        )
+        self.s_init = s_init if s_init is not None else 0.1 * jnp.eye(state_dim)
         self.max_action = max_action
 
     def set_data(self, X: Array, Y: Array) -> "PILCO":
@@ -191,15 +191,11 @@ class PILCO(eqx.Module):
         Returns:
             A ``DynamicalModel`` with GP-based discrete-time state evolution.
         """
-        import numpyro.distributions as dist
-
-        from dynestyx.models.observations import DiracIdentityObservation
-
         state_dim = self.mgpr.state_dim
         control_dim = self.mgpr.X.shape[1] - state_dim
 
         if initial_condition is None:
-            initial_condition = dist.MultivariateNormal(
+            initial_condition = npdist.MultivariateNormal(
                 loc=self.m_init,
                 covariance_matrix=self.s_init,
             )
@@ -213,9 +209,7 @@ class PILCO(eqx.Module):
             control_dim=control_dim if control_dim > 0 else None,
         )
 
-    def propagate(
-        self, m_x: Array, s_x: Array
-    ) -> tuple[Array, Array]:
+    def propagate(self, m_x: Array, s_x: Array) -> tuple[Array, Array]:
         """Single-step state propagation via moment matching (Eqs. 10-12).
 
         1. Compute action distribution from controller
@@ -236,10 +230,12 @@ class PILCO(eqx.Module):
         s_u = (s_u + s_u.T) / 2.0 + 1e-6 * jnp.eye(m_u.shape[0])
 
         m_joint = jnp.concatenate([m_x, m_u])
-        s_joint = jnp.block([
-            [s_x, c_xu],
-            [c_xu.T, s_u],
-        ])
+        s_joint = jnp.block(
+            [
+                [s_x, c_xu],
+                [c_xu.T, s_u],
+            ]
+        )
         # Symmetrize joint covariance
         s_joint = (s_joint + s_joint.T) / 2.0
 
@@ -281,9 +277,7 @@ class PILCO(eqx.Module):
 
         return total_reward, means, covs
 
-    def predict_jit(
-        self, m_x: Array, s_x: Array
-    ) -> Array:
+    def predict_jit(self, m_x: Array, s_x: Array) -> Array:
         """JIT-friendly version returning only the total reward."""
 
         def step_fn(carry, _):
@@ -326,7 +320,11 @@ class PILCO(eqx.Module):
             return mgpr, new_opt_state, loss
 
         for restart in range(num_restarts):
-            mgpr = self.mgpr if restart == 0 else _randomize_hyperparams(self.mgpr, restart)
+            mgpr = (
+                self.mgpr
+                if restart == 0
+                else _randomize_hyperparams(self.mgpr, restart)
+            )
             optimizer = optax.adam(learning_rate)
             opt_state = optimizer.init(eqx.filter(mgpr, hp_filter))
 
@@ -351,7 +349,8 @@ class PILCO(eqx.Module):
         """
         ctrl_filter = jax.tree.map(lambda _: False, self)
         ctrl_filter = eqx.tree_at(
-            lambda p: p.controller, ctrl_filter,
+            lambda p: p.controller,
+            ctrl_filter,
             jax.tree.map(lambda _: True, self.controller),
         )
 
@@ -365,7 +364,8 @@ class PILCO(eqx.Module):
 
             loss, grads = eqx.filter_value_and_grad(neg_reward)(pilco)
             updates, new_opt_state = optimizer.update(
-                eqx.filter(grads, ctrl_filter), opt_state,
+                eqx.filter(grads, ctrl_filter),
+                opt_state,
                 eqx.filter(pilco, ctrl_filter),
             )
             pilco = eqx.apply_updates(pilco, updates)
@@ -382,9 +382,15 @@ def _randomize_hyperparams(mgpr: MGPR, seed: int) -> MGPR:
     """Randomize GP hyperparameters for restart."""
     key = jax.random.PRNGKey(seed * 42)
     k1, k2, k3 = jax.random.split(key, 3)
-    new_ls = mgpr.log_lengthscales + 0.5 * jax.random.normal(k1, mgpr.log_lengthscales.shape)
-    new_sv = mgpr.log_signal_variance + 0.5 * jax.random.normal(k2, mgpr.log_signal_variance.shape)
-    new_nv = mgpr.log_noise_variance + 0.5 * jax.random.normal(k3, mgpr.log_noise_variance.shape)
+    new_ls = mgpr.log_lengthscales + 0.5 * jax.random.normal(
+        k1, mgpr.log_lengthscales.shape
+    )
+    new_sv = mgpr.log_signal_variance + 0.5 * jax.random.normal(
+        k2, mgpr.log_signal_variance.shape
+    )
+    new_nv = mgpr.log_noise_variance + 0.5 * jax.random.normal(
+        k3, mgpr.log_noise_variance.shape
+    )
     return eqx.tree_at(
         lambda m: (m.log_lengthscales, m.log_signal_variance, m.log_noise_variance),
         mgpr,

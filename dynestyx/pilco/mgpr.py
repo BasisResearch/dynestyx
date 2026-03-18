@@ -153,7 +153,11 @@ class MGPR(eqx.Module):
             sL_inv = jnp.linalg.inv(sL + 1e-8 * jnp.eye(input_dim))
             det_factor = jnp.linalg.det(sL) / jnp.prod(self.lengthscales[a] ** 2)
             quad = jnp.sum(nu @ sL_inv * nu, axis=-1)
-            q = self.signal_variance[a] / jnp.sqrt(jnp.maximum(det_factor, 1e-12)) * jnp.exp(-0.5 * quad)
+            q = (
+                self.signal_variance[a]
+                / jnp.sqrt(jnp.maximum(det_factor, 1e-12))
+                * jnp.exp(-0.5 * quad)
+            )
             qs.append(q)
             M = M.at[a].set(betas[a] @ q)
 
@@ -169,8 +173,12 @@ class MGPR(eqx.Module):
 
                 nu_La = nu @ Lambda_a_inv
                 nu_Lb = nu @ Lambda_b_inv
-                k_a_m = self.signal_variance[a] * jnp.exp(-0.5 * jnp.sum(nu * nu_La, axis=-1))
-                k_b_m = self.signal_variance[b] * jnp.exp(-0.5 * jnp.sum(nu * nu_Lb, axis=-1))
+                k_a_m = self.signal_variance[a] * jnp.exp(
+                    -0.5 * jnp.sum(nu * nu_La, axis=-1)
+                )
+                k_b_m = self.signal_variance[b] * jnp.exp(
+                    -0.5 * jnp.sum(nu * nu_Lb, axis=-1)
+                )
 
                 R_inv_s = R_inv @ s
                 t_a = nu_La @ R_inv_s
@@ -180,7 +188,8 @@ class MGPR(eqx.Module):
                 q_ab = nu_La @ t_b.T
 
                 Q = (
-                    k_a_m[:, None] * k_b_m[None, :]
+                    k_a_m[:, None]
+                    * k_b_m[None, :]
                     / jnp.sqrt(jnp.maximum(det_R, 1e-12))
                     * jnp.exp(0.5 * (q_aa[:, None] + q_bb[None, :] + 2.0 * q_ab))
                 )

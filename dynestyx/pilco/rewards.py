@@ -52,16 +52,14 @@ class ExponentialReward(eqx.Module):
         iSpW = jnp.linalg.solve(jnp.eye(D) + SW, self.W)
 
         diff = m - self.target
-        mu_r = (
-            jnp.exp(-0.5 * diff @ iSpW @ diff)
-            / jnp.sqrt(jnp.linalg.det(jnp.eye(D) + SW))
+        mu_r = jnp.exp(-0.5 * diff @ iSpW @ diff) / jnp.sqrt(
+            jnp.linalg.det(jnp.eye(D) + SW)
         )
 
         # Second moment for variance
         i2SpW = jnp.linalg.solve(jnp.eye(D) + 2.0 * SW, 2.0 * self.W)
-        r2 = (
-            jnp.exp(-0.5 * diff @ i2SpW @ diff)
-            / jnp.sqrt(jnp.linalg.det(jnp.eye(D) + 2.0 * SW))
+        r2 = jnp.exp(-0.5 * diff @ i2SpW @ diff) / jnp.sqrt(
+            jnp.linalg.det(jnp.eye(D) + 2.0 * SW)
         )
         s_r = r2 - mu_r**2
 

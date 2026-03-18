@@ -38,9 +38,7 @@ class LinearController(eqx.Module):
         """Deterministic action for a known state."""
         return self.W @ x + self.b
 
-    def compute_action(
-        self, m: Array, s: Array
-    ) -> tuple[Array, Array, Array]:
+    def compute_action(self, m: Array, s: Array) -> tuple[Array, Array, Array]:
         """Compute action distribution for uncertain state N(m, s).
 
         Args:
@@ -101,9 +99,7 @@ class RBFController(eqx.Module):
         phi = jnp.exp(-0.5 * sq_dist)  # (n_basis,)
         return phi @ self.weights  # (control_dim,)
 
-    def compute_action(
-        self, m: Array, s: Array
-    ) -> tuple[Array, Array, Array]:
+    def compute_action(self, m: Array, s: Array) -> tuple[Array, Array, Array]:
         """Compute action distribution for uncertain state N(m, s).
 
         Analytic moment matching through the RBF network. This mirrors
@@ -130,7 +126,9 @@ class RBFController(eqx.Module):
         sL_inv = jnp.linalg.inv(sL + 1e-8 * jnp.eye(state_dim))
         det_factor = jnp.linalg.det(sL) / jnp.prod(self.lengthscales**2)
         quad = jnp.sum(nu @ sL_inv * nu, axis=-1)  # (n_basis,)
-        q = jnp.exp(-0.5 * quad) / jnp.sqrt(jnp.maximum(det_factor, 1e-12))  # (n_basis,)
+        q = jnp.exp(-0.5 * quad) / jnp.sqrt(
+            jnp.maximum(det_factor, 1e-12)
+        )  # (n_basis,)
 
         m_u = q @ self.weights  # (control_dim,)
 
@@ -166,9 +164,7 @@ class RBFController(eqx.Module):
         return m_u, s_u, c_xu
 
 
-def squash_sin(
-    m: Array, s: Array, max_action: Array
-) -> tuple[Array, Array, Array]:
+def squash_sin(m: Array, s: Array, max_action: Array) -> tuple[Array, Array, Array]:
     """Squash action through sin() for bounded controls.
 
     Analytically computes moments of max_action * sin(u) where u ~ N(m, s).

@@ -66,9 +66,7 @@ class InvertedPendulumEnv(eqx.Module):
             next_state = self.step(state, action)
             return next_state, (state, action, next_state)
 
-        _, (states, actions, next_states) = jax.lax.scan(
-            scan_fn, x0, None, length=T
-        )
+        _, (states, actions, next_states) = jax.lax.scan(scan_fn, x0, None, length=T)
         all_states = jnp.concatenate([states, next_states[-1:]], axis=0)
         return all_states, actions, next_states
 
@@ -85,18 +83,14 @@ class InvertedPendulumEnv(eqx.Module):
             next_state = self.step(state, action)
             return next_state, (state, action, next_state)
 
-        _, (states, actions, next_states) = jax.lax.scan(
-            scan_fn, x0, keys
-        )
+        _, (states, actions, next_states) = jax.lax.scan(scan_fn, x0, keys)
         all_states = jnp.concatenate([states, next_states[-1:]], axis=0)
         return all_states, actions, next_states
 
     def _make_initial_condition(self, x0: Array | None = None):
         """Create initial condition distribution."""
         if x0 is not None:
-            return dist.MultivariateNormal(
-                loc=x0, covariance_matrix=0.01 * jnp.eye(2)
-            )
+            return dist.MultivariateNormal(loc=x0, covariance_matrix=0.01 * jnp.eye(2))
         return dist.MultivariateNormal(
             loc=jnp.zeros(2), covariance_matrix=0.1 * jnp.eye(2)
         )
@@ -148,14 +142,20 @@ class InvertedPendulumEnv(eqx.Module):
             process_noise: Process noise std dev for transition.
         """
         mass, length, g_val, b_val, dt = (
-            self.mass, self.length, self.g, self.b, self.dt
+            self.mass,
+            self.length,
+            self.g,
+            self.b,
+            self.dt,
         )
         max_torque = self.max_torque
 
         def transition_fn(x, u, t_now, t_next):
             theta, dtheta = x[0], x[1]
-            u_val = jnp.zeros(()) if u is None else jnp.clip(
-                u.squeeze(), -max_torque, max_torque
+            u_val = (
+                jnp.zeros(())
+                if u is None
+                else jnp.clip(u.squeeze(), -max_torque, max_torque)
             )
             ddtheta = (
                 u_val - b_val * dtheta + mass * g_val * length * jnp.sin(theta)
