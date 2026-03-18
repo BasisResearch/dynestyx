@@ -14,10 +14,13 @@ from dynestyx.inference.mcmc_configs import (
 )
 from dynestyx.simulators import Simulator
 from tests.fixtures import _squeeze_sim_dims
-from tests.models import continuous_time_stochastic_l63_model
+from tests.models import (
+    continuous_time_stochastic_l63_model,
+    discrete_time_lti_simplified_model,
+)
 
 
-def _make_data():
+def _make_data_continuous():
     predict_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
     obs_times = predict_times
     true_params = {"rho": jnp.array(28.0)}
@@ -32,8 +35,22 @@ def _make_data():
     return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
 
 
+def _make_data_discrete():
+    obs_times = jnp.arange(start=0.0, stop=30.0, step=1.0)
+    true_params = {"alpha": jnp.array(0.35)}
+    predictive = Predictive(
+        discrete_time_lti_simplified_model,
+        params=true_params,
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+    with Simulator():
+        synthetic = predictive(jr.PRNGKey(0), predict_times=obs_times)
+    return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
+
+
 def test_filter_based_mcmc_nuts_smoke():
-    obs_times, obs_values = _make_data()
+    obs_times, obs_values = _make_data_continuous()
     with Filter():
         inference = MCMCInference(
             mcmc_config=NUTSConfig(
@@ -46,7 +63,7 @@ def test_filter_based_mcmc_nuts_smoke():
 
 
 def test_filter_based_mcmc_hmc_smoke():
-    obs_times, obs_values = _make_data()
+    obs_times, obs_values = _make_data_continuous()
     with Filter():
         inference = MCMCInference(
             mcmc_config=HMCConfig(
@@ -63,8 +80,26 @@ def test_filter_based_mcmc_hmc_smoke():
     assert "rho" in posterior_samples
 
 
+def test_discrete_filter_based_mcmc_hmc_smoke():
+    obs_times, obs_values = _make_data_discrete()
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=HMCConfig(
+                num_samples=8,
+                num_warmup=8,
+                num_chains=1,
+                mcmc_source="blackjax",
+                step_size=5e-3,
+                num_steps=8,
+            ),
+            model=discrete_time_lti_simplified_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
+    assert "alpha" in posterior_samples
+
+
 def test_filter_based_sgmcmc_smoke():
-    obs_times, obs_values = _make_data()
+    obs_times, obs_values = _make_data_continuous()
     with Filter():
         inference = MCMCInference(
             mcmc_config=SGLDConfig(
@@ -82,7 +117,7 @@ def test_filter_based_sgmcmc_smoke():
 
 
 def test_filter_based_mala_smoke():
-    obs_times, obs_values = _make_data()
+    obs_times, obs_values = _make_data_continuous()
     with Filter():
         inference = MCMCInference(
             mcmc_config=MALAConfig(
@@ -96,3 +131,7 @@ def test_filter_based_mala_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(3), obs_times, obs_values)
     assert "rho" in posterior_samples
+
+
+if __name__ == "__main__":
+    test_discrete_filter_based_mcmc_hmc_smoke()
