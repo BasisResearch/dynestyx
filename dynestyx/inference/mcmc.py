@@ -107,6 +107,8 @@ def _numpyro_mcmc(
                 model,
                 step_size=mcmc_config.step_size,
                 num_steps=mcmc_config.num_steps,
+                adapt_step_size=mcmc_config.adapt,
+                adapt_mass_matrix=mcmc_config.adapt,
             ),
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
