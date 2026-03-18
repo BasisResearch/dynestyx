@@ -18,12 +18,10 @@ from dynestyx import DiscreteTimeSimulator
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import DiracIdentityObservation
-from dynestyx.pilco.controllers import LinearController, RBFController
+from dynestyx.pilco.controllers import Controller
 from dynestyx.pilco.mgpr import MGPR
 from dynestyx.pilco.rewards import ExponentialReward
 from dynestyx.types import FunctionOfTime
-
-Controller = LinearController | RBFController
 
 
 @dataclasses.dataclass
@@ -241,7 +239,8 @@ class PILCO(eqx.Module):
         m_u, s_u, c_xu = self.controller.compute_action(m_x, s_x)
 
         if self.max_action is not None:
-            # Squash through sin() for bounded controls: u_sat = max_action * sin(u)
+            # Analytic moments of max_action * sin(u) for u ~ N(m, s)
+            # (Deisenroth 2010, Appendix A; used for control saturation)
             s_diag = jnp.diag(s_u)
             e = jnp.exp(-0.5 * s_diag)
             m_sin = self.max_action * e * jnp.sin(m_u)
@@ -267,9 +266,7 @@ class PILCO(eqx.Module):
         )
         s_joint = (s_joint + s_joint.T) / 2.0
 
-        M_delta, S_delta, V_delta = self.mgpr.predict_given_factorizations(
-            m_joint, s_joint
-        )
+        M_delta, S_delta, V_delta = self.mgpr.predict_uncertain(m_joint, s_joint)
 
         s1 = s_joint[:state_dim, :]
         m_next = m_x + M_delta

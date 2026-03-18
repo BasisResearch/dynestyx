@@ -96,9 +96,7 @@ class MGPR(eqx.Module):
             )
         return means, variances
 
-    def predict_given_factorizations(
-        self, m: Array, s: Array
-    ) -> tuple[Array, Array, Array]:
+    def predict_uncertain(self, m: Array, s: Array) -> tuple[Array, Array, Array]:
         """Moment matching for uncertain Gaussian input (Eqs. 14-23)."""
         iKs, betas = self._all_factorizations()
         nu = self.X - m[None, :]
@@ -116,6 +114,15 @@ class MGPR(eqx.Module):
         return GPStateEvolution(mgpr=self)
 
 
+def _build_gp_input(x: State, u: Control | None, control_dim: int) -> Array:
+    """Build GP input $\\tilde{x} = [x^\\top, u^\\top]^\\top$, padding zeros if needed."""
+    if u is not None:
+        return jnp.concatenate([x, jnp.atleast_1d(u)])
+    if control_dim > 0:
+        return jnp.concatenate([x, jnp.zeros(control_dim)])
+    return x
+
+
 class GPStateEvolution(DiscreteTimeStateEvolution):
     """GP dynamics as a dynestyx ``DiscreteTimeStateEvolution``."""
 
@@ -127,13 +134,7 @@ class GPStateEvolution(DiscreteTimeStateEvolution):
         return self.mgpr.X.shape[1] - self.mgpr.state_dim
 
     def __call__(self, x: State, u: Control | None, t_now: Time, t_next: Time):
-        if u is not None:
-            x_tilde = jnp.concatenate([x, jnp.atleast_1d(u)])
-        elif self.control_dim > 0:
-            x_tilde = jnp.concatenate([x, jnp.zeros(self.control_dim)])
-        else:
-            x_tilde = x
-
+        x_tilde = _build_gp_input(x, u, self.control_dim)
         mean_delta, var_delta = self.mgpr._predict_deterministic(x_tilde)
         return dist.MultivariateNormal(
             loc=x + mean_delta, covariance_matrix=jnp.diag(var_delta)

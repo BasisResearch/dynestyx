@@ -69,11 +69,16 @@ class InvertedPendulumEnv(eqx.Module):
         all_states = jnp.concatenate([states, next_states[-1:]], axis=0)
         return all_states, actions, next_states
 
+    @property
+    def state_dim(self) -> int:
+        return 2
+
     def _make_initial_condition(self, x0: Array | None = None):
+        d = self.state_dim
         if x0 is not None:
-            return dist.MultivariateNormal(loc=x0, covariance_matrix=0.01 * jnp.eye(2))
+            return dist.MultivariateNormal(loc=x0, covariance_matrix=0.01 * jnp.eye(d))
         return dist.MultivariateNormal(
-            loc=jnp.zeros(2), covariance_matrix=0.1 * jnp.eye(2)
+            loc=jnp.zeros(d), covariance_matrix=0.1 * jnp.eye(d)
         )
 
     def to_continuous_dynamical_model(

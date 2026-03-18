@@ -1,5 +1,7 @@
 """Shared moment matching primitives for SE-ARD GPs (Deisenroth & Rasmussen, 2011)."""
 
+from collections.abc import Callable
+
 import jax
 import jax.numpy as jnp
 from jax import Array
@@ -77,7 +79,8 @@ def compute_predictive_moments(
     """Full multi-output moment matching (Eqs. 14-23).
 
     Orchestrates mean, covariance, and cross-covariance computation
-    across all $D$ output dimensions.
+    across all $D$ output dimensions. Uses Python loops over $D$
+    (typically 2-4); not JAX-traceable across output dimensions.
 
     Args:
         nu: Centered training inputs $\\tilde{x}_i - \\tilde{\\mu}$, shape ``(n, D+F)``.
@@ -134,7 +137,10 @@ def compute_predictive_moments(
 
 
 def gp_log_marginal_likelihood(
-    K_fn, X: Array, Y: Array, noise_variance: Array
+    K_fn: Callable[[Array, Array, int], Array],
+    X: Array,
+    Y: Array,
+    noise_variance: Array,
 ) -> Array:
     """GP log marginal likelihood summed over $D$ independent outputs.
 

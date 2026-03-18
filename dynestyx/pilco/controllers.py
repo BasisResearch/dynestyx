@@ -71,7 +71,7 @@ class RBFController(eqx.Module):
         """Analytic moment matching through the RBF network.
 
         Uses shared primitives from ``moment_matching`` -- the same math
-        as ``MGPR.predict_given_factorizations`` but with signal_variance=1
+        as ``MGPR.predict_uncertain`` but with signal_variance=1
         (deterministic GP, iK=0).
         """
         from dynestyx.pilco.moment_matching import (
@@ -85,15 +85,12 @@ class RBFController(eqx.Module):
         ls_sq = self.lengthscales**2
         nu = self.centers - m[None, :]
 
-        # Mean: signal_variance=1 for deterministic RBF
         q = compute_mean_and_q(nu, s, ls_sq, 1.0)
         m_u = q @ self.weights
 
-        # Covariance: same lengthscales for a and b (single kernel)
         Q = compute_Q_matrix(nu, s, ls_sq, ls_sq, 1.0, 1.0)
         s_u = self.weights.T @ Q @ self.weights - jnp.outer(m_u, m_u)
 
-        # Cross-covariance per control dimension
         c_xu = jnp.zeros((state_dim, control_dim))
         for d in range(control_dim):
             c_xu = c_xu.at[:, d].set(
@@ -103,22 +100,4 @@ class RBFController(eqx.Module):
         return m_u, s_u, c_xu
 
 
-def squash_sin(m: Array, s: Array, max_action: Array) -> tuple[Array, Array, Array]:
-    """Analytic moments of $u_{\\text{max}} \\sin(u)$ for $u \\sim \\mathcal{N}(m, s)$."""
-    s_diag = jnp.diag(s)
-
-    e = jnp.exp(-0.5 * s_diag)
-    m_out = max_action * e * jnp.sin(m)
-
-    lq = -(s_diag[:, None] + s_diag[None, :]) / 2.0
-
-    s_out = (
-        jnp.exp(lq + s) * jnp.cos(m[:, None] - m[None, :])
-        - jnp.exp(lq - s) * jnp.cos(m[:, None] + m[None, :])
-    ) / 2.0
-    s_out = max_action[:, None] * max_action[None, :] * s_out
-    s_out = s_out - jnp.outer(m_out, m_out)
-
-    c_out = jnp.diag(max_action * jnp.cos(m) * e)
-
-    return m_out, s_out, c_out
+Controller = LinearController | RBFController
