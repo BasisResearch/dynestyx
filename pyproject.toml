@@ -29,6 +29,9 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 packages = ["dynestyx"]
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.uv.sources]
 effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cuthbert = { git = "https://github.com/DanWaxman/cuthbert.git", rev = "b56783de77ef62804b8458463a7bf907c1296017", subdirectory = "pkg/cuthbert"}
