@@ -95,6 +95,12 @@ class MGPR(eqx.Module):
         Given $p(\\tilde{x}) = \\mathcal{N}(m, s)$, returns the predictive
         mean $M$, covariance $S$, and input-output cross-covariance $V$.
         """
+        from dynestyx.pilco.moment_matching import (
+            compute_cross_covariance,
+            compute_mean_and_q,
+            compute_Q_matrix,
+        )
+
         D = self.Y.shape[1]
         input_dim = self.X.shape[1]
 
@@ -111,15 +117,8 @@ class MGPR(eqx.Module):
         M = jnp.zeros(D)
         qs = []
         for a in range(D):
-            Lambda_a = jnp.diag(self.lengthscales[a] ** 2)
-            sL = s + Lambda_a
-            sL_inv = jnp.linalg.inv(sL + 1e-8 * jnp.eye(input_dim))
-            det_factor = jnp.linalg.det(sL) / jnp.prod(self.lengthscales[a] ** 2)
-            quad = jnp.sum(nu @ sL_inv * nu, axis=-1)
-            q = (
-                self.signal_variance[a]
-                / jnp.sqrt(jnp.maximum(det_factor, 1e-12))
-                * jnp.exp(-0.5 * quad)
+            q = compute_mean_and_q(
+                nu, s, self.lengthscales[a] ** 2, self.signal_variance[a]
             )
             qs.append(q)
             M = M.at[a].set(betas[a] @ q)
@@ -127,34 +126,14 @@ class MGPR(eqx.Module):
         # Covariance (Eq. 17-23)
         S = jnp.zeros((D, D))
         for a in range(D):
-            Lambda_a_inv = jnp.diag(1.0 / self.lengthscales[a] ** 2)
             for b in range(a, D):
-                Lambda_b_inv = jnp.diag(1.0 / self.lengthscales[b] ** 2)
-                R = s @ (Lambda_a_inv + Lambda_b_inv) + jnp.eye(input_dim)
-                R_inv = jnp.linalg.inv(R + 1e-8 * jnp.eye(input_dim))
-                det_R = jnp.linalg.det(R)
-
-                nu_La = nu @ Lambda_a_inv
-                nu_Lb = nu @ Lambda_b_inv
-                k_a_m = self.signal_variance[a] * jnp.exp(
-                    -0.5 * jnp.sum(nu * nu_La, axis=-1)
-                )
-                k_b_m = self.signal_variance[b] * jnp.exp(
-                    -0.5 * jnp.sum(nu * nu_Lb, axis=-1)
-                )
-
-                R_inv_s = R_inv @ s
-                t_a = nu_La @ R_inv_s
-                t_b = nu_Lb @ R_inv_s
-                q_aa = jnp.sum(nu_La * t_a, axis=-1)
-                q_bb = jnp.sum(nu_Lb * t_b, axis=-1)
-                q_ab = nu_La @ t_b.T
-
-                Q = (
-                    k_a_m[:, None]
-                    * k_b_m[None, :]
-                    / jnp.sqrt(jnp.maximum(det_R, 1e-12))
-                    * jnp.exp(0.5 * (q_aa[:, None] + q_bb[None, :] + 2.0 * q_ab))
+                Q = compute_Q_matrix(
+                    nu,
+                    s,
+                    self.lengthscales[a] ** 2,
+                    self.lengthscales[b] ** 2,
+                    self.signal_variance[a],
+                    self.signal_variance[b],
                 )
 
                 S_ab = betas[a] @ Q @ betas[b] - M[a] * M[b]
@@ -170,11 +149,11 @@ class MGPR(eqx.Module):
         # Input-output cross-covariance
         V = jnp.zeros((input_dim, D))
         for a in range(D):
-            Lambda_a = jnp.diag(self.lengthscales[a] ** 2)
-            sL = s + Lambda_a
-            sL_inv = jnp.linalg.inv(sL + 1e-8 * jnp.eye(input_dim))
-            weighted_nu = (betas[a] * qs[a])[:, None] * nu
-            V = V.at[:, a].set(s @ sL_inv @ jnp.sum(weighted_nu, axis=0))
+            V = V.at[:, a].set(
+                compute_cross_covariance(
+                    nu, s, self.lengthscales[a] ** 2, betas[a], qs[a]
+                )
+            )
 
         return M, S, V
 
