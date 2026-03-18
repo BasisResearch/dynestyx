@@ -134,10 +134,11 @@ def _run_nlgssm_filter(
     if ctrl_values is None:
         inputs = jnp.zeros((T1, control_dim))
     elif ctrl_values.shape[0] > T1:
-        # ctrl spans union of obs_times and predict_times; filter needs ctrl at obs_times only
+        # Find controls aligned to obs_times
         inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
     else:
+        # Controls should align exactly with obs_times
         inputs = ctrl_values
 
     params_nl = gaussian_to_nlgssm_params(dynamics)
