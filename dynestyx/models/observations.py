@@ -144,16 +144,6 @@ class DiagonalLinearGaussianObservation(ObservationModel):
             loc += self.bias
         return dist.Independent(dist.Normal(loc, jnp.sqrt(self.R_diag)), 1)
 
-    def masked_log_prob(self, y, obs_mask, x, u=None, t=None):
-        mu = jnp.dot(self.H, x)
-        if self.D is not None and u is not None:
-            mu = mu + jnp.dot(self.D, u)
-        if self.bias is not None:
-            mu = mu + self.bias
-        per_dim_lp = dist.Normal(mu, jnp.sqrt(self.R_diag)).log_prob(y)
-        return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
-
-
 class DiagonalGaussianObservation(ObservationModel):
     """
     Nonlinear Gaussian observation model with diagonal noise covariance.
@@ -191,12 +181,6 @@ class DiagonalGaussianObservation(ObservationModel):
     def __call__(self, x, u, t):
         loc = self.h(x, u, t)
         return dist.Independent(dist.Normal(loc, jnp.sqrt(self.R_diag)), 1)
-
-    def masked_log_prob(self, y, obs_mask, x, u=None, t=None):
-        mu = self.h(x, u, t)
-        per_dim_lp = dist.Normal(mu, jnp.sqrt(self.R_diag)).log_prob(y)
-        return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
-
 
 class DiracIdentityObservation(ObservationModel):
     """
