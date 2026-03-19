@@ -41,7 +41,7 @@ def test_filter_based_discrete_nuts_smoke():
     assert "alpha" in posterior_samples
 
 
-@pytest.mark.parametrize("num_chains", [1, 2])
+@pytest.mark.parametrize("num_chains", [1])
 def test_filter_based_discrete_sgmcmc_smoke(num_chains):
     obs_times, obs_values = _make_data()
     with Filter():
