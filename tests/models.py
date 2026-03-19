@@ -589,7 +589,7 @@ def interacting_particles_gaussian_kernel_model(
       scale       – kernel width (range of the interaction)
     Background potential parameters (bg_centers, bg_strengths) are KNOWN / fixed.
     Observations are noise-free (DiracIdentityObservation); partial NaN rows
-    trigger the two-mask scan which samples latent states for unobserved particles.
+    trigger the per-step missing-data scan which samples latent states for unobserved particles.
     """
     if bg_centers is None:
         bg_centers = jnp.array([[-2.0], [2.0]])  # (K, 1)

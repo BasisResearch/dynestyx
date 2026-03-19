@@ -387,14 +387,14 @@ class DiscreteTimeSimulator(BaseSimulator):
         When `obs_values` contains NaN entries the simulator selects a path
         automatically:
 
-        - **Partial NaN rows** (some but not all dims NaN): two-mask scan.
-          For `DiracIdentityObservation` a correction-factor approach is used.
-          For other models, `obs_model.masked_log_prob` is called; models that
-          do not implement it (e.g. `LinearGaussianObservation`) raise
-          `NotImplementedError`.
+        - **Partial NaN rows** (some but not all dims NaN): per-step scan
+          with observation masks.  For `DiracIdentityObservation` a
+          correction-factor approach is used.  For other models,
+          `obs_model.masked_log_prob` is called; models that do not implement
+          it (e.g. `LinearGaussianObservation`) raise `NotImplementedError`.
         - **Entirely-missing rows** + ``unroll_missing=False``: filter rows;
           shorter output.
-        - **Entirely-missing rows** + ``unroll_missing=True``: two-mask scan;
+        - **Entirely-missing rows** + ``unroll_missing=True``: per-step scan;
           full-length output with NaN observations at missing rows. Works for
           any observation model.
 
@@ -447,7 +447,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         if has_partial or (self.unroll_missing and has_entire_row_missing):
             if obs_np is None:
                 obs_np = np.asarray(obs_values)
-            return self._simulate_two_mask(
+            return self._simulate_missing_scan(
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -638,10 +638,12 @@ class DiscreteTimeSimulator(BaseSimulator):
         x_0_exp = jnp.expand_dims(x_prev, axis=0)  # type: ignore  # shape (1, state_dim) or (1,)
         y_0_exp = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
         states = jnp.concatenate([x_0_exp, scan_states], axis=0)  # shape (T, state_dim)
-        observations = jnp.concatenate([y_0_exp, scan_observations], axis=0)  # shape (T, obs_dim)
+        observations = jnp.concatenate(
+            [y_0_exp, scan_observations], axis=0
+        )  # shape (T, obs_dim)
         return {"times": obs_times, "states": states, "observations": observations}
 
-    def _simulate_two_mask(
+    def _simulate_missing_scan(
         self,
         dynamics: DynamicalModel,
         *,
@@ -654,7 +656,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         T: int,
         is_dirac: bool,
     ) -> dict[str, State]:
-        """Two-mask scan: handles partial missingness and unroll_missing=True.
+        """Per-step scan handling partial missingness and unroll_missing=True.
 
         Sub-path A (DiracIdentity): correction-factor approach for observed dims.
         Sub-path B (non-Dirac):

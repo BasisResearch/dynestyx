@@ -254,7 +254,7 @@ def test_diagonal_obs_missing_data_science(
     """DiagonalLinearGaussianObservation / DiagonalGaussianObservation with missing data.
 
     Mirrors test_lti_system_missing_data_science:
-    - 'partial' uses masked_log_prob (per-dim NaN, two-mask scan path)
+    - 'partial' uses masked_log_prob (per-dim NaN, per-step scan path)
     - others use whole-row missingness (row-filter or scan path)
     """
     import dynestyx as dsx
