@@ -41,7 +41,7 @@ def _configure_logger(output_dir: Path) -> None:
 def _read_meminfo() -> dict[str, int]:
     logger.trace("Reading /proc/meminfo")
     values: dict[str, int] = {}
-    with open("/proc/meminfo", "r", encoding="utf-8") as memfile:
+    with open("/proc/meminfo", encoding="utf-8") as memfile:
         for raw_line in memfile:
             line = raw_line.strip()
             if not line:
@@ -62,12 +62,14 @@ class CpuStatSnapshot:
 class CpuPercentSampler:
     def __init__(self) -> None:
         self._last = self._read_cpu_snapshot()
-        logger.debug(f"CpuPercentSampler baseline: idle={self._last.idle} total={self._last.total}")
+        logger.debug(
+            f"CpuPercentSampler baseline: idle={self._last.idle} total={self._last.total}"
+        )
 
     @staticmethod
     def _read_cpu_snapshot() -> CpuStatSnapshot:
         logger.trace("Reading /proc/stat for CPU snapshot")
-        with open("/proc/stat", "r", encoding="utf-8") as statfile:
+        with open("/proc/stat", encoding="utf-8") as statfile:
             line = statfile.readline().strip()
         parts = line.split()
         values = [int(item) for item in parts[1:]]
@@ -86,7 +88,9 @@ class CpuPercentSampler:
             return 0.0
         busy = delta_total - delta_idle
         percent = max(0.0, min(100.0, 100.0 * busy / delta_total))
-        logger.trace(f"CPU sample: {percent:.1f}% (delta_total={delta_total} delta_idle={delta_idle})")
+        logger.trace(
+            f"CPU sample: {percent:.1f}% (delta_total={delta_total} delta_idle={delta_idle})"
+        )
         return percent
 
 
@@ -96,7 +100,9 @@ def read_ram_used_mb() -> float:
     avail_kb = mem.get("MemAvailable", 0)
     used_kb = max(0, total_kb - avail_kb)
     used_mb = used_kb / 1024.0
-    logger.trace(f"RAM used: {used_mb:.1f} MB (total={total_kb//1024} MB avail={avail_kb//1024} MB)")
+    logger.trace(
+        f"RAM used: {used_mb:.1f} MB (total={total_kb // 1024} MB avail={avail_kb // 1024} MB)"
+    )
     return used_mb
 
 
@@ -119,7 +125,9 @@ def read_gpu_stats() -> dict[str, float | None]:
         logger.debug("nvidia-smi not found — GPU stats unavailable")
         return {"gpu_util_percent": None, "gpu_mem_used_mb": None}
     except subprocess.CalledProcessError as exc:
-        logger.warning(f"nvidia-smi exited with code {exc.returncode} — GPU stats unavailable")
+        logger.warning(
+            f"nvidia-smi exited with code {exc.returncode} — GPU stats unavailable"
+        )
         return {"gpu_util_percent": None, "gpu_mem_used_mb": None}
     except subprocess.TimeoutExpired:
         logger.warning("nvidia-smi timed out — GPU stats unavailable")
@@ -148,7 +156,9 @@ def read_gpu_stats() -> dict[str, float | None]:
         "gpu_util_percent": max(util_values),
         "gpu_mem_used_mb": sum(mem_values),
     }
-    logger.trace(f"GPU stats: util={result['gpu_util_percent']:.1f}% mem={result['gpu_mem_used_mb']:.1f} MB ({len(util_values)} device(s))")
+    logger.trace(
+        f"GPU stats: util={result['gpu_util_percent']:.1f}% mem={result['gpu_mem_used_mb']:.1f} MB ({len(util_values)} device(s))"
+    )
     return result
 
 
@@ -181,7 +191,10 @@ def run_one_test(
     env: dict[str, str],
 ) -> tuple[int, float, float]:
     test_name_safe = (
-        test_nodeid.replace("/", "_").replace("::", "__").replace("[", "_").replace("]", "_")
+        test_nodeid.replace("/", "_")
+        .replace("::", "__")
+        .replace("[", "_")
+        .replace("]", "_")
     )
     log_path = output_dir / "logs" / f"{test_name_safe}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -222,7 +235,11 @@ def run_one_test(
             if poll_n % 10 == 0:
                 logger.debug(
                     f"  poll #{poll_n} | t={sample_t:.1f}s | CPU={cpu_pct:.1f}% | RAM={ram_mb:.0f} MB"
-                    + (f" | GPU={gpu['gpu_util_percent']:.0f}% {gpu['gpu_mem_used_mb']:.0f} MB" if gpu["gpu_util_percent"] is not None else "")
+                    + (
+                        f" | GPU={gpu['gpu_util_percent']:.0f}% {gpu['gpu_mem_used_mb']:.0f} MB"
+                        if gpu["gpu_util_percent"] is not None
+                        else ""
+                    )
                 )
             time.sleep(interval_seconds)
 
@@ -231,7 +248,9 @@ def run_one_test(
     end_t = time.time() - started_at
     duration = end_t - start_t
     new_samples = len(samples) - sample_count_before
-    transitions.append({"event": "test_end", "t": end_t, "test": test_nodeid, "exit_code": exit_code})
+    transitions.append(
+        {"event": "test_end", "t": end_t, "test": test_nodeid, "exit_code": exit_code}
+    )
 
     status = "PASSED" if exit_code == 0 else f"FAILED (exit={exit_code})"
     log_fn = logger.info if exit_code == 0 else logger.error
@@ -240,7 +259,11 @@ def run_one_test(
     if test_samples:
         peak_ram = max(s["ram_used_mb"] for s in test_samples)
         avg_cpu = sum(s["cpu_percent"] for s in test_samples) / len(test_samples)
-        gpu_vals = [s["gpu_mem_used_mb"] for s in test_samples if s["gpu_mem_used_mb"] is not None]
+        gpu_vals = [
+            s["gpu_mem_used_mb"]
+            for s in test_samples
+            if s["gpu_mem_used_mb"] is not None
+        ]
         gpu_str = f" | peak GPU VRAM={max(gpu_vals):.0f} MB" if gpu_vals else ""
         resource_str = f"peak RAM={peak_ram:.0f} MB | avg CPU={avg_cpu:.1f}%{gpu_str}"
     else:
@@ -263,7 +286,10 @@ def plot_memory_timeline(
 
     times = [sample["t"] for sample in samples]
     ram = [sample["ram_used_mb"] for sample in samples]
-    gpu_mem = [sample["gpu_mem_used_mb"] if sample["gpu_mem_used_mb"] is not None else 0.0 for sample in samples]
+    gpu_mem = [
+        sample["gpu_mem_used_mb"] if sample["gpu_mem_used_mb"] is not None else 0.0
+        for sample in samples
+    ]
 
     fig, ax = plt.subplots(figsize=(14, 6))
     ax.plot(times, ram, label="RAM used (MB)", linewidth=1.8)
@@ -304,10 +330,14 @@ def _log_summary(
 
     # --- slowest tests ---
     by_duration = sorted(test_results, key=lambda r: r["duration_s"], reverse=True)
-    logger.info(f"Slowest {min(top_n, len(by_duration))} tests (by wall-clock duration):")
+    logger.info(
+        f"Slowest {min(top_n, len(by_duration))} tests (by wall-clock duration):"
+    )
     for rank, result in enumerate(by_duration[:top_n], start=1):
         status = "PASS" if result["exit_code"] == 0 else "FAIL"
-        logger.info(f"  #{rank:>2}  {result['duration_s']:>8.2f}s  [{status}]  {result['test']}")
+        logger.info(
+            f"  #{rank:>2}  {result['duration_s']:>8.2f}s  [{status}]  {result['test']}"
+        )
 
     # --- memory heaviest tests (peak RAM during test window) ---
     if samples:
@@ -320,7 +350,9 @@ def _log_summary(
                 peak_ram[test] = ram
 
         by_ram = sorted(peak_ram.items(), key=lambda kv: kv[1], reverse=True)
-        logger.info(f"Memory-heaviest {min(top_n, len(by_ram))} tests (peak RAM during test):")
+        logger.info(
+            f"Memory-heaviest {min(top_n, len(by_ram))} tests (peak RAM during test):"
+        )
         for rank, (test, peak) in enumerate(by_ram[:top_n], start=1):
             logger.info(f"  #{rank:>2}  {peak:>9.1f} MB  {test}")
 
@@ -334,7 +366,9 @@ def _log_summary(
                 if gpu_mb > peak_gpu.get(test, 0.0):
                     peak_gpu[test] = gpu_mb
             by_gpu = sorted(peak_gpu.items(), key=lambda kv: kv[1], reverse=True)
-            logger.info(f"GPU memory-heaviest {min(top_n, len(by_gpu))} tests (peak VRAM during test):")
+            logger.info(
+                f"GPU memory-heaviest {min(top_n, len(by_gpu))} tests (peak VRAM during test):"
+            )
             for rank, (test, peak) in enumerate(by_gpu[:top_n], start=1):
                 logger.info(f"  #{rank:>2}  {peak:>9.1f} MB  {test}")
 
@@ -346,7 +380,9 @@ def plot_duration_histogram(
     output_path: Path,
     title_suffix: str = "",
 ) -> None:
-    logger.info(f"Plotting duration histogram ({len(test_results)} tests) → {output_path}")
+    logger.info(
+        f"Plotting duration histogram ({len(test_results)} tests) → {output_path}"
+    )
     durations = [r["duration_s"] for r in test_results]
     labels = [r["test"].split("::")[-1] for r in test_results]
 
@@ -399,9 +435,13 @@ def plot_memory_histogram(
 
     if has_gpu:
         ax.bar(x, ram_vals, label="Peak RAM (MB)", color="#5cb85c")
-        ax.bar(x, gpu_vals, bottom=ram_vals, label="Peak GPU VRAM (MB)", color="#f0ad4e")
+        ax.bar(
+            x, gpu_vals, bottom=ram_vals, label="Peak GPU VRAM (MB)", color="#f0ad4e"
+        )
         ax.legend(loc="upper right")
-        logger.debug(f"GPU VRAM data present for {sum(1 for v in gpu_vals if v > 0)} tests")
+        logger.debug(
+            f"GPU VRAM data present for {sum(1 for v in gpu_vals if v > 0)} tests"
+        )
     else:
         ax.bar(x, ram_vals, color="#5cb85c")
         logger.debug("No GPU VRAM data; showing RAM only")
@@ -424,9 +464,23 @@ def parse_args() -> argparse.Namespace:
             "write JSON output, and save a memory timeline PNG."
         )
     )
-    parser.add_argument("--target", default="tests", help="Pytest target to collect tests from (default: tests)")
-    parser.add_argument("--interval", type=float, default=0.5, help="Sampling interval in seconds (default: 0.5)")
-    parser.add_argument("--max-tests", type=int, default=None, help="Optional cap on number of collected tests")
+    parser.add_argument(
+        "--target",
+        default="tests",
+        help="Pytest target to collect tests from (default: tests)",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=0.5,
+        help="Sampling interval in seconds (default: 0.5)",
+    )
+    parser.add_argument(
+        "--max-tests",
+        type=int,
+        default=None,
+        help="Optional cap on number of collected tests",
+    )
     parser.add_argument(
         "--output-dir",
         default=None,
@@ -450,7 +504,11 @@ def main() -> int:
     args = parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(args.output_dir) if args.output_dir else Path(f".output/resource_monitor_{timestamp}")
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir
+        else Path(f".output/resource_monitor_{timestamp}")
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     _configure_logger(output_dir)
@@ -469,7 +527,9 @@ def main() -> int:
     if args.max_tests is not None:
         original_count = len(nodeids)
         nodeids = nodeids[: args.max_tests]
-        logger.info(f"Capped test list: {original_count} → {len(nodeids)} (--max-tests={args.max_tests})")
+        logger.info(
+            f"Capped test list: {original_count} → {len(nodeids)} (--max-tests={args.max_tests})"
+        )
 
     if not nodeids:
         logger.error("No tests collected — check --target and --pytest-arg values")
@@ -520,20 +580,38 @@ def main() -> int:
             elapsed_min = (now - started_at) / 60
             snap_ts = datetime.now().strftime("%H%M%S")
             suffix = f"  [snapshot at {elapsed_min:.1f} min]"
-            logger.info(f"Saving intermediate plots (t={elapsed_min:.1f} min) → snapshots/{snap_ts}/")
+            logger.info(
+                f"Saving intermediate plots (t={elapsed_min:.1f} min) → snapshots/{snap_ts}/"
+            )
             snap_dir = snapshots_dir / snap_ts
             snap_dir.mkdir(parents=True, exist_ok=True)
             try:
-                plot_memory_timeline(samples=samples, transitions=transitions, output_path=snap_dir / "memory_timeline.png", title_suffix=suffix)
-                plot_duration_histogram(test_results=test_results, output_path=snap_dir / "histogram_durations.png", title_suffix=suffix)
-                plot_memory_histogram(test_results=test_results, samples=samples, output_path=snap_dir / "histogram_memory.png", title_suffix=suffix)
+                plot_memory_timeline(
+                    samples=samples,
+                    transitions=transitions,
+                    output_path=snap_dir / "memory_timeline.png",
+                    title_suffix=suffix,
+                )
+                plot_duration_histogram(
+                    test_results=test_results,
+                    output_path=snap_dir / "histogram_durations.png",
+                    title_suffix=suffix,
+                )
+                plot_memory_histogram(
+                    test_results=test_results,
+                    samples=samples,
+                    output_path=snap_dir / "histogram_memory.png",
+                    title_suffix=suffix,
+                )
             except Exception as exc:
                 logger.warning(f"Intermediate plot failed: {exc}")
             last_snapshot_t = now
 
     total_elapsed = time.time() - started_at
     failing = [result for result in test_results if result["exit_code"] != 0]
-    logger.info(f"Test loop complete: {len(test_results)} run, {len(failing)} failed, elapsed={total_elapsed:.1f}s")
+    logger.info(
+        f"Test loop complete: {len(test_results)} run, {len(failing)} failed, elapsed={total_elapsed:.1f}s"
+    )
 
     json_path = output_dir / "resource_timeline.json"
     png_path = output_dir / "memory_timeline.png"
@@ -550,15 +628,31 @@ def main() -> int:
         "tests": test_results,
     }
 
-    logger.info(f"Writing JSON ({len(samples)} samples, {len(transitions)} transitions) → {json_path}")
+    logger.info(
+        f"Writing JSON ({len(samples)} samples, {len(transitions)} transitions) → {json_path}"
+    )
     with open(json_path, "w", encoding="utf-8") as outfile:
         json.dump(payload, outfile, indent=2)
     logger.info(f"JSON written: {json_path}")
 
     final_suffix = f"  [final — {total_elapsed / 60:.1f} min total]"
-    plot_memory_timeline(samples=samples, transitions=transitions, output_path=png_path, title_suffix=final_suffix)
-    plot_duration_histogram(test_results=test_results, output_path=duration_hist_path, title_suffix=final_suffix)
-    plot_memory_histogram(test_results=test_results, samples=samples, output_path=memory_hist_path, title_suffix=final_suffix)
+    plot_memory_timeline(
+        samples=samples,
+        transitions=transitions,
+        output_path=png_path,
+        title_suffix=final_suffix,
+    )
+    plot_duration_histogram(
+        test_results=test_results,
+        output_path=duration_hist_path,
+        title_suffix=final_suffix,
+    )
+    plot_memory_histogram(
+        test_results=test_results,
+        samples=samples,
+        output_path=memory_hist_path,
+        title_suffix=final_suffix,
+    )
 
     _log_summary(test_results=test_results, samples=samples)
 
@@ -572,7 +666,9 @@ def main() -> int:
     if failing:
         logger.error(f"{len(failing)} test(s) failed:")
         for result in failing:
-            logger.error(f"  {result['test']} (exit={result['exit_code']} duration={result['duration_s']:.2f}s)")
+            logger.error(
+                f"  {result['test']} (exit={result['exit_code']} duration={result['duration_s']:.2f}s)"
+            )
         return 1
 
     logger.success(f"All {len(test_results)} tests passed")

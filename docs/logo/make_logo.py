@@ -15,23 +15,23 @@ with SDESimulator:
 import argparse
 import os
 
-import dynestyx as dsx
 import imageio.v2 as imageio
 import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 import numpyro.distributions as dist
+from numpyro.infer import Predictive
+from PIL import Image, ImageDraw, ImageFont
+from scipy import ndimage
+from scipy.ndimage import binary_erosion
+
+import dynestyx as dsx
 from dynestyx import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
     DynamicalModel,
     SDESimulator,
 )
-from numpyro.infer import Predictive
-from PIL import Image, ImageDraw, ImageFont
-from scipy import ndimage
-from scipy.ndimage import binary_erosion
-
 
 # -----------------------------
 # Fonts (cross-platform)
@@ -82,7 +82,9 @@ def load_font(font_size: int, font_path: str | None):
 # -----------------------------
 
 
-def bilinear_sample_jax(arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+def bilinear_sample_jax(
+    arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray
+) -> jnp.ndarray:
     """Bilinear interpolation for arr[y, x], where x/y are pixel coordinates."""
     H, W = arr.shape
     x0 = jnp.floor(x).astype(jnp.int32)
