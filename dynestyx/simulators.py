@@ -2,6 +2,7 @@
 
 import dataclasses
 from collections.abc import Callable
+from typing import cast
 
 import diffrax as dfx
 import jax.numpy as jnp
@@ -544,7 +545,11 @@ class DiscreteTimeSimulator(BaseSimulator):
         numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
         numpyro.deterministic("y_0", obs_values[0])
         if T == 1:
-            return {"times": obs_times, "states": obs_values, "observations": obs_values}
+            return {
+                "times": obs_times,
+                "states": obs_values,
+                "observations": obs_values,
+            }
 
         # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid.
         if obs_values.ndim == 1:
@@ -555,9 +560,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             x_next = obs_values[1:]
         if ctrl_values is not None:
             u_prev: Array | None = (
-                ctrl_values[:-1][:, None]
-                if ctrl_values.ndim == 1
-                else ctrl_values[:-1]
+                ctrl_values[:-1][:, None] if ctrl_values.ndim == 1 else ctrl_values[:-1]
             )
         else:
             u_prev = None
@@ -572,7 +575,10 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         with numpyro.plate("time", T - 1):
             trans = dynamics.state_evolution(
-                x_prev_bl, u_prev_bl, t_now, t_next  # type: ignore
+                x_prev_bl,
+                u_prev_bl,
+                t_now,
+                t_next,  # type: ignore
             )
             # obs shape must match trans.batch_shape + trans.event_shape
             obs_next = x_next_bl if dynamics.state_dim == 1 else x_next
@@ -670,13 +676,16 @@ class DiscreteTimeSimulator(BaseSimulator):
                 )
             else:
                 latent_mask_np = ~obs_mask_np
-            latent_mask_jax = jnp.array(latent_mask_np)
             has_any_latent = bool(latent_mask_np.any())
 
             if has_any_latent:
                 x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
-                per_dim_lp_0_obs = _per_dim_log_prob(dynamics.initial_condition, safe_obs_0)
-                per_dim_lp_0_samp = _per_dim_log_prob(dynamics.initial_condition, x_0_full)
+                per_dim_lp_0_obs = _per_dim_log_prob(
+                    dynamics.initial_condition, safe_obs_0
+                )
+                per_dim_lp_0_samp = _per_dim_log_prob(
+                    dynamics.initial_condition, x_0_full
+                )
                 numpyro.factor(
                     "x_0_obs_corr",
                     jnp.sum(
@@ -741,7 +750,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             # ------------------------------------------------------------------
             # Sub-path B: non-Dirac — sample state unconditionally, score obs.
             # ------------------------------------------------------------------
-            x_prev = numpyro.sample("x_0", dynamics.initial_condition)
+            x_prev = cast(State, numpyro.sample("x_0", dynamics.initial_condition))
             obs_model = dynamics.observation_model
             assert isinstance(obs_model, ObservationModel)
 
@@ -761,7 +770,9 @@ class DiscreteTimeSimulator(BaseSimulator):
                     u_next = _get_val_or_None(ctrl_values, t_idx + 1)
                     x_t = numpyro.sample(
                         f"x_{t_idx + 1}",
-                        dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
+                        dynamics.state_evolution(
+                            x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                        ),
                     )
                     obs_mask_t = obs_mask_jax[t_idx + 1]
                     safe_obs_t = safe_obs_jax[t_idx + 1]
@@ -789,13 +800,17 @@ class DiscreteTimeSimulator(BaseSimulator):
                     u_next = _get_val_or_None(ctrl_values, t_idx + 1)
                     x_t = numpyro.sample(
                         f"x_{t_idx + 1}",
-                        dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
+                        dynamics.state_evolution(
+                            x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                        ),
                     )
                     obs_mask_t = obs_mask_jax[t_idx + 1]
                     safe_obs_t = safe_obs_jax[t_idx + 1]
                     obs_dist_t = obs_model(x_t, u_next, t_next)
                     lp_t = obs_dist_t.log_prob(safe_obs_t)
-                    numpyro.factor(f"y_{t_idx + 1}_lp", jnp.where(obs_mask_t.any(), lp_t, 0.0))
+                    numpyro.factor(
+                        f"y_{t_idx + 1}_lp", jnp.where(obs_mask_t.any(), lp_t, 0.0)
+                    )
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
