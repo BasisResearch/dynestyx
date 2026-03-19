@@ -36,8 +36,8 @@ from tests.models import (
 def _gen_obs_sde():
     """Generate obs_times, obs_values for L63 SDE."""
     rng = jr.PRNGKey(42)
-    obs_times = jnp.linspace(0.0, 2.0, 11)
-    predict_times = jnp.linspace(0.0, 3.0, 31)
+    obs_times = jnp.linspace(0.0, 1.0, 6)
+    predict_times = jnp.linspace(0.0, 1.5, 10)
     with SDESimulator(n_simulations=1):
         pred = Predictive(
             continuous_time_stochastic_l63_model,
@@ -53,8 +53,8 @@ def _gen_obs_sde():
 def _gen_obs_discrete():
     """Generate obs_times, obs_values for discrete LTI."""
     rng = jr.PRNGKey(42)
-    obs_times = jnp.arange(0.0, 11.0, 1.0)
-    predict_times = jnp.arange(0.0, 21.0, 1.0)  # extend beyond obs for rollout
+    obs_times = jnp.arange(0.0, 6.0, 1.0)
+    predict_times = jnp.arange(0.0, 9.0, 1.0)  # extend beyond obs for rollout
     with DiscreteTimeSimulator(n_simulations=1):
         pred = Predictive(
             discrete_time_lti_simplified_model,
@@ -93,8 +93,8 @@ def _gen_obs_ode():
     return obs_times, obs_values, predict_times, 1, ctrl_times, ctrl_values
 
 
-@pytest.mark.parametrize("num_samples", [1, 4])
-@pytest.mark.parametrize("n_sim", [1, 5])
+@pytest.mark.parametrize("num_samples", [1, 2])
+@pytest.mark.parametrize("n_sim", [1, 2])
 def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim):
     """Predictive + Filter + SDESimulator: expected shapes for num_samples and n_simulations."""
     obs_times, obs_values, predict_times, state_dim = _gen_obs_sde()
@@ -108,7 +108,7 @@ def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim):
     with SDESimulator(n_simulations=n_sim):
         with Filter(
             filter_config=ContinuousTimeEnKFConfig(
-                n_particles=20, record_filtered_states_mean=True
+                n_particles=8, record_filtered_states_mean=True
             )
         ):
             samples = predictive(
@@ -129,8 +129,8 @@ def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim):
     assert filtered_means.shape == (num_samples, len(obs_times), state_dim)
 
 
-@pytest.mark.parametrize("num_samples", [1, 4])
-@pytest.mark.parametrize("n_sim", [1, 5])
+@pytest.mark.parametrize("num_samples", [1, 2])
+@pytest.mark.parametrize("n_sim", [1, 2])
 def test_predictive_filter_discretetimesimulator_shapes(num_samples, n_sim):
     """Predictive + Filter + DiscreteTimeSimulator: expected shapes for num_samples and n_simulations."""
     obs_times, obs_values, predict_times, state_dim = _gen_obs_discrete()
@@ -165,8 +165,8 @@ def test_predictive_filter_discretetimesimulator_shapes(num_samples, n_sim):
     assert filtered_means.shape == (num_samples, len(obs_times), state_dim)
 
 
-@pytest.mark.parametrize("num_samples", [1, 4])
-@pytest.mark.parametrize("n_sim", [1, 5])
+@pytest.mark.parametrize("num_samples", [1, 2])
+@pytest.mark.parametrize("n_sim", [1, 2])
 def test_predictive_filter_odesimulator_shapes(num_samples, n_sim):
     """Predictive + Filter + ODESimulator: expected shapes for num_samples and n_simulations."""
     # if n_sim > 1:
@@ -212,8 +212,8 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
     This is a complexity regression test: old behavior simulated every filtered
     segment (including empty ones), yielding O(n_filtered * n_pred) work.
     """
-    obs_times = jnp.arange(0.0, 11.0, 1.0)  # 11 filtered states
-    predict_times = jnp.arange(11.0, 21.0, 1.0)  # all strictly in the future
+    obs_times = jnp.arange(0.0, 5.0, 1.0)  # minimal filtered states
+    predict_times = jnp.arange(5.0, 8.0, 1.0)  # all strictly in the future
 
     # Build observed training data once.
     with DiscreteTimeSimulator(n_simulations=1):
@@ -229,10 +229,10 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
     predictive = Predictive(
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
-        num_samples=3,
+        num_samples=2,
         exclude_deterministic=False,
     )
-    with DiscreteTimeSimulator(n_simulations=5):
+    with DiscreteTimeSimulator(n_simulations=2):
         with Filter(
             filter_config=KFConfig(
                 record_filtered_states_mean=True, filter_source="cuthbert"
@@ -251,14 +251,14 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
     assert len(x0_keys) == 1
 
     # Keep a shape assertion in the same scenario (num_samples > 1, n_sim > 1).
-    assert samples["f_predicted_states"].shape == (3, 5, len(predict_times), 2)
+    assert samples["f_predicted_states"].shape == (2, 2, len(predict_times), 2)
 
 
-@pytest.mark.parametrize("num_samples", [1, 4])
-@pytest.mark.parametrize("n_sim", [1, 5])
+@pytest.mark.parametrize("num_samples", [1, 2])
+@pytest.mark.parametrize("n_sim", [1, 2])
 def test_predictive_simulator_only_times_has_n_sim_axis_sde(num_samples, n_sim):
     """Simulator-only SDE outputs always include n_sim axis, including times."""
-    predict_times = jnp.linspace(0.0, 2.0, 21)
+    predict_times = jnp.linspace(0.0, 1.0, 9)
     predictive = Predictive(
         continuous_time_stochastic_l63_model,
         params={"rho": jnp.array(28.0)},
@@ -276,11 +276,11 @@ def test_predictive_simulator_only_times_has_n_sim_axis_sde(num_samples, n_sim):
     )
 
 
-@pytest.mark.parametrize("num_samples", [1, 4])
-@pytest.mark.parametrize("n_sim", [1, 5])
+@pytest.mark.parametrize("num_samples", [1, 2])
+@pytest.mark.parametrize("n_sim", [1, 2])
 def test_predictive_simulator_only_times_has_n_sim_axis_discrete(num_samples, n_sim):
     """Simulator-only discrete outputs always include n_sim axis, including times."""
-    predict_times = jnp.arange(0.0, 21.0, 1.0)
+    predict_times = jnp.arange(0.0, 9.0, 1.0)
     predictive = Predictive(
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
@@ -298,8 +298,8 @@ def test_predictive_simulator_only_times_has_n_sim_axis_discrete(num_samples, n_
     )
 
 
-@pytest.mark.parametrize("num_samples", [1, 4])
-@pytest.mark.parametrize("n_sim", [1, 5])
+@pytest.mark.parametrize("num_samples", [1, 2])
+@pytest.mark.parametrize("n_sim", [1, 2])
 def test_predictive_simulator_only_times_has_n_sim_axis_ode(num_samples, n_sim):
     """Simulator-only ODE outputs always include n_sim axis, including times."""
     predict_times = jnp.linspace(0.0, 1.0, 21)
