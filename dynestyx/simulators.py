@@ -544,13 +544,14 @@ class DiscreteTimeSimulator(BaseSimulator):
         numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
         numpyro.deterministic("y_0", obs_values[0])
         if T == 1:
+            # No transitions exist for a single-timepoint trajectory.
             return {
                 "times": obs_times,
                 "states": obs_values,
                 "observations": obs_values,
             }
 
-        # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid.
+        # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
         if obs_values.ndim == 1:
             x_prev = obs_values[:-1][:, None]
             x_next = obs_values[1:][:, None]
@@ -579,7 +580,8 @@ class DiscreteTimeSimulator(BaseSimulator):
                 t_now,
                 t_next,  # type: ignore
             )
-            # obs shape must match trans.batch_shape + trans.event_shape
+            # obs shape must match trans.batch_shape + trans.event_shape: use
+            # time-first (T-1, state_dim) for e.g. discretizer; batch-last (state_dim, T-1) for scalar.
             obs_next = x_next_bl if dynamics.state_dim == 1 else x_next
             numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
 
@@ -596,8 +598,10 @@ class DiscreteTimeSimulator(BaseSimulator):
         T: int,
     ) -> dict[str, State]:
         """Default path: sequential scan sampling states and observations."""
+        # Sample initial state
         x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
         u_0 = _get_val_or_None(ctrl_values, 0)
+        # Sample initial observation
         y_0 = numpyro.sample(  # type: ignore[assignment]
             "y_0",
             dynamics.observation_model(x_prev, u_0, obs_times[0]),
@@ -609,10 +613,12 @@ class DiscreteTimeSimulator(BaseSimulator):
             t_next = obs_times[t_idx + 1]
             u_now = _get_val_or_None(ctrl_values, t_idx)
             u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+            # Sample next state
             x_t = numpyro.sample(
                 f"x_{t_idx + 1}",
                 dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
             )
+            # Sample observation
             y_t = numpyro.sample(
                 f"y_{t_idx + 1}",
                 dynamics.observation_model(x=x_t, u=u_next, t=t_next),
@@ -620,13 +626,19 @@ class DiscreteTimeSimulator(BaseSimulator):
             )
             return x_t, (x_t, y_t)
 
+        # Run scan and collect states and observations
+        # scan_outputs will be (scan_states, scan_observations) where each is shape (T-1, ...)
         _, scan_outputs = nscan(_step, x_prev, jnp.arange(T - 1))
         scan_states, scan_observations = scan_outputs
 
-        x_0_exp = jnp.expand_dims(x_prev, axis=0)  # type: ignore
-        y_0_exp = jnp.expand_dims(y_0, axis=0)
-        states = jnp.concatenate([x_0_exp, scan_states], axis=0)
-        observations = jnp.concatenate([y_0_exp, scan_observations], axis=0)
+        # Stack initial state/observation with scanned results
+        # x_prev is shape (state_dim,) or scalar, scan_states is (T-1, state_dim)
+        # y_0 is shape (obs_dim,) or scalar, scan_observations is (T-1, obs_dim)
+        # Use expand_dims to ensure proper shape for concatenation
+        x_0_exp = jnp.expand_dims(x_prev, axis=0)  # type: ignore  # shape (1, state_dim) or (1,)
+        y_0_exp = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
+        states = jnp.concatenate([x_0_exp, scan_states], axis=0)  # shape (T, state_dim)
+        observations = jnp.concatenate([y_0_exp, scan_observations], axis=0)  # shape (T, obs_dim)
         return {"times": obs_times, "states": states, "observations": observations}
 
     def _simulate_two_mask(
