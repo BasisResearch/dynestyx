@@ -9,7 +9,6 @@ from dynestyx.models.core import (
     Drift,
     DynamicalModel,
     ObservationModel,
-    WithPartialMissingnessSupport,
 )
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
@@ -39,7 +38,6 @@ __all__ = [
     "LinearGaussianObservation",
     "LinearGaussianStateEvolution",
     "ObservationModel",
-    "WithPartialMissingnessSupport",
     "LTI_continuous",
     "LTI_discrete",
 ]

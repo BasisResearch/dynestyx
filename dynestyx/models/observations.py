@@ -144,6 +144,7 @@ class DiagonalLinearGaussianObservation(ObservationModel):
             loc += self.bias
         return dist.Independent(dist.Normal(loc, jnp.sqrt(self.R_diag)), 1)
 
+
 class DiagonalGaussianObservation(ObservationModel):
     """
     Nonlinear Gaussian observation model with diagonal noise covariance.
@@ -181,6 +182,7 @@ class DiagonalGaussianObservation(ObservationModel):
     def __call__(self, x, u, t):
         loc = self.h(x, u, t)
         return dist.Independent(dist.Normal(loc, jnp.sqrt(self.R_diag)), 1)
+
 
 class DiracIdentityObservation(ObservationModel):
     """

@@ -21,7 +21,6 @@ from dynestyx.models import (
     DynamicalModel,
     ObservationModel,
 )
-from dynestyx.models.core import WithPartialMissingnessSupport
 from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _build_control_path,
@@ -670,15 +669,12 @@ class DiscreteTimeSimulator(BaseSimulator):
             # observed dim. This avoids numpyro.handlers.mask(mask=vector), which
             # adds incorrect batch dimensions to joint distributions.
             # ------------------------------------------------------------------
-            if isinstance(dynamics, WithPartialMissingnessSupport):
-                latent_mask_np: np.ndarray = np.asarray(
-                    dynamics.compute_latent_mask(obs_np)
-                )
-            else:
-                latent_mask_np = ~obs_mask_np
+            latent_mask_np: np.ndarray = ~obs_mask_np
+            latent_mask_jax = jnp.array(latent_mask_np)
             has_any_latent = bool(latent_mask_np.any())
 
             if has_any_latent:
+                latent_mask_0 = latent_mask_jax[0]
                 x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
                 per_dim_lp_0_obs = _per_dim_log_prob(
                     dynamics.initial_condition, safe_obs_0
@@ -686,13 +682,25 @@ class DiscreteTimeSimulator(BaseSimulator):
                 per_dim_lp_0_samp = _per_dim_log_prob(
                     dynamics.initial_condition, x_0_full
                 )
+                # Three-way correction at t=0:
+                #   observed     → swap initial sample lp for obs lp
+                #   latent gap   → keep initial sample lp (0.0 delta)
+                #   absent       → cancel initial sample lp entirely
                 numpyro.factor(
                     "x_0_obs_corr",
                     jnp.sum(
-                        jnp.where(obs_mask_0, per_dim_lp_0_obs - per_dim_lp_0_samp, 0.0)
+                        jnp.where(
+                            obs_mask_0,
+                            per_dim_lp_0_obs - per_dim_lp_0_samp,
+                            jnp.where(latent_mask_0, 0.0, -per_dim_lp_0_samp),
+                        )
                     ),
                 )
-                x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
+                x_prev = jnp.where(
+                    obs_mask_0,
+                    safe_obs_0,
+                    jnp.where(latent_mask_0, x_0_full, jnp.nan),
+                )
 
                 def _step_dirac_latent(x_prev, t_idx):
                     t_now = obs_times[t_idx]
@@ -700,19 +708,32 @@ class DiscreteTimeSimulator(BaseSimulator):
                     u_now = _get_val_or_None(ctrl_values, t_idx)
                     obs_mask_t = obs_mask_jax[t_idx + 1]
                     safe_obs_t = safe_obs_jax[t_idx + 1]
+                    latent_mask_t = latent_mask_jax[t_idx + 1]
                     trans_dist = dynamics.state_evolution(
                         x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     )
                     x_t_full = numpyro.sample(f"x_{t_idx + 1}", trans_dist)
                     per_dim_lp_obs = _per_dim_log_prob(trans_dist, safe_obs_t)
                     per_dim_lp_samp = _per_dim_log_prob(trans_dist, x_t_full)
+                    # Three-way correction:
+                    #   observed   → swap sample lp for obs lp
+                    #   latent gap → keep sample lp (0.0 delta)
+                    #   absent     → cancel sample lp entirely
                     numpyro.factor(
                         f"x_{t_idx + 1}_obs_corr",
                         jnp.sum(
-                            jnp.where(obs_mask_t, per_dim_lp_obs - per_dim_lp_samp, 0.0)
+                            jnp.where(
+                                obs_mask_t,
+                                per_dim_lp_obs - per_dim_lp_samp,
+                                jnp.where(latent_mask_t, 0.0, -per_dim_lp_samp),
+                            )
                         ),
                     )
-                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
+                    x_t = jnp.where(
+                        obs_mask_t,
+                        safe_obs_t,
+                        jnp.where(latent_mask_t, x_t_full, jnp.nan),
+                    )
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
