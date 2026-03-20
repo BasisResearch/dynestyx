@@ -392,24 +392,25 @@ class DiscreteTimeSimulator(BaseSimulator):
           correction-factor approach is used.  For other models,
           `obs_model.masked_log_prob` is called; models that do not implement
           it (e.g. `LinearGaussianObservation`) raise `NotImplementedError`.
+        - **Entirely-missing rows** + ``unroll_missing=True`` (default): per-step
+          scan; full-length output with NaN observations at missing rows. Works
+          for any observation model.
         - **Entirely-missing rows** + ``unroll_missing=False``: filter rows;
           shorter output.
-        - **Entirely-missing rows** + ``unroll_missing=True``: per-step scan;
-          full-length output with NaN observations at missing rows. Works for
-          any observation model.
 
     Deterministic outputs:
         When run, the simulator records `"times"`, `"states"`, and `"observations"`
         as `numpyro.deterministic(...)` sites.
 
     Args:
-        unroll_missing: When True and obs_values contains entirely-missing rows,
-            step through all T time steps (sampling latent states for missing rows)
-            rather than filtering them out. Produces full-length output arrays with
-            NaN in the observations at missing rows. Default False.
+        unroll_missing: When True (default) and obs_values contains entirely-missing
+            rows, step through all T time steps (sampling latent states for missing
+            rows) rather than filtering them out. Produces full-length output arrays
+            with NaN in the observations at missing rows. Set to False to filter out
+            missing rows and produce shorter output.
     """
 
-    unroll_missing: bool = False
+    unroll_missing: bool = True
 
     def _simulate(
         self,

@@ -805,11 +805,11 @@ def test_entirely_missing_rows_without_unroll_produces_shorter_output():
         exclude_deterministic=False,
     )
 
-    with DiscreteTimeSimulator():
+    with DiscreteTimeSimulator(unroll_missing=False):
         result_filtered = predictive(
             jr.PRNGKey(0), obs_times=obs_times, obs_values=obs_values_with_gap
         )
-    with DiscreteTimeSimulator(unroll_missing=True):
+    with DiscreteTimeSimulator():
         result_unrolled = predictive(
             jr.PRNGKey(0), obs_times=obs_times, obs_values=obs_values_with_gap
         )
