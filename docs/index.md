@@ -31,6 +31,9 @@ Or with `pip`:
 pip install git+https://github.com/BasisResearch/dynestyx.git
 ```
 
+!!! tip "Documentation versions"
+    Published docs use **versioned builds**: **`stable`** matches the latest **git tag** (e.g. `v0.0.1`); **`latest`** matches the **`main`** branch. Use the version menu in the site header to switch. See [Versioned documentation](versioning.md) for install commands and how this relates to notebooks.
+
 ## Quick Example: Simulation
 
 Define a dynamical model, wrap it with a simulator, and generate synthetic trajectories by passing observation times (and optionally controls) as kwargs:

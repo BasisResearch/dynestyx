@@ -95,6 +95,7 @@ nav:
       - Diagnostics:
         - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - FAQ: faq.md
+  - Versioned documentation: versioning.md
 
 theme:
   name: "material"
@@ -350,6 +351,10 @@ extra_javascript:
 # |                                                                                                        |
 # +--------------------------------------------------------------------------------------------------------+
 extra:
+  # Version selector (Material + mike). Deployed per version/alias by CI — see docs/versioning.md
+  version:
+    provider: mike
+
   # +------------------------------------------------------------------------------------------------------+
   # |                                                                                                      |
   # | The social section allows you to set a list of entries which would be displayed in the footer of the |
