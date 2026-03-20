@@ -14,9 +14,9 @@ on:
         required: true
         default: main
       version:
-        description: Mike version id to publish (e.g. 0.0.1, dev, manual-preview)
+        description: Mike version id to publish (e.g. 0.0.1, dev, manual-preview-build)
         required: true
-        default: manual-preview
+        default: manual-preview-build
       alias:
         description: Mike alias to update (e.g. stable, latest, manual-preview)
         required: true
