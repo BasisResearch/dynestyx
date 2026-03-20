@@ -474,3 +474,4 @@ plugins:
 
   - mkdocs-jupyter:
       execute: false
+      ignore_h1_warnings: true
