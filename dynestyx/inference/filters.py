@@ -54,24 +54,28 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
-        self._add_log_factors(
-            name,
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
-        )
-        # Forward unchanged so downstream handlers (or default implementation)
-        # can still see this op if needed.
+        filtered_dists = None
+        if not (obs_times is None or obs_values is None):
+            filtered_dists = self._add_log_factors(
+                name,
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                **kwargs,
+            )
+
+        # Filter consumes obs_times and obs_values, so they are passed forward as None
         return fwd(
             name,
             dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
+            obs_times=None,
+            obs_values=None,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            filtered_times=obs_times,
+            filtered_dists=filtered_dists,
             **kwargs,
         )
 
@@ -85,7 +89,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
-    ):
+    ) -> list[numpyro.distributions.Distribution]:
         # Inheritors should implement this method.
         raise NotImplementedError()
 
@@ -165,7 +169,7 @@ class Filter(BaseLogFactorAdder):
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
-    ):
+    ) -> list[numpyro.distributions.Distribution]:
         """
         Add the marginal log likelihood as a numpyro factor.
 
@@ -195,7 +199,7 @@ class Filter(BaseLogFactorAdder):
                     f"Invalid filter config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
-            _filter_continuous_time(
+            return _filter_continuous_time(
                 name,
                 dynamics,
                 config,  # type: ignore[arg-type]
@@ -208,7 +212,7 @@ class Filter(BaseLogFactorAdder):
             )
         else:
             if isinstance(config, HMMConfigs):
-                _filter_hmm(
+                return _filter_hmm(
                     name,
                     dynamics,
                     config,  # type: ignore[arg-type]
@@ -219,7 +223,7 @@ class Filter(BaseLogFactorAdder):
                     **kwargs,
                 )
             elif isinstance(config, DiscreteTimeConfigs):
-                _filter_discrete_time(
+                return _filter_discrete_time(
                     name,
                     dynamics,
                     config,  # type: ignore[arg-type]
@@ -249,7 +253,7 @@ def _filter_discrete_time(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
     Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig (cd-dynamax)
@@ -266,7 +270,7 @@ def _filter_discrete_time(
     """
 
     if filter_config.filter_source == "cd_dynamax":
-        run_cd_dynamax_discrete(
+        return run_cd_dynamax_discrete(
             name,
             dynamics,
             filter_config,
@@ -277,7 +281,7 @@ def _filter_discrete_time(
             **kwargs,
         )
     elif filter_config.filter_source == "cuthbert":
-        run_cuthbert_discrete(
+        return run_cuthbert_discrete(
             name,
             dynamics,
             filter_config,
@@ -303,7 +307,7 @@ def _filter_continuous_time(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.
 
     Supports: EnKF, DPF, EKF, UKF (inferred from config type).
@@ -317,7 +321,7 @@ def _filter_continuous_time(
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
     """
-    run_continuous_filter(
+    return run_continuous_filter(
         name,
         dynamics,
         filter_config,  # type: ignore[arg-type]

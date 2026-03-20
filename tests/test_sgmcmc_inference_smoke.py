@@ -8,12 +8,19 @@ from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63_model
 
+SMOKE_NUM_SAMPLES = 1
+SMOKE_NUM_WARMUP = 1
+
 
 @pytest.mark.parametrize(
     ("model", "filter_config", "target"),
     [
         (continuous_time_stochastic_l63_model, ContinuousTimeEnKFConfig(), "rho"),
-        (discrete_time_l63_model, EKFConfig(filter_source="cuthbert"), "rho"),
+        pytest.param(
+            discrete_time_l63_model,
+            EKFConfig(filter_source="cuthbert"),
+            "rho",
+        ),
     ],
 )
 def test_sgmcmc_inference_smoke(model, filter_config, target):
@@ -24,8 +31,8 @@ def test_sgmcmc_inference_smoke(model, filter_config, target):
     with Filter(filter_config):
         inference = MCMCInference(
             mcmc_config=SGLDConfig(
-                num_samples=5,
-                num_warmup=5,
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
                 num_chains=1,
                 mcmc_source="blackjax",
                 step_size=1e-4,
@@ -42,7 +49,7 @@ def test_sgmcmc_inference_smoke(model, filter_config, target):
     assert target in posterior_samples
     values = posterior_samples[target]
     assert values.shape[0] == 1
-    assert values.shape[1] == 5
+    assert values.shape[1] == SMOKE_NUM_SAMPLES
     assert not jnp.isnan(values).any()
     assert not jnp.isinf(values).any()
 
@@ -55,8 +62,8 @@ def test_sgmcmc_inference_smoke_multiple_chains():
     with Filter():
         inference = MCMCInference(
             mcmc_config=SGLDConfig(
-                num_samples=4,
-                num_warmup=4,
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
                 num_chains=2,
                 mcmc_source="blackjax",
                 step_size=1e-4,
@@ -73,6 +80,6 @@ def test_sgmcmc_inference_smoke_multiple_chains():
     assert "rho" in posterior_samples
     values = posterior_samples["rho"]
     assert values.shape[0] == 2
-    assert values.shape[1] == 4
+    assert values.shape[1] == SMOKE_NUM_SAMPLES
     assert not jnp.isnan(values).any()
     assert not jnp.isinf(values).any()

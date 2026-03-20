@@ -5,9 +5,33 @@ import equinox as eqx
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
-from jax import Array
+from jax import Array, lax
 
 from dynestyx.models import DynamicalModel
+
+
+def flatten_draws(arr: Array) -> Array:
+    """Merge the leading ``(num_samples, n_sim)`` axes of a simulator output into one.
+
+    Simulators return arrays of shape ``(n_sim, T, ...)``. After wrapping the
+    model in :class:`~numpyro.infer.Predictive` with ``num_samples=N``, the
+    output becomes ``(N, n_sim, T, ...)``.  This helper collapses both draw axes
+    so that all ``N * n_sim`` trajectories can be treated uniformly — useful for
+    computing credible intervals or plotting fans.
+
+    Args:
+        arr: Array of shape ``(num_samples, n_sim, ...)``.
+
+    Returns:
+        Array of shape ``(num_samples * n_sim, ...)``.
+
+    Example:
+        >>> states = samples["f_states"]      # (num_samples, n_sim, T, state_dim)
+        >>> draws = flatten_draws(states)      # (num_samples * n_sim, T, state_dim)
+        >>> lo, hi = jnp.percentile(draws, jnp.array([5.0, 95.0]), axis=0)
+    """
+    return arr.reshape((-1,) + arr.shape[2:])
+
 
 type SSMType = CDNLGSSM | CDNLSSM
 
@@ -60,16 +84,25 @@ def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -
 
 
 def _validate_controls(
-    obs_times: Array,
+    obs_times: Array | None,
+    predict_times: Array | None,
     ctrl_times: Array | None,
     ctrl_values: Array | None,
 ) -> None:
     """
-    Validate that ctrl_times/ctrl_values align with obs_times if provided.
+    Validate control inputs against model time grids.
+
+    Rules:
+    - ctrl_times and ctrl_values must be provided together (or both omitted).
+    - At least one of obs_times or predict_times must be provided.
+    - If both obs_times and predict_times are present, ctrl_times must match their union.
+    - Otherwise ctrl_times must match whichever single grid is provided.
+    - Matching is set-like (order-insensitive) and length-preserving.
 
     Raises:
-        ValueError: If control times length doesn't match observation times length.
+        ValueError: If controls are partially provided or no time grid is provided.
     """
+
     if ctrl_times is None:
         if ctrl_values is not None:
             raise ValueError(
@@ -82,11 +115,35 @@ def _validate_controls(
             "ctrl_times is not None, but ctrl_values is None. "
             "Provide both ctrl_times and ctrl_values together."
         )
-    if len(ctrl_times) != len(obs_times):
-        raise ValueError(
-            f"Control times length ({len(ctrl_times)}) must match "
-            f"observation times length ({len(obs_times)})"
-        )
+
+    if obs_times is None and predict_times is None:
+        raise ValueError("At least one of obs_times or predict_times must be provided")
+
+    if obs_times is None:
+        total_obs_pred_times = predict_times
+    elif predict_times is None:
+        total_obs_pred_times = obs_times
+    else:
+        # Skip union when traced (jnp.union1d/jnp.unique fail under lax.map/vmap)
+        try:
+            total_obs_pred_times = jnp.union1d(obs_times, predict_times)
+        except Exception:
+            return  # ConcretizationTypeError etc. when arrays are traced
+    assert total_obs_pred_times is not None
+
+    # Use trace-safe check: same length and sorted arrays match.
+    # (Avoid jnp.setxor1d/jnp.unique which have data-dependent output shapes and fail under JIT.)
+    len_mismatch = ctrl_times.shape[0] != total_obs_pred_times.shape[0]
+    values_mismatch = lax.cond(
+        len_mismatch,
+        lambda: jnp.array(True),
+        lambda: ~jnp.allclose(jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)),
+    )
+    _ = eqx.error_if(
+        ctrl_times,
+        jnp.logical_or(len_mismatch, values_mismatch),
+        "Control times and the union of obs_times and predict_times must be the same.",
+    )
 
 
 def _build_control_path(
@@ -120,14 +177,23 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
     return values[t_idx] if values is not None else None
 
 
-def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array) -> DynamicalModel:
+def _get_dynamics_with_t0(
+    dynamics: DynamicalModel, obs_times: Array | None, predict_times: Array | None
+) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
-    If ``dynamics.t0`` is already set, it must match ``obs_times[0]`` exactly;
+    If ``dynamics.t0`` is already set, it must match the earlier of``obs_times[0]`` or ``predict_times[0]`` exactly;
     otherwise a ``ValueError`` is raised. If it is ``None``, it is filled in
-    from ``obs_times[0]`` (kept as a JAX scalar so the result is jittable).
+    from ``obs_times[0]`` or ``predict_times[0]`` (kept as a JAX scalar so the result is jittable).
     """
-    inferred_t0 = obs_times[0]
+    if obs_times is None:
+        assert predict_times is not None
+        inferred_t0 = predict_times[0]
+    elif predict_times is None:
+        inferred_t0 = obs_times[0]
+    else:
+        inferred_t0 = jnp.minimum(obs_times[0], predict_times[0])
+
     if dynamics.t0 is not None:
         # JIT-safe validation against user-provided t0.
         _ = eqx.error_if(
@@ -145,22 +211,11 @@ def _get_dynamics_with_t0(dynamics: DynamicalModel, obs_times: Array) -> Dynamic
         )
 
 
-def _validate_site_sorting(obs_times: Array | None, ctrl_times: Array | None) -> None:
-    """Validate that obs_times and ctrl_times are strictly increasing.
-
-    Raises:
-        ValueError: If obs_times or ctrl_times are not strictly increasing.
-    """
-    if obs_times is not None and len(obs_times) > 1:
+def _validate_site_sorting(times: Array | None, name: str) -> None:
+    """Validate that times are strictly increasing."""
+    if times is not None and len(times) > 1:
         _ = eqx.error_if(
-            obs_times,
-            jnp.any(obs_times[:-1] >= obs_times[1:]),
-            "obs_times must be strictly increasing",
-        )
-
-    if ctrl_times is not None and len(ctrl_times) > 1:
-        _ = eqx.error_if(
-            ctrl_times,
-            jnp.any(ctrl_times[:-1] >= ctrl_times[1:]),
-            "ctrl_times must be strictly increasing",
+            times,
+            jnp.any(times[:-1] >= times[1:]),
+            f"{name} must be strictly increasing",
         )

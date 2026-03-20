@@ -21,16 +21,13 @@ from dynestyx.inference.filter_configs import (
     PFConfig,
     _config_to_record_kwargs,
 )
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 
 class CuthbertInputs(NamedTuple):
@@ -68,25 +65,29 @@ def run_discrete_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
-    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter)."""
+) -> list[dist.Distribution]:
+    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
+    Returns:
+        list[dist.Distribution]: Filtered state distributions at each obs time.
+    """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = _config_to_record_kwargs(filter_config)
 
     ys = obs_values
-    t1 = int(ys.shape[0])
-    if t1 == 0:
-        return
+    T1 = int(ys.shape[0])
+    if T1 == 0:
+        return []
 
     times = obs_times
 
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
-
     if ctrl_values is None:
         control_dim = dynamics.control_dim
-        ctrl_values = jnp.zeros((t1, control_dim), dtype=ys.dtype)
+        ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
+    elif ctrl_values.shape[0] > T1:
+        # Find controls aligned to obs_times.
+        inds = jnp.searchsorted(ctrl_times, times, side="left")
+        ctrl_values = ctrl_values[inds]
 
     dt0 = times[1] - times[0]
     time_prev = jnp.concatenate([times[:1] - dt0, times[:-1]], axis=0)
@@ -103,7 +104,7 @@ def run_discrete_filter(
         u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
         time=jnp.concatenate([dummy_time, times], axis=0),
         time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(t1 + 1) == 1,
+        is_first_step=jnp.arange(T1 + 1) == 1,
     )
 
     if isinstance(filter_config, PFConfig):
@@ -131,8 +132,20 @@ def run_discrete_filter(
 
     if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
+        # PF: mixture of deltas
+        particles = states.particles
+        if particles.ndim == 2:
+            particles = particles[..., None]
+        return particles_to_delta_mixtures(particles, states.log_weights)
     else:
         _add_sites_taylor_kf(name, states, record_kwargs)
+        # KF/EKF: states.mean (T+1, state_dim), states.chol_cov (T+1, state_dim, state_dim)
+        chol_t = jnp.transpose(states.chol_cov, (0, 2, 1))
+        cov = jnp.matmul(states.chol_cov, chol_t)
+        return [
+            dist.MultivariateNormal(states.mean[i], covariance_matrix=cov[i])
+            for i in range(states.mean.shape[0])
+        ]
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):

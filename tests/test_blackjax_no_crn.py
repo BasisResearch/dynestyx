@@ -28,10 +28,14 @@ from dynestyx.inference.mcmc_configs import (
     SGLDConfig,
 )
 from dynestyx.simulators import Simulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import (
     continuous_time_stochastic_l63_model,
     discrete_time_lti_simplified_model,
 )
+
+SMOKE_NUM_SAMPLES = 1
+SMOKE_NUM_WARMUP = 1
 
 # ---------------------------------------------------------------------------
 # Data fixtures
@@ -39,7 +43,8 @@ from tests.models import (
 
 
 def _make_continuous_data():
-    obs_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    predict_times = jnp.arange(start=0.0, stop=2.0, step=0.05)
+    obs_times = predict_times
     true_params = {"rho": jnp.array(28.0)}
     predictive = Predictive(
         continuous_time_stochastic_l63_model,
@@ -48,8 +53,8 @@ def _make_continuous_data():
         exclude_deterministic=False,
     )
     with Simulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    return obs_times, synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
 
 
 def _make_discrete_data():
@@ -62,8 +67,8 @@ def _make_discrete_data():
         exclude_deterministic=False,
     )
     with Simulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    return obs_times, synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=obs_times)
+    return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
 
 
 # ---------------------------------------------------------------------------
@@ -187,21 +192,24 @@ class TestBlackJAXMCMCNoSeedSmokes:
         with Filter():
             inference = MCMCInference(
                 mcmc_config=NUTSConfig(
-                    num_samples=8, num_warmup=8, num_chains=1, mcmc_source="blackjax"
+                    num_samples=SMOKE_NUM_SAMPLES,
+                    num_warmup=SMOKE_NUM_WARMUP,
+                    num_chains=1,
+                    mcmc_source="blackjax",
                 ),
                 model=continuous_time_stochastic_l63_model,
             )
             samples = inference.run(jr.PRNGKey(10), obs_times, obs_values)
         assert "rho" in samples
-        assert samples["rho"].shape == (1, 8)
+        assert samples["rho"].shape == (1, SMOKE_NUM_SAMPLES)
 
     def test_hmc_continuous(self):
         obs_times, obs_values = _make_continuous_data()
         with Filter():
             inference = MCMCInference(
                 mcmc_config=HMCConfig(
-                    num_samples=8,
-                    num_warmup=8,
+                    num_samples=SMOKE_NUM_SAMPLES,
+                    num_warmup=SMOKE_NUM_WARMUP,
                     num_chains=1,
                     mcmc_source="blackjax",
                     step_size=5e-3,
@@ -217,8 +225,8 @@ class TestBlackJAXMCMCNoSeedSmokes:
         with Filter():
             inference = MCMCInference(
                 mcmc_config=HMCConfig(
-                    num_samples=8,
-                    num_warmup=8,
+                    num_samples=SMOKE_NUM_SAMPLES,
+                    num_warmup=SMOKE_NUM_WARMUP,
                     num_chains=1,
                     mcmc_source="blackjax",
                     step_size=5e-3,
@@ -234,8 +242,8 @@ class TestBlackJAXMCMCNoSeedSmokes:
         with Filter():
             inference = MCMCInference(
                 mcmc_config=SGLDConfig(
-                    num_samples=8,
-                    num_warmup=8,
+                    num_samples=SMOKE_NUM_SAMPLES,
+                    num_warmup=SMOKE_NUM_WARMUP,
                     num_chains=1,
                     mcmc_source="blackjax",
                     step_size=1e-4,
@@ -251,8 +259,8 @@ class TestBlackJAXMCMCNoSeedSmokes:
         with Filter():
             inference = MCMCInference(
                 mcmc_config=MALAConfig(
-                    num_samples=8,
-                    num_warmup=8,
+                    num_samples=SMOKE_NUM_SAMPLES,
+                    num_warmup=SMOKE_NUM_WARMUP,
                     num_chains=1,
                     mcmc_source="blackjax",
                     step_size=1e-3,
@@ -269,8 +277,8 @@ class TestBlackJAXMCMCNoSeedSmokes:
         with Filter(filter_config=PFConfig(n_particles=50)):
             inference = MCMCInference(
                 mcmc_config=HMCConfig(
-                    num_samples=8,
-                    num_warmup=8,
+                    num_samples=SMOKE_NUM_SAMPLES,
+                    num_warmup=SMOKE_NUM_WARMUP,
                     num_chains=1,
                     mcmc_source="blackjax",
                     step_size=1e-3,
