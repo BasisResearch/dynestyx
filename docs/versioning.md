@@ -103,9 +103,15 @@ Deployment is defined in `.github/workflows/build_docs.yml`:
 
 ### Manual publish / backfill (`workflow_dispatch`)
 
-Use **Actions → Deploy documentation → Run workflow** when you want to publish docs from an arbitrary git ref without creating a new tag.
+Use **Actions → Build docs → Run workflow** when you want to publish docs from an arbitrary git ref without creating a new tag.
 
 This is especially useful for your already-existing historical release tag.
+
+!!! note "Manual preview inputs"
+    In Mike, the **version id** and an **alias** cannot be the same string in the same deploy command. For a one-off preview, use distinct values such as:
+    
+    - **version:** `manual-preview-build`
+    - **alias:** `manual-preview`
 
 Example: backfill **`stable`** from the existing tag **`v0.0.1`**:
 
