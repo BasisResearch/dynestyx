@@ -23,8 +23,8 @@ from tests.fixtures import (
     data_conditioned_stochastic_volatility,  # noqa: F401
 )
 
-NUM_SAMPLES = 10
-NUM_WARMUP = 10
+NUM_SAMPLES = 1
+NUM_WARMUP = 1
 
 
 def test_hmm_mcmc_smoke(
@@ -66,7 +66,9 @@ def test_discrete_time_l63_auto_mcmc_smoke(
         data_conditioned_discrete_time_l63_auto
     )
     mcmc = MCMC(
-        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+        NUTS(data_conditioned_model),
+        num_samples=NUM_SAMPLES,
+        num_warmup=NUM_WARMUP,
     )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
@@ -82,7 +84,9 @@ def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
         data_conditioned_discrete_time_l63_auto_dirac_obs
     )
     mcmc = MCMC(
-        NUTS(data_conditioned_model), num_samples=NUM_SAMPLES, num_warmup=NUM_WARMUP
+        NUTS(data_conditioned_model),
+        num_samples=NUM_SAMPLES,
+        num_warmup=NUM_WARMUP,
     )
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()

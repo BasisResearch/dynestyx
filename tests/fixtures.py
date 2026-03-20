@@ -4,13 +4,41 @@ import jax.numpy as jnp
 import jax.random as jr
 import pytest
 
+# Global fixture profile switch:
+# - Fast mode (default): minimize data length and particle cost for CI/dev loops.
+# - Science mode: preserve longer trajectories used by science-grade tests.
+_FAST_TESTS = os.environ.get("DYNESTYX_FAST_TESTS", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+}
+
+
+def _pick_profile_value(fast_value, science_value):
+    return fast_value if _FAST_TESTS else science_value
+
+
+def _profiled_arange(
+    *, fast_stop: float, fast_step: float, science_stop: float, science_step: float
+):
+    return jnp.arange(
+        start=0.0,
+        stop=_pick_profile_value(fast_stop, science_stop),
+        step=_pick_profile_value(fast_step, science_step),
+    )
+
+
 # Scale factor for particle filter particle counts.
 _PF_PARTICLES_SCALE = float(os.environ.get("DYNESTYX_PF_PARTICLES_SCALE", "1.0"))
-_MIN_PARTICLES = 10
+_MIN_PARTICLES = 8
+_FAST_PARTICLE_CAP = int(os.environ.get("DYNESTYX_FAST_PARTICLE_CAP", "128"))
 
 
 def _n_particles(base: int) -> int:
-    return max(_MIN_PARTICLES, int(base * _PF_PARTICLES_SCALE))
+    n_particles = int(base * _PF_PARTICLES_SCALE)
+    if _FAST_TESTS:
+        n_particles = min(n_particles, _FAST_PARTICLE_CAP)
+    return max(_MIN_PARTICLES, n_particles)
 
 
 def _squeeze_sim_dims(arr):
@@ -98,7 +126,9 @@ def data_conditioned_hmm(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+    predict_times = _profiled_arange(
+        fast_stop=4.0, fast_step=0.2, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -161,7 +191,9 @@ def data_conditioned_discrete_time_l63(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=4.0, fast_step=0.2, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -222,7 +254,9 @@ def data_conditioned_discrete_time_l63_filter(request):
     true_rho = 28.0
 
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=4.0, fast_step=0.2, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -281,7 +315,9 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
     true_rho = 28.0
 
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=4.0, fast_step=0.2, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -351,7 +387,9 @@ def data_conditioned_continuous_time_stochastic_l63(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=4.0, fast_step=0.2, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -416,7 +454,9 @@ def data_conditioned_continuous_time_l63_dpf(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.1)
+    predict_times = _profiled_arange(
+        fast_stop=4.0, fast_step=0.2, science_stop=20.0, science_step=0.1
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -479,7 +519,9 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     # Generate synthetic observations using Predictive
     # ---------------------------------------------------------
     # Generate observations at some times
-    predict_times = jnp.arange(start=0.0, stop=2.0, step=0.001)
+    predict_times = _profiled_arange(
+        fast_stop=1.0, fast_step=0.1, science_stop=2.0, science_step=0.001
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -573,7 +615,9 @@ def data_conditioned_stochastic_volatility(request):
     data_init_key, _mcmc_key, _posterior_pred_key, _ctrl_key = jr.split(rng_key, 4)
 
     true_phi = 0.9
-    obs_times = jnp.arange(start=0.0, stop=100.0, step=1.0)
+    obs_times = _profiled_arange(
+        fast_stop=30.0, fast_step=1.0, science_stop=100.0, science_step=1.0
+    )
     ctrl_times = None
     ctrl_values = None
 
@@ -649,7 +693,9 @@ def data_conditioned_continuous_time_lti_gaussian(request):
     )
 
     true_rho = 2.0
-    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = _profiled_arange(
+        fast_stop=3.0, fast_step=0.2, science_stop=10.0, science_step=0.05
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -708,7 +754,9 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
     )
 
     true_rho = 2.0
-    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = _profiled_arange(
+        fast_stop=3.0, fast_step=0.2, science_stop=10.0, science_step=0.05
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -763,7 +811,9 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
     )
 
     true_rho = 28.0
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=20.0, fast_step=0.01, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -820,7 +870,9 @@ def data_conditioned_discrete_time_l63_auto(request):
     )
 
     true_rho = 28.0
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=20.0, fast_step=0.01, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -877,7 +929,9 @@ def data_conditioned_jumpy_controls(
         exclude_deterministic=False,
     )
 
-    predict_times = jnp.arange(start=0.0, stop=20.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=1.0, fast_step=0.1, science_stop=20.0, science_step=0.01
+    )
     obs_times = predict_times
     ctrl_values = jnp.ones((len(predict_times), 1)) * 100  # control_dim=1
     for i in range(1, len(ctrl_values), 2):
@@ -936,7 +990,9 @@ def data_conditioned_jumpy_controls_sde():
         exclude_deterministic=False,
     )
 
-    predict_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=1.0, fast_step=0.1, science_stop=1.0, science_step=0.01
+    )
     obs_times = predict_times
     controls = jnp.ones((len(predict_times),)) * 100
     for i in range(1, len(controls), 2):
@@ -980,7 +1036,9 @@ def data_conditioned_jumpy_controls_ode():
         exclude_deterministic=False,
     )
 
-    predict_times = jnp.arange(start=0.0, stop=1.0, step=0.01)
+    predict_times = _profiled_arange(
+        fast_stop=1.0, fast_step=0.1, science_stop=1.0, science_step=0.01
+    )
     obs_times = predict_times
     controls = jnp.ones((len(predict_times),)) * 100
     for i in range(1, len(controls), 2):
@@ -1100,7 +1158,9 @@ def data_conditioned_discrete_time_lti_simplified(request):
 
     true_alpha = 0.4
     # Longer timeseries (~200 obs) so data inform alpha more, like continuous LTI
-    predict_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+    predict_times = _profiled_arange(
+        fast_stop=30.0, fast_step=1.0, science_stop=200.0, science_step=1.0
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -1161,7 +1221,9 @@ def data_conditioned_discrete_time_lti_simplified_science(request):
 
     true_alpha = 0.4
     # Longer timeseries (~200 obs) so data inform alpha more, like continuous LTI
-    predict_times = jnp.arange(start=0.0, stop=200.0, step=1.0)
+    predict_times = _profiled_arange(
+        fast_stop=30.0, fast_step=1.0, science_stop=200.0, science_step=1.0
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -1218,7 +1280,9 @@ def data_conditioned_continuous_time_lti_simplified(request):
     data_init_key, data_solver_key, ctrl_key = jr.split(rng_key, 3)
 
     true_rho = 2.0
-    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = _profiled_arange(
+        fast_stop=3.0, fast_step=0.2, science_stop=10.0, science_step=0.05
+    )
     obs_times = predict_times
 
     ctrl_times = None
@@ -1276,7 +1340,9 @@ def data_conditioned_continuous_time_lti_simplified_science(request):
     data_init_key, data_solver_key, ctrl_key = jr.split(rng_key, 3)
 
     true_rho = 2.0
-    predict_times = jnp.arange(start=0.0, stop=10.0, step=0.05)
+    predict_times = _profiled_arange(
+        fast_stop=3.0, fast_step=0.2, science_stop=10.0, science_step=0.05
+    )
     obs_times = predict_times
 
     ctrl_times = None

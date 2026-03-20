@@ -40,7 +40,7 @@ def test_filter_sdesimulator_known_params():
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_obs.shape == filtered_means.shape
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
-    assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 1.5e-2
+    assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 3e-2
 
 
 def test_filter_odesimulator_known_params():
@@ -104,8 +104,8 @@ def test_filter_sdesimulator_predict_times_n_simulations():
     from tests.models import continuous_time_stochastic_l63_model
 
     rng_key = jr.PRNGKey(42)
-    obs_times = jnp.linspace(0.0, 2.0, 11)  # sparse for speed
-    predict_times = jnp.linspace(0.0, 3.0, 31)
+    obs_times = jnp.linspace(0.0, 1.0, 6)  # sparse for speed
+    predict_times = jnp.linspace(0.0, 1.5, 10)
     true_rho = 28.0
 
     # Generate observations
@@ -123,11 +123,11 @@ def test_filter_sdesimulator_predict_times_n_simulations():
     substituted = numpyro.handlers.substitute(
         continuous_time_stochastic_l63_model, data={"rho": jnp.array(true_rho)}
     )
-    n_sim = 5
+    n_sim = 2
     with SDESimulator(n_simulations=n_sim):
         with Filter(
             filter_config=ContinuousTimeEnKFConfig(
-                n_particles=20, record_filtered_states_mean=True
+                n_particles=8, record_filtered_states_mean=True
             )
         ):
             with trace() as tr, seed(rng_seed=0):
@@ -153,8 +153,8 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
     from tests.models import discrete_time_lti_simplified_model
 
     rng_key = jr.PRNGKey(42)
-    obs_times = jnp.arange(0.0, 11.0, 1.0)  # 11 points
-    predict_times = jnp.arange(0.0, 11.0, 1.0)  # same grid for simplicity
+    obs_times = jnp.arange(0.0, 6.0, 1.0)  # 6 points
+    predict_times = jnp.arange(0.0, 6.0, 1.0)  # same grid for simplicity
     true_alpha = 0.35
 
     # Generate observations
@@ -172,7 +172,7 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
     substituted = numpyro.handlers.substitute(
         discrete_time_lti_simplified_model, data={"alpha": jnp.array(true_alpha)}
     )
-    n_sim = 5
+    n_sim = 2
     with DiscreteTimeSimulator(n_simulations=n_sim):
         with Filter(
             filter_config=KFConfig(

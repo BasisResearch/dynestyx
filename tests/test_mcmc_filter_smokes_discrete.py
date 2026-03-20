@@ -12,9 +12,12 @@ from dynestyx.simulators import DiscreteTimeSimulator
 from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
 
+SMOKE_NUM_SAMPLES = 1
+SMOKE_NUM_WARMUP = 1
+
 
 def _make_data():
-    predict_times = jnp.arange(start=0.0, stop=30.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=8.0, step=1.0)
     obs_times = predict_times
     true_params = {"alpha": jnp.array(0.35)}
     predictive = Predictive(
@@ -33,7 +36,10 @@ def test_filter_based_discrete_nuts_smoke():
     with Filter():
         inference = MCMCInference(
             mcmc_config=NUTSConfig(
-                num_samples=10, num_warmup=10, num_chains=1, mcmc_source="numpyro"
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
+                num_chains=1,
+                mcmc_source="numpyro",
             ),
             model=discrete_time_lti_simplified_model,
         )
@@ -47,8 +53,8 @@ def test_filter_based_discrete_sgmcmc_smoke(num_chains):
     with Filter():
         inference = MCMCInference(
             mcmc_config=SGLDConfig(
-                num_samples=10,
-                num_warmup=10,
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
                 num_chains=num_chains,
                 mcmc_source="blackjax",
                 step_size=5e-5,
