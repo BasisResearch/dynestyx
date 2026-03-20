@@ -30,30 +30,6 @@ from dynestyx.utils import (
 )
 
 
-def _per_dim_log_prob(d, y):
-    """Extract per-element log_prob (shape = event_shape) from a distribution.
-
-    Supports:
-      - Independent(base, 1): returns base.log_prob(y), shape (event_dim,)
-      - MultivariateNormal with diagonal covariance: decomposes into Normal per dim
-
-    Raises:
-        NotImplementedError: for non-decomposable distributions.
-    """
-    import numpyro.distributions as _nd
-
-    if isinstance(d, _nd.Normal):
-        return d.log_prob(y)  # scalar for scalar state
-    if isinstance(d, _nd.Independent) and d.reinterpreted_batch_ndims == 1:
-        return d.base_dist.log_prob(y)
-    raise NotImplementedError(
-        f"_per_dim_log_prob not implemented for {type(d).__name__}. "
-        "Requires Normal or Independent(Normal, 1). "
-        "For DiracIdentity with partial missingness, structure the transition as "
-        "Independent(Normal(mu, std), 1) rather than MultivariateNormal."
-    )
-
-
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -402,16 +378,6 @@ class DiscreteTimeSimulator(BaseSimulator):
         When run, the simulator records `"times"`, `"states"`, and `"observations"`
         as `numpyro.deterministic(...)` sites.
 
-    SVI caveat for DiracIdentityObservation:
-        With ``unroll_missing=True``, the scan emits a sample site at *every*
-        timestep — including fully-observed rows where the sample is clamped to
-        the observation via a correction factor.  These phantom sites are
-        mathematically correct (the correction cancels their log-prob
-        contribution) but introduce unnecessary variational parameters in SVI
-        guides, which can prevent convergence for high-dimensional states.
-        Use ``unroll_missing=False`` when running SVI with DiracIdentity and
-        large state dimensions.  MCMC is unaffected.
-
     Args:
         unroll_missing: When True (default) and obs_values contains entirely-missing
             rows, step through all T time steps (sampling latent states for missing
@@ -688,96 +654,68 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         if is_dirac:
             # ------------------------------------------------------------------
-            # Sub-path A: DiracIdentity — correction-factor approach.
-            # Sample all dims from transition, then add a correction factor to
-            # replace the sampled log-prob with the observed log-prob on each
-            # observed dim. This avoids numpyro.handlers.mask(mask=vector), which
-            # adds incorrect batch dimensions to joint distributions.
+            # Sub-path A: DiracIdentity — factor + masked-sample approach.
+            # For observed dims/rows: score via numpyro.factor (no sample site).
+            # For latent dims/rows: sample with numpyro.handlers.mask so that
+            # observed dims/rows contribute zero to the ELBO (both model and
+            # guide terms are zeroed by the mask).
             # ------------------------------------------------------------------
-            latent_mask_np: np.ndarray = ~obs_mask_np
-            latent_mask_jax = jnp.array(latent_mask_np)
-            has_any_latent = bool(latent_mask_np.any())
+            has_any_latent = bool((~obs_mask_np).any())
 
             if has_any_latent and has_partial:
-                # Partial missingness requires per-dim log_prob decomposition.
-                # Only works with Independent(Normal, 1) transitions.
-                latent_mask_0 = latent_mask_jax[0]
-                x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
-                per_dim_lp_0_obs = _per_dim_log_prob(
-                    dynamics.initial_condition, safe_obs_0
-                )
-                per_dim_lp_0_samp = _per_dim_log_prob(
-                    dynamics.initial_condition, x_0_full
-                )
-                # Three-way correction at t=0:
-                #   observed     → swap initial sample lp for obs lp
-                #   latent gap   → keep initial sample lp (0.0 delta)
-                #   absent       → cancel initial sample lp entirely
+                # Partial missingness: per-dim mask. Requires Independent(Normal, 1)
+                # transitions so that base_dist.log_prob gives per-dim scores.
+                # We sample from base_dist (Normal, batch_shape=(d,)) so the
+                # per-dim mask aligns with the batch dimensions.
+                obs_lp_0 = dynamics.initial_condition.base_dist.log_prob(safe_obs_0)
                 numpyro.factor(
-                    "x_0_obs_corr",
-                    jnp.sum(
-                        jnp.where(
-                            obs_mask_0,
-                            per_dim_lp_0_obs - per_dim_lp_0_samp,
-                            jnp.where(latent_mask_0, 0.0, -per_dim_lp_0_samp),
-                        )
-                    ),
+                    "x_0_obs",
+                    jnp.sum(jnp.where(obs_mask_0, obs_lp_0, 0.0)),
                 )
-                x_prev = jnp.where(
-                    obs_mask_0,
-                    safe_obs_0,
-                    jnp.where(latent_mask_0, x_0_full, jnp.nan),
-                )
+                with numpyro.handlers.mask(mask=~obs_mask_0):
+                    x_0_full = numpyro.sample(
+                        "x_0", dynamics.initial_condition.base_dist
+                    )
+                x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
 
-                def _step_dirac_latent(x_prev, t_idx):
+                def _step_dirac_partial(x_prev, t_idx):
                     t_now = obs_times[t_idx]
                     t_next = obs_times[t_idx + 1]
                     u_now = _get_val_or_None(ctrl_values, t_idx)
                     obs_mask_t = obs_mask_jax[t_idx + 1]
                     safe_obs_t = safe_obs_jax[t_idx + 1]
-                    latent_mask_t = latent_mask_jax[t_idx + 1]
                     trans_dist = dynamics.state_evolution(
                         x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     )
-                    x_t_full = numpyro.sample(f"x_{t_idx + 1}", trans_dist)
-                    per_dim_lp_obs = _per_dim_log_prob(trans_dist, safe_obs_t)
-                    per_dim_lp_samp = _per_dim_log_prob(trans_dist, x_t_full)
-                    # Three-way correction:
-                    #   observed   → swap sample lp for obs lp
-                    #   latent gap → keep sample lp (0.0 delta)
-                    #   absent     → cancel sample lp entirely
+                    obs_lp = trans_dist.base_dist.log_prob(safe_obs_t)
                     numpyro.factor(
-                        f"x_{t_idx + 1}_obs_corr",
-                        jnp.sum(
-                            jnp.where(
-                                obs_mask_t,
-                                per_dim_lp_obs - per_dim_lp_samp,
-                                jnp.where(latent_mask_t, 0.0, -per_dim_lp_samp),
-                            )
-                        ),
+                        f"x_{t_idx + 1}_obs",
+                        jnp.sum(jnp.where(obs_mask_t, obs_lp, 0.0)),
                     )
-                    x_t = jnp.where(
-                        obs_mask_t,
-                        safe_obs_t,
-                        jnp.where(latent_mask_t, x_t_full, jnp.nan),
-                    )
+                    with numpyro.handlers.mask(mask=~obs_mask_t):
+                        x_t_full = numpyro.sample(
+                            f"x_{t_idx + 1}", trans_dist.base_dist
+                        )
+                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
-                _step_fn = _step_dirac_latent
+                _step_fn = _step_dirac_partial
 
             elif has_any_latent:
-                # Whole-row missingness only: each row is all-observed or
-                # all-missing. Use joint log_prob — works for any transition
-                # distribution (including MultivariateNormal).
-                x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
+                # Whole-row missingness only: scalar mask per row. Works for
+                # any transition distribution (including MultivariateNormal).
                 row_obs_0 = obs_mask_0.all()
-                lp_0_obs = dynamics.initial_condition.log_prob(safe_obs_0)
-                lp_0_samp = dynamics.initial_condition.log_prob(x_0_full)
                 numpyro.factor(
-                    "x_0_obs_corr",
-                    jnp.where(row_obs_0, lp_0_obs - lp_0_samp, 0.0),
+                    "x_0_obs",
+                    jnp.where(
+                        row_obs_0,
+                        dynamics.initial_condition.log_prob(safe_obs_0),
+                        0.0,
+                    ),
                 )
+                with numpyro.handlers.mask(mask=~row_obs_0):
+                    x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
                 x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
 
                 def _step_dirac_wholerow(x_prev, t_idx):
@@ -789,14 +727,17 @@ class DiscreteTimeSimulator(BaseSimulator):
                     trans_dist = dynamics.state_evolution(
                         x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     )
-                    x_t_full = numpyro.sample(f"x_{t_idx + 1}", trans_dist)
                     row_obs = obs_mask_t.all()
-                    lp_obs = trans_dist.log_prob(safe_obs_t)
-                    lp_samp = trans_dist.log_prob(x_t_full)
                     numpyro.factor(
-                        f"x_{t_idx + 1}_obs_corr",
-                        jnp.where(row_obs, lp_obs - lp_samp, 0.0),
+                        f"x_{t_idx + 1}_obs",
+                        jnp.where(
+                            row_obs, trans_dist.log_prob(safe_obs_t), 0.0
+                        ),
                     )
+                    with numpyro.handlers.mask(mask=~row_obs):
+                        x_t_full = numpyro.sample(
+                            f"x_{t_idx + 1}", trans_dist
+                        )
                     x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
