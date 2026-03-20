@@ -402,6 +402,16 @@ class DiscreteTimeSimulator(BaseSimulator):
         When run, the simulator records `"times"`, `"states"`, and `"observations"`
         as `numpyro.deterministic(...)` sites.
 
+    SVI caveat for DiracIdentityObservation:
+        With ``unroll_missing=True``, the scan emits a sample site at *every*
+        timestep — including fully-observed rows where the sample is clamped to
+        the observation via a correction factor.  These phantom sites are
+        mathematically correct (the correction cancels their log-prob
+        contribution) but introduce unnecessary variational parameters in SVI
+        guides, which can prevent convergence for high-dimensional states.
+        Use ``unroll_missing=False`` when running SVI with DiracIdentity and
+        large state dimensions.  MCMC is unaffected.
+
     Args:
         unroll_missing: When True (default) and obs_values contains entirely-missing
             rows, step through all T time steps (sampling latent states for missing
@@ -688,7 +698,9 @@ class DiscreteTimeSimulator(BaseSimulator):
             latent_mask_jax = jnp.array(latent_mask_np)
             has_any_latent = bool(latent_mask_np.any())
 
-            if has_any_latent:
+            if has_any_latent and has_partial:
+                # Partial missingness requires per-dim log_prob decomposition.
+                # Only works with Independent(Normal, 1) transitions.
                 latent_mask_0 = latent_mask_jax[0]
                 x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
                 per_dim_lp_0_obs = _per_dim_log_prob(
@@ -754,16 +766,21 @@ class DiscreteTimeSimulator(BaseSimulator):
 
                 _step_fn = _step_dirac_latent
 
-            else:
-                # Fully observed: factor transition log probs, no sample sites
-                per_dim_lp_0 = _per_dim_log_prob(dynamics.initial_condition, safe_obs_0)
+            elif has_any_latent:
+                # Whole-row missingness only: each row is all-observed or
+                # all-missing. Use joint log_prob — works for any transition
+                # distribution (including MultivariateNormal).
+                x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
+                row_obs_0 = obs_mask_0.all()
+                lp_0_obs = dynamics.initial_condition.log_prob(safe_obs_0)
+                lp_0_samp = dynamics.initial_condition.log_prob(x_0_full)
                 numpyro.factor(
-                    "x_0_obs_lp",
-                    jnp.sum(jnp.where(obs_mask_0, per_dim_lp_0, 0.0)),
+                    "x_0_obs_corr",
+                    jnp.where(row_obs_0, lp_0_obs - lp_0_samp, 0.0),
                 )
-                x_prev = safe_obs_0
+                x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
 
-                def _step_dirac_full(x_prev, t_idx):
+                def _step_dirac_wholerow(x_prev, t_idx):
                     t_now = obs_times[t_idx]
                     t_next = obs_times[t_idx + 1]
                     u_now = _get_val_or_None(ctrl_values, t_idx)
@@ -772,15 +789,19 @@ class DiscreteTimeSimulator(BaseSimulator):
                     trans_dist = dynamics.state_evolution(
                         x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     )
-                    per_dim_lp = _per_dim_log_prob(trans_dist, safe_obs_t)
+                    x_t_full = numpyro.sample(f"x_{t_idx + 1}", trans_dist)
+                    row_obs = obs_mask_t.all()
+                    lp_obs = trans_dist.log_prob(safe_obs_t)
+                    lp_samp = trans_dist.log_prob(x_t_full)
                     numpyro.factor(
-                        f"x_{t_idx + 1}_obs_lp",
-                        jnp.sum(jnp.where(obs_mask_t, per_dim_lp, 0.0)),
+                        f"x_{t_idx + 1}_obs_corr",
+                        jnp.where(row_obs, lp_obs - lp_samp, 0.0),
                     )
+                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
-                    return safe_obs_t, (safe_obs_t, y_t)
+                    return x_t, (x_t, y_t)
 
-                _step_fn = _step_dirac_full
+                _step_fn = _step_dirac_wholerow
 
         else:
             # ------------------------------------------------------------------

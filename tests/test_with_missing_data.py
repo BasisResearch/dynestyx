@@ -449,7 +449,7 @@ def test_particle_model_missing_data_svi(
         )
 
         def data_conditioned_model():
-            with DiscreteTimeSimulator():
+            with DiscreteTimeSimulator(unroll_missing=False):
                 with Discretizer():
                     return particle_sde_gaussian_potential_model(
                         N=N,
