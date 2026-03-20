@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 import diffrax as dfx
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -409,8 +410,43 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
-            obs_values is not None
+        #
+        # When there are missing rows (entire-row NaN), we filter them out
+        # using numpy (concrete indexing, no tracers) before entering the
+        # plate.  state_evolution handles non-unit dt from skipped rows.
+        has_no_obs = obs_values is None
+        has_missing_data = not has_no_obs and np.isnan(np.asarray(obs_values)).any()
+
+        if has_missing_data:
+            # Only entire-row missingness is supported; raise on partial.
+            obs_np = np.asarray(obs_values)
+            nan_per_row = np.isnan(obs_np).any(axis=1)
+            all_nan_per_row = np.isnan(obs_np).all(axis=1)
+            has_partial = (nan_per_row & ~all_nan_per_row).any()
+            if has_partial:
+                raise ValueError(
+                    "Partial missingness (some but not all components NaN in a "
+                    "row) is not yet supported. Only entire-row NaN is allowed."
+                )
+            # Filter to observed rows using numpy (concrete indexing, no
+            # tracers).  state_evolution handles non-unit dt from skipped
+            # rows.  Both the Dirac plate path and the default scan path
+            # operate on the filtered arrays.
+            observed_mask = ~all_nan_per_row
+            obs_values = jnp.array(obs_np[observed_mask])
+            obs_times = jnp.array(np.asarray(obs_times)[observed_mask])
+            if ctrl_values is not None:
+                ctrl_values = jnp.array(np.asarray(ctrl_values)[observed_mask])
+            T = len(obs_times)
+            if T < 1:
+                raise ValueError(
+                    "obs_times must contain at least one timepoint after "
+                    "removing missing data"
+                )
+
+        if (
+            isinstance(dynamics.observation_model, DiracIdentityObservation)
+            and not has_no_obs
         ):
             numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
             numpyro.deterministic("y_0", obs_values[0])
