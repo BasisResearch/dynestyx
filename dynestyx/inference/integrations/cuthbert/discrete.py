@@ -104,7 +104,7 @@ def run_discrete_filter(
         u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
         time=jnp.concatenate([dummy_time, times], axis=0),
         time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(t1 + 1) == 1,
+        is_first_step=jnp.arange(T1 + 1) == 1,
     )
 
     if isinstance(filter_config, PFConfig):
