@@ -29,7 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "effectful @ git+https://github.com/BasisResearch/effectful.git",
+    "effectful",
     "cuthbert @ git+https://github.com/state-space-models/cuthbert.git#subdirectory=pkg/cuthbert",
     "cuthbertlib @ git+https://github.com/state-space-models/cuthbert.git#subdirectory=pkg/cuthbertlib",
     "cd-dynamax @ git+https://github.com/DanWaxman/cd_dynamax.git@dw-dpf",
@@ -54,7 +54,6 @@ packages = ["dynestyx"]
 allow-direct-references = true
 
 [tool.uv.sources]
-effectful = { git = "https://github.com/BasisResearch/effectful.git" }
 cuthbert = { git = "https://github.com/state-space-models/cuthbert.git", subdirectory = "pkg/cuthbert"}
 cd-dynamax = { git = "https://github.com/DanWaxman/cd_dynamax.git", rev = "dw-dpf" }
 
