@@ -59,6 +59,7 @@ cd-dynamax = { git = "https://github.com/DanWaxman/cd_dynamax.git", rev = "dw-dp
 
 [dependency-groups]
 dev = [
+    "mike>=2.1.0",
     "mkdocs-material>=9.7.1",
     "mkdocs>=1.6.1",
     "mypy>=1.19.1",
