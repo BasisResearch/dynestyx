@@ -77,7 +77,7 @@ def test_jumpy_controls_ode():
 
 def test_continuous_time_dpf_non_gaussian_observation_smoke():
     obs_times = jnp.array([0.0, 0.1, 0.2], dtype=jnp.float32)
-    obs_values = jnp.array([0, 1, 0], dtype=jnp.float32)
+    obs_values = jnp.array([0, 1, 0], dtype=jnp.int32)
 
     def model():
         bias = numpyro.sample("bias", dist.Normal(0.0, 0.5))
