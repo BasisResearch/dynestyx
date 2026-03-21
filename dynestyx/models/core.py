@@ -7,7 +7,7 @@ from typing import Any, Protocol
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from numpyro._typing import DistributionT
+from numpyro.distributions import Distribution as DistributionT
 
 from dynestyx.models.checkers import (
     _infer_vector_dim_from_distribution,

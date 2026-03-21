@@ -124,7 +124,7 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
     try:
         params, _ = model.initialize(**raw_kwargs)
         return params
-    except Exception:
+    except TypeError:
         wrapped_kwargs = {}
         for key, value in raw_kwargs.items():
             if key == "dynamics_approx_order":
@@ -245,7 +245,15 @@ def dsx_to_cd_dynamax(
             f"State evolution of type {type(state_evo)} is not supported yet."
         )
 
-    uses_nonlinear_non_gaussian_api = isinstance(cd_model, ContDiscreteNonlinearSSM)
+    ## Map observation model ##
+    obs = dsx_model.observation_model
+    non_gaussian_flag = not isinstance(obs, LinearGaussianObservation)
+
+    # When cd_model is None, ContDiscreteNonlinearSSM is selected for non-Gaussian
+    # observations, so the nonlinear non-Gaussian API (initial_distribution, etc.) is needed.
+    uses_nonlinear_non_gaussian_api = isinstance(cd_model, ContDiscreteNonlinearSSM) or (
+        cd_model is None and non_gaussian_flag
+    )
 
     ## Map initial condition ##
     ic = dsx_model.initial_condition
@@ -264,10 +272,6 @@ def dsx_to_cd_dynamax(
             raise NotImplementedError(
                 f"Initial condition of type {type(ic)} is not supported yet."
             )
-
-    ## Map observation model ##
-    obs = dsx_model.observation_model
-    non_gaussian_flag = False
 
     if isinstance(obs, LinearGaussianObservation):
 
@@ -305,7 +309,6 @@ def dsx_to_cd_dynamax(
     else:
         # TODO: check for linear-gaussian observation models and extract H, R
         # TODO: check for Gaussian observation and use CDNLGSSM
-        non_gaussian_flag = True
         model_params = {
             **shared_params,
             "initial_distribution": initial_distribution,
