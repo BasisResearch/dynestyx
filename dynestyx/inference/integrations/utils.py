@@ -1,11 +1,10 @@
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
-from numpyro import distributions
 from numpyro.distributions import constraints
 
 
-class WeightedParticles(distributions.Distribution):
+class WeightedParticles(dist.Distribution):
     """A distribution over a finite set of weighted particles.
 
     Samples by drawing an index from a Categorical distribution defined by
@@ -13,6 +12,16 @@ class WeightedParticles(distributions.Distribution):
     representing particle filter posteriors as proper NumPyro distributions
     without relying on ``MixtureSameFamily``, which requires component
     distributions to have a parameter-free support constraint.
+
+    Note:
+        ``log_prob`` is not implemented because this distribution is intended
+        solely for forward sampling (e.g., as an ``initial_condition`` in a
+        ``DynamicalModel``). Using it as a likelihood or in contexts that require
+        density evaluation will raise ``NotImplementedError``.
+
+        ``arg_constraints`` is empty because ``particles`` and ``log_weights``
+        are treated as fixed data (pre-computed particle filter output), not
+        learnable distribution parameters.
 
     Args:
         particles: Array of shape ``(n_particles, state_dim)``.
