@@ -1,5 +1,4 @@
 import jax
-import jax.numpy as jnp
 import numpyro.distributions as dist
 from numpyro.distributions import constraints
 
@@ -32,21 +31,25 @@ class WeightedParticles(dist.Distribution):
     arg_constraints: dict = {}
     support = constraints.real_vector
 
-    def __init__(self, particles: jax.Array, log_weights: jax.Array, validate_args=None):
+    def __init__(
+        self, particles: jax.Array, log_weights: jax.Array, validate_args=None
+    ):
         self._particles = particles  # (n_particles, state_dim)
         self._log_weights = log_weights  # (n_particles,)
         batch_shape = ()
         event_shape = particles.shape[1:]
-        super().__init__(batch_shape=batch_shape, event_shape=event_shape, validate_args=validate_args)
+        super().__init__(
+            batch_shape=batch_shape,
+            event_shape=event_shape,
+            validate_args=validate_args,
+        )
 
     def sample(self, key, sample_shape=()):
         idx = dist.Categorical(logits=self._log_weights).sample(key, sample_shape)
         return self._particles[idx]
 
     def log_prob(self, value):
-        raise NotImplementedError(
-            "log_prob is not implemented for WeightedParticles."
-        )
+        raise NotImplementedError("log_prob is not implemented for WeightedParticles.")
 
 
 def particles_to_delta_mixtures(
