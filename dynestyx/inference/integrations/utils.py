@@ -1,3 +1,5 @@
+from typing import Any
+
 import jax
 import numpyro.distributions as dist
 from numpyro.distributions import constraints
@@ -29,13 +31,16 @@ class WeightedParticles(dist.Distribution):
     """
 
     arg_constraints: dict = {}
-    support = constraints.real_vector
+    support: Any = constraints.real_vector
+    pytree_data_fields = ("particles", "log_weights")
+    particles: jax.Array
+    log_weights: jax.Array
 
     def __init__(
         self, particles: jax.Array, log_weights: jax.Array, validate_args=None
     ):
-        self._particles = particles  # (n_particles, state_dim)
-        self._log_weights = log_weights  # (n_particles,)
+        self.particles = particles  # (n_particles, state_dim)
+        self.log_weights = log_weights  # (n_particles,)
         batch_shape = ()
         event_shape = particles.shape[1:]
         super().__init__(
@@ -45,8 +50,8 @@ class WeightedParticles(dist.Distribution):
         )
 
     def sample(self, key, sample_shape=()):
-        idx = dist.Categorical(logits=self._log_weights).sample(key, sample_shape)
-        return self._particles[idx]
+        idx = dist.Categorical(logits=self.log_weights).sample(key, sample_shape)
+        return self.particles[idx]
 
     def log_prob(self, value):
         raise NotImplementedError("log_prob is not implemented for WeightedParticles.")
