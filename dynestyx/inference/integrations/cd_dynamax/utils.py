@@ -124,7 +124,7 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
     try:
         params, _ = model.initialize(**raw_kwargs)
         return params
-    except TypeError:
+    except Exception:
         wrapped_kwargs = {}
         for key, value in raw_kwargs.items():
             if key == "dynamics_approx_order":
