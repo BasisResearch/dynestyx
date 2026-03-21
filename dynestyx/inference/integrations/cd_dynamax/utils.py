@@ -1,16 +1,17 @@
+from collections.abc import Callable
 from typing import Any
 
+import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax import (
+    ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
     ParamsCDLGSSM,
 )
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
-from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.builders import (
-    build_params as build_cdlgssm_params,
-)
+from cd_dynamax.dynamax.parameters import ParameterProperties
 
 from dynestyx.models import (
     AffineDrift,
@@ -23,6 +24,101 @@ from dynestyx.models import (
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+
+
+class _ConstantFunction(eqx.Module):
+    value: Any
+
+    def f(self, x=None, u=None, t=None):
+        return self.value
+
+
+class _CallableFunction(eqx.Module):
+    fn: Callable = eqx.field(static=True)
+
+    def f(self, x=None, u=None, t=None):
+        return self.fn(x, u, t)
+
+
+class _NumpyroDistributionAdapter:
+    def __init__(self, base_distribution: dist.Distribution):
+        self._base_distribution = base_distribution
+
+    @property
+    def distribution(self):
+        # CD-Dynamax sometimes calls `obj.distribution.sample(seed=...)`.
+        return self
+
+    def log_prob(self, y):
+        return self._base_distribution.log_prob(y)
+
+    def sample(self, *args, seed=None, **kwargs):
+        key = seed if seed is not None else kwargs.pop("key", None)
+        sample_shape = kwargs.pop("sample_shape", ())
+        if key is not None:
+            return self._base_distribution.sample(key, sample_shape=sample_shape)
+        return self._base_distribution.sample(
+            *args, sample_shape=sample_shape, **kwargs
+        )
+
+
+def _fixed_param(value: Any) -> dict[str, Any]:
+    return {"params": value, "props": ParameterProperties(trainable=False)}
+
+
+def _as_learnable(value: Any) -> Any:
+    if hasattr(value, "f"):
+        return value
+    if callable(value):
+        return _CallableFunction(fn=value)
+    return _ConstantFunction(value=jnp.asarray(value))
+
+
+def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
+    """Initialize cd_dynamax params, handling both raw and dict-wrapped APIs."""
+    try:
+        params, _ = model.initialize(**raw_kwargs)
+        return params
+    except Exception:
+        # Some CD-Dynamax revisions have a broken ContDiscreteNonlinearSSM.initialize;
+        # use the model's own build_params API as a compatibility path.
+        if isinstance(model, ContDiscreteNonlinearSSM):
+            build_kwargs: dict[str, Any] = {}
+            rename_map = {
+                "dynamics_drift": "drift",
+                "dynamics_diffusion_coefficient": "diffusion_coeff",
+                "dynamics_diffusion_cov": "diffusion_cov",
+                "dynamics_approx_order": "approx_order",
+            }
+            for key, value in raw_kwargs.items():
+                build_kwargs[rename_map.get(key, key)] = value
+            return model.build_params(**build_kwargs)
+
+        nonlinear_gaussian_keys = {
+            "initial_mean",
+            "initial_cov",
+            "dynamics_drift",
+            "dynamics_diffusion_coefficient",
+            "dynamics_diffusion_cov",
+            "emission_function",
+            "emission_cov",
+        }
+        wrapped_kwargs = {}
+        for key, value in raw_kwargs.items():
+            if key == "dynamics_approx_order":
+                wrapped_kwargs[key] = value
+                continue
+
+            if (
+                isinstance(model, ContDiscreteNonlinearGaussianSSM)
+                and key in nonlinear_gaussian_keys
+            ):
+                wrapped_kwargs[key] = _fixed_param(_as_learnable(value))
+            else:
+                wrapped_kwargs[key] = _fixed_param(value)
+
+        params, _ = model.initialize(**wrapped_kwargs)
+        return params
 
 
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
@@ -77,17 +173,20 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     )
     d = obs.bias if obs.bias is not None else jnp.zeros(dsx_model.observation_dim)
 
-    return build_cdlgssm_params(
+    cd_model = ContDiscreteLinearGaussianSSM(
         state_dim=dsx_model.state_dim,
         emission_dim=dsx_model.observation_dim,
         input_dim=dsx_model.control_dim,
-        dynamics_drift_weights=drift.A,
+    )
+    return _initialize_model_params(
+        cd_model,
+        initial_mean=jnp.asarray(ic.loc),
+        initial_cov=jnp.asarray(ic.covariance_matrix),
+        dynamics_weights=drift.A,
         dynamics_input_weights=B,
         dynamics_bias=b,
-        diffusion_coeff=L,
-        diffusion_cov=Q,
-        x0_mean=jnp.asarray(ic.loc),
-        x0_cov=jnp.asarray(ic.covariance_matrix),
+        dynamics_diffusion_coefficient=L,
+        dynamics_diffusion_cov=Q,
         emission_weights=obs.H,
         emission_input_weights=D,
         emission_bias=d,
@@ -97,20 +196,20 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
 
 def dsx_to_cd_dynamax(
     dsx_model: DynamicalModel, cd_model: SSMType | None = None
-) -> tuple[dict, bool]:
+) -> tuple[Any, bool]:
     """
     Maps a dsx Dynamical Model to a CD-Dynamax-compatible model.
     """
 
-    params: dict[str, Any] = {}
+    shared_params: dict[str, Any] = {}
 
     ## Map state evolution ##
     state_evo = dsx_model.state_evolution
     if isinstance(state_evo, ContinuousTimeStateEvolution):
         if state_evo.drift is not None or state_evo.potential is not None:
-            params.update(
+            shared_params.update(
                 {
-                    "drift": state_evo.total_drift,
+                    "dynamics_drift": state_evo.total_drift,
                 }
             )
         else:
@@ -120,10 +219,10 @@ def dsx_to_cd_dynamax(
                 raise ValueError(
                     "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
                 )
-            params.update(
+            shared_params.update(
                 {
-                    "diffusion_coeff": state_evo.diffusion_coefficient,
-                    "diffusion_cov": jnp.eye(state_evo.bm_dim),
+                    "dynamics_diffusion_coefficient": state_evo.diffusion_coefficient,
+                    "dynamics_diffusion_cov": jnp.eye(state_evo.bm_dim),
                 }
             )
     else:
@@ -131,25 +230,30 @@ def dsx_to_cd_dynamax(
             f"State evolution of type {type(state_evo)} is not supported yet."
         )
 
+    uses_nonlinear_non_gaussian_api = isinstance(cd_model, ContDiscreteNonlinearSSM)
+
     ## Map initial condition ##
     ic = dsx_model.initial_condition
-    if isinstance(ic, dist.MultivariateNormal):
-        params.update(
-            {
-                "initial_mean": ic.loc,  # type: ignore
-                "initial_cov": ic.covariance_matrix,
-            }
+    if uses_nonlinear_non_gaussian_api:
+        initial_distribution = (
+            _NumpyroDistributionAdapter(ic) if isinstance(ic, dist.Distribution) else ic
         )
-    elif isinstance(ic, dist.Normal):
-        params.update({"initial_mean": ic.loc, "initial_cov": jnp.square(ic.scale)})  # type: ignore
     else:
-        raise NotImplementedError(
-            f"Initial condition of type {type(ic)} is not supported yet."
-        )
+        if isinstance(ic, dist.MultivariateNormal):
+            initial_mean = ic.loc  # type: ignore
+            initial_cov = ic.covariance_matrix
+        elif isinstance(ic, dist.Normal):
+            initial_mean = ic.loc  # type: ignore
+            initial_cov = jnp.square(ic.scale)
+        else:
+            raise NotImplementedError(
+                f"Initial condition of type {type(ic)} is not supported yet."
+            )
 
     ## Map observation model ##
     obs = dsx_model.observation_model
     non_gaussian_flag = False
+
     if isinstance(obs, LinearGaussianObservation):
 
         def emission_function(x, u, t):
@@ -162,20 +266,39 @@ def dsx_to_cd_dynamax(
                     obs.D @ u if obs.D is not None and u is not None else 0
                 )
 
-        params.update(
-            {
+        if uses_nonlinear_non_gaussian_api:
+
+            def emission_distribution(x=None, u=None, t=None):
+                mean = emission_function(x, u, t)
+                return _NumpyroDistributionAdapter(  # type: ignore
+                    dist.MultivariateNormal(
+                        loc=jnp.atleast_1d(jnp.asarray(mean)),
+                        covariance_matrix=jnp.atleast_2d(jnp.asarray(obs.R)),
+                    )
+                )
+
+            model_params = {
+                **shared_params,
+                "initial_distribution": initial_distribution,
+                "emission_distribution": emission_distribution,
+            }
+        else:
+            model_params = {
+                **shared_params,
+                "initial_mean": initial_mean,
+                "initial_cov": initial_cov,
                 "emission_function": emission_function,
                 "emission_cov": obs.R,  # type: ignore
             }
-        )
     else:
         # TODO: check for linear-gaussian observation models and extract H, R
         # TODO: check for Gaussian observation and use CDNLGSSM
         non_gaussian_flag = True
-        params.update(emission_distribution=dsx_model.observation_model)
-        # raise NotImplementedError(
-        #     f"Observation model of type {type(obs)} is not supported yet."
-        # )
+        model_params = {
+            **shared_params,
+            "initial_distribution": initial_distribution,
+            "emission_distribution": dsx_model.observation_model,
+        }
 
     if cd_model is None:
         if non_gaussian_flag:
@@ -193,7 +316,7 @@ def dsx_to_cd_dynamax(
     else:
         model_to_use = cd_model
 
-    cd_dynamax_params = model_to_use.build_params(**params)
+    cd_dynamax_params = _initialize_model_params(model_to_use, **model_params)
 
     return cd_dynamax_params, non_gaussian_flag
 
