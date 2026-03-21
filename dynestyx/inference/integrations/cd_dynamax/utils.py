@@ -26,20 +26,20 @@ type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 class _InitialDistributionAdapter:
-    """Adapter matching CD-Dynamax initial distribution expectations, with a TFP-like sample(seed=...) API."""
+    """NumPyro initial dist for CD-Dynamax: ``.distribution.sample(seed=...)`` matches TFP."""
 
-    def __init__(self, base_distribution):
-        self.base_distribution = base_distribution
+    def __init__(self, numpyro_distribution):
+        self._dist = numpyro_distribution
+
+    @property
+    def distribution(self):
+        return self
+
+    def sample(self, seed, sample_shape=()):
+        return self._dist.sample(seed, sample_shape=sample_shape)
 
     def log_prob(self, x, u=None, t=None):
-        return self.base_distribution.log_prob(x)
-
-    def sample(self, x=None, u=None, t=None, seed=None, sample_shape=()):
-        if seed is None:
-            raise ValueError(
-                "seed must be provided when sampling initial distribution."
-            )
-        return self.base_distribution.sample(seed, sample_shape=sample_shape)
+        return self._dist.log_prob(x)
 
 
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
