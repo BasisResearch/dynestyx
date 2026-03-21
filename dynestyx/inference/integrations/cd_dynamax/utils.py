@@ -62,6 +62,30 @@ class _NumpyroDistributionAdapter:
         )
 
 
+class _ConditionalDistributionAdapter:
+    def __init__(self, distribution_fn: Callable):
+        self._distribution_fn = distribution_fn
+
+    def log_prob(self, y, x=None, u=None, t=None):
+        return self._distribution_fn(x, u, t).log_prob(y)
+
+    def sample(self, x=None, u=None, t=None, *args, seed=None, **kwargs):
+        key = seed if seed is not None else kwargs.pop("key", None)
+        sample_shape = kwargs.pop("sample_shape", ())
+        dist_xy = self._distribution_fn(x, u, t)
+        if key is not None:
+            return dist_xy.sample(key, sample_shape=sample_shape)
+        return dist_xy.sample(*args, sample_shape=sample_shape, **kwargs)
+
+
+def _as_emission_distribution(obs_model: Any) -> Any:
+    if hasattr(obs_model, "log_prob") and hasattr(obs_model, "sample"):
+        return obs_model
+    if callable(obs_model):
+        return _ConditionalDistributionAdapter(obs_model)
+    return obs_model
+
+
 def _fixed_param(value: Any) -> dict[str, Any]:
     return {"params": value, "props": ParameterProperties(trainable=False)}
 
@@ -76,25 +100,9 @@ def _as_learnable(value: Any) -> Any:
 
 def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
     """Initialize cd_dynamax params, handling both raw and dict-wrapped APIs."""
-    try:
-        params, _ = model.initialize(**raw_kwargs)
-        return params
-    except Exception:
-        # Some CD-Dynamax revisions have a broken ContDiscreteNonlinearSSM.initialize;
-        # use the model's own build_params API as a compatibility path.
-        if isinstance(model, ContDiscreteNonlinearSSM):
-            build_kwargs: dict[str, Any] = {}
-            rename_map = {
-                "dynamics_drift": "drift",
-                "dynamics_diffusion_coefficient": "diffusion_coeff",
-                "dynamics_diffusion_cov": "diffusion_cov",
-                "dynamics_approx_order": "approx_order",
-            }
-            for key, value in raw_kwargs.items():
-                build_kwargs[rename_map.get(key, key)] = value
-            return model.build_params(**build_kwargs)
-
-        nonlinear_gaussian_keys = {
+    if isinstance(model, (ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM)):
+        wrapped_kwargs = {}
+        learnable_fn_keys = {
             "initial_mean",
             "initial_cov",
             "dynamics_drift",
@@ -103,19 +111,26 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
             "emission_function",
             "emission_cov",
         }
+        for key, value in raw_kwargs.items():
+            if key == "dynamics_approx_order":
+                wrapped_kwargs[key] = value
+            elif key in learnable_fn_keys:
+                wrapped_kwargs[key] = _fixed_param(_as_learnable(value))
+            else:
+                wrapped_kwargs[key] = _fixed_param(value)
+        params, _ = model.initialize(**wrapped_kwargs)
+        return params
+
+    try:
+        params, _ = model.initialize(**raw_kwargs)
+        return params
+    except Exception:
         wrapped_kwargs = {}
         for key, value in raw_kwargs.items():
             if key == "dynamics_approx_order":
                 wrapped_kwargs[key] = value
                 continue
-
-            if (
-                isinstance(model, ContDiscreteNonlinearGaussianSSM)
-                and key in nonlinear_gaussian_keys
-            ):
-                wrapped_kwargs[key] = _fixed_param(_as_learnable(value))
-            else:
-                wrapped_kwargs[key] = _fixed_param(value)
+            wrapped_kwargs[key] = _fixed_param(value)
 
         params, _ = model.initialize(**wrapped_kwargs)
         return params
@@ -267,15 +282,12 @@ def dsx_to_cd_dynamax(
                 )
 
         if uses_nonlinear_non_gaussian_api:
-
-            def emission_distribution(x=None, u=None, t=None):
-                mean = emission_function(x, u, t)
-                return _NumpyroDistributionAdapter(  # type: ignore
-                    dist.MultivariateNormal(
-                        loc=jnp.atleast_1d(jnp.asarray(mean)),
-                        covariance_matrix=jnp.atleast_2d(jnp.asarray(obs.R)),
-                    )
+            emission_distribution = _ConditionalDistributionAdapter(
+                lambda x=None, u=None, t=None: dist.MultivariateNormal(
+                    loc=jnp.atleast_1d(jnp.asarray(emission_function(x, u, t))),
+                    covariance_matrix=jnp.atleast_2d(jnp.asarray(obs.R)),
                 )
+            )
 
             model_params = {
                 **shared_params,
@@ -297,7 +309,9 @@ def dsx_to_cd_dynamax(
         model_params = {
             **shared_params,
             "initial_distribution": initial_distribution,
-            "emission_distribution": dsx_model.observation_model,
+            "emission_distribution": _as_emission_distribution(
+                dsx_model.observation_model
+            ),
         }
 
     if cd_model is None:
