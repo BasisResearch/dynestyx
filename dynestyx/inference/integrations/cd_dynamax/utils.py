@@ -103,16 +103,18 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
     if isinstance(model, ContDiscreteLinearGaussianSSM):
         # HD-UQ/public expects `{params, props}` wrappers for CDLGSSM initialize,
         # but tensor-valued fields should remain raw arrays (not function wrappers).
-        wrapped_kwargs = {}
+        wrapped_linear_kwargs: dict[str, Any] = {}
         for key, value in raw_kwargs.items():
-            wrapped_kwargs[key] = (
+            wrapped_linear_kwargs[key] = (
                 value if key == "dynamics_approx_order" else _fixed_param(value)
             )
-        params, _ = model.initialize(**wrapped_kwargs)
-        return params
+        cdlg_params, _ = model.initialize(  # type: ignore[arg-type]
+            **wrapped_linear_kwargs
+        )
+        return cdlg_params
 
     if isinstance(model, (ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM)):
-        wrapped_kwargs = {}
+        wrapped_nonlinear_kwargs: dict[str, Any] = {}
         learnable_fn_keys = {
             "initial_mean",
             "initial_cov",
@@ -124,16 +126,23 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
         }
         for key, value in raw_kwargs.items():
             if key == "dynamics_approx_order":
-                wrapped_kwargs[key] = value
+                wrapped_nonlinear_kwargs[key] = value
             elif key in learnable_fn_keys:
-                wrapped_kwargs[key] = _fixed_param(_as_learnable(value))
+                wrapped_nonlinear_kwargs[key] = _fixed_param(_as_learnable(value))
             else:
-                wrapped_kwargs[key] = _fixed_param(value)
-        params, _ = model.initialize(**wrapped_kwargs)
-        return params
+                wrapped_nonlinear_kwargs[key] = _fixed_param(value)
+        cdnl_params, _ = model.initialize(  # type: ignore[arg-type]
+            **wrapped_nonlinear_kwargs
+        )
+        return cdnl_params
 
-    params, _ = model.initialize(**raw_kwargs)
-    return params
+    raise TypeError(
+        "_initialize_model_params only supports "
+        "ContDiscreteLinearGaussianSSM, "
+        "ContDiscreteNonlinearGaussianSSM, and "
+        "ContDiscreteNonlinearSSM; "
+        f"got {type(model).__name__}."
+    )
 
 
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
