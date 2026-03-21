@@ -25,6 +25,23 @@ from dynestyx.models import (
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
+class _InitialDistributionAdapter:
+    """Adapter matching CD-Dynamax initial distribution expectations, with a TFP-like sample(seed=...) API."""
+
+    def __init__(self, base_distribution):
+        self.base_distribution = base_distribution
+
+    def log_prob(self, x, u=None, t=None):
+        return self.base_distribution.log_prob(x)
+
+    def sample(self, x=None, u=None, t=None, seed=None, sample_shape=()):
+        if seed is None:
+            raise ValueError(
+                "seed must be provided when sampling initial distribution."
+            )
+        return self.base_distribution.sample(seed, sample_shape=sample_shape)
+
+
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     """Build ParamsCDLGSSM for CD-Dynamax's continuous-discrete KF.
 
@@ -133,7 +150,9 @@ def dsx_to_cd_dynamax(
 
     ## Map initial condition ##
     ic = dsx_model.initial_condition
-    if isinstance(ic, dist.MultivariateNormal):
+    if isinstance(cd_model, ContDiscreteNonlinearSSM):
+        params.update({"initial_distribution": _InitialDistributionAdapter(ic)})
+    elif isinstance(ic, dist.MultivariateNormal):
         params.update(
             {
                 "initial_mean": ic.loc,  # type: ignore
