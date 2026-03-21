@@ -20,6 +20,7 @@ from dynestyx import (
 )
 from dynestyx.inference.filter_configs import (
     ContinuousTimeEnKFConfig,
+    PFConfig,
 )
 from tests.fixtures import (
     _squeeze_sim_dims,
@@ -192,3 +193,49 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
     assert "f_filtered_states_mean" in tr
     pred_states = tr["f_predicted_states"]["value"]
     assert pred_states.shape == (n_sim, len(predict_times), 2), pred_states.shape
+
+
+def test_filter_discretetimesimulator_pf_predict_times_particle_sampling():
+    """PF + DiscreteTimeSimulator uses stochastic particle-mixture rollout."""
+    from numpyro.infer import Predictive
+
+    from tests.models import discrete_time_lti_simplified_model
+
+    rng_key = jr.PRNGKey(7)
+    obs_times = jnp.arange(0.0, 6.0, 1.0)
+    predict_times = jnp.arange(0.0, 9.0, 1.0)
+    true_alpha = 0.35
+
+    # Generate training observations once.
+    with DiscreteTimeSimulator(n_simulations=1):
+        pred = Predictive(
+            discrete_time_lti_simplified_model,
+            params={"alpha": jnp.array(true_alpha)},
+            num_samples=1,
+            exclude_deterministic=False,
+        )
+        sim = pred(rng_key, predict_times=obs_times)
+    obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
+
+    substituted = numpyro.handlers.substitute(
+        discrete_time_lti_simplified_model, data={"alpha": jnp.array(true_alpha)}
+    )
+    n_sim = 4
+    with DiscreteTimeSimulator(n_simulations=n_sim):
+        with Filter(filter_config=PFConfig(n_particles=128, filter_source="cuthbert")):
+            with trace() as tr, seed(rng_seed=0):
+                substituted(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=predict_times,
+                )
+
+    pred_states = tr["f_predicted_states"]["value"]
+    assert pred_states.shape == (n_sim, len(predict_times), 2)
+
+    # Segment initial states are sampled from the PF posterior mixture.
+    x0_keys = [k for k in tr if k.startswith("f_") and k.endswith("_x_0")]
+    assert x0_keys, "Expected rollout segment initial-state sites."
+    x0 = tr[x0_keys[0]]["value"]
+    assert x0.shape[0] == n_sim
+    assert not jnp.allclose(x0[0], x0[1])
