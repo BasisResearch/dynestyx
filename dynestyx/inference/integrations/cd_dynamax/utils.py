@@ -100,6 +100,17 @@ def _as_learnable(value: Any) -> Any:
 
 def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
     """Initialize cd_dynamax params, handling both raw and dict-wrapped APIs."""
+    if isinstance(model, ContDiscreteLinearGaussianSSM):
+        # HD-UQ/public expects `{params, props}` wrappers for CDLGSSM initialize,
+        # but tensor-valued fields should remain raw arrays (not function wrappers).
+        wrapped_kwargs = {}
+        for key, value in raw_kwargs.items():
+            wrapped_kwargs[key] = (
+                value if key == "dynamics_approx_order" else _fixed_param(value)
+            )
+        params, _ = model.initialize(**wrapped_kwargs)
+        return params
+
     if isinstance(model, (ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM)):
         wrapped_kwargs = {}
         learnable_fn_keys = {
@@ -121,19 +132,8 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
         params, _ = model.initialize(**wrapped_kwargs)
         return params
 
-    try:
-        params, _ = model.initialize(**raw_kwargs)
-        return params
-    except Exception:
-        wrapped_kwargs = {}
-        for key, value in raw_kwargs.items():
-            if key == "dynamics_approx_order":
-                wrapped_kwargs[key] = value
-                continue
-            wrapped_kwargs[key] = _fixed_param(value)
-
-        params, _ = model.initialize(**wrapped_kwargs)
-        return params
+    params, _ = model.initialize(**raw_kwargs)
+    return params
 
 
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
