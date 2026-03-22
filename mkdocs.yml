@@ -354,6 +354,7 @@ extra:
   # Version selector (Material + mike). Deployed per version/alias by CI — see docs/versioning.md
   version:
     provider: mike
+    default: latest
 
   # +------------------------------------------------------------------------------------------------------+
   # |                                                                                                      |
