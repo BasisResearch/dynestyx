@@ -95,6 +95,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times=None,
         obs_values=None,
         ctrl_times=None,

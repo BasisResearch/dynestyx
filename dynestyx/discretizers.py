@@ -16,6 +16,8 @@ from dynestyx.types import FunctionOfTime
 class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
     """x_{t+1} ~ N(x + drift*dt, (L@Q@L.T)*dt)."""
 
+    cte: ContinuousTimeStateEvolution
+
     def __init__(self, cte: ContinuousTimeStateEvolution):
         self.cte = cte
 
@@ -180,6 +182,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
@@ -198,6 +201,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         return fwd(
             name,
             dynamics,
+            plate_shapes=plate_shapes,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,

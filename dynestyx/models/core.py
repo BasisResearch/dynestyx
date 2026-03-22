@@ -1,12 +1,12 @@
 """Core interfaces and base classes for dynamical models."""
 
-import dataclasses
 from collections.abc import Callable
 from typing import Any, Protocol
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import numpyro.primitives
 from numpyro._typing import DistributionT
 
 from dynestyx.models.checkers import (
@@ -137,13 +137,47 @@ class DynamicalModel(eqx.Module):
         if control_dim is None:
             control_dim = 0
 
+        # Skip shape validation when inside a numpyro plate context, since
+        # batched parameters produce shapes that don't match unbatched expectations.
+        _inside_plate = any(
+            isinstance(f, numpyro.primitives.plate)
+            for f in numpyro.primitives._PYRO_STACK
+        )
+
+        if _inside_plate:
+            # Cannot validate shapes with batched parameters; trust the user.
+            # Infer observation_dim from observation model if not explicitly provided.
+            if observation_dim is not None:
+                inferred_obs_dim = int(observation_dim)
+            else:
+                x0 = _make_probe_state(
+                    initial_condition=initial_condition,
+                    state_dim=inferred_state_dim,
+                )
+                u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+                dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+                try:
+                    obs_dist = observation_model(x0, u0, dummy_t0)
+                    inferred_obs_dim = int(
+                        _infer_vector_dim_from_distribution(
+                            obs_dist, "observation_model(x, u, t)"
+                        )
+                    )
+                except Exception:
+                    inferred_obs_dim = 0
+            self.state_dim = int(inferred_state_dim)
+            self.observation_dim = inferred_obs_dim
+            self.control_dim = int(control_dim)
+            self.categorical_state = bool(inferred_categorical_state)
+            return
+
         x0 = _make_probe_state(
             initial_condition=initial_condition, state_dim=inferred_state_dim
         )
         u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
         dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
 
-        _validate_state_evolution_output_shape(
+        inferred_bm_dim = _validate_state_evolution_output_shape(
             state_evolution=state_evolution,
             state_dim=inferred_state_dim,
             x0=x0,
@@ -151,6 +185,8 @@ class DynamicalModel(eqx.Module):
             t0=dummy_t0,
             continuous_time=self.continuous_time,
         )
+        if self.continuous_time and inferred_bm_dim != state_evolution.bm_dim:
+            object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
 
         obs_dist = observation_model(x0, u0, dummy_t0)
         inferred_observation_dim = _infer_vector_dim_from_distribution(
@@ -249,8 +285,7 @@ class Potential(Protocol):
         raise NotImplementedError()
 
 
-@dataclasses.dataclass
-class ContinuousTimeStateEvolution:
+class ContinuousTimeStateEvolution(eqx.Module):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
 
@@ -284,9 +319,9 @@ class ContinuousTimeStateEvolution:
 
     drift: Drift | None = None
     potential: Potential | None = None
-    use_negative_gradient: bool = False
+    use_negative_gradient: bool = eqx.field(static=True, default=False)
     diffusion_coefficient: Drift | None = None
-    bm_dim: int | None = dataclasses.field(default=None, repr=False)
+    bm_dim: int | None = eqx.field(static=True, default=None)
 
     def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
         base = self.drift(x, u, t) if self.drift is not None else None
@@ -307,7 +342,7 @@ class ContinuousTimeStateEvolution:
         return base + grad_term
 
 
-class DiscreteTimeStateEvolution:
+class DiscreteTimeStateEvolution(eqx.Module):
     """
     Discrete-time state evolution via Markov transition distributions.
 
