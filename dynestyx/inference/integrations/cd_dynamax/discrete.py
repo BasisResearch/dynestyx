@@ -1,7 +1,5 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF."""
 
-from collections.abc import Callable
-
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -72,157 +70,63 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
         )
 
 
-def _filter_discrete_time_dynamax_kf(
-    name: str,
-    dynamics: DynamicalModel,
-    record_kwargs: dict,
-    *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-    **kwargs,
-) -> list[dist.Distribution]:
-    """Run dynamax Kalman filter for LTI_discretetime and add factor + sites."""
+def _prepare_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
+    """Prepare emissions and inputs arrays for cd-dynamax discrete filters."""
     emissions = obs_values
     T1 = emissions.shape[0]
     control_dim = dynamics.control_dim
     if ctrl_values is None:
         inputs = jnp.zeros((T1, control_dim))
     elif ctrl_values.shape[0] > T1:
-        # Find controls aligned to obs_times
         inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
     else:
-        # Controls should align exactly with obs_times
         inputs = ctrl_values
-
-    params = _lti_to_lgssm_params(dynamics)
-    posterior = lgssm_filter(params, emissions, inputs=inputs)
-
-    marginal_loglik = posterior.marginal_loglik
-    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
-    _add_kf_sites(name, posterior, record_kwargs)
-
-    if posterior.filtered_means is None or posterior.filtered_covariances is None:
-        return []
-    return [
-        dist.MultivariateNormal(
-            posterior.filtered_means[i], posterior.filtered_covariances[i]
-        )
-        for i in range(posterior.filtered_means.shape[0])
-    ]
+    return emissions, inputs
 
 
-def _run_nlgssm_filter(
-    name: str,
+def compute_cd_dynamax_discrete_filter(
     dynamics: DynamicalModel,
-    record_kwargs: dict,
-    run_filter: Callable,
+    filter_config: BaseFilterConfig,
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
-    **kwargs,
-) -> list[dist.Distribution]:
-    """Common setup for EKF/UKF: get emissions/inputs, run filter, add factor + sites."""
-    emissions = obs_values
-    T1 = emissions.shape[0]
-    control_dim = dynamics.control_dim
-    if ctrl_values is None:
-        inputs = jnp.zeros((T1, control_dim))
-    elif ctrl_values.shape[0] > T1:
-        # Find controls aligned to obs_times
-        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
-        inputs = ctrl_values[inds]
-    else:
-        # Controls should align exactly with obs_times
-        inputs = ctrl_values
+):
+    """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects).
 
-    params_nl = gaussian_to_nlgssm_params(dynamics)
-    posterior = run_filter(params_nl, emissions, inputs)
-
-    marginal_loglik = posterior.marginal_loglik
-    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
-    _add_kf_sites(name, posterior, record_kwargs)
-
-    if posterior.filtered_means is None or posterior.filtered_covariances is None:
-        return []
-    return [
-        dist.MultivariateNormal(
-            posterior.filtered_means[i], posterior.filtered_covariances[i]
-        )
-        for i in range(posterior.filtered_means.shape[0])
-    ]
-
-
-def _filter_discrete_time_dynamax_ekf(
-    name: str,
-    dynamics: DynamicalModel,
-    record_kwargs: dict,
-    num_iter: int = 1,
-    *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-    **kwargs,
-) -> list[dist.Distribution]:
-    """Run dynamax EKF for LTI and add factor + sites."""
-
-    def run_filter(params_nl, emissions, inputs):
-        return extended_kalman_filter(
-            params_nl, emissions, num_iter=num_iter, inputs=inputs
-        )
-
-    return _run_nlgssm_filter(
-        name,
-        dynamics,
-        record_kwargs,
-        run_filter,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        **kwargs,
+    Returns:
+        PosteriorGSSMFiltered: The filtered posterior (contains marginal_loglik,
+        filtered_means, filtered_covariances).
+    """
+    emissions, inputs = _prepare_inputs(
+        dynamics, obs_values, obs_times, ctrl_times, ctrl_values
     )
 
+    if isinstance(filter_config, KFConfig):
+        params = _lti_to_lgssm_params(dynamics)
+        return lgssm_filter(params, emissions, inputs=inputs)
 
-def _filter_discrete_time_dynamax_ukf(
-    name: str,
-    dynamics: DynamicalModel,
-    record_kwargs: dict,
-    hyperparams: UKFHyperParams | None = None,
-    *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-    **kwargs,
-) -> list[dist.Distribution]:
-    """Run dynamax UKF for LTI and add factor + sites."""
-    if hyperparams is None:
-        hyperparams = UKFHyperParams()
+    # EKF and UKF share the same nonlinear params representation.
+    params_nl = gaussian_to_nlgssm_params(dynamics)
 
-    def run_filter(params_nl, emissions, inputs):
+    if isinstance(filter_config, EKFConfig):
+        return extended_kalman_filter(params_nl, emissions, inputs=inputs)
+    elif isinstance(filter_config, UKFConfig):
+        hyperparams = UKFHyperParams(
+            alpha=filter_config.alpha,
+            beta=filter_config.beta,
+            kappa=filter_config.kappa,
+        )
         return unscented_kalman_filter(
             params_nl, emissions, hyperparams=hyperparams, inputs=inputs
         )
-
-    return _run_nlgssm_filter(
-        name,
-        dynamics,
-        record_kwargs,
-        run_filter,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        **kwargs,
-    )
+    else:
+        raise ValueError(
+            f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
+            "Expected KFConfig, EKFConfig, or UKFConfig."
+        )
 
 
 def _add_kf_sites(
@@ -280,34 +184,26 @@ def run_discrete_filter(
     Returns:
         list[dist.Distribution]: Filtered state distributions at each obs time.
     """
-    record_kwargs = _config_to_record_kwargs(filter_config)
-    filter_kwargs = dict(
+    posterior = compute_cd_dynamax_discrete_filter(
+        dynamics,
+        filter_config,
         obs_times=obs_times,
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        **kwargs,
     )
 
-    if isinstance(filter_config, KFConfig):
-        return _filter_discrete_time_dynamax_kf(
-            name, dynamics, record_kwargs, **filter_kwargs
+    record_kwargs = _config_to_record_kwargs(filter_config)
+    marginal_loglik = posterior.marginal_loglik
+    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
+    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
+    _add_kf_sites(name, posterior, record_kwargs)
+
+    if posterior.filtered_means is None or posterior.filtered_covariances is None:
+        return []
+    return [
+        dist.MultivariateNormal(
+            posterior.filtered_means[i], posterior.filtered_covariances[i]
         )
-    elif isinstance(filter_config, EKFConfig):
-        return _filter_discrete_time_dynamax_ekf(
-            name, dynamics, record_kwargs, **filter_kwargs
-        )
-    elif isinstance(filter_config, UKFConfig):
-        hyperparams = UKFHyperParams(
-            alpha=filter_config.alpha,
-            beta=filter_config.beta,
-            kappa=filter_config.kappa,
-        )
-        return _filter_discrete_time_dynamax_ukf(
-            name, dynamics, record_kwargs, hyperparams=hyperparams, **filter_kwargs
-        )
-    else:
-        raise ValueError(
-            f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, or UKFConfig."
-        )
+        for i in range(posterior.filtered_means.shape[0])
+    ]

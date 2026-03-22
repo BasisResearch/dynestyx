@@ -1,4 +1,5 @@
 import dataclasses
+import math
 
 import jax
 import numpyro
@@ -25,10 +26,19 @@ from dynestyx.inference.filter_configs import (
     PFResamplingConfig,
     UKFConfig,
 )
-from dynestyx.inference.hmm_filters import _filter_hmm
-from dynestyx.inference.integrations.cd_dynamax.continuous import run_continuous_filter
+from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
+from dynestyx.inference.integrations.cd_dynamax.continuous import (
+    compute_continuous_filter,
+    run_continuous_filter,
+)
+from dynestyx.inference.integrations.cd_dynamax.discrete import (
+    compute_cd_dynamax_discrete_filter,
+)
 from dynestyx.inference.integrations.cd_dynamax.discrete import (
     run_discrete_filter as run_cd_dynamax_discrete,
+)
+from dynestyx.inference.integrations.cuthbert.discrete import (
+    compute_cuthbert_filter,
 )
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
@@ -37,6 +47,40 @@ from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+
+
+def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
+    """Build in_axes for a pytree based on whether leaves have plate batch dims.
+
+    A leaf is considered batched if it is a JAX array whose leading dimensions
+    match the plate_shapes tuple. Batched leaves get in_axes=0; others get None.
+    The same in_axes can be reused for each nested vmap call since each vmap
+    peels off one leading dimension.
+    """
+    n_plates = len(plate_shapes)
+
+    def _axis(leaf):
+        if not isinstance(leaf, jax.Array) or leaf.ndim < n_plates:
+            return None
+        for i, ps in enumerate(plate_shapes):
+            if leaf.shape[i] != ps:
+                return None
+        return 0
+
+    return jax.tree.map(_axis, tree)
+
+
+def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
+    """Return 0 if arr has leading dims matching plate_shapes, else None."""
+    if arr is None:
+        return None
+    n_plates = len(plate_shapes)
+    if arr.ndim < n_plates:
+        return None
+    for i, ps in enumerate(plate_shapes):
+        if arr.shape[i] != ps:
+            return None
+    return 0
 
 
 class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
@@ -48,6 +92,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
@@ -59,6 +104,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
             filtered_dists = self._add_log_factors(
                 name,
                 dynamics,
+                plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
@@ -70,6 +116,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         return fwd(
             name,
             dynamics,
+            plate_shapes=plate_shapes,
             obs_times=None,
             obs_values=None,
             ctrl_times=ctrl_times,
@@ -84,12 +131,13 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
-    ) -> list[numpyro.distributions.Distribution]:
+    ) -> list[numpyro.distributions.Distribution] | None:
         # Inheritors should implement this method.
         raise NotImplementedError()
 
@@ -164,18 +212,20 @@ class Filter(BaseLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times: jax.Array | None = None,
         obs_values: jax.Array | None = None,
         ctrl_times=None,
         ctrl_values=None,
         **kwargs,
-    ) -> list[numpyro.distributions.Distribution]:
+    ) -> list[numpyro.distributions.Distribution] | None:
         """
         Add the marginal log likelihood as a numpyro factor.
 
         Args:
             name: Name of the factor.
             dynamics: Dynamical model to filter.
+            plate_shapes: Tuple of plate sizes from enclosing dsx.plate contexts.
             obs_times: Observation times.
             obs_values: Observed values.
             ctrl_times: Control times (optional).
@@ -191,6 +241,19 @@ class Filter(BaseLogFactorAdder):
         )
 
         key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
+
+        if plate_shapes:
+            return self._add_log_factors_batched(
+                name,
+                dynamics,
+                config,
+                key=key,
+                plate_shapes=plate_shapes,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
@@ -240,6 +303,130 @@ class Filter(BaseLogFactorAdder):
                     f"Invalid filter config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
+
+    def _add_log_factors_batched(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        config: BaseFilterConfig,
+        *,
+        key: jax.Array | None,
+        plate_shapes: tuple[int, ...],
+        obs_times: jax.Array,
+        obs_values: jax.Array,
+        ctrl_times=None,
+        ctrl_values=None,
+    ) -> None:
+        """Compute batched marginal log-likelihoods via vmap for plate contexts.
+
+        Vmaps the pure-JAX compute function over each plate dimension, then issues
+        a single numpyro.factor with the batched log-likelihoods. The enclosing
+        numpyro.plate context handles summation.
+
+        Returns None (no filtered distributions for batched case).
+        """
+        # Determine the compute function (dispatch before vmap).
+        if dynamics.continuous_time:
+            if not isinstance(config, ContinuousTimeConfigs):
+                valid = [c.__name__ for c in ContinuousTimeConfigs]
+                raise ValueError(
+                    f"Invalid filter config: {type(config).__name__}. "
+                    f"Valid config types: {valid}"
+                )
+
+            def compute_loglik(dyn, ot, ov, ct, cv, k):
+                filtered = compute_continuous_filter(
+                    dyn,
+                    config,
+                    k,
+                    obs_times=ot,
+                    obs_values=ov,
+                    ctrl_times=ct,
+                    ctrl_values=cv,
+                )
+                return filtered.marginal_loglik
+
+        elif isinstance(config, HMMConfigs):
+
+            def compute_loglik(dyn, ot, ov, ct, cv, k):
+                loglik, _ = compute_hmm_filter(
+                    dyn,
+                    obs_times=ot,
+                    obs_values=ov,
+                    ctrl_values=cv,
+                )
+                return loglik
+
+        elif isinstance(config, DiscreteTimeConfigs):
+            if config.filter_source == "cuthbert":
+
+                def compute_loglik(dyn, ot, ov, ct, cv, k):
+                    loglik, _ = compute_cuthbert_filter(
+                        dyn,
+                        config,
+                        k,
+                        obs_times=ot,
+                        obs_values=ov,
+                        ctrl_times=ct,
+                        ctrl_values=cv,
+                    )
+                    return loglik
+
+            elif config.filter_source == "cd_dynamax":
+
+                def compute_loglik(dyn, ot, ov, ct, cv, k):
+                    posterior = compute_cd_dynamax_discrete_filter(
+                        dyn,
+                        config,
+                        obs_times=ot,
+                        obs_values=ov,
+                        ctrl_times=ct,
+                        ctrl_values=cv,
+                    )
+                    return posterior.marginal_loglik
+
+            else:
+                raise ValueError(f"Unknown filter source: {config.filter_source}")
+        else:
+            raise ValueError(
+                f"Unsupported filter config for plate: {type(config).__name__}"
+            )
+
+        # Pre-split keys for all plate members (needed for stochastic filters).
+        if key is not None:
+            total = math.prod(plate_shapes)
+            keys = jax.random.split(key, total).reshape(*plate_shapes, -1)
+        else:
+            keys = None
+
+        # Build in_axes: same axes reused for each nested vmap.
+        dyn_axes = _make_plate_in_axes(dynamics, plate_shapes)
+        ot_axis = _array_plate_axis(obs_times, plate_shapes)
+        ov_axis = _array_plate_axis(obs_values, plate_shapes)
+        ct_axis = _array_plate_axis(ctrl_times, plate_shapes)
+        cv_axis = _array_plate_axis(ctrl_values, plate_shapes)
+        k_axis = 0 if keys is not None else None
+
+        # Nest vmap for each plate dimension.
+        vmapped = compute_loglik
+        for _ in plate_shapes:
+            vmapped = jax.vmap(
+                vmapped,
+                in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+            )
+
+        marginal_logliks = vmapped(
+            dynamics,
+            obs_times,
+            obs_values,
+            ctrl_times,
+            ctrl_values,
+            keys,
+        )
+
+        numpyro.factor(f"{name}_marginal_log_likelihood", marginal_logliks)
+        numpyro.deterministic(f"{name}_marginal_loglik", marginal_logliks)
+        return None
 
 
 def _filter_discrete_time(

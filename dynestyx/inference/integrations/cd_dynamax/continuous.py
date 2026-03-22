@@ -141,7 +141,6 @@ def _add_filter_sites(
 
 
 def _run_linear_kf(
-    name: str,
     dynamics: DynamicalModel,
     obs_times,
     obs_values,
@@ -162,6 +161,70 @@ def _run_linear_kf(
         inputs=ctrl_values,
         warn=filter_config.warn,
     )
+    return filtered
+
+
+def compute_continuous_filter(
+    dynamics: DynamicalModel,
+    filter_config: ContinuousTimeFilterConfig,
+    key: jax.Array | None = None,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+):
+    """Pure-JAX continuous-time filter computation (no numpyro side-effects).
+
+    Returns:
+        The cd-dynamax filtered posterior object (contains marginal_loglik,
+        filtered_means, filtered_covariances, and for DPF: particles, log_weights).
+    """
+    obs_times_arr = jnp.asarray(obs_times)
+    if obs_times_arr.ndim == 1:
+        obs_times_arr = obs_times_arr[:, None]
+
+    control_dim = dynamics.control_dim
+    ctrl_vals = (
+        ctrl_values
+        if ctrl_values is not None
+        else jnp.zeros((obs_times_arr.shape[0], control_dim))
+    )
+
+    if isinstance(filter_config, ContinuousTimeKFConfig):
+        filtered = _run_linear_kf(
+            dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
+        )
+    else:
+        if isinstance(
+            filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
+        ):
+            if key is None:
+                raise ValueError(
+                    f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
+                    "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+                )
+
+        if isinstance(filter_config, ContinuousTimeDPFConfig):
+            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
+                state_dim=dynamics.state_dim,
+                emission_dim=dynamics.observation_dim,
+                input_dim=dynamics.control_dim,
+            )
+        else:
+            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
+                state_dim=dynamics.state_dim,
+                emission_dim=dynamics.observation_dim,
+                input_dim=dynamics.control_dim,
+            )
+
+        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
+        filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
+            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+        )
+
+        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
+
     return filtered
 
 
@@ -193,50 +256,15 @@ def run_continuous_filter(
     Returns:
         list[numpyro.distributions.Distribution]: A list of distributions for the filtered states.
     """
-    obs_times_arr = jnp.asarray(obs_times)
-    if obs_times_arr.ndim == 1:
-        obs_times_arr = obs_times_arr[:, None]
-
-    control_dim = dynamics.control_dim
-    ctrl_vals = (
-        ctrl_values
-        if ctrl_values is not None
-        else jnp.zeros((obs_times_arr.shape[0], control_dim))
+    filtered = compute_continuous_filter(
+        dynamics,
+        filter_config,
+        key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
     )
-
-    if isinstance(filter_config, ContinuousTimeKFConfig):
-        filtered = _run_linear_kf(
-            name, dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
-        )
-    else:
-        if isinstance(
-            filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
-        ):
-            if key is None:
-                raise ValueError(
-                    f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
-                    "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-                )
-
-        if isinstance(filter_config, ContinuousTimeDPFConfig):
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
-        else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
-
-        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-        filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
-        )
-
-        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
     _add_filter_sites(name, filter_config, filtered)
 
