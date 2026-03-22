@@ -186,13 +186,16 @@ def _get_dynamics_with_t0(
     otherwise a ``ValueError`` is raised. If it is ``None``, it is filled in
     from ``obs_times[0]`` or ``predict_times[0]`` (kept as a JAX scalar so the result is jittable).
     """
+    # Use the first time step along the last (time) axis, supporting batched arrays.
     if obs_times is None:
         assert predict_times is not None
-        inferred_t0 = predict_times[0]
+        inferred_t0 = predict_times[..., 0].reshape(())
     elif predict_times is None:
-        inferred_t0 = obs_times[0]
+        inferred_t0 = obs_times[..., 0].reshape(())
     else:
-        inferred_t0 = jnp.minimum(obs_times[0], predict_times[0])
+        inferred_t0 = jnp.minimum(
+            obs_times[..., 0].reshape(()), predict_times[..., 0].reshape(())
+        )
 
     if dynamics.t0 is not None:
         # JIT-safe validation against user-provided t0.
@@ -212,10 +215,13 @@ def _get_dynamics_with_t0(
 
 
 def _validate_site_sorting(times: Array | None, name: str) -> None:
-    """Validate that times are strictly increasing."""
-    if times is not None and len(times) > 1:
+    """Validate that times are strictly increasing (along the last axis)."""
+    if times is not None and times.shape[-1] > 1:
+        # Use slicing on the last axis to support batched time arrays.
+        t_prev = times[..., :-1]
+        t_next = times[..., 1:]
         _ = eqx.error_if(
             times,
-            jnp.any(times[:-1] >= times[1:]),
+            jnp.any(t_prev >= t_next),
             f"{name} must be strictly increasing",
         )
