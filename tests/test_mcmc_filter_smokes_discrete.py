@@ -2,17 +2,23 @@
 
 import jax.numpy as jnp
 import jax.random as jr
+import pytest
 from numpyro.infer import Predictive
 
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import NUTSConfig, SGLDConfig
 from dynestyx.simulators import DiscreteTimeSimulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
+
+SMOKE_NUM_SAMPLES = 1
+SMOKE_NUM_WARMUP = 1
 
 
 def _make_data():
-    obs_times = jnp.arange(start=0.0, stop=30.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=8.0, step=1.0)
+    obs_times = predict_times
     true_params = {"alpha": jnp.array(0.35)}
     predictive = Predictive(
         discrete_time_lti_simplified_model,
@@ -21,8 +27,8 @@ def _make_data():
         exclude_deterministic=False,
     )
     with DiscreteTimeSimulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    return obs_times, synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    return obs_times, _squeeze_sim_dims(synthetic["f_observations"])
 
 
 def test_filter_based_discrete_nuts_smoke():
@@ -30,7 +36,10 @@ def test_filter_based_discrete_nuts_smoke():
     with Filter():
         inference = MCMCInference(
             mcmc_config=NUTSConfig(
-                num_samples=10, num_warmup=10, num_chains=1, mcmc_source="numpyro"
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
+                num_chains=1,
+                mcmc_source="numpyro",
             ),
             model=discrete_time_lti_simplified_model,
         )
@@ -38,14 +47,15 @@ def test_filter_based_discrete_nuts_smoke():
     assert "alpha" in posterior_samples
 
 
-def test_filter_based_discrete_sgmcmc_smoke():
+@pytest.mark.parametrize("num_chains", [1, 2])
+def test_filter_based_discrete_sgmcmc_smoke(num_chains):
     obs_times, obs_values = _make_data()
     with Filter():
         inference = MCMCInference(
             mcmc_config=SGLDConfig(
-                num_samples=10,
-                num_warmup=10,
-                num_chains=1,
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
+                num_chains=num_chains,
                 mcmc_source="blackjax",
                 step_size=5e-5,
                 schedule_power=0.6,

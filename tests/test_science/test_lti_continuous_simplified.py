@@ -41,18 +41,18 @@ def test_mcmc_inference(
         import matplotlib.pyplot as plt
 
         plt.plot(
-            obs_times.squeeze(0),
-            synthetic["states"].squeeze(0)[:, 0],
+            obs_times,
+            synthetic["states"][:, 0],
             label="x[0]",
         )
         plt.plot(
-            obs_times.squeeze(0),
-            synthetic["states"].squeeze(0)[:, 1],
+            obs_times,
+            synthetic["states"][:, 1],
             label="x[1]",
         )
         plt.plot(
-            obs_times.squeeze(0),
-            synthetic["observations"].squeeze(0)[:, 0],
+            obs_times,
+            synthetic["observations"][:, 0],
             label="observations",
             linestyle="--",
         )

@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -24,12 +25,9 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -178,7 +176,7 @@ def run_continuous_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[numpyro.distributions.Distribution]:
     """Run continuous-time filter via CD-Dynamax.
 
     Args:
@@ -191,12 +189,13 @@ def run_continuous_filter(
         obs_values: Observed values.
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
+
+    Returns:
+        list[numpyro.distributions.Distribution]: A list of distributions for the filtered states.
     """
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
         obs_times_arr = obs_times_arr[:, None]
-    _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
 
     control_dim = dynamics.control_dim
     ctrl_vals = (
@@ -240,3 +239,21 @@ def run_continuous_filter(
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
     _add_filter_sites(name, filter_config, filtered)
+
+    if not isinstance(filter_config, ContinuousTimeDPFConfig):
+        means = filtered.filtered_means
+        covs = filtered.filtered_covariances
+        if means is None or covs is None:
+            raise ValueError(
+                "Filtered means/covariances unexpectedly None for non-DPF config"
+            )
+        return [
+            dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])
+        ]
+    else:
+        # PF: filtered has particles and log_weights (DPF-specific, not in base type)
+        particles = filtered.particles  # type: ignore[attr-defined]
+        log_weights = filtered.log_weights  # type: ignore[attr-defined]
+        if particles.ndim == 2:
+            particles = particles[..., None]
+        return particles_to_delta_mixtures(particles, log_weights)

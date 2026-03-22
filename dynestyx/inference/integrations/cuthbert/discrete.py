@@ -21,16 +21,13 @@ from dynestyx.inference.filter_configs import (
     PFConfig,
     _config_to_record_kwargs,
 )
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 
 class CuthbertInputs(NamedTuple):
@@ -41,6 +38,7 @@ class CuthbertInputs(NamedTuple):
     u_prev: jax.Array  # (T+1, control_dim) or (T+1, 0)
     time: jax.Array  # (T+1,)
     time_prev: jax.Array  # (T+1,)
+    is_first_step: jax.Array  # (T+1,) bool — True only at index 1
 
 
 def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
@@ -67,32 +65,46 @@ def run_discrete_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
-    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter)."""
+) -> list[dist.Distribution]:
+    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
+    Returns:
+        list[dist.Distribution]: Filtered state distributions at each obs time.
+    """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
     record_kwargs = _config_to_record_kwargs(filter_config)
 
     ys = obs_values
-    t1 = int(ys.shape[0])  # this is T+1 in cuthbert's convention
-    if t1 == 0:
-        return
+    T1 = int(ys.shape[0])
+    if T1 == 0:
+        return []
 
     times = obs_times
 
-    _validate_controls(times, ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
-
     if ctrl_values is None:
         control_dim = dynamics.control_dim
-        ctrl_values = jnp.zeros((t1, control_dim), dtype=ys.dtype)
+        ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
+    elif ctrl_values.shape[0] > T1:
+        # Find controls aligned to obs_times.
+        inds = jnp.searchsorted(ctrl_times, times, side="left")
+        ctrl_values = ctrl_values[inds]
 
     dt0 = times[1] - times[0]
     time_prev = jnp.concatenate([times[:1] - dt0, times[:-1]], axis=0)
     u_prev = jnp.concatenate([ctrl_values[:1], ctrl_values[:-1]], axis=0)
 
+    # Prepend dummy for init step (index 0 in cuthbert scan)
+    dummy_y = jnp.zeros_like(ys[:1])
+    dummy_u = jnp.zeros_like(ctrl_values[:1])
+    dummy_time = jnp.zeros_like(times[:1])
+
     cuthbert_inputs = CuthbertInputs(
-        y=ys, u=ctrl_values, u_prev=u_prev, time=times, time_prev=time_prev
+        y=jnp.concatenate([dummy_y, ys], axis=0),
+        u=jnp.concatenate([dummy_u, ctrl_values], axis=0),
+        u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
+        time=jnp.concatenate([dummy_time, times], axis=0),
+        time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
+        is_first_step=jnp.arange(T1 + 1) == 1,
     )
 
     if isinstance(filter_config, PFConfig):
@@ -120,8 +132,20 @@ def run_discrete_filter(
 
     if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
+        # PF: mixture of deltas
+        particles = states.particles
+        if particles.ndim == 2:
+            particles = particles[..., None]
+        return particles_to_delta_mixtures(particles, states.log_weights)
     else:
         _add_sites_taylor_kf(name, states, record_kwargs)
+        # KF/EKF: states.mean (T+1, state_dim), states.chol_cov (T+1, state_dim, state_dim)
+        chol_t = jnp.transpose(states.chol_cov, (0, 2, 1))
+        cov = jnp.matmul(states.chol_cov, chol_t)
+        return [
+            dist.MultivariateNormal(states.mean[i], covariance_matrix=cov[i])
+            for i in range(states.mean.shape[0])
+        ]
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
@@ -132,8 +156,14 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
         return dynamics.initial_condition.sample(key)
 
     def propagate_sample(key, x_prev, mi: CuthbertInputs):
-        dist = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
-        return dist.sample(key)  # type: ignore
+        def _noop(key, x_prev, mi):
+            return x_prev
+
+        def _evolve(key, x_prev, mi):
+            d = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
+            return d.sample(key)  # type: ignore
+
+        return jax.lax.cond(mi.is_first_step, _noop, _evolve, key, x_prev, mi)
 
     def log_potential(x_prev, x, mi: CuthbertInputs):
         edist = dynamics.observation_model(x, mi.u, mi.time)
@@ -173,7 +203,6 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
         log_potential=log_potential,  # type: ignore
         n_filter_particles=int(filter_kwargs.get("n_filter_particles", 1_000)),
         resampling_fn=resampling_fn,  # type: ignore
-        consume_first_observation=True,
     )
     return pf
 
@@ -229,11 +258,20 @@ def _cuthbert_filter_kalman(
         return m0, chol_P0
 
     def get_dynamics_params(mi: CuthbertInputs):
-        c = evo_bias
-        if B is not None:
-            c = c + B @ jnp.atleast_1d(jnp.asarray(mi.u_prev))
+        def _noop(mi):
+            return (
+                jnp.eye(state_dim, dtype=m0.dtype),
+                jnp.zeros((state_dim,), dtype=m0.dtype),
+                jnp.zeros((state_dim, state_dim), dtype=m0.dtype),
+            )
 
-        return A, c, chol_Q
+        def _evolve(mi):
+            c = evo_bias
+            if B is not None:
+                c = c + B @ jnp.atleast_1d(jnp.asarray(mi.u_prev))
+            return A, c, chol_Q
+
+        return jax.lax.cond(mi.is_first_step, _noop, _evolve, mi)
 
     def get_observation_params(mi: CuthbertInputs):
         d = obs_bias
@@ -246,7 +284,6 @@ def _cuthbert_filter_kalman(
         get_init_params,  # type: ignore
         get_dynamics_params,  # type: ignore
         get_observation_params,  # type: ignore
-        consume_first_observation=True,
     )
 
 
@@ -272,8 +309,14 @@ def _cuthbert_filter_taylor_kf(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
     ):
         def dynamics_log_density(x_prev, x):
-            dist = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)
-            return jnp.asarray(dist.log_prob(x)).sum()
+            normal_logp = jnp.asarray(
+                dynamics.state_evolution(
+                    x_prev, mi.u_prev, mi.time_prev, mi.time
+                ).log_prob(x)
+            ).sum()
+            # Identity dynamics with near-zero noise for the noop first step.
+            noop_logp = -1e10 * jnp.sum((x - x_prev) ** 2)
+            return jnp.where(mi.is_first_step, noop_logp, normal_logp)
 
         x_prev_lin = jnp.atleast_1d(jnp.asarray(state.mean))
 
@@ -286,6 +329,9 @@ def _cuthbert_filter_taylor_kf(
             raise ValueError(
                 "dist_at_lin.mean is not available. Linearized Kalman filter requires a mean-able distribution."
             ) from exc
+
+        # On the first step, use identity linearization (x_lin = x_prev_lin).
+        x_lin = jnp.where(mi.is_first_step, x_prev_lin, x_lin)
 
         return dynamics_log_density, x_prev_lin, x_lin
 
@@ -305,7 +351,6 @@ def _cuthbert_filter_taylor_kf(
         associative=False,
         rtol=rtol,
         ignore_nan_dims=True,
-        consume_first_observation=True,
     )
     return kf
 
@@ -313,8 +358,11 @@ def _cuthbert_filter_taylor_kf(
 def _add_sites_pf(
     name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
 ):
-    log_weights = states.log_weights
-    particles = states.particles
+    # Strip the init entry (index 0) — cuthbert output is (T+1, ...),
+    # we want (T, ...) matching dynestyx's convention where output[0]
+    # is the filtered state after observing y_0.
+    log_weights = states.log_weights[1:]
+    particles = states.particles[1:]
     if particles.ndim == 2:
         particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
@@ -374,14 +422,18 @@ def _add_sites_taylor_kf(
     name: str, states: taylor.LinearizedKalmanFilterState, record_kwargs: dict
 ):
     max_elems = record_kwargs["record_max_elems"]
-    t1, state_dim, _ = states.chol_cov.shape
+    # Strip the init entry (index 0) — cuthbert output is (T+1, ...),
+    # we want (T, ...) matching dynestyx's convention.
+    mean = states.mean[1:]
+    chol_cov = states.chol_cov[1:]
+    t1, state_dim, _ = chol_cov.shape
 
     add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], states.mean.shape, max_elems
+        record_kwargs["record_filtered_states_mean"], mean.shape, max_elems
     )
     add_chol_cov = _should_record_field(
         record_kwargs["record_filtered_states_chol_cov"],
-        states.chol_cov.shape,
+        chol_cov.shape,
         max_elems,
     )
     add_filtered_states_cov = _should_record_field(
@@ -394,13 +446,13 @@ def _add_sites_taylor_kf(
     )
 
     if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", states.mean)
+        numpyro.deterministic(f"{name}_filtered_states_mean", mean)
     if add_chol_cov:
-        numpyro.deterministic(f"{name}_filtered_states_chol_cov", states.chol_cov)
+        numpyro.deterministic(f"{name}_filtered_states_chol_cov", chol_cov)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
-        chol_t = jnp.transpose(states.chol_cov, (0, 2, 1))
-        filtered_cov = jnp.matmul(states.chol_cov, chol_t)
+        chol_t = jnp.transpose(chol_cov, (0, 2, 1))
+        filtered_cov = jnp.matmul(chol_cov, chol_t)
 
     if add_filtered_states_cov:
         numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)

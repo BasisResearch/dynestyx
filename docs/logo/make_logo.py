@@ -308,10 +308,10 @@ def simulate_boundary_orbit_gif(
     with SDESimulator(dt0=dt):
         samples = Predictive(logo_model, num_samples=n_particles)(
             jr.PRNGKey(seed),
-            obs_times=obs_times,
+            predict_times=obs_times,
         )
 
-    states = np.asarray(samples["states"], dtype=np.float32)  # (N, T, 2)
+    states = np.asarray(samples["f_states"], dtype=np.float32)  # (N, T, 2)
 
     # Fixed particle colors based on STARTING point nearest-letter field
     x0 = states[:, 0, 0]

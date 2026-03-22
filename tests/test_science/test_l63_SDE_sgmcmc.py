@@ -11,12 +11,14 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from dynestyx.simulators import Simulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import continuous_time_stochastic_l63_model
 
 
 @pytest.mark.parametrize("num_samples", [120])
 def test_sgmcmc_inference(num_samples):
-    obs_times = jnp.arange(start=0.0, stop=4.0, step=0.02)
+    predict_times = jnp.arange(start=0.0, stop=4.0, step=0.02)
+    obs_times = predict_times
     true_params = {"rho": jnp.array(28.0)}
     predictive = Predictive(
         continuous_time_stochastic_l63_model,
@@ -25,8 +27,8 @@ def test_sgmcmc_inference(num_samples):
         exclude_deterministic=False,
     )
     with Simulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    obs_values = synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    obs_values = _squeeze_sim_dims(synthetic["f_observations"])
 
     with Filter():
         inference = MCMCInference(
