@@ -1,7 +1,7 @@
 """Dynestyx package."""
 
 from dynestyx.discretizers import Discretizer, euler_maruyama
-from dynestyx.handlers import sample
+from dynestyx.handlers import plate, sample
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
@@ -37,6 +37,7 @@ __all__ = [
     "ObservationModel",
     "Filter",
     "flatten_draws",
+    "plate",
     "sample",
     "DiracIdentityObservation",
     "LinearGaussianObservation",
