@@ -2,6 +2,7 @@
 
 import re
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -28,6 +29,7 @@ from dynestyx.inference.filter_configs import (
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    GaussianStateEvolution,
     LinearGaussianObservation,
 )
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
@@ -170,6 +172,44 @@ def _plate_hmm_model(
         )
 
 
+class _PlateNonlinearTransition(eqx.Module):
+    beta: jnp.ndarray
+
+    def __call__(self, x, u, t_now, t_next):
+        return 0.75 * x + self.beta * jnp.tanh(x)
+
+
+def _plate_nonlinear_discrete_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=2,
+):
+    with dsx.plate("trajectories", M):
+        beta_raw = numpyro.sample("beta_raw", dist.Normal(0.0, 0.4))
+        beta = 0.8 * (jnp.tanh(beta_raw) / 2.0)
+        dynamics = DynamicalModel(
+            control_dim=0,
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(1), covariance_matrix=0.2 * jnp.eye(1)
+            ),
+            state_evolution=GaussianStateEvolution(
+                F=_PlateNonlinearTransition(beta=beta),
+                cov=0.05 * jnp.eye(1),
+            ),
+            observation_model=LinearGaussianObservation(
+                H=jnp.array([[1.0]]), R=jnp.array([[0.1]])
+            ),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
 def _make_obs_values(shape, dtype=jnp.float32):
     return jnp.zeros(shape, dtype=dtype)
 
@@ -227,6 +267,30 @@ def test_plate_conditioning_ode_single():
             _plate_continuous_ode_model(obs_times=t, obs_values=obs, M=2)
     assert tr["f_times"]["value"].shape == (2, 1, len(t))
     assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
+
+
+def test_plate_nonlinear_discrete_single_sample_under_plate():
+    t = jnp.arange(6.0)
+
+    with DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(16)):
+            _plate_nonlinear_discrete_model(predict_times=t, M=2)
+    assert tr["f_times"]["value"].shape == (2, 1, len(t))
+    assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
+    assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
+
+    obs = tr["f_observations"]["value"][:, 0]
+    with DiscreteTimeSimulator():
+        with Filter(filter_config=EKFConfig(filter_source="cd_dynamax")):
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(17)):
+                _plate_nonlinear_discrete_model(
+                    obs_times=t,
+                    obs_values=obs,
+                    predict_times=t,
+                    M=2,
+                )
+    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(t))
+    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(t))
 
 
 def test_plate_sde_conditioning_policy_unchanged():

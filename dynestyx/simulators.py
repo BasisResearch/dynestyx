@@ -113,17 +113,29 @@ def _slice_array_for_plate_member(
 def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
     """Slice all plate-batched array leaves in a pytree for one plate member."""
 
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
     def _slice_leaf(leaf):
-        # Require at least two non-plate dimensions for generic model-parameter leaves.
-        # This avoids slicing state/event-only vectors and matrices whose leading size
-        # numerically equals a plate size.
-        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
-            leaf, plate_shapes, min_suffix_ndim=2
-        ):
+        if not isinstance(leaf, jax.Array):
+            return leaf
+        if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
+            return leaf
+
+        suffix_ndim = leaf.ndim - len(plate_shapes)
+        # We slice two cases:
+        # 1) suffix_ndim >= 2: classic batched tensors (e.g. A[M, d, d]).
+        # 2) suffix_ndim == 0: per-member scalar params (e.g. beta[M]) inside
+        #    nonlinear callable modules.
+        #
+        # We intentionally skip suffix_ndim == 1 to avoid ambiguous false
+        # positives where unbatched vectors/matrices happen to start with a size
+        # equal to the plate size (e.g. HMM state dim == plate size).
+        if suffix_ndim == 0 or suffix_ndim >= 2:
             return leaf[plate_idx]
         return leaf
 
-    return jax.tree.map(_slice_leaf, tree)
+    return jax.tree.map(_slice_leaf, tree, is_leaf=_is_distribution_leaf)
 
 
 def _dist_has_plate_batch_dims(dist_obj, plate_shapes: tuple[int, ...]) -> bool:
@@ -242,10 +254,17 @@ def _member_name(base_name: str, plate_idx: tuple[int, ...]) -> str:
 
 def _tree_has_plate_batched_leaf(tree, plate_shapes: tuple[int, ...]) -> bool:
     """Return True if any JAX-array leaf has leading plate_shapes."""
-    for leaf in jax.tree.leaves(tree):
-        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
-            leaf, plate_shapes, min_suffix_ndim=2
-        ):
+
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
+    for leaf in jax.tree.leaves(tree, is_leaf=_is_distribution_leaf):
+        if not isinstance(leaf, jax.Array):
+            continue
+        if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
+            continue
+        suffix_ndim = leaf.ndim - len(plate_shapes)
+        if suffix_ndim == 0 or suffix_ndim >= 2:
             return True
     return False
 

@@ -78,17 +78,25 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     peels off one leading dimension.
     """
 
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
     def _axis(leaf):
         if not isinstance(leaf, jax.Array):
             return None
-        # Require at least two non-plate dims for generic dynamics leaves. This
-        # avoids mapping over event-only vectors/matrices when their leading size
-        # numerically matches a plate size.
-        return (
-            0 if _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=2) else None
-        )
+        if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
+            return None
+        suffix_ndim = leaf.ndim - len(plate_shapes)
+        # Map two classes of leaves:
+        # 1) suffix_ndim >= 2: canonical batched tensors.
+        # 2) suffix_ndim == 0: per-member scalar parameters captured in callable
+        #    modules for nonlinear dynamics/observations.
+        #
+        # Keep suffix_ndim == 1 unmapped to avoid ambiguous false positives where
+        # unbatched vectors/matrices happen to begin with a plate-sized dimension.
+        return 0 if (suffix_ndim == 0 or suffix_ndim >= 2) else None
 
-    return jax.tree.map(_axis, tree)
+    return jax.tree.map(_axis, tree, is_leaf=_is_distribution_leaf)
 
 
 def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
@@ -148,7 +156,10 @@ def _summarize_dynamics_leading_dims(
 ) -> str:
     """Summarize leading dimensions from JAX-array leaves in a model pytree."""
     shapes: list[tuple[int, ...]] = []
-    for leaf in jax.tree.leaves(dynamics):
+    for leaf in jax.tree.leaves(
+        dynamics,
+        is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+    ):
         if isinstance(leaf, jax.Array):
             n = min(n_dims, leaf.ndim)
             shapes.append(tuple(int(d) for d in leaf.shape[:n]))
