@@ -60,6 +60,7 @@ cd-dynamax = { git = "https://github.com/HD-UQ/cd_dynamax.git", branch = "public
 
 [dependency-groups]
 dev = [
+    "mike>=2.1.0",
     "mkdocs-material>=9.7.1",
     "mkdocs>=1.6.1",
     "mypy>=1.19.1",
@@ -69,6 +70,8 @@ dev = [
     "mkdocs-jupyter>=0.25.1",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
+    "mkdocs-jupyter>=0.24,<0.26",
+    "nbconvert>=7"
 ]
 
 [tool.ruff.lint]
