@@ -4,11 +4,11 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
-from cd_dynamax.dynamax.linear_gaussian_ssm.builders import build_params
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     PosteriorGSSMFiltered,
     lgssm_filter,
 )
+from cd_dynamax.dynamax.linear_gaussian_ssm.models import LinearGaussianSSM
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
     extended_kalman_filter,
 )
@@ -34,7 +34,7 @@ from dynestyx.utils import _should_record_field
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
-    """Build dynamax ParamsLGSSM via builders.build_params from an LTI model."""
+    """Build dynamax ParamsLGSSM from LinearGaussianSSM.initialize for an LTI model."""
     state_dim = dynamics.state_dim
     emission_dim = dynamics.observation_dim
     control_dim = dynamics.control_dim
@@ -47,23 +47,26 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
         evo = dynamics.state_evolution
         obs = dynamics.observation_model
         ic = dynamics.initial_condition
-        return build_params(
+        model = LinearGaussianSSM(
             state_dim=state_dim,
             emission_dim=emission_dim,
             input_dim=control_dim,
-            dynamics_weights=evo.A,
             has_dynamics_bias=evo.bias is not None,
+            has_emissions_bias=obs.bias is not None,
+        )
+        params, _ = model.initialize(
+            initial_mean=jnp.asarray(ic.loc),
+            initial_covariance=jnp.asarray(ic.covariance_matrix),
+            dynamics_weights=evo.A,
             dynamics_bias=evo.bias,
             dynamics_input_weights=evo.B,
-            dynamics_cov=evo.cov,
+            dynamics_covariance=evo.cov,
             emission_weights=obs.H,
-            emission_input_weights=obs.D,
-            has_emissions_bias=obs.bias is not None,
             emission_bias=obs.bias,
-            emission_cov=obs.R,
-            x0_mean=jnp.asarray(ic.loc),
-            x0_cov=jnp.asarray(ic.covariance_matrix),
+            emission_input_weights=obs.D,
+            emission_covariance=obs.R,
         )
+        return params
     else:
         raise TypeError(
             "filter_type='kf' expects a DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation and initial_condition as MultivariateNormal."

@@ -44,7 +44,10 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
+from dynestyx.inference.integrations.utils import (
+    WeightedParticles,
+    particles_to_delta_mixtures,
+)
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.types import FunctionOfTime
 
@@ -321,7 +324,7 @@ def _particle_to_batched_dists(
     *,
     plate_shapes: tuple[int, ...],
 ) -> list[numpyro.distributions.Distribution]:
-    """Build per-time plate-batched delta mixtures using the stable main-path helper."""
+    """Build per-time plate-batched WeightedParticles from canonical PF outputs."""
     if particles.ndim == len(plate_shapes) + 2:
         particles = particles[..., None]
 
@@ -342,20 +345,19 @@ def _particle_to_batched_dists(
         return per_member[0]
 
     result: list[numpyro.distributions.Distribution] = []
-    # TODO: don't use MixtureSameFamily at all!
     for t in range(t_len):
         logits_t = jnp.stack(
-            [per_member[i][t].mixing_distribution.logits for i in range(n_members)],  # type: ignore[attr-defined]
+            [per_member[i][t].log_weights for i in range(n_members)],  # type: ignore[attr-defined]
             axis=0,
         ).reshape(*plate_shapes, -1)
         values_t = jnp.stack(
-            [per_member[i][t].component_distribution.v for i in range(n_members)],  # type: ignore[attr-defined]
+            [per_member[i][t].particles for i in range(n_members)],  # type: ignore[attr-defined]
             axis=0,
-        ).reshape(*plate_shapes, *per_member[0][t].component_distribution.v.shape)  # type: ignore[attr-defined]
+        ).reshape(*plate_shapes, *per_member[0][t].particles.shape)  # type: ignore[attr-defined]
         result.append(
-            numpyro.distributions.MixtureSameFamily(
-                numpyro.distributions.Categorical(logits=logits_t),
-                numpyro.distributions.Delta(values_t, event_dim=1),  # type: ignore[arg-type]
+            WeightedParticles(
+                particles=values_t,
+                log_weights=logits_t,
             )
         )
     return result

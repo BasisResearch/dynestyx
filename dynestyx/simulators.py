@@ -19,6 +19,7 @@ from jax import Array, lax
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -193,6 +194,11 @@ def _slice_dist_for_plate_member(
             log_density=log_density,
             event_dim=dist_obj.event_dim,
         )
+
+    if isinstance(dist_obj, WeightedParticles):
+        particles = _slice_required_array(dist_obj.particles)
+        log_weights = _slice_required_array(dist_obj.log_weights)
+        return WeightedParticles(particles=particles, log_weights=log_weights)
 
     if dist_obj.__class__.__name__.startswith("Categorical"):
         if dist_obj.logits is not None:
