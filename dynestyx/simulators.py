@@ -216,51 +216,6 @@ def _slice_dist_for_plate_member(
     return jax.tree.map(_slice_leaf, dist_obj)
 
 
-def _stack_member_results(
-    member_results: list[dict[str, Array]], plate_shapes: tuple[int, ...]
-) -> dict[str, Array]:
-    """Stack per-member simulator outputs into leading plate dimensions."""
-    if not member_results:
-        return {}
-
-    keys = member_results[0].keys()
-    for result in member_results:
-        if result.keys() != keys:
-            raise ValueError(
-                "Plate simulator members returned inconsistent result keys."
-            )
-
-    stacked = {}
-    for key in keys:
-        values = [r[key] for r in member_results]
-        flat = jnp.stack(values, axis=0)
-        stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
-    return stacked
-
-
-def _member_name(base_name: str, plate_idx: tuple[int, ...]) -> str:
-    """Stable member prefix used for plate-mode simulator sample sites."""
-    joined = "_".join(str(i) for i in plate_idx)
-    return f"{base_name}_p{joined}"
-
-
-def _tree_has_plate_batched_leaf(tree, plate_shapes: tuple[int, ...]) -> bool:
-    """Return True if any JAX-array leaf has leading plate_shapes."""
-
-    def _is_distribution_leaf(node) -> bool:
-        return isinstance(node, numpyro.distributions.Distribution)
-
-    for leaf in jax.tree.leaves(tree, is_leaf=_is_distribution_leaf):
-        if not isinstance(leaf, jax.Array):
-            continue
-        if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
-            continue
-        suffix_ndim = leaf.ndim - len(plate_shapes)
-        if suffix_ndim == 0 or suffix_ndim >= 2:
-            return True
-    return False
-
-
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -430,9 +385,21 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator over all plate members and stack outputs."""
-        has_batched_source = _tree_has_plate_batched_leaf(
-            dynamics, plate_shapes
-        ) or any(
+        has_batched_source = False
+        for leaf in jax.tree.leaves(
+            dynamics,
+            is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+        ):
+            if not isinstance(leaf, jax.Array):
+                continue
+            if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
+                continue
+            suffix_ndim = leaf.ndim - len(plate_shapes)
+            if suffix_ndim == 0 or suffix_ndim >= 2:
+                has_batched_source = True
+                break
+
+        has_batched_source = has_batched_source or any(
             _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1)
             for arr in (
                 obs_times,
@@ -459,7 +426,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         member_results: list[dict[str, Array]] = []
 
         for plate_idx in plate_indices:
-            member_name = _member_name(name, plate_idx)
+            member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
             member_dynamics = _slice_tree_for_plate_member(
                 dynamics, plate_shapes, plate_idx
             )
@@ -517,7 +484,20 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if not member_results:
             return None
-        return _stack_member_results(member_results, plate_shapes)
+
+        keys = member_results[0].keys()
+        for result in member_results:
+            if result.keys() != keys:
+                raise ValueError(
+                    "Plate simulator members returned inconsistent result keys."
+                )
+
+        stacked: dict[str, Array] = {}
+        for key in keys:
+            values = [r[key] for r in member_results]
+            flat = jnp.stack(values, axis=0)
+            stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
+        return stacked
 
     @implements(_sample_intp)
     def _sample_ds(

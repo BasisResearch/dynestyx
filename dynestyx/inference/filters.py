@@ -90,11 +90,6 @@ def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
     return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
 
 
-def _tree_has_axis_zero(tree) -> bool:
-    """Return True if any pytree leaf has in_axes=0."""
-    return any(axis == 0 for axis in jax.tree.leaves(tree))
-
-
 def _leading_dims(arr: jax.Array | None, n_dims: int) -> tuple[int, ...] | None:
     """Return up to n_dims leading dimensions for diagnostics."""
     if arr is None:
@@ -143,7 +138,7 @@ def _validate_batched_plate_alignment(
     ctrl_values: jax.Array | None,
 ) -> None:
     """Raise early when plate_shapes do not align with any batched input source."""
-    has_batched_dynamics = _tree_has_axis_zero(dyn_axes)
+    has_batched_dynamics = any(axis == 0 for axis in jax.tree.leaves(dyn_axes))
     has_batched_data = any(axis == 0 for axis in (ot_axis, ov_axis, ct_axis, cv_axis))
     if has_batched_dynamics or has_batched_data:
         return
