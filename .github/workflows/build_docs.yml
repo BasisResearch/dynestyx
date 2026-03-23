@@ -72,7 +72,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="${TAG#v}"
-          uv run mike deploy --push --title "stable (${VERSION})" "$VERSION" stable
+          uv run mike deploy --push --update-aliases --title "stable (${VERSION})" "$VERSION" stable
           uv run mike set-default --push stable
 
       - name: Build manual docs
