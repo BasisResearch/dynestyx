@@ -67,9 +67,21 @@ def sample(
         )
 
     if obs_times is not None and obs_values is not None:
-        # Compare time dimensions: obs_times is (..., T), obs_values is (..., T, D) or (..., T)
+        # Compare time dimensions: obs_times is (..., T). obs_values can be
+        # (..., T) for scalar observations or (..., T, D) for vector observations,
+        # with optional leading plate dims.
         obs_T = obs_times.shape[-1]
-        val_T = obs_values.shape[-2] if obs_values.ndim >= 2 else len(obs_values)
+        if obs_values.ndim == 1:
+            val_T = len(obs_values)
+        else:
+            # Prefer a trailing time axis for scalar-observation tensors (..., T),
+            # else fall back to the penultimate axis for (..., T, D).
+            if obs_values.shape[-1] == obs_T:
+                val_T = obs_values.shape[-1]
+            elif obs_values.ndim >= 2 and obs_values.shape[-2] == obs_T:
+                val_T = obs_values.shape[-2]
+            else:
+                val_T = obs_values.shape[-1]
         if obs_T != val_T:
             raise ValueError(
                 f"obs_times and obs_values must have the same number of time steps. "

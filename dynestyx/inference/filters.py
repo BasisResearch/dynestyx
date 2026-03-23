@@ -2,6 +2,7 @@ import dataclasses
 import math
 
 import jax
+import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
@@ -43,10 +44,29 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.models import DynamicalModel
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
+from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.types import FunctionOfTime
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+
+
+def _array_has_plate_dims(
+    arr: jax.Array | None,
+    plate_shapes: tuple[int, ...],
+    *,
+    min_suffix_ndim: int = 0,
+) -> bool:
+    """Return True when arr has plate_shapes as leading dims."""
+    if arr is None:
+        return False
+    n_plates = len(plate_shapes)
+    if arr.ndim < n_plates:
+        return False
+    for i, ps in enumerate(plate_shapes):
+        if arr.shape[i] != ps:
+            return False
+    return (arr.ndim - n_plates) >= min_suffix_ndim
 
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
@@ -57,30 +77,57 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     The same in_axes can be reused for each nested vmap call since each vmap
     peels off one leading dimension.
     """
-    n_plates = len(plate_shapes)
 
     def _axis(leaf):
-        if not isinstance(leaf, jax.Array) or leaf.ndim < n_plates:
+        if not isinstance(leaf, jax.Array):
             return None
-        for i, ps in enumerate(plate_shapes):
-            if leaf.shape[i] != ps:
-                return None
-        return 0
+        # Require at least two non-plate dims for generic dynamics leaves. This
+        # avoids mapping over event-only vectors/matrices when their leading size
+        # numerically matches a plate size.
+        return (
+            0 if _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=2) else None
+        )
 
     return jax.tree.map(_axis, tree)
 
 
 def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
     """Return 0 if arr has leading dims matching plate_shapes, else None."""
-    if arr is None:
-        return None
-    n_plates = len(plate_shapes)
-    if arr.ndim < n_plates:
-        return None
-    for i, ps in enumerate(plate_shapes):
-        if arr.shape[i] != ps:
-            return None
-    return 0
+    return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
+
+
+def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
+    """Infer and set bm_dim when continuous models are built inside active plates."""
+    if not dynamics.continuous_time:
+        return dynamics
+
+    state_evolution = dynamics.state_evolution
+    if (
+        not isinstance(state_evolution, ContinuousTimeStateEvolution)
+        or state_evolution.diffusion_coefficient is None
+        or state_evolution.bm_dim is not None
+    ):
+        return dynamics
+
+    x0 = jnp.zeros((dynamics.state_dim,))
+    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
+    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
+    diffusion_shape = jax.eval_shape(
+        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
+    ).shape
+    if len(diffusion_shape) != 2:
+        raise ValueError(
+            "diffusion_coefficient must return shape (state_dim, bm_dim). "
+            f"Got shape {diffusion_shape}."
+        )
+    if int(diffusion_shape[0]) != int(dynamics.state_dim):
+        raise ValueError(
+            "diffusion_coefficient first dimension must match state_dim. "
+            f"Got diffusion_shape={diffusion_shape}, state_dim={dynamics.state_dim}."
+        )
+    inferred_bm_dim = int(diffusion_shape[1])
+    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
+    return dynamics
 
 
 def _tree_has_axis_zero(tree) -> bool:
@@ -151,6 +198,155 @@ def _validate_batched_plate_alignment(
         "Expected at least one batched source to start with plate_shapes."
     )
     raise ValueError(diagnostics)
+
+
+def _get_time_axis(plate_shapes: tuple[int, ...]) -> int:
+    """Return the axis index corresponding to time after plate dimensions."""
+    return len(plate_shapes)
+
+
+def _time_len_from_array(arr: jax.Array, plate_shapes: tuple[int, ...]) -> int:
+    """Infer sequence length from an array with plate dims followed by time."""
+    return int(arr.shape[_get_time_axis(plate_shapes)])
+
+
+def _slice_time_axis(
+    arr: jax.Array, t: int, plate_shapes: tuple[int, ...]
+) -> jax.Array:
+    """Slice an array at time index t where time axis follows plate dims."""
+    time_axis = _get_time_axis(plate_shapes)
+    return arr[(slice(None),) * time_axis + (t, ...)]
+
+
+def _cuthbert_states_to_dists(
+    states,
+    config: DiscreteTimeConfigs,
+    *,
+    plate_shapes: tuple[int, ...],
+) -> list[numpyro.distributions.Distribution]:
+    """Convert vmapped cuthbert outputs to per-time filtered distributions."""
+    if isinstance(config, PFConfig):
+        particles = states.particles
+        log_weights = states.log_weights
+        # cuthbert includes an init step at index 0; align with dynestyx T convention.
+        particles = particles[
+            (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
+        ]
+        log_weights = log_weights[
+            (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
+        ]
+        return _particle_to_batched_dists(
+            particles,
+            log_weights,
+            plate_shapes=plate_shapes,
+        )
+
+    # Kalman / Taylor-KF variants expose mean/chol_cov and include init at index 0.
+    mean = states.mean[(slice(None),) * len(plate_shapes) + (slice(1, None), ...)]
+    chol_cov = states.chol_cov[
+        (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
+    ]
+    cov = jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
+    t_len = _time_len_from_array(mean, plate_shapes)
+    return [
+        numpyro.distributions.MultivariateNormal(
+            _slice_time_axis(mean, t, plate_shapes),
+            covariance_matrix=_slice_time_axis(cov, t, plate_shapes),
+        )
+        for t in range(t_len)
+    ]
+
+
+def _posterior_to_dists(
+    posterior,
+    *,
+    plate_shapes: tuple[int, ...],
+    particle_mode: bool,
+) -> list[numpyro.distributions.Distribution]:
+    """Convert vmapped cd-dynamax posterior objects to per-time distributions."""
+    if particle_mode:
+        particles = posterior.particles
+        log_weights = posterior.log_weights
+        return _particle_to_batched_dists(
+            particles,
+            log_weights,
+            plate_shapes=plate_shapes,
+        )
+
+    means = posterior.filtered_means
+    covs = posterior.filtered_covariances
+    if means is None or covs is None:
+        raise ValueError(
+            "Filtered means/covariances were unavailable for a Gaussian rollout path."
+        )
+    t_len = _time_len_from_array(means, plate_shapes)
+    return [
+        numpyro.distributions.MultivariateNormal(
+            _slice_time_axis(means, t, plate_shapes),
+            covariance_matrix=_slice_time_axis(covs, t, plate_shapes),
+        )
+        for t in range(t_len)
+    ]
+
+
+def _hmm_to_dists(
+    log_filt_seq: jax.Array,
+    *,
+    plate_shapes: tuple[int, ...],
+) -> list[numpyro.distributions.Distribution]:
+    """Convert vmapped HMM filtered log-probs to Categorical distributions."""
+    t_len = _time_len_from_array(log_filt_seq, plate_shapes)
+    return [
+        numpyro.distributions.Categorical(
+            probs=jnp.exp(_slice_time_axis(log_filt_seq, t, plate_shapes))
+        )
+        for t in range(t_len)
+    ]
+
+
+def _particle_to_batched_dists(
+    particles: jax.Array,
+    log_weights: jax.Array,
+    *,
+    plate_shapes: tuple[int, ...],
+) -> list[numpyro.distributions.Distribution]:
+    """Build per-time plate-batched delta mixtures using the stable main-path helper."""
+    if particles.ndim == len(plate_shapes) + 2:
+        particles = particles[..., None]
+
+    # Flatten plate members -> use the canonical per-member helper from
+    # dynestyx.inference.integrations.utils (main branch path).
+    n_members = math.prod(plate_shapes) if plate_shapes else 1
+    t_len = _time_len_from_array(log_weights, plate_shapes)
+    part_tail = particles.shape[len(plate_shapes) :]
+    w_tail = log_weights.shape[len(plate_shapes) :]
+    flat_particles = particles.reshape((n_members, *part_tail))
+    flat_log_weights = log_weights.reshape((n_members, *w_tail))
+    per_member = [
+        particles_to_delta_mixtures(flat_particles[i], flat_log_weights[i])
+        for i in range(n_members)
+    ]
+
+    if not plate_shapes:
+        return per_member[0]
+
+    result: list[numpyro.distributions.Distribution] = []
+    for t in range(t_len):
+        logits_t = jnp.stack(
+            [per_member[i][t].mixing_distribution.logits for i in range(n_members)],
+            axis=0,
+        ).reshape(*plate_shapes, -1)
+        values_t = jnp.stack(
+            [per_member[i][t].component_distribution.v for i in range(n_members)],
+            axis=0,
+        ).reshape(*plate_shapes, *per_member[0][t].component_distribution.v.shape)
+        result.append(
+            numpyro.distributions.MixtureSameFamily(
+                numpyro.distributions.Categorical(logits=logits_t),
+                numpyro.distributions.Delta(values_t, event_dim=1),
+            )
+        )
+    return result
 
 
 class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
@@ -304,6 +500,8 @@ class Filter(BaseLogFactorAdder):
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
 
+        dynamics = _ensure_continuous_bm_dim(dynamics)
+
         config = (
             self.filter_config
             if self.filter_config is not None
@@ -386,16 +584,15 @@ class Filter(BaseLogFactorAdder):
         obs_values: jax.Array,
         ctrl_times=None,
         ctrl_values=None,
-    ) -> None:
+    ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
-        Vmaps the pure-JAX compute function over each plate dimension, then issues
-        a single numpyro.factor with the batched log-likelihoods. The enclosing
-        numpyro.plate context handles summation.
-
-        Returns None (no filtered distributions for batched case).
+        Vmaps the pure-JAX compute function over each plate dimension, issues one
+        numpyro.factor with batched log-likelihoods, and reconstructs per-time
+        filtered distributions with plate-shaped batch dimensions for rollout.
         """
         # Determine the compute function (dispatch before vmap).
+        output_kind: str
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
@@ -403,9 +600,10 @@ class Filter(BaseLogFactorAdder):
                     f"Invalid filter config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
+            output_kind = "continuous"
 
-            def compute_loglik(dyn, ot, ov, ct, cv, k):
-                filtered = compute_continuous_filter(
+            def compute_output(dyn, ot, ov, ct, cv, k):
+                return compute_continuous_filter(
                     dyn,
                     config,
                     k,
@@ -414,24 +612,24 @@ class Filter(BaseLogFactorAdder):
                     ctrl_times=ct,
                     ctrl_values=cv,
                 )
-                return filtered.marginal_loglik
 
         elif isinstance(config, HMMConfigs):
+            output_kind = "hmm"
 
-            def compute_loglik(dyn, ot, ov, ct, cv, k):
-                loglik, _ = compute_hmm_filter(
+            def compute_output(dyn, ot, ov, ct, cv, k):
+                return compute_hmm_filter(
                     dyn,
                     obs_times=ot,
                     obs_values=ov,
                     ctrl_values=cv,
                 )
-                return loglik
 
         elif isinstance(config, DiscreteTimeConfigs):
             if config.filter_source == "cuthbert":
+                output_kind = "cuthbert"
 
-                def compute_loglik(dyn, ot, ov, ct, cv, k):
-                    loglik, _ = compute_cuthbert_filter(
+                def compute_output(dyn, ot, ov, ct, cv, k):
+                    return compute_cuthbert_filter(
                         dyn,
                         config,
                         k,
@@ -440,12 +638,12 @@ class Filter(BaseLogFactorAdder):
                         ctrl_times=ct,
                         ctrl_values=cv,
                     )
-                    return loglik
 
             elif config.filter_source == "cd_dynamax":
+                output_kind = "cd_dynamax_discrete"
 
-                def compute_loglik(dyn, ot, ov, ct, cv, k):
-                    posterior = compute_cd_dynamax_discrete_filter(
+                def compute_output(dyn, ot, ov, ct, cv, k):
+                    return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
                         obs_times=ot,
@@ -453,7 +651,6 @@ class Filter(BaseLogFactorAdder):
                         ctrl_times=ct,
                         ctrl_values=cv,
                     )
-                    return posterior.marginal_loglik
 
             else:
                 raise ValueError(f"Unknown filter source: {config.filter_source}")
@@ -491,14 +688,14 @@ class Filter(BaseLogFactorAdder):
         k_axis = 0 if keys is not None else None
 
         # Nest vmap for each plate dimension.
-        vmapped = compute_loglik
+        vmapped = compute_output
         for _ in plate_shapes:
             vmapped = jax.vmap(
                 vmapped,
                 in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
             )
 
-        marginal_logliks = vmapped(
+        outputs = vmapped(
             dynamics,
             obs_times,
             obs_values,
@@ -507,9 +704,44 @@ class Filter(BaseLogFactorAdder):
             keys,
         )
 
+        if output_kind in {"continuous", "cd_dynamax_discrete"}:
+            marginal_logliks = outputs.marginal_loglik
+        elif output_kind == "hmm":
+            marginal_logliks, log_filt_seq = outputs
+        elif output_kind == "cuthbert":
+            marginal_logliks, states = outputs
+        else:
+            raise ValueError(f"Unsupported batched output kind: {output_kind}")
+
         numpyro.factor(f"{name}_marginal_log_likelihood", marginal_logliks)
         numpyro.deterministic(f"{name}_marginal_loglik", marginal_logliks)
-        return None
+
+        if output_kind == "continuous":
+            particle_mode = isinstance(config, ContinuousTimeDPFConfig)
+            return _posterior_to_dists(
+                outputs,
+                plate_shapes=plate_shapes,
+                particle_mode=particle_mode,
+            )
+        if output_kind == "cd_dynamax_discrete":
+            return _posterior_to_dists(
+                outputs,
+                plate_shapes=plate_shapes,
+                particle_mode=False,
+            )
+        if output_kind == "hmm":
+            return _hmm_to_dists(
+                log_filt_seq,
+                plate_shapes=plate_shapes,
+            )
+        if output_kind == "cuthbert":
+            return _cuthbert_states_to_dists(
+                states,
+                config,
+                plate_shapes=plate_shapes,
+            )
+
+        raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
 
 def _filter_discrete_time(

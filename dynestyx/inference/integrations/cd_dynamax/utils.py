@@ -25,6 +25,36 @@ from dynestyx.models import (
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
+def _normalize_cd_dynamax_diffusion(
+    diffusion_coefficient,
+    state_dim: int,
+):
+    """Return a diffusion coeff compatible with cd-dynamax's EnKF SDE solve.
+
+    cd-dynamax's internal diffrax wrapper builds Brownian controls with shape
+    equal to `y0.shape` (state_dim). For non-square diffusion coefficients
+    (state_dim, bm_dim) with bm_dim != state_dim, pad/truncate columns so the
+    returned matrix is always (state_dim, state_dim).
+    """
+
+    def _wrapped(x, u, t):
+        L = diffusion_coefficient(x, u, t)
+        if L.ndim == 1:
+            L = jnp.diag(L)
+        if L.ndim != 2:
+            raise ValueError(
+                "diffusion_coefficient must return a vector or matrix for cd-dynamax."
+            )
+        n_cols = L.shape[-1]
+        if n_cols == state_dim:
+            return L
+        if n_cols < state_dim:
+            return jnp.pad(L, ((0, 0), (0, state_dim - n_cols)))
+        return L[:, :state_dim]
+
+    return _wrapped
+
+
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     """Build ParamsCDLGSSM for CD-Dynamax's continuous-discrete KF.
 
@@ -120,10 +150,14 @@ def dsx_to_cd_dynamax(
                 raise ValueError(
                     "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
                 )
+            diffusion_coeff = _normalize_cd_dynamax_diffusion(
+                state_evo.diffusion_coefficient,
+                dsx_model.state_dim,
+            )
             params.update(
                 {
-                    "diffusion_coeff": state_evo.diffusion_coefficient,
-                    "diffusion_cov": jnp.eye(state_evo.bm_dim),
+                    "diffusion_coeff": diffusion_coeff,
+                    "diffusion_cov": jnp.eye(dsx_model.state_dim),
                 }
             )
     else:
