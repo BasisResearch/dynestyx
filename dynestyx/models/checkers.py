@@ -6,6 +6,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+import numpyro.primitives
 
 from dynestyx.types import Control, State, Time
 
@@ -168,3 +169,84 @@ def _validate_state_evolution_output_shape(
                 f"state_dim={state_dim}, inferred={inferred_state_dim}."
             )
         return None
+
+
+def _validate_continuous_time_flag(
+    continuous_time: bool | None, inferred_continuous_time: bool
+) -> None:
+    """Ensure optional continuous_time agrees with inferred model type."""
+    if continuous_time is not None and bool(continuous_time) != inferred_continuous_time:
+        raise ValueError("continuous_time does not match inferred state_evolution type.")
+
+
+def _validate_state_dim(state_dim: int | None, inferred_state_dim: int) -> None:
+    """Ensure optional state_dim agrees with inferred initial condition shape."""
+    if state_dim is not None and int(state_dim) != int(inferred_state_dim):
+        raise ValueError(
+            "state_dim does not match inferred initial_condition shape. "
+            f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
+        )
+
+
+def _validate_categorical_state(
+    categorical_state: bool | None, inferred_categorical_state: bool
+) -> None:
+    """Ensure optional categorical_state agrees with inferred initial condition type."""
+    if (
+        categorical_state is not None
+        and bool(categorical_state) != inferred_categorical_state
+    ):
+        raise ValueError(
+            "categorical_state does not match inferred initial_condition type. "
+            f"Got categorical_state={categorical_state}, "
+            f"inferred={inferred_categorical_state}."
+        )
+
+
+def _inside_numpyro_plate_context() -> bool:
+    """Return True when currently executing inside any active numpyro.plate frame."""
+    return any(
+        isinstance(frame, numpyro.primitives.plate)
+        for frame in numpyro.primitives._PYRO_STACK
+    )
+
+
+def _infer_observation_dim_in_plate_context(
+    *,
+    initial_condition: Any,
+    observation_model: Callable[[State, Control | None, Time], Any],
+    inferred_state_dim: int,
+    control_dim: int,
+    t0: float | None,
+    observation_dim: int | None,
+) -> int:
+    """Infer observation dimension in plate context, falling back to explicit value."""
+    if observation_dim is not None:
+        return int(observation_dim)
+
+    x0 = _make_probe_state(
+        initial_condition=initial_condition,
+        state_dim=inferred_state_dim,
+    )
+    u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+    dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+    try:
+        obs_dist = observation_model(x0, u0, dummy_t0)
+        return int(
+            _infer_vector_dim_from_distribution(obs_dist, "observation_model(x, u, t)")
+        )
+    except Exception:
+        return 0
+
+
+def _validate_observation_dim(
+    observation_dim: int | None, inferred_observation_dim: int
+) -> None:
+    """Ensure optional observation_dim agrees with inferred observation shape."""
+    if observation_dim is not None and int(observation_dim) != int(
+        inferred_observation_dim
+    ):
+        raise ValueError(
+            "observation_dim does not match inferred observation_model output shape. "
+            f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
+        )

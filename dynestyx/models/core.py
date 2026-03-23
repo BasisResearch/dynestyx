@@ -6,13 +6,18 @@ from typing import Any, Protocol
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import numpyro.primitives
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
+    _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
+    _inside_numpyro_plate_context,
     _is_categorical_distribution,
     _make_probe_state,
+    _validate_categorical_state,
+    _validate_continuous_time_flag,
+    _validate_observation_dim,
+    _validate_state_dim,
     _validate_state_evolution_output_shape,
 )
 from dynestyx.types import Control, State, Time, dState
@@ -101,13 +106,7 @@ class DynamicalModel(eqx.Module):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
         )
-        if (
-            continuous_time is not None
-            and bool(continuous_time) != inferred_continuous_time
-        ):
-            raise ValueError(
-                "continuous_time does not match inferred state_evolution type."
-            )
+        _validate_continuous_time_flag(continuous_time, inferred_continuous_time)
         self.continuous_time = inferred_continuous_time
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
@@ -118,52 +117,27 @@ class DynamicalModel(eqx.Module):
         inferred_state_dim = _infer_vector_dim_from_distribution(
             initial_condition, "initial_condition"
         )
-        if state_dim is not None and int(state_dim) != int(inferred_state_dim):
-            raise ValueError(
-                "state_dim does not match inferred initial_condition shape. "
-                f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
-            )
+        _validate_state_dim(state_dim, inferred_state_dim)
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
-        if (
-            categorical_state is not None
-            and bool(categorical_state) != inferred_categorical_state
-        ):
-            raise ValueError(
-                "categorical_state does not match inferred initial_condition type. "
-                f"Got categorical_state={categorical_state}, "
-                f"inferred={inferred_categorical_state}."
-            )
+        _validate_categorical_state(categorical_state, inferred_categorical_state)
         if control_dim is None:
             control_dim = 0
 
         # Skip shape validation when inside a numpyro plate context, since
         # batched parameters produce shapes that don't match unbatched expectations.
-        _inside_plate = any(
-            isinstance(f, numpyro.primitives.plate)
-            for f in numpyro.primitives._PYRO_STACK
-        )
+        _inside_plate = _inside_numpyro_plate_context()
 
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.
-            if observation_dim is not None:
-                inferred_obs_dim = int(observation_dim)
-            else:
-                x0 = _make_probe_state(
-                    initial_condition=initial_condition,
-                    state_dim=inferred_state_dim,
-                )
-                u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-                dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
-                try:
-                    obs_dist = observation_model(x0, u0, dummy_t0)
-                    inferred_obs_dim = int(
-                        _infer_vector_dim_from_distribution(
-                            obs_dist, "observation_model(x, u, t)"
-                        )
-                    )
-                except Exception:
-                    inferred_obs_dim = 0
+            inferred_obs_dim = _infer_observation_dim_in_plate_context(
+                initial_condition=initial_condition,
+                observation_model=observation_model,
+                inferred_state_dim=inferred_state_dim,
+                control_dim=control_dim,
+                t0=t0,
+                observation_dim=observation_dim,
+            )
             self.state_dim = int(inferred_state_dim)
             self.observation_dim = inferred_obs_dim
             self.control_dim = int(control_dim)
@@ -191,13 +165,7 @@ class DynamicalModel(eqx.Module):
         inferred_observation_dim = _infer_vector_dim_from_distribution(
             obs_dist, "observation_model(x, u, t)"
         )
-        if observation_dim is not None and int(observation_dim) != int(
-            inferred_observation_dim
-        ):
-            raise ValueError(
-                "observation_dim does not match inferred observation_model output shape. "
-                f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
-            )
+        _validate_observation_dim(observation_dim, inferred_observation_dim)
 
         self.state_dim = int(inferred_state_dim)
         self.observation_dim = int(inferred_observation_dim)
