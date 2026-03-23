@@ -337,7 +337,11 @@ def test_nested_plates_cuthbert_ekf_smoke():
             model=nested_plate_model,
         )
         posterior = inference.run(
-            jr.PRNGKey(42), obs_times, obs_values, G=G, M=M,
+            jr.PRNGKey(42),
+            obs_times,
+            obs_values,
+            G=G,
+            M=M,
         )
 
     assert "alpha" in posterior
@@ -368,7 +372,11 @@ def test_nested_plates_cd_dynamax_kf_smoke():
             model=nested_plate_model,
         )
         posterior = inference.run(
-            jr.PRNGKey(42), obs_times, obs_values, G=G, M=M,
+            jr.PRNGKey(42),
+            obs_times,
+            obs_values,
+            G=G,
+            M=M,
         )
 
     assert "alpha" in posterior
