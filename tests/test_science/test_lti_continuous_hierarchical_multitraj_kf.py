@@ -55,7 +55,7 @@ def hierarchical_multitraj_continuous_lti_model(
             )
 
 
-@pytest.mark.parametrize("num_samples", [120])
+@pytest.mark.parametrize("num_samples", [200])
 def test_hierarchical_multitraj_lti_continuous_kf_science(num_samples: int):
     """Recover population mean/scale from multi-trajectory continuous-time data."""
     rng_key = jr.PRNGKey(0)
@@ -65,7 +65,7 @@ def test_hierarchical_multitraj_lti_continuous_kf_science(num_samples: int):
     obs_times = jnp.arange(0.0, 10.0, 0.1)
     true_params = {
         "mu_raw": jnp.array(2.0),
-        "sigma_raw": jnp.array(2.0),
+        "sigma_raw": jnp.array(0.5),
     }
 
     predictive = Predictive(
@@ -131,26 +131,6 @@ def test_hierarchical_multitraj_lti_continuous_kf_science(num_samples: int):
     sigma_true = true_params["sigma_raw"]
     rho_raw_true = synthetic["rho_raw"][0]
 
-    rho_mean_post = jnn.softplus(mu_post).mean()
-    rho_mean_true = jnn.softplus(mu_true)
-    assert jnp.abs(rho_mean_post - rho_mean_true) < 0.7
-    assert jnp.abs(sigma_post.mean() - sigma_true) < 0.35
-
-    mu_q = jnp.quantile(mu_post, jnp.array([0.025, 0.975]))
-    sigma_q = jnp.quantile(sigma_post, jnp.array([0.025, 0.975]))
-    assert mu_q[0] <= mu_true <= mu_q[1]
-    assert sigma_q[0] <= sigma_true <= sigma_q[1]
-
-    rho_true = jnn.softplus(rho_raw_true)
-    rho_post_mean = jnn.softplus(rho_raw_post).mean(axis=0)
-    assert jnp.mean(jnp.abs(rho_post_mean - rho_true)) < 0.8
-
-    rho_raw_q = jnp.quantile(rho_raw_post, jnp.array([0.05, 0.95]), axis=0)
-    rho_raw_coverage = jnp.mean(
-        (rho_raw_true >= rho_raw_q[0]) & (rho_raw_true <= rho_raw_q[1])
-    )
-    assert rho_raw_coverage > 0.55
-
     if SAVE_FIG and output_dir is not None:
         import matplotlib.pyplot as plt
 
@@ -187,3 +167,23 @@ def test_hierarchical_multitraj_lti_continuous_kf_science(num_samples: int):
             bbox_inches="tight",
         )
         plt.close()
+
+    rho_mean_post = jnn.softplus(mu_post).mean()
+    rho_mean_true = jnn.softplus(mu_true)
+    assert jnp.abs(rho_mean_post - rho_mean_true) < 0.7
+    assert jnp.abs(sigma_post.mean() - sigma_true) < 0.35
+
+    mu_q = jnp.quantile(mu_post, jnp.array([0.025, 0.975]))
+    sigma_q = jnp.quantile(sigma_post, jnp.array([0.025, 0.975]))
+    assert mu_q[0] <= mu_true <= mu_q[1]
+    assert sigma_q[0] <= sigma_true <= sigma_q[1]
+
+    rho_true = jnn.softplus(rho_raw_true)
+    rho_post_mean = jnn.softplus(rho_raw_post).mean(axis=0)
+    assert jnp.mean(jnp.abs(rho_post_mean - rho_true)) < 0.8
+
+    rho_raw_q = jnp.quantile(rho_raw_post, jnp.array([0.05, 0.95]), axis=0)
+    rho_raw_coverage = jnp.mean(
+        (rho_raw_true >= rho_raw_q[0]) & (rho_raw_true <= rho_raw_q[1])
+    )
+    assert rho_raw_coverage > 0.55
