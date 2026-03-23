@@ -164,7 +164,9 @@ class plate(ObjectInterpretation):
 
     Wraps ``numpyro.plate`` for parameter sampling semantics and intercepts
     ``dsx.sample`` to inject ``plate_shapes`` into the handler chain via ``fwd()``.
-    Nested plates accumulate: each plate appends its size to the ``plate_shapes`` tuple.
+    Nested plate handlers run from inner to outer under ``effectful`` dispatch,
+    so each handler appends its size to preserve NumPyro's effective batch order
+    (inner plate is the leftmost data batch dim).
 
     Examples:
         >>> with dsx.plate("trajectories", M):
@@ -191,4 +193,7 @@ class plate(ObjectInterpretation):
 
     @implements(_sample_intp)
     def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs):
+        # effectful dispatch invokes nested plate handlers inner->outer.
+        # Appending here preserves inner-first ordering in plate_shapes,
+        # matching NumPyro's leftmost-inner batch layout.
         return fwd(name, dynamics, plate_shapes=plate_shapes + (self.size,), **kwargs)
