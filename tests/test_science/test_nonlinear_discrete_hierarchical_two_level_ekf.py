@@ -1,5 +1,7 @@
 """Science test: two-level hierarchical nonlinear multi-trajectory EKF inference."""
 
+from typing import cast
+
 import arviz as az
 import equinox as eqx
 import jax.nn as jnn
@@ -21,8 +23,9 @@ from tests.test_utils import get_output_dir
 SAVE_FIG = True
 
 
-def _beta_from_raw(beta_raw: jnp.ndarray) -> jnp.ndarray:
-    return 0.8 * (jnn.sigmoid(beta_raw) - 0.5)
+def _beta_from_raw(beta_raw) -> jnp.ndarray:
+    beta_raw_arr = jnp.asarray(beta_raw)
+    return 0.8 * (jnn.sigmoid(beta_raw_arr) - 0.5)
 
 
 class _NestedNonlinearTransition(eqx.Module):
@@ -211,7 +214,7 @@ def test_hierarchical_nonlinear_two_level_ekf_science(num_samples: int):
         fig, ax = plt.subplots(figsize=(8, 4))
         group_idx = jnp.arange(n_groups)
         parts = ax.violinplot(group_raw_post, positions=group_idx, widths=0.7)
-        for pc in parts["bodies"]:
+        for pc in cast(list, parts["bodies"]):
             pc.set_alpha(0.35)
         ax.scatter(
             group_idx,
@@ -237,7 +240,7 @@ def test_hierarchical_nonlinear_two_level_ekf_science(num_samples: int):
         fig, ax = plt.subplots(figsize=(12, 4))
         member_idx = jnp.arange(beta_raw_true_flat.shape[0])
         parts = ax.violinplot(beta_raw_post_flat, positions=member_idx, widths=0.8)
-        for pc in parts["bodies"]:
+        for pc in cast(list, parts["bodies"]):
             pc.set_alpha(0.35)
         ax.scatter(
             member_idx,

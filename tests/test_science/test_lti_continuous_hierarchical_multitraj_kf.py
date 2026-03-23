@@ -1,5 +1,7 @@
 """Science test: hierarchical multi-trajectory continuous-time LTI KF inference."""
 
+from typing import cast
+
 import arviz as az
 import jax.nn as jnn
 import jax.numpy as jnp
@@ -147,7 +149,7 @@ def test_hierarchical_multitraj_lti_continuous_kf_science(num_samples: int):
         fig, ax = plt.subplots(figsize=(14, 4))
         traj_idx = jnp.arange(n_traj)
         parts = ax.violinplot(rho_raw_post, positions=traj_idx, widths=0.8)
-        for pc in parts["bodies"]:
+        for pc in cast(list, parts["bodies"]):
             pc.set_alpha(0.35)
         ax.scatter(
             traj_idx,

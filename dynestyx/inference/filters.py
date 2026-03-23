@@ -231,7 +231,7 @@ def _slice_time_axis(
 
 def _cuthbert_states_to_dists(
     states,
-    config: DiscreteTimeConfigs,
+    config: BaseFilterConfig,
     *,
     plate_shapes: tuple[int, ...],
 ) -> list[numpyro.distributions.Distribution]:
@@ -342,19 +342,20 @@ def _particle_to_batched_dists(
         return per_member[0]
 
     result: list[numpyro.distributions.Distribution] = []
+    # TODO: don't use MixtureSameFamily at all!
     for t in range(t_len):
         logits_t = jnp.stack(
-            [per_member[i][t].mixing_distribution.logits for i in range(n_members)],
+            [per_member[i][t].mixing_distribution.logits for i in range(n_members)],  # type: ignore[attr-defined]
             axis=0,
         ).reshape(*plate_shapes, -1)
         values_t = jnp.stack(
-            [per_member[i][t].component_distribution.v for i in range(n_members)],
+            [per_member[i][t].component_distribution.v for i in range(n_members)],  # type: ignore[attr-defined]
             axis=0,
-        ).reshape(*plate_shapes, *per_member[0][t].component_distribution.v.shape)
+        ).reshape(*plate_shapes, *per_member[0][t].component_distribution.v.shape)  # type: ignore[attr-defined]
         result.append(
             numpyro.distributions.MixtureSameFamily(
                 numpyro.distributions.Categorical(logits=logits_t),
-                numpyro.distributions.Delta(values_t, event_dim=1),
+                numpyro.distributions.Delta(values_t, event_dim=1),  # type: ignore[arg-type]
             )
         )
     return result

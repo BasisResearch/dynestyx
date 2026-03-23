@@ -159,6 +159,13 @@ def _slice_dist_for_plate_member(
     if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
         return dist_obj
 
+    def _slice_required_array(arr_like) -> Array:
+        arr = jnp.asarray(arr_like)
+        sliced = _slice_array_for_plate_member(arr, plate_shapes, plate_idx)
+        if sliced is None:
+            raise ValueError("Expected a concrete array when slicing plate member.")
+        return sliced
+
     # Rebuild common distributions explicitly so cached/static batch metadata is
     # consistent after slicing.
     if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
@@ -171,20 +178,16 @@ def _slice_dist_for_plate_member(
         return numpyro.distributions.MixtureSameFamily(mixture, components)
 
     if isinstance(dist_obj, numpyro.distributions.MultivariateNormal):
-        loc = _slice_array_for_plate_member(dist_obj.loc, plate_shapes, plate_idx)
-        cov = _slice_array_for_plate_member(
-            dist_obj.covariance_matrix, plate_shapes, plate_idx
-        )
+        loc = _slice_required_array(dist_obj.loc)
+        cov = _slice_required_array(dist_obj.covariance_matrix)
         return numpyro.distributions.MultivariateNormal(
             loc=loc,
             covariance_matrix=cov,
         )
 
     if isinstance(dist_obj, numpyro.distributions.Delta):
-        value = _slice_array_for_plate_member(dist_obj.v, plate_shapes, plate_idx)
-        log_density = _slice_array_for_plate_member(
-            dist_obj.log_density, plate_shapes, plate_idx
-        )
+        value = _slice_required_array(dist_obj.v)
+        log_density = _slice_required_array(dist_obj.log_density)
         return numpyro.distributions.Delta(
             value,
             log_density=log_density,
@@ -193,11 +196,9 @@ def _slice_dist_for_plate_member(
 
     if dist_obj.__class__.__name__.startswith("Categorical"):
         if dist_obj.logits is not None:
-            logits = _slice_array_for_plate_member(
-                dist_obj.logits, plate_shapes, plate_idx
-            )
+            logits = _slice_required_array(dist_obj.logits)
             return numpyro.distributions.Categorical(logits=logits)
-        probs = _slice_array_for_plate_member(dist_obj.probs, plate_shapes, plate_idx)
+        probs = _slice_required_array(dist_obj.probs)
         return numpyro.distributions.Categorical(probs=probs)
 
     if isinstance(dist_obj, numpyro.distributions.Independent):
@@ -209,9 +210,10 @@ def _slice_dist_for_plate_member(
 
     if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
         base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        transforms = getattr(dist_obj, "transforms")
         return numpyro.distributions.TransformedDistribution(
             base,
-            dist_obj.transforms,
+            transforms,
         )
 
     def _slice_leaf(leaf):

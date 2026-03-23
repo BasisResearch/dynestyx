@@ -1,5 +1,7 @@
 """Science test: hierarchical nonlinear multi-trajectory inference with EKF."""
 
+from typing import cast
+
 import arviz as az
 import equinox as eqx
 import jax.nn as jnn
@@ -21,9 +23,10 @@ from tests.test_utils import get_output_dir
 SAVE_FIG = True
 
 
-def _beta_from_raw(beta_raw: jnp.ndarray) -> jnp.ndarray:
+def _beta_from_raw(beta_raw) -> jnp.ndarray:
     """Map unconstrained raw params to stable nonlinear transition gain."""
-    return 0.8 * (jnn.sigmoid(beta_raw) - 0.5)
+    beta_raw_arr = jnp.asarray(beta_raw)
+    return 0.8 * (jnn.sigmoid(beta_raw_arr) - 0.5)
 
 
 class _PlateNonlinearTransition(eqx.Module):
@@ -182,7 +185,7 @@ def test_hierarchical_nonlinear_multitraj_ekf_science(num_samples: int):
         traj_idx = jnp.arange(n_traj)
         fig, ax = plt.subplots(figsize=(12, 4))
         parts = ax.violinplot(beta_raw_post, positions=traj_idx, widths=0.8)
-        for pc in parts["bodies"]:
+        for pc in cast(list, parts["bodies"]):
             pc.set_alpha(0.35)
         ax.scatter(
             traj_idx,
