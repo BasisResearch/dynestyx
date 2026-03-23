@@ -175,8 +175,13 @@ def _validate_continuous_time_flag(
     continuous_time: bool | None, inferred_continuous_time: bool
 ) -> None:
     """Ensure optional continuous_time agrees with inferred model type."""
-    if continuous_time is not None and bool(continuous_time) != inferred_continuous_time:
-        raise ValueError("continuous_time does not match inferred state_evolution type.")
+    if (
+        continuous_time is not None
+        and bool(continuous_time) != inferred_continuous_time
+    ):
+        raise ValueError(
+            "continuous_time does not match inferred state_evolution type."
+        )
 
 
 def _validate_state_dim(state_dim: int | None, inferred_state_dim: int) -> None:
