@@ -7,7 +7,7 @@ from typing import Any, Protocol
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from numpyro._typing import DistributionT
+from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
     _infer_vector_dim_from_distribution,
@@ -45,8 +45,7 @@ class DynamicalModel(eqx.Module):
             Gets inferred automatically from the type of `initial_condition`.
         control_dim (int): Dimension of the control/input vector $u_t \\in \\mathbb{R}^{d_u}$. Defaults to 0 if not provided (assumes no controls).
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
-            In the codebase this is annotated as `DistributionT` (a typing alias); in practice you should pass
-            a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
+            Pass a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
             [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
         state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
             Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
@@ -71,12 +70,12 @@ class DynamicalModel(eqx.Module):
     
     """
 
-    initial_condition: DistributionT
+    initial_condition: Distribution
     state_evolution: (
         Callable[[State, Control, Time], State]
         | Callable[[State, Control, Time, Time], State]
     )
-    observation_model: Callable[[State, Control, Time], DistributionT]
+    observation_model: Callable[[State, Control, Time], Distribution]
     control_dim: int
     control_model: Any
     t0: float | None
@@ -328,7 +327,7 @@ class DiscreteTimeStateEvolution:
         t_next (Time): Next time index $t_{k+1}$ (for non-uniform sampling or continuous-time embeddings).
 
     Returns:
-        DistributionT: Distribution over the next state $x_{t_{k+1}}$.
+        numpyro.distributions.Distribution: Distribution over the next state $x_{t_{k+1}}$.
             In practice this should be a `numpyro.distributions.Distribution` instance.
     """
 
@@ -338,7 +337,7 @@ class DiscreteTimeStateEvolution:
         u: Control | None,
         t_now: Time,
         t_next: Time,
-    ) -> DistributionT:
+    ) -> Distribution:
         raise NotImplementedError()
 
 

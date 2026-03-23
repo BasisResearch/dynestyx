@@ -199,8 +199,10 @@ def _get_dynamics_with_t0(
         _ = eqx.error_if(
             inferred_t0,
             inferred_t0 != jnp.asarray(dynamics.t0),
-            f"dynamics.t0={dynamics.t0!r} does not match obs_times[0]. "
-            "Either set t0=None to auto-infer from obs_times, or ensure they agree.",
+            (
+                f"dynamics.t0={dynamics.t0!r} does not match the earlier of obs_times[0] or predict_times[0]. "
+                "Either set t0=None to auto-infer from provided times, or ensure they agree."
+            ),
         )
         # Return dynamics with original t0
         return dynamics
