@@ -28,7 +28,9 @@ from dynestyx.models import (
 )
 from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
+    _array_has_plate_dims,
     _build_control_path,
+    _ensure_continuous_bm_dim,
     _get_val_or_None,
     _validate_site_sorting,
 )
@@ -80,24 +82,6 @@ def _suspend_numpyro_plate_frames():
         yield
     finally:
         stack[:] = original
-
-
-def _array_has_plate_dims(
-    arr: Array | None,
-    plate_shapes: tuple[int, ...],
-    *,
-    min_suffix_ndim: int = 0,
-) -> bool:
-    """Return True if arr has leading dims exactly matching plate_shapes."""
-    if arr is None:
-        return False
-    n_plates = len(plate_shapes)
-    if arr.ndim < n_plates:
-        return False
-    for i, size in enumerate(plate_shapes):
-        if arr.shape[i] != size:
-            return False
-    return (arr.ndim - n_plates) >= min_suffix_ndim
 
 
 def _slice_array_for_plate_member(
@@ -275,40 +259,6 @@ def _tree_has_plate_batched_leaf(tree, plate_shapes: tuple[int, ...]) -> bool:
         if suffix_ndim == 0 or suffix_ndim >= 2:
             return True
     return False
-
-
-def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
-    """Infer and set bm_dim when continuous dynamics were constructed inside a plate."""
-    if not dynamics.continuous_time:
-        return dynamics
-
-    state_evolution = dynamics.state_evolution
-    if (
-        not isinstance(state_evolution, ContinuousTimeStateEvolution)
-        or state_evolution.diffusion_coefficient is None
-        or state_evolution.bm_dim is not None
-    ):
-        return dynamics
-
-    x0 = jnp.zeros((dynamics.state_dim,))
-    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    diffusion_shape = jax.eval_shape(
-        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
-    ).shape
-    if len(diffusion_shape) != 2:
-        raise ValueError(
-            "diffusion_coefficient must return shape (state_dim, bm_dim). "
-            f"Got shape {diffusion_shape}."
-        )
-    if int(diffusion_shape[0]) != int(dynamics.state_dim):
-        raise ValueError(
-            "diffusion_coefficient first dimension must match state_dim. "
-            f"Got diffusion_shape={diffusion_shape}, state_dim={dynamics.state_dim}."
-        )
-    inferred_bm_dim = int(diffusion_shape[1])
-    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
-    return dynamics
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):

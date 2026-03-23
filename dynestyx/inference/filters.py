@@ -48,28 +48,11 @@ from dynestyx.inference.integrations.utils import (
     WeightedParticles,
     particles_to_delta_mixtures,
 )
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _array_has_plate_dims, _ensure_continuous_bm_dim
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
-
-
-def _array_has_plate_dims(
-    arr: jax.Array | None,
-    plate_shapes: tuple[int, ...],
-    *,
-    min_suffix_ndim: int = 0,
-) -> bool:
-    """Return True when arr has plate_shapes as leading dims."""
-    if arr is None:
-        return False
-    n_plates = len(plate_shapes)
-    if arr.ndim < n_plates:
-        return False
-    for i, ps in enumerate(plate_shapes):
-        if arr.shape[i] != ps:
-            return False
-    return (arr.ndim - n_plates) >= min_suffix_ndim
 
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
@@ -105,40 +88,6 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
 def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
     """Return 0 if arr has leading dims matching plate_shapes, else None."""
     return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
-
-
-def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
-    """Infer and set bm_dim when continuous models are built inside active plates."""
-    if not dynamics.continuous_time:
-        return dynamics
-
-    state_evolution = dynamics.state_evolution
-    if (
-        not isinstance(state_evolution, ContinuousTimeStateEvolution)
-        or state_evolution.diffusion_coefficient is None
-        or state_evolution.bm_dim is not None
-    ):
-        return dynamics
-
-    x0 = jnp.zeros((dynamics.state_dim,))
-    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    diffusion_shape = jax.eval_shape(
-        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
-    ).shape
-    if len(diffusion_shape) != 2:
-        raise ValueError(
-            "diffusion_coefficient must return shape (state_dim, bm_dim). "
-            f"Got shape {diffusion_shape}."
-        )
-    if int(diffusion_shape[0]) != int(dynamics.state_dim):
-        raise ValueError(
-            "diffusion_coefficient first dimension must match state_dim. "
-            f"Got diffusion_shape={diffusion_shape}, state_dim={dynamics.state_dim}."
-        )
-    inferred_bm_dim = int(diffusion_shape[1])
-    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
-    return dynamics
 
 
 def _tree_has_axis_zero(tree) -> bool:
