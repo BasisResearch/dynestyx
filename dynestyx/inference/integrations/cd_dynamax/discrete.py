@@ -18,6 +18,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_filter,
 )
+from jaxtyping import Float
 
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
@@ -80,10 +81,10 @@ def _filter_discrete_time_dynamax_kf(
     dynamics: DynamicalModel,
     record_kwargs: dict,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Run dynamax Kalman filter for LTI_discretetime and add factor + sites."""
@@ -124,10 +125,10 @@ def _run_nlgssm_filter(
     record_kwargs: dict,
     run_filter: Callable,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Common setup for EKF/UKF: get emissions/inputs, run filter, add factor + sites."""
@@ -168,10 +169,10 @@ def _filter_discrete_time_dynamax_ekf(
     record_kwargs: dict,
     num_iter: int = 1,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Run dynamax EKF for LTI and add factor + sites."""
@@ -200,10 +201,10 @@ def _filter_discrete_time_dynamax_ukf(
     record_kwargs: dict,
     hyperparams: UKFHyperParams | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Run dynamax UKF for LTI and add factor + sites."""
@@ -263,10 +264,10 @@ def run_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).

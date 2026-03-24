@@ -13,7 +13,7 @@ import numpyro.distributions as dist
 from jaxtyping import Float
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
-from dynestyx.types import Control, State, Time, dState
+from dynestyx.types import Control, State, Time
 
 
 class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
@@ -59,7 +59,13 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
         self.bias = bias
         self.cov = cov
 
-    def __call__(self, x, u, t_now, t_next):
+    def __call__(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t_now: Float[jax.Array, ""],
+        t_next: Float[jax.Array, ""],
+    ) -> dist.MultivariateNormal:
         loc = jnp.dot(self.A, x)
         if self.bias is not None:
             loc += self.bias
@@ -84,12 +90,12 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
     """
 
     F: Callable[[State, Control, Time, Time], State]
-    cov: jax.Array
+    cov: Float[jax.Array, "d_x d_x"]
 
     def __init__(
         self,
         F: Callable[[State, Control, Time, Time], State],
-        cov: jax.Array,
+        cov: Float[jax.Array, "d_x d_x"],
     ):
         """
         Args:
@@ -101,7 +107,13 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         self.F = F
         self.cov = cov
 
-    def __call__(self, x, u, t_now, t_next):
+    def __call__(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t_now: Float[jax.Array, ""],
+        t_next: Float[jax.Array, ""],
+    ) -> dist.MultivariateNormal:
         loc = self.F(x, u, t_now, t_next)
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
@@ -135,10 +147,10 @@ class AffineDrift(eqx.Module):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> dState:
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> Float[jax.Array, " d_x"]:
         out = jnp.dot(self.A, x)
         if self.B is not None:
             u_vec = u if u is not None else jnp.zeros(self.B.shape[1])

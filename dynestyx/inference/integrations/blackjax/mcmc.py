@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from jax.flatten_util import ravel_pytree
+from jaxtyping import Float
 from numpyro import handlers
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model, potential_energy
@@ -65,7 +66,7 @@ def _run_chains(chain_keys, make_step, initial_states, num_steps):
 
 
 def _run_blackjax(
-    mcmc_key: jnp.ndarray,
+    mcmc_key: jax.Array,
     make_algorithm: Callable,
     initial_positions,
     has_chain_axis: bool,
@@ -97,7 +98,7 @@ def _run_blackjax(
 
 
 def init_model(
-    rng_key: jnp.ndarray,
+    rng_key: jax.Array,
     model: Callable,
     *,
     model_args: tuple,
@@ -127,7 +128,7 @@ def init_model(
     )
 
     def potential_fn_gen(*dynamic_args, **dynamic_kwargs):
-        def potential_fn(position: dict, density_key: jnp.ndarray) -> jnp.ndarray:
+        def potential_fn(position: dict, density_key: jax.Array) -> jax.Array:
             seeded_model = handlers.seed(model, density_key)
             return potential_energy(
                 seeded_model, dynamic_args, dynamic_kwargs, position
@@ -140,12 +141,12 @@ def init_model(
 
 def run_blackjax_mcmc(
     mcmc_config: BaseMCMCConfig,
-    rng_key: jnp.ndarray,
+    rng_key: jax.Array,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     *model_args,
     **model_kwargs,
 ) -> dict:

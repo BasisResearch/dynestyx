@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
-import jax.numpy as jnp
+import jax
+from jaxtyping import Float
 from numpyro.infer import HMC, MCMC, NUTS
 
 from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
@@ -31,11 +32,11 @@ class MCMCInference:
 
     def run(
         self,
-        rng_key: jnp.ndarray,
-        obs_times: jnp.ndarray,
-        obs_values: jnp.ndarray,
-        ctrl_times: jnp.ndarray | None = None,
-        ctrl_values: jnp.ndarray | None = None,
+        rng_key: jax.Array,
+        obs_times: Float[jax.Array, " T"],
+        obs_values: Float[jax.Array, "T d_y"],
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
         *model_args,
         **model_kwargs,
     ) -> dict:
@@ -84,12 +85,12 @@ class MCMCInference:
 
 def _numpyro_mcmc(
     mcmc_config: BaseMCMCConfig,
-    rng_key: jnp.ndarray,
+    rng_key: jax.Array,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     *model_args,
     **model_kwargs,
 ) -> dict:
@@ -130,12 +131,12 @@ def _numpyro_mcmc(
 
 def _blackjax_mcmc(
     mcmc_config: BaseMCMCConfig,
-    rng_key: jnp.ndarray,
+    rng_key: jax.Array,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     *model_args,
     **model_kwargs,
 ) -> dict:

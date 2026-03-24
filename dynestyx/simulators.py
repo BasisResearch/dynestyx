@@ -13,6 +13,7 @@ import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import Array, lax
+from jaxtyping import Float
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
@@ -30,12 +31,12 @@ from dynestyx.utils import (
 )
 
 
-def _tile_times(times: Array, n_sim: int) -> Array:
+def _tile_times(times: Float[jax.Array, " T"], n_sim: int) -> Float[jax.Array, "N T"]:
     """Return times tiled to shape (n_sim, T)."""
     return jnp.broadcast_to(jnp.expand_dims(times, axis=0), (n_sim, len(times)))
 
 
-def _ensure_trailing_dim(arr: Array) -> Array:
+def _ensure_trailing_dim(arr: Float[jax.Array, "..."]) -> Float[jax.Array, "..."]:
     """Ensure simulator outputs follow shape (n_sim, T, dim)."""
     return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
 
@@ -94,11 +95,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+        predict_times: Float[jax.Array, " T_pred"] | None = None,
         filtered_times=None,
         filtered_dists=None,
         **kwargs,
@@ -227,11 +228,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+        predict_times: Float[jax.Array, " T_pred"] | None = None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll `dynamics` as a NumPyro model.
@@ -259,16 +260,16 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
 
 def _solve_de(
-    dynamics,
-    t0: float,
-    saveat_times: Array,
-    x0: State,
-    control_path_eval: Callable[[Array], Array | None],
+    dynamics: DynamicalModel,
+    t0: float | Float[jax.Array, ""],
+    saveat_times: Float[jax.Array, " T"],
+    x0: Float[jax.Array, " d_x"],
+    control_path_eval: Callable[[jax.Array], jax.Array | None],
     diffeqsolve_settings: dict,
     *,
-    key=None,
+    key: jax.Array | None = None,
     tol_vbt: float | None = None,
-) -> Array:
+) -> Float[jax.Array, "T d_x"]:
     """Solve one ODE/SDE trajectory with diffrax.
 
     Uses ODE mode when diffusion is None, otherwise SDE mode. `t0` is explicit
@@ -281,11 +282,11 @@ def _solve_de(
         return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
 
     def _solve():
-        diffusion = dynamics.state_evolution.diffusion_coefficient
+        diffusion = dynamics.state_evolution.diffusion_coefficient  # ty: ignore[unresolved-attribute]
 
         def _drift(t, y, args):
             u_t = args(t) if args is not None else None
-            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
+            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)  # ty: ignore[unresolved-attribute]
 
         if diffusion is None:
             terms = dfx.ODETerm(_drift)
@@ -295,13 +296,13 @@ def _solve_de(
                 t0=t0,
                 t1=t1,
                 tol=tol_vbt,
-                shape=(dynamics.state_evolution.bm_dim,),
+                shape=(dynamics.state_evolution.bm_dim,),  # ty: ignore[unresolved-attribute]
                 key=k_bm,
             )
 
             def _diffusion(t, y, args):
                 u_t = args(t) if args is not None else None
-                return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+                return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)  # ty: ignore[unresolved-attribute]
 
             terms = dfx.MultiTerm(dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm))
 
@@ -321,13 +322,13 @@ def _solve_de(
 
 def _emit_observations(
     name: str,
-    dynamics,
-    states: Array,
-    times: Array,
-    obs_values: Array | None,
-    control_path_eval: Callable[[Array], Array | None],
-    key=None,
-) -> Array:
+    dynamics: DynamicalModel,
+    states: Float[jax.Array, "T d_x"],
+    times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"] | None,
+    control_path_eval: Callable[[jax.Array], jax.Array | None],
+    key: jax.Array | None = None,
+) -> Float[jax.Array, "T d_y"]:
     """Emit observations via numpyro.sample (conditioning) or dist.sample (vmap)."""
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     T = len(times)
@@ -340,7 +341,7 @@ def _emit_observations(
             t = times[t_idx]
             u_t = ctrl(t)
             obs_dist = dynamics.observation_model(x_t, u_t, t)
-            return obs_dist.sample(obs_keys[t_idx])
+            return obs_dist.sample(obs_keys[t_idx])  # ty: ignore[invalid-argument-type]
 
         return jax.vmap(_obs_step)(jnp.arange(T))
     else:
@@ -445,11 +446,11 @@ class SDESimulator(BaseSimulator):
         name: str,
         dynamics,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+        predict_times: Float[jax.Array, " T_pred"] | None = None,
         **kwargs,
     ) -> dict[str, State]:
         """
@@ -604,11 +605,11 @@ class DiscreteTimeSimulator(BaseSimulator):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+        predict_times: Float[jax.Array, " T_pred"] | None = None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll a discrete-time model as a NumPyro model.
@@ -883,11 +884,11 @@ class ODESimulator(BaseSimulator):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+        predict_times: Float[jax.Array, " T_pred"] | None = None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll a deterministic continuous-time model as a NumPyro model.
@@ -1015,11 +1016,11 @@ class Simulator(BaseSimulator):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+        predict_times: Float[jax.Array, " T_pred"] | None = None,
         **kwargs,
     ) -> dict[str, State]:
         if self.simulator is None:

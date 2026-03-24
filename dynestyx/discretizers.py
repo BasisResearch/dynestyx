@@ -1,8 +1,10 @@
+import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import vmap
+from jaxtyping import Float
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
@@ -19,7 +21,13 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
     def __init__(self, cte: ContinuousTimeStateEvolution):
         self.cte = cte
 
-    def __call__(self, x, u, t_now, t_next):
+    def __call__(
+        self,
+        x: Float[jax.Array, "..."],
+        u: Float[jax.Array, "..."] | None,
+        t_now: Float[jax.Array, "..."],
+        t_next: Float[jax.Array, "..."],
+    ) -> dist.MultivariateNormal:
         """
         Discretize continuous-time state evolution via Euler-Maruyama. (CTSE) -> DTSE.
 

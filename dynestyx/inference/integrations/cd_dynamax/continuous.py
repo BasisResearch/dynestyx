@@ -12,6 +12,7 @@ from cd_dynamax import (
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
+from jaxtyping import Float
 
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
@@ -171,10 +172,10 @@ def run_continuous_filter(
     filter_config: ContinuousTimeFilterConfig,
     key: jax.Array | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Run continuous-time filter via CD-Dynamax.

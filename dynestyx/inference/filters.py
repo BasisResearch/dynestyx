@@ -5,6 +5,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jaxtyping import Float
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.filter_configs import (
@@ -164,10 +165,10 @@ class Filter(BaseLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times: jax.Array | None = None,
-        obs_values: jax.Array | None = None,
-        ctrl_times=None,
-        ctrl_values=None,
+        obs_times: Float[jax.Array, " T"] | None = None,
+        obs_values: Float[jax.Array, "T d_y"] | None = None,
+        ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+        ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution]:
         """
@@ -248,10 +249,10 @@ def _filter_discrete_time(
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
@@ -302,10 +303,10 @@ def _filter_continuous_time(
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.

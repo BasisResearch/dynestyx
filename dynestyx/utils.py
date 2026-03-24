@@ -2,15 +2,17 @@ import math
 
 import diffrax as dfx
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
-from jax import Array, lax
+from jax import lax
+from jaxtyping import Float
 
 from dynestyx.models import DynamicalModel
 
 
-def flatten_draws(arr: Array) -> Array:
+def flatten_draws(arr: Float[jax.Array, "..."]) -> Float[jax.Array, "..."]:
     """Merge the leading ``(num_samples, n_sim)`` axes of a simulator output into one.
 
     Simulators return arrays of shape ``(n_sim, T, ...)``. After wrapping the
@@ -55,7 +57,9 @@ def _should_record_field(
     return math.prod(shape) <= max_elems
 
 
-def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
+def _validate_control_dim(
+    dynamics: DynamicalModel, ctrl_values: Float[jax.Array, "T d_u"] | None
+) -> None:
     """
     Validate that control_dim is set in DynamicalModel when controls are present.
 
@@ -84,10 +88,10 @@ def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -
 
 
 def _validate_controls(
-    obs_times: Array | None,
-    predict_times: Array | None,
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
+    obs_times: Float[jax.Array, " T"] | None,
+    predict_times: Float[jax.Array, " T_pred"] | None,
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None,
 ) -> None:
     """
     Validate control inputs against model time grids.
@@ -147,7 +151,9 @@ def _validate_controls(
 
 
 def _build_control_path(
-    ctrl_times: Array, ctrl_values: Array, obs_times: Array
+    ctrl_times: Float[jax.Array, " T_ctrl"],
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"],
+    obs_times: Float[jax.Array, " T"],
 ) -> dfx.LinearInterpolation:
     """
     Build rectilinear control path for continuous-time simulators.
@@ -163,7 +169,9 @@ def _build_control_path(
     return dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
 
-def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
+def _get_val_or_None(
+    values: Float[jax.Array, "T ..."] | None, t_idx: int
+) -> Float[jax.Array, "..."] | None:
     """
     Safely get value at index t_idx, returning None if values is None.
 
@@ -178,7 +186,9 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
 
 
 def _get_dynamics_with_t0(
-    dynamics: DynamicalModel, obs_times: Array | None, predict_times: Array | None
+    dynamics: DynamicalModel,
+    obs_times: Float[jax.Array, " T"] | None,
+    predict_times: Float[jax.Array, " T_pred"] | None,
 ) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
@@ -213,7 +223,7 @@ def _get_dynamics_with_t0(
         )
 
 
-def _validate_site_sorting(times: Array | None, name: str) -> None:
+def _validate_site_sorting(times: Float[jax.Array, " T"] | None, name: str) -> None:
     """Validate that times are strictly increasing."""
     if times is not None and len(times) > 1:
         _ = eqx.error_if(

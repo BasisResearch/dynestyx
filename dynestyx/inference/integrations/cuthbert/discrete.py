@@ -13,6 +13,7 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
+from jaxtyping import Float
 
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
@@ -33,11 +34,11 @@ from dynestyx.utils import _should_record_field
 class CuthbertInputs(NamedTuple):
     """Model inputs pytree for cuthbert; leading time dim must be T+1."""
 
-    y: jax.Array  # (T+1, emission_dim)
-    u: jax.Array  # (T+1, control_dim) or (T+1, 0)
-    u_prev: jax.Array  # (T+1, control_dim) or (T+1, 0)
-    time: jax.Array  # (T+1,)
-    time_prev: jax.Array  # (T+1,)
+    y: Float[jax.Array, "T_plus_1 d_y"]
+    u: Float[jax.Array, "T_plus_1 d_u"]
+    u_prev: Float[jax.Array, "T_plus_1 d_u"]
+    time: Float[jax.Array, " T_plus_1"]
+    time_prev: Float[jax.Array, " T_plus_1"]
     is_first_step: jax.Array  # (T+1,) bool — True only at index 1
 
 
@@ -60,10 +61,10 @@ def run_discrete_filter(
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).

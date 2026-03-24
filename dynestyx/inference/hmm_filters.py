@@ -6,6 +6,7 @@ import numpyro
 import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
+from jaxtyping import Float
 
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
@@ -81,9 +82,9 @@ def hmm_log_emission_probs(
 
 def hmm_log_components(
     dynamics: DynamicalModel,
-    obs_times: jnp.ndarray,  # (T,)
-    obs_values: jnp.ndarray,  # (T, ...)
-    ctrl_values=None,  # (T, ...) or None
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_values: Float[jax.Array, "T d_u"] | None = None,
 ):
     """
     Returns:
@@ -126,9 +127,9 @@ def hmm_log_components(
 
 
 def hmm_filter(
-    log_pi: jnp.ndarray,  # (K,)
-    log_A_seq: jnp.ndarray,  # (T-1, K, K)
-    log_emit_seq: jnp.ndarray,  # (T, K)
+    log_pi: Float[jax.Array, " K"],
+    log_A_seq: Float[jax.Array, "T_minus_1 K K"],
+    log_emit_seq: Float[jax.Array, "T K"],
 ):
     """
     Exact HMM filtering.
@@ -179,10 +180,10 @@ def _filter_hmm(
     dynamics: DynamicalModel,
     filter_config: HMMConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Float[jax.Array, " T"],
+    obs_values: Float[jax.Array, "T d_y"],
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T d_u"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Exact HMM marginal likelihood via forward filtering.

@@ -54,7 +54,12 @@ class LinearGaussianObservation(ObservationModel):
         self.R = R
         self.bias = bias
 
-    def __call__(self, x, u, t):
+    def __call__(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> dist.MultivariateNormal:
         loc = jnp.dot(self.H, x)
         if self.D is not None and u is not None:
             loc += jnp.dot(self.D, u)
@@ -78,9 +83,13 @@ class GaussianObservation(ObservationModel):
     """
 
     h: Callable[[State, Control, Time], Observation]
-    R: jax.Array
+    R: Float[jax.Array, "d_y d_y"]
 
-    def __init__(self, h: Callable[[State, Control, Time], jax.Array], R: jax.Array):
+    def __init__(
+        self,
+        h: Callable[[State, Control, Time], jax.Array],
+        R: Float[jax.Array, "d_y d_y"],
+    ):
         """
         Args:
             h (Callable[[State, Control, Time], jax.Array]): Measurement
@@ -91,7 +100,12 @@ class GaussianObservation(ObservationModel):
         self.h = h
         self.R = R
 
-    def __call__(self, x, u, t):
+    def __call__(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> dist.MultivariateNormal:
         loc = self.h(x, u, t)
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
 
@@ -109,5 +123,10 @@ class DiracIdentityObservation(ObservationModel):
     i.e., the observation equals the latent state almost surely.
     """
 
-    def __call__(self, x, u, t):
+    def __call__(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> dist.Delta:
         return dist.Delta(x)

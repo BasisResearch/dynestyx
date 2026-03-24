@@ -7,6 +7,7 @@ from typing import Any, Protocol
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+from jaxtyping import Float
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
@@ -15,7 +16,7 @@ from dynestyx.models.checkers import (
     _make_probe_state,
     _validate_state_evolution_output_shape,
 )
-from dynestyx.types import Control, State, Time, dState
+from dynestyx.types import Control, State, Time
 
 
 class DynamicalModel(eqx.Module):
@@ -204,10 +205,10 @@ class Drift(Protocol):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> dState:
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> Float[jax.Array, " d_x"]:
         raise NotImplementedError()
 
 
@@ -241,10 +242,10 @@ class Potential(Protocol):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> jax.Array:
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> Float[jax.Array, ""]:
         raise NotImplementedError()
 
 
@@ -287,7 +288,12 @@ class ContinuousTimeStateEvolution:
     diffusion_coefficient: Drift | None = None
     bm_dim: int | None = dataclasses.field(default=None, repr=False)
 
-    def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
+    def total_drift(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> Float[jax.Array, " d_x"]:
         base = self.drift(x, u, t) if self.drift is not None else None
 
         potential = self.potential
@@ -333,10 +339,10 @@ class DiscreteTimeStateEvolution:
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t_now: Time,
-        t_next: Time,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t_now: Float[jax.Array, ""],
+        t_next: Float[jax.Array, ""],
     ) -> Distribution:
         raise NotImplementedError()
 
@@ -364,11 +370,16 @@ class ObservationModel(eqx.Module):
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
 
-    def __call__(self, x, u, t) -> Distribution:
+    def __call__(
+        self,
+        x: Float[jax.Array, " d_x"],
+        u: Float[jax.Array, " d_u"] | None,
+        t: Float[jax.Array, ""],
+    ) -> Distribution:
         raise NotImplementedError()
 
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
-        dist = self(x, u, t)
+        dist = self(x, u, t)  # ty: ignore[invalid-argument-type]
         return dist.log_prob(y)
 
     def sample(self, x, u, t, *args, **kwargs):

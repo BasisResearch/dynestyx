@@ -6,6 +6,7 @@ import jax
 from effectful.ops.semantics import handler
 from effectful.ops.syntax import defop
 from effectful.ops.types import NotHandled
+from jaxtyping import Float
 
 from dynestyx.models import (
     DynamicalModel,
@@ -25,11 +26,11 @@ def sample(
     name: str,
     dynamics: DynamicalModel,
     *,
-    obs_times: jax.Array | None = None,
-    obs_values: jax.Array | None = None,
-    ctrl_times: jax.Array | None = None,
-    ctrl_values: jax.Array | None = None,
-    predict_times: jax.Array | None = None,
+    obs_times: Float[jax.Array, " T"] | None = None,
+    obs_values: Float[jax.Array, "T d_y"] | None = None,
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+    predict_times: Float[jax.Array, " T_pred"] | None = None,
     **kwargs,
 ) -> FunctionOfTime:
     """
@@ -100,11 +101,11 @@ def _sample_intp(
     name: str,
     dynamics: DynamicalModel,
     *,
-    obs_times: jax.Array | None = None,
-    obs_values: jax.Array | None = None,
-    ctrl_times: jax.Array | None = None,
-    ctrl_values: jax.Array | None = None,
-    predict_times: jax.Array | None = None,
+    obs_times: Float[jax.Array, " T"] | None = None,
+    obs_values: Float[jax.Array, "T d_y"] | None = None,
+    ctrl_times: Float[jax.Array, " T_ctrl"] | None = None,
+    ctrl_values: Float[jax.Array, "T_ctrl d_u"] | None = None,
+    predict_times: Float[jax.Array, " T_pred"] | None = None,
     **kwargs,
 ) -> FunctionOfTime:
     """
