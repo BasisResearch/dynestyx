@@ -152,7 +152,7 @@ def _validate_state_evolution_output_shape(
             )
         t_now = t0
         t_next = t0 + 1.0
-        transition_dist = state_evolution(x=x0, u=u0, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]
+        transition_dist = state_evolution(x0, u0, t_now, t_next)  # ty: ignore[too-many-positional-arguments]
         inferred_state_dim = _infer_vector_dim_from_distribution(
             transition_dist, "state_evolution(x, u, t_now, t_next)"
         )

@@ -108,9 +108,7 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
             wrapped_linear_kwargs[key] = (
                 value if key == "dynamics_approx_order" else _fixed_param(value)
             )
-        cdlg_params, _ = model.initialize(  # type: ignore[arg-type]
-            **wrapped_linear_kwargs
-        )
+        cdlg_params, _ = model.initialize(**wrapped_linear_kwargs)
         return cdlg_params
 
     if isinstance(model, (ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM)):
@@ -131,9 +129,7 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
                 wrapped_nonlinear_kwargs[key] = _fixed_param(_as_learnable(value))
             else:
                 wrapped_nonlinear_kwargs[key] = _fixed_param(value)
-        cdnl_params, _ = model.initialize(  # type: ignore[arg-type]
-            **wrapped_nonlinear_kwargs
-        )
+        cdnl_params, _ = model.initialize(**wrapped_nonlinear_kwargs)
         return cdnl_params
 
     raise TypeError(
@@ -264,10 +260,10 @@ def dsx_to_cd_dynamax(
         )
     else:
         if isinstance(ic, dist.MultivariateNormal):
-            initial_mean = ic.loc  # type: ignore
+            initial_mean = ic.loc
             initial_cov = ic.covariance_matrix
         elif isinstance(ic, dist.Normal):
-            initial_mean = ic.loc  # type: ignore
+            initial_mean = ic.loc
             initial_cov = jnp.square(ic.scale)
         else:
             raise NotImplementedError(
@@ -309,7 +305,7 @@ def dsx_to_cd_dynamax(
                 "initial_mean": initial_mean,
                 "initial_cov": initial_cov,
                 "emission_function": emission_function,
-                "emission_cov": obs.R,  # type: ignore
+                "emission_cov": obs.R,
             }
     else:
         # TODO: check for linear-gaussian observation models and extract H, R

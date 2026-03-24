@@ -3,6 +3,6 @@ set -euxo pipefail
 
 SRC="tests/ dynestyx/"
 
-mypy $SRC
+ty check $SRC
 ruff check $SRC
 ruff format --diff $SRC

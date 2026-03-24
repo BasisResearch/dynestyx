@@ -202,7 +202,7 @@ class Filter(BaseLogFactorAdder):
             return _filter_continuous_time(
                 name,
                 dynamics,
-                config,  # type: ignore[arg-type]
+                config,
                 key=key,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -215,7 +215,7 @@ class Filter(BaseLogFactorAdder):
                 return _filter_hmm(
                     name,
                     dynamics,
-                    config,  # type: ignore[arg-type]
+                    config,  # ty: ignore[invalid-argument-type]
                     obs_times=obs_times,
                     obs_values=obs_values,
                     ctrl_times=ctrl_times,
@@ -226,7 +226,7 @@ class Filter(BaseLogFactorAdder):
                 return _filter_discrete_time(
                     name,
                     dynamics,
-                    config,  # type: ignore[arg-type]
+                    config,
                     key=key,
                     obs_times=obs_times,
                     obs_values=obs_values,
@@ -324,7 +324,7 @@ def _filter_continuous_time(
     return run_continuous_filter(
         name,
         dynamics,
-        filter_config,  # type: ignore[arg-type]
+        filter_config,  # ty: ignore[invalid-argument-type]
         key=key,
         obs_times=obs_times,
         obs_values=obs_values,

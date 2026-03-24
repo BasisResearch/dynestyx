@@ -10,6 +10,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Float
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.types import Control, State, Time, dState
@@ -30,17 +31,17 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     covariance.
     """
 
-    A: jax.Array
-    B: jax.Array | None = None
-    bias: jax.Array | None = None
-    cov: jax.Array
+    A: Float[jax.Array, "d_x d_x"]
+    B: Float[jax.Array, "d_x d_u"] | None = None
+    bias: Float[jax.Array, " d_x"] | None = None
+    cov: Float[jax.Array, "d_x d_x"]
 
     def __init__(
         self,
-        A: jax.Array,
-        cov: jax.Array,
-        B: jax.Array | None = None,
-        bias: jax.Array | None = None,
+        A: Float[jax.Array, "d_x d_x"],
+        cov: Float[jax.Array, "d_x d_x"],
+        B: Float[jax.Array, "d_x d_u"] | None = None,
+        bias: Float[jax.Array, " d_x"] | None = None,
     ):
         """
         Args:
@@ -128,9 +129,9 @@ class AffineDrift(eqx.Module):
         b (jax.Array | None): Optional additive bias with shape $(d_x,)$.
     """
 
-    A: jax.Array
-    B: jax.Array | None = None
-    b: jax.Array | None = None
+    A: Float[jax.Array, "d_x d_x"]
+    B: Float[jax.Array, "d_x d_u"] | None = None
+    b: Float[jax.Array, " d_x"] | None = None
 
     def __call__(
         self,

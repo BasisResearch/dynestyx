@@ -78,9 +78,9 @@ def _run_blackjax(
     algorithm = make_algorithm(init_density_key)
 
     initial_states = (
-        jax.vmap(algorithm.init)(initial_positions)  # type: ignore[call-arg]
+        jax.vmap(algorithm.init)(initial_positions)
         if has_chain_axis
-        else algorithm.init(initial_positions)  # type: ignore[call-arg]
+        else algorithm.init(initial_positions)
     )
 
     full_states = _run_chains(
@@ -183,8 +183,10 @@ def run_blackjax_mcmc(
             if has_chain_axis
             else initial_positions
         )
-        ((_, warmup_parameters), _) = warmup.run(  # type: ignore
-            warmup_key, warmup_position, num_steps=mcmc_config.num_warmup
+        ((_, warmup_parameters), _) = warmup.run(
+            warmup_key,
+            warmup_position,
+            num_steps=mcmc_config.num_warmup,  # ty: ignore[unknown-argument]
         )
 
         def make_nuts(density_key):
@@ -214,8 +216,10 @@ def run_blackjax_mcmc(
                 make_logdensity(warmup_density_key),
                 num_integration_steps=mcmc_config.num_steps,
             )
-            ((_, warmup_parameters), _) = warmup.run(  # type: ignore
-                warmup_key, ref_position, num_steps=mcmc_config.num_warmup
+            ((_, warmup_parameters), _) = warmup.run(
+                warmup_key,
+                ref_position,
+                num_steps=mcmc_config.num_warmup,  # ty: ignore[unknown-argument]
             )
 
             def make_hmc(density_key):

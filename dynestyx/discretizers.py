@@ -55,6 +55,11 @@ class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
             _dt = _t_next - _t_now
             drift = self.cte.total_drift(_x, _u, _t_now)
             x_pred_mean = _x + drift * _dt
+            if self.cte.diffusion_coefficient is None:
+                raise ValueError(
+                    "ContinuousTimeStateEvolution.diffusion_coefficient is not set. "
+                    "Construct dynamics via DynamicalModel before discretization."
+                )
             L = self.cte.diffusion_coefficient(_x, _u, _t_now)
             if self.cte.bm_dim is None:
                 raise ValueError(

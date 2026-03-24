@@ -94,7 +94,7 @@ def _filter_discrete_time_dynamax_kf(
         inputs = jnp.zeros((T1, control_dim))
     elif ctrl_values.shape[0] > T1:
         # Find controls aligned to obs_times
-        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")  # ty: ignore[invalid-argument-type]
         inputs = ctrl_values[inds]
     else:
         # Controls should align exactly with obs_times
@@ -138,7 +138,7 @@ def _run_nlgssm_filter(
         inputs = jnp.zeros((T1, control_dim))
     elif ctrl_values.shape[0] > T1:
         # Find controls aligned to obs_times
-        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")  # ty: ignore[invalid-argument-type]
         inputs = ctrl_values[inds]
     else:
         # Controls should align exactly with obs_times
@@ -294,11 +294,17 @@ def run_discrete_filter(
 
     if isinstance(filter_config, KFConfig):
         return _filter_discrete_time_dynamax_kf(
-            name, dynamics, record_kwargs, **filter_kwargs
+            name,
+            dynamics,
+            record_kwargs,
+            **filter_kwargs,  # ty: ignore[invalid-argument-type]
         )
     elif isinstance(filter_config, EKFConfig):
         return _filter_discrete_time_dynamax_ekf(
-            name, dynamics, record_kwargs, **filter_kwargs
+            name,
+            dynamics,
+            record_kwargs,
+            **filter_kwargs,  # ty: ignore[invalid-argument-type]
         )
     elif isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
@@ -307,7 +313,11 @@ def run_discrete_filter(
             kappa=filter_config.kappa,
         )
         return _filter_discrete_time_dynamax_ukf(
-            name, dynamics, record_kwargs, hyperparams=hyperparams, **filter_kwargs
+            name,
+            dynamics,
+            record_kwargs,
+            hyperparams=hyperparams,
+            **filter_kwargs,  # ty: ignore[invalid-argument-type]
         )
     else:
         raise ValueError(

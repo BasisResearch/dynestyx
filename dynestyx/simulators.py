@@ -2,7 +2,6 @@
 
 import dataclasses
 from collections.abc import Callable
-from typing import cast
 
 import diffrax as dfx
 import equinox as eqx
@@ -114,7 +113,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if filter_rollout:
             _validate_site_sorting(filtered_times, name="filtered_times")
-            n_pred = len(predict_times)
+            n_pred = len(predict_times)  # ty: ignore[invalid-argument-type]
 
             # Build segment ids on host once.
             # seg_id == -1 means "before first filtered time" (use model prior).
@@ -132,8 +131,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 if seg_id < 0:
                     return dynamics, f"{name}_0"
 
-                filtered_time = filtered_times[seg_id]
-                filtered_dist = filtered_dists[seg_id]
+                filtered_time = filtered_times[seg_id]  # ty: ignore[not-subscriptable]
+                filtered_dist = filtered_dists[seg_id]  # ty: ignore[not-subscriptable]
                 dynamics_with_filtered_time = eqx.tree_at(
                     lambda m: m.t0,
                     dynamics,
@@ -163,7 +162,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 # Keep the same membership mask as a JAX array for scatter/merge later.
                 mask_seg = jnp.asarray(mask_host)
                 # Extract just this segment's prediction times (variable-length sub-grid).
-                sub_times = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
+                sub_times = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)  # ty: ignore[unresolved-attribute]
                 dynamics_seg, seg_name = _dynamics_for_segment(seg_id)
 
                 ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_times)
@@ -189,7 +188,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 "predicted_observations": merge("observations"),
             }
             n_sim_out = results["predicted_states"].shape[0]
-            results["predicted_times"] = _tile_times(predict_times, n_sim_out)
+            results["predicted_times"] = _tile_times(predict_times, n_sim_out)  # ty: ignore[invalid-argument-type]
 
         else:
             if self.n_simulations > 1 and obs_values is not None:
@@ -291,7 +290,7 @@ def _solve_de(
         if diffusion is None:
             terms = dfx.ODETerm(_drift)
         else:
-            k_bm, _ = jr.split(key, 2)
+            k_bm, _ = jr.split(key, 2)  # ty: ignore[invalid-argument-type]
             bm = dfx.VirtualBrownianTree(
                 t0=t0,
                 t1=t1,
@@ -304,9 +303,7 @@ def _solve_de(
                 u_t = args(t) if args is not None else None
                 return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
-            terms = dfx.MultiTerm(  # type: ignore
-                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-            )
+            terms = dfx.MultiTerm(dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm))
 
         sol = dfx.diffeqsolve(
             terms,
@@ -342,7 +339,7 @@ def _emit_observations(
             x_t = states[t_idx]
             t = times[t_idx]
             u_t = ctrl(t)
-            obs_dist = dynamics.observation_model(x=x_t, u=u_t, t=t)
+            obs_dist = dynamics.observation_model(x_t, u_t, t)
             return obs_dist.sample(obs_keys[t_idx])
 
         return jax.vmap(_obs_step)(jnp.arange(T))
@@ -355,7 +352,7 @@ def _emit_observations(
             obs_t = _get_val_or_None(obs_values, t_idx)
             y_t = numpyro.sample(
                 f"{name}_y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                dynamics.observation_model(x_t, u_t, t),
                 obs=obs_t,
             )
             return carry, y_t
@@ -518,14 +515,14 @@ class SDESimulator(BaseSimulator):
         n_sim = self.n_simulations
 
         if ctrl_times is not None and ctrl_values is not None:
-            control_path = _build_control_path(ctrl_times, ctrl_values, times)
+            control_path = _build_control_path(ctrl_times, ctrl_values, times)  # ty: ignore[invalid-argument-type]
             control_path_eval: Callable[[Array], Array | None] = lambda t: (
                 control_path.evaluate(t, left=False)
             )
         else:
             control_path_eval = lambda t: None
 
-        t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        t0 = dynamics.t0 if dynamics.t0 is not None else times[0]  # ty: ignore[not-subscriptable]
 
         def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
             """Simulate one SDE trajectory and its emissions."""
@@ -533,7 +530,7 @@ class SDESimulator(BaseSimulator):
             states_sol = _solve_de(
                 dynamics,
                 t0,
-                times,
+                times,  # ty: ignore[invalid-argument-type]
                 x0,
                 control_path_eval,
                 self.diffeqsolve_settings,
@@ -541,7 +538,13 @@ class SDESimulator(BaseSimulator):
                 tol_vbt=self.tol_vbt,
             )
             emissions = _emit_observations(
-                name, dynamics, states_sol, times, None, control_path_eval, key=k_obs
+                name,
+                dynamics,
+                states_sol,
+                times,  # ty: ignore[invalid-argument-type]
+                None,
+                control_path_eval,
+                key=k_obs,
             )
             return states_sol, emissions
 
@@ -555,7 +558,7 @@ class SDESimulator(BaseSimulator):
             keys, jnp.asarray(initial_state)
         )
         return {
-            "times": _tile_times(times, n_sim),
+            "times": _tile_times(times, n_sim),  # ty: ignore[invalid-argument-type]
             "states": states,
             "observations": emissions,
         }
@@ -693,12 +696,12 @@ class DiscreteTimeSimulator(BaseSimulator):
                     x_prev_batch_last,
                     u_prev_batch_last,
                     t_now,
-                    t_next,  # type: ignore
+                    t_next,  # ty: ignore[too-many-positional-arguments]
                 )
                 # obs shape must match trans.batch_shape + trans.event_shape: use
                 # time-first (T-1, state_dim) for e.g. discretizer; batch-last (state_dim, T-1) for scalar.
                 obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
-                numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
+                numpyro.sample("x_next", trans, obs=obs_next)  # ty: ignore[invalid-argument-type]
 
             # Always return (n_sim, T, state_dim) for consistent shaping
             obs_exp = _ensure_trailing_dim(jnp.expand_dims(obs_values, axis=0))
@@ -715,7 +718,10 @@ class DiscreteTimeSimulator(BaseSimulator):
             u_now = _get_val_or_None(ctrl_values, t_idx)
             u_next = _get_val_or_None(ctrl_values, t_idx + 1)
             trans_dist = dynamics.state_evolution(
-                x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                x_prev,
+                u_now,
+                t_now,
+                t_next,  # ty: ignore[too-many-positional-arguments]
             )
             return t_next, u_next, trans_dist
 
@@ -740,14 +746,12 @@ class DiscreteTimeSimulator(BaseSimulator):
                     k_trans, k_obs = jr.split(keys_t[t_idx], 2)
                     t_next, u_next, trans_dist = _step_dists(x_prev, t_idx)
                     x_t = trans_dist.sample(k_trans)
-                    y_t = dynamics.observation_model(x=x_t, u=u_next, t=t_next).sample(
-                        k_obs
-                    )
+                    y_t = dynamics.observation_model(x_t, u_next, t_next).sample(k_obs)
                     return x_t, (x_t, y_t)
 
                 u_0 = _get_val_or_None(ctrl_values, 0)
-                y_0 = dynamics.observation_model(x=x0, u=u_0, t=times[0]).sample(
-                    keys_t[0]
+                y_0 = dynamics.observation_model(x0, u_0, times[0]).sample(
+                    keys_t[0]  # ty: ignore[invalid-argument-type]
                 )
                 _, (scan_states, scan_obs) = jax.lax.scan(_step, x0, jnp.arange(T - 1))
                 states = jnp.concatenate([jnp.expand_dims(x0, 0), scan_states], axis=0)
@@ -765,7 +769,7 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         # Default: scan over time (n_simulations == 1)...allows for obs= conditioning.
         with numpyro.plate(f"{name}_n_simulations", 1):
-            x_prev_site: State = numpyro.sample(  # type: ignore
+            x_prev_site: State = numpyro.sample(  # ty: ignore[invalid-assignment]
                 f"{name}_x_0", dynamics.initial_condition
             )
         x_prev = x_prev_site[0]
@@ -780,30 +784,30 @@ class DiscreteTimeSimulator(BaseSimulator):
                 dynamics.observation_model(x_prev, u_0, times[0]),
                 obs=obs_0,
             )
-        y_0_arr = cast(Array, jnp.asarray(y_0_site))
+        y_0_arr = jnp.asarray(y_0_site)
         y_0 = y_0_arr[0]
 
         def _step(x_prev, t_idx):
             t_next, u_next, trans_dist = _step_dists(x_prev, t_idx)
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x_t_site = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
-            x_t = x_t_site[0]
+            x_t = x_t_site[0]  # ty: ignore[not-subscriptable]
             obs_next = _get_val_or_None(obs_values, t_idx + 1)
             if obs_next is not None:
                 obs_next = jnp.expand_dims(obs_next, axis=0)
             with numpyro.plate(f"{name}_n_simulations", 1):
                 y_t_site = numpyro.sample(
                     f"{name}_y_{t_idx + 1}",
-                    dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                    dynamics.observation_model(x_t, u_next, t_next),
                     obs=obs_next,
                 )
-            y_t = y_t_site[0]
+            y_t = y_t_site[0]  # ty: ignore[not-subscriptable]
             return x_t, (x_t, y_t)
 
         _, scan_outputs = nscan(_step, x_prev, jnp.arange(T - 1))
         scan_states, scan_observations = scan_outputs
 
-        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
+        x_0_expanded = jnp.expand_dims(x_prev, axis=0)
         y_0_expanded = jnp.expand_dims(y_0, axis=0)
         states = jnp.concatenate([x_0_expanded, scan_states], axis=0)
         observations = jnp.concatenate([y_0_expanded, scan_observations], axis=0)

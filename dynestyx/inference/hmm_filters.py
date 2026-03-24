@@ -49,10 +49,10 @@ def hmm_log_transition_matrix(
     """
 
     def row(x_prev):
-        dist = dynamics.state_evolution(x=x_prev, u=u, t_now=t_now, t_next=t_next)
+        dist = dynamics.state_evolution(x_prev, u, t_now, t_next)  # ty: ignore[too-many-positional-arguments]
 
         def col(x_next):
-            return dist.log_prob(x_next)
+            return dist.log_prob(x_next)  # ty: ignore[unresolved-attribute]
 
         return jax.vmap(col)(xs)
 
@@ -72,7 +72,7 @@ def hmm_log_emission_probs(
     """
 
     def lp(x):
-        dist = dynamics.observation_model(x=x, u=u, t=t)
+        dist = dynamics.observation_model(x, u, t)
         lp = dist.log_prob(y)
         return jnp.sum(lp)  # critical for vector-valued observations
 

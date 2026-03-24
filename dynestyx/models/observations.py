@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
+from jaxtyping import Float
 from numpyro import distributions as dist
 
 from dynestyx.models.core import ObservationModel
@@ -25,17 +26,17 @@ class LinearGaussianObservation(ObservationModel):
     noise covariance.
     """
 
-    H: jax.Array
-    R: jax.Array
-    D: jax.Array | None = None
-    bias: jax.Array | None = None
+    H: Float[jax.Array, "d_y d_x"]
+    R: Float[jax.Array, "d_y d_y"]
+    D: Float[jax.Array, "d_y d_u"] | None = None
+    bias: Float[jax.Array, " d_y"] | None = None
 
     def __init__(
         self,
-        H: jax.Array,
-        R: jax.Array,
-        D: jax.Array | None = None,
-        bias: jax.Array | None = None,
+        H: Float[jax.Array, "d_y d_x"],
+        R: Float[jax.Array, "d_y d_y"],
+        D: Float[jax.Array, "d_y d_u"] | None = None,
+        bias: Float[jax.Array, " d_y"] | None = None,
     ):
         """
         Args:

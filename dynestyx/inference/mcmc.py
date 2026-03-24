@@ -55,7 +55,7 @@ class MCMCInference:
         """
 
         if self.mcmc_config.mcmc_source == "numpyro":
-            return _numpyro_mcmc(  # type: ignore
+            return _numpyro_mcmc(
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
                 model=self.model,
@@ -63,11 +63,11 @@ class MCMCInference:
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                *model_args,
+                *model_args,  # ty: ignore[parameter-already-assigned]
                 **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
-            return _blackjax_mcmc(  # type: ignore
+            return _blackjax_mcmc(
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
                 model=self.model,
@@ -75,7 +75,7 @@ class MCMCInference:
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                *model_args,
+                *model_args,  # ty: ignore[parameter-already-assigned]
                 **model_kwargs,
             )
         else:
@@ -116,7 +116,7 @@ def _numpyro_mcmc(
         )
     else:
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    mcmc.run(  # type: ignore
+    mcmc.run(
         rng_key,
         obs_times,
         obs_values,
@@ -145,7 +145,7 @@ def _blackjax_mcmc(
         NUTSConfig | HMCConfig | SGLDConfig | MALAConfig,
     ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    return run_blackjax_mcmc(  # type: ignore
+    return run_blackjax_mcmc(
         mcmc_config=mcmc_config,
         rng_key=rng_key,
         model=model,
@@ -153,6 +153,6 @@ def _blackjax_mcmc(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        *model_args,
+        *model_args,  # ty: ignore[parameter-already-assigned]
         **model_kwargs,
     )

@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Float
 
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
@@ -11,16 +12,16 @@ from dynestyx.models.state_evolution import AffineDrift, LinearGaussianStateEvol
 
 
 def LTI_discrete(
-    A: jax.Array,
-    Q: jax.Array,
-    H: jax.Array,
-    R: jax.Array,
-    B: jax.Array | None = None,
-    b: jax.Array | None = None,
-    D: jax.Array | None = None,
-    d: jax.Array | None = None,
-    initial_mean: jax.Array | None = None,
-    initial_cov: jax.Array | None = None,
+    A: Float[jax.Array, "d_x d_x"],
+    Q: Float[jax.Array, "d_x d_x"],
+    H: Float[jax.Array, "d_y d_x"],
+    R: Float[jax.Array, "d_y d_y"],
+    B: Float[jax.Array, "d_x d_u"] | None = None,
+    b: Float[jax.Array, " d_x"] | None = None,
+    D: Float[jax.Array, "d_y d_u"] | None = None,
+    d: Float[jax.Array, " d_y"] | None = None,
+    initial_mean: Float[jax.Array, " d_x"] | None = None,
+    initial_cov: Float[jax.Array, "d_x d_x"] | None = None,
 ) -> DynamicalModel:
     """
     Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
@@ -97,16 +98,16 @@ def LTI_discrete(
 
 
 def LTI_continuous(
-    A: jax.Array,
-    L: jax.Array,
-    H: jax.Array,
-    R: jax.Array,
-    B: jax.Array | None = None,
-    b: jax.Array | None = None,
-    D: jax.Array | None = None,
-    d: jax.Array | None = None,
-    initial_mean: jax.Array | None = None,
-    initial_cov: jax.Array | None = None,
+    A: Float[jax.Array, "d_x d_x"],
+    L: Float[jax.Array, "d_x d_w"],
+    H: Float[jax.Array, "d_y d_x"],
+    R: Float[jax.Array, "d_y d_y"],
+    B: Float[jax.Array, "d_x d_u"] | None = None,
+    b: Float[jax.Array, " d_x"] | None = None,
+    D: Float[jax.Array, "d_y d_u"] | None = None,
+    d: Float[jax.Array, " d_y"] | None = None,
+    initial_mean: Float[jax.Array, " d_x"] | None = None,
+    initial_cov: Float[jax.Array, "d_x d_x"] | None = None,
 ) -> DynamicalModel:
     """
     Build a continuous-time linear time-invariant (LTI) `DynamicalModel`.

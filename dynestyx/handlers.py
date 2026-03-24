@@ -147,9 +147,10 @@ class HandlesSelf:
     _cm = None
 
     def __enter__(self):
-        self._cm = handler(self)
+        self._cm = handler(self)  # ty: ignore[invalid-argument-type]
         self._cm.__enter__()
         return self._cm
 
     def __exit__(self, exc_type, exc, tb):
+        assert self._cm is not None
         return self._cm.__exit__(exc_type, exc, tb)

@@ -86,7 +86,7 @@ def run_discrete_filter(
         ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
     elif ctrl_values.shape[0] > T1:
         # Find controls aligned to obs_times.
-        inds = jnp.searchsorted(ctrl_times, times, side="left")
+        inds = jnp.searchsorted(ctrl_times, times, side="left")  # ty: ignore[invalid-argument-type]
         ctrl_values = ctrl_values[inds]
 
     dt0 = times[1] - times[0]
@@ -160,8 +160,8 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
             return x_prev
 
         def _evolve(key, x_prev, mi):
-            d = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
-            return d.sample(key)  # type: ignore
+            d = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)  # ty: ignore[too-many-positional-arguments]
+            return d.sample(key)  # ty: ignore[unresolved-attribute]
 
         return jax.lax.cond(mi.is_first_step, _noop, _evolve, key, x_prev, mi)
 
@@ -198,11 +198,11 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
     resampling_fn = adaptive.ess_decorator(base_resampling_fn, ess_threshold)
 
     pf = particle_filter.build_filter(
-        init_sample=init_sample,  # type: ignore
-        propagate_sample=propagate_sample,  # type: ignore
-        log_potential=log_potential,  # type: ignore
+        init_sample=init_sample,  # ty: ignore[invalid-argument-type]
+        propagate_sample=propagate_sample,  # ty: ignore[invalid-argument-type]
+        log_potential=log_potential,  # ty: ignore[invalid-argument-type]
         n_filter_particles=int(filter_kwargs.get("n_filter_particles", 1_000)),
-        resampling_fn=resampling_fn,  # type: ignore
+        resampling_fn=resampling_fn,
     )
     return pf
 
@@ -281,9 +281,9 @@ def _cuthbert_filter_kalman(
         return H, d, chol_R, y
 
     return kalman.build_filter(
-        get_init_params,  # type: ignore
-        get_dynamics_params,  # type: ignore
-        get_observation_params,  # type: ignore
+        get_init_params,  # ty: ignore[invalid-argument-type]
+        get_dynamics_params,  # ty: ignore[invalid-argument-type]
+        get_observation_params,  # ty: ignore[invalid-argument-type]
     )
 
 
@@ -310,8 +310,11 @@ def _cuthbert_filter_taylor_kf(
     ):
         def dynamics_log_density(x_prev, x):
             normal_logp = jnp.asarray(
-                dynamics.state_evolution(
-                    x_prev, mi.u_prev, mi.time_prev, mi.time
+                dynamics.state_evolution(  # ty: ignore[unresolved-attribute]
+                    x_prev,
+                    mi.u_prev,
+                    mi.time_prev,
+                    mi.time,  # ty: ignore[too-many-positional-arguments]
                 ).log_prob(x)
             ).sum()
             # Identity dynamics with near-zero noise for the noop first step.
@@ -320,11 +323,14 @@ def _cuthbert_filter_taylor_kf(
 
         x_prev_lin = jnp.atleast_1d(jnp.asarray(state.mean))
 
-        dist_at_lin = dynamics.state_evolution(  # type: ignore
-            x_prev_lin, mi.u_prev, mi.time_prev, mi.time
+        dist_at_lin = dynamics.state_evolution(
+            x_prev_lin,
+            mi.u_prev,
+            mi.time_prev,
+            mi.time,  # ty: ignore[too-many-positional-arguments]
         )
         try:
-            x_lin = jnp.atleast_1d(jnp.asarray(dist_at_lin.mean))  # type: ignore
+            x_lin = jnp.atleast_1d(jnp.asarray(dist_at_lin.mean))
         except Exception as exc:
             raise ValueError(
                 "dist_at_lin.mean is not available. Linearized Kalman filter requires a mean-able distribution."
@@ -345,9 +351,9 @@ def _cuthbert_filter_taylor_kf(
         return log_potential, jnp.atleast_1d(jnp.asarray(state.mean))
 
     kf = taylor.build_filter(
-        get_init_log_density,  # type: ignore
-        get_dynamics_log_density,  # type: ignore
-        get_observation_func,  # type: ignore
+        get_init_log_density,  # ty: ignore[invalid-argument-type]
+        get_dynamics_log_density,  # ty: ignore[invalid-argument-type]
+        get_observation_func,  # ty: ignore[invalid-argument-type]
         associative=False,
         rtol=rtol,
         ignore_nan_dims=True,

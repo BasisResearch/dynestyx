@@ -364,6 +364,9 @@ class ObservationModel(eqx.Module):
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
 
+    def __call__(self, x, u, t) -> Distribution:
+        raise NotImplementedError()
+
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
         dist = self(x, u, t)
         return dist.log_prob(y)

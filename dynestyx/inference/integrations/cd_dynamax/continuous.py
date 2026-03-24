@@ -236,7 +236,7 @@ def run_continuous_filter(
             filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
         )
 
-        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
+        filtered = cd_dynamax_model.filter(**filter_kwargs)
 
     _add_filter_sites(name, filter_config, filtered)
 
@@ -252,8 +252,8 @@ def run_continuous_filter(
         ]
     else:
         # PF: filtered has particles and log_weights (DPF-specific, not in base type)
-        particles = filtered.particles  # type: ignore[attr-defined]
-        log_weights = filtered.log_weights  # type: ignore[attr-defined]
+        particles = filtered.particles  # ty: ignore[unresolved-attribute]
+        log_weights = filtered.log_weights  # ty: ignore[unresolved-attribute]
         if particles.ndim == 2:
             particles = particles[..., None]
         return particles_to_delta_mixtures(particles, log_weights)
