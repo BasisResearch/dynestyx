@@ -95,6 +95,7 @@ nav:
       - Diagnostics:
         - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - FAQ: faq.md
+  - Versioned documentation: versioning.md
 
 theme:
   name: "material"
