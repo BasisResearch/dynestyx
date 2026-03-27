@@ -49,6 +49,13 @@ def _config_to_cd_dynamax_filter_kwargs(
     key,
 ) -> dict:
     """Build the filter_kwargs dict passed to cd_dynamax_model.filter()."""
+
+    # cd-dynamax uses the legacy PRNG key interface, but newer numpyro uses typed keys.
+    # We should convert accordingly.
+    # https://docs.jax.dev/en/latest/jax.random.html#module-jax.random
+    if jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
+        key = jax.random.key_data(key)
+
     base = {
         "params": params,
         "emissions": obs_values,
