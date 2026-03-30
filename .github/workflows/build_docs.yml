@@ -3,12 +3,46 @@ name: Build docs
 on:
   push:
     branches: [main]
-    
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Git ref to build from (e.g. main, v0.0.1, feature/my-docs)
+        required: true
+        default: main
+      version:
+        description: Mike version id to publish (e.g. 0.0.1, dev, manual-preview-build)
+        required: true
+        default: manual-preview-build
+      alias:
+        description: Mike alias to update (e.g. stable, latest, manual-preview)
+        required: true
+        default: manual-preview
+      title:
+        description: Human-readable title in version switcher
+        required: true
+        default: manual preview
+      set_default:
+        description: Also set this alias as the default site root
+        required: true
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && format('docs-manual-{0}', inputs.version) || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -20,32 +54,34 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Configure Git for mike
         run: |
-          uv sync --all-extras --dev
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Build docs
+      - name: Build latest docs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          source .venv/bin/activate && mkdocs build
+          uv run mike deploy --push --title "latest" dev latest
 
-      - name: Upload static files as artifact
-        id: deployment
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
+      - name: Build stable docs
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          uv run mike deploy --push --update-aliases --title "$VERSION" "$VERSION" stable
+          uv run mike set-default --push stable
 
-  # Deployment job
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-
-    permissions:
-      pages: write 
-      id-token: write 
-
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Build manual docs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          uv run mike deploy --push \
+            --title "${{ inputs.title }}" \
+            "${{ inputs.version }}" \
+            "${{ inputs.alias }}"
+          if [ "${{ inputs.set_default }}" = "true" ]; then
+            uv run mike set-default --push "${{ inputs.alias }}"
+          fi

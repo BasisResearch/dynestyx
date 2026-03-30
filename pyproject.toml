@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.0.1"
+version = "0.0.3"
 description = "NumPyro integration for dynamical systems"
 readme = "README.md"
 license = "Apache-2.0"
@@ -60,6 +60,7 @@ cd-dynamax = { git = "https://github.com/HD-UQ/cd_dynamax.git", branch = "public
 
 [dependency-groups]
 dev = [
+    "mike>=2.1.0",
     "mkdocs-material>=9.7.1",
     "mkdocs>=1.6.1",
     "mypy>=1.19.1",
@@ -70,6 +71,8 @@ dev = [
     "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
+    "mkdocs-jupyter>=0.24,<0.26",
+    "nbconvert>=7"
 ]
 
 [tool.ruff.lint]
