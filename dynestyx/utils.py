@@ -239,6 +239,7 @@ def _get_dynamics_with_t0(
     otherwise a ``ValueError`` is raised. If it is ``None``, it is filled in
     from ``obs_times[0]`` or ``predict_times[0]`` (kept as a JAX scalar so the result is jittable).
     """
+
     # Use the first time step along the last (time) axis, then reduce across any
     # leading batch/plate dims to a scalar t0.
     def _infer_t0_from_times(times: Array) -> Array:
