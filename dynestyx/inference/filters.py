@@ -552,8 +552,14 @@ class Filter(BaseLogFactorAdder):
 
         # Pre-split keys for all plate members (needed for stochastic filters).
         if key is not None:
+            # Ensure we use typed PRNG keys so split returns shape (total,)
+            # rather than old-style (total, 2). See cd-dynamax continuous.py
+            # for the same pattern.
+            if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
+                key = jax.random.wrap_key_data(key)
             total = math.prod(plate_shapes)
-            keys = jax.random.split(key, total).reshape(*plate_shapes, -1)
+            split_keys = jax.random.split(key, total)
+            keys = split_keys.reshape(*plate_shapes, *split_keys.shape[1:])
         else:
             keys = None
 
