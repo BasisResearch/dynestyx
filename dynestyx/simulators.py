@@ -112,7 +112,6 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
     return jax.tree.map(_slice_leaf, tree, is_leaf=_is_distribution_leaf)
 
 
-
 def _slice_dist_for_plate_member(
     dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
 ):
@@ -364,7 +363,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         if not _has_any_batched_plate_source(
             dynamics,
             plate_shapes,
-            arrays=(obs_times, obs_values, ctrl_times, ctrl_values, predict_times, filtered_times),
+            arrays=(
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                predict_times,
+                filtered_times,
+            ),
             dists=filtered_dists,
         ):
             raise ValueError(

@@ -107,7 +107,9 @@ def _has_any_batched_plate_source(
         if _leaf_is_plate_batched(leaf, plate_shapes):
             return True
 
-    if any(_array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) for arr in arrays):
+    if any(
+        _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) for arr in arrays
+    ):
         return True
 
     if dists is not None and any(
