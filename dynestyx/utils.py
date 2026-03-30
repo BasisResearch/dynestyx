@@ -4,6 +4,7 @@ import diffrax as dfx
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
@@ -55,6 +56,66 @@ def _array_has_plate_dims(
         if arr.shape[i] != size:
             return False
     return (arr.ndim - n_plates) >= min_suffix_ndim
+
+
+def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...]) -> bool:
+    """Return True if a pytree leaf is plate-batched according to the suffix_ndim heuristic.
+
+    A JAX array leaf is considered plate-batched when its leading dimensions
+    match ``plate_shapes`` and:
+    - ``suffix_ndim == 0``: per-member scalar parameter (e.g. ``beta[M]``), or
+    - ``suffix_ndim >= 2``: canonical batched tensor (e.g. ``A[M, d, d]``).
+
+    ``suffix_ndim == 1`` is intentionally skipped to avoid ambiguous false
+    positives where unbatched vectors happen to start with a plate-sized
+    dimension (e.g. HMM state dim == plate size).
+    """
+    if not isinstance(leaf, jax.Array):
+        return False
+    if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
+        return False
+    suffix_ndim = leaf.ndim - len(plate_shapes)
+    return suffix_ndim == 0 or suffix_ndim >= 2
+
+
+def _dist_has_plate_batch_dims(dist_obj, plate_shapes: tuple[int, ...]) -> bool:
+    """Return True when a distribution has plate-shaped leading batch dims."""
+    if dist_obj is None or not hasattr(dist_obj, "batch_shape"):
+        return False
+    batch_shape = tuple(dist_obj.batch_shape)
+    n_plates = len(plate_shapes)
+    if len(batch_shape) < n_plates:
+        return False
+    for i, size in enumerate(plate_shapes):
+        if batch_shape[i] != size:
+            return False
+    return True
+
+
+def _has_any_batched_plate_source(
+    dynamics: DynamicalModel,
+    plate_shapes: tuple[int, ...],
+    *,
+    arrays: tuple[Array | None, ...] = (),
+    dists: list | None = None,
+) -> bool:
+    """Return True if any source (dynamics leaves, arrays, or dists) is plate-batched."""
+    for leaf in jax.tree.leaves(
+        dynamics,
+        is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+    ):
+        if _leaf_is_plate_batched(leaf, plate_shapes):
+            return True
+
+    if any(_array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) for arr in arrays):
+        return True
+
+    if dists is not None and any(
+        _dist_has_plate_batch_dims(dist_obj, plate_shapes) for dist_obj in dists
+    ):
+        return True
+
+    return False
 
 
 def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:

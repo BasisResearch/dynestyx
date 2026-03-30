@@ -51,7 +51,11 @@ from dynestyx.inference.integrations.utils import (
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
-from dynestyx.utils import _array_has_plate_dims, _ensure_continuous_bm_dim
+from dynestyx.utils import (
+    _array_has_plate_dims,
+    _ensure_continuous_bm_dim,
+    _leaf_is_plate_batched,
+)
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -69,19 +73,7 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
         return isinstance(node, numpyro.distributions.Distribution)
 
     def _axis(leaf):
-        if not isinstance(leaf, jax.Array):
-            return None
-        if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
-            return None
-        suffix_ndim = leaf.ndim - len(plate_shapes)
-        # Map two classes of leaves:
-        # 1) suffix_ndim >= 2: canonical batched tensors.
-        # 2) suffix_ndim == 0: per-member scalar parameters captured in callable
-        #    modules for nonlinear dynamics/observations.
-        #
-        # Keep suffix_ndim == 1 unmapped to avoid ambiguous false positives where
-        # unbatched vectors/matrices happen to begin with a plate-sized dimension.
-        return 0 if (suffix_ndim == 0 or suffix_ndim >= 2) else None
+        return 0 if _leaf_is_plate_batched(leaf, plate_shapes) else None
 
     return jax.tree.map(_axis, tree, is_leaf=_is_distribution_leaf)
 
@@ -553,8 +545,7 @@ class Filter(BaseLogFactorAdder):
         # Pre-split keys for all plate members (needed for stochastic filters).
         if key is not None:
             # Ensure we use typed PRNG keys so split returns shape (total,)
-            # rather than old-style (total, 2). See cd-dynamax continuous.py
-            # for the same pattern.
+            # rather than old-style (total, 2).
             if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
                 key = jax.random.wrap_key_data(key)
             total = math.prod(plate_shapes)
@@ -572,11 +563,6 @@ class Filter(BaseLogFactorAdder):
         _validate_batched_plate_alignment(
             dynamics,
             plate_shapes,
-            dyn_axes,
-            ot_axis,
-            ov_axis,
-            ct_axis,
-            cv_axis,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,

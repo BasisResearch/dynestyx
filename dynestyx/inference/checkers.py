@@ -4,6 +4,7 @@ import jax
 import numpyro
 
 from dynestyx.models import DynamicalModel
+from dynestyx.utils import _has_any_batched_plate_source
 
 
 def _leading_dims(arr: jax.Array | None, n_dims: int) -> tuple[int, ...] | None:
@@ -42,11 +43,6 @@ def _summarize_dynamics_leading_dims(
 def _validate_batched_plate_alignment(
     dynamics: DynamicalModel,
     plate_shapes: tuple[int, ...],
-    dyn_axes,
-    ot_axis: int | None,
-    ov_axis: int | None,
-    ct_axis: int | None,
-    cv_axis: int | None,
     *,
     obs_times: jax.Array | None,
     obs_values: jax.Array | None,
@@ -54,9 +50,11 @@ def _validate_batched_plate_alignment(
     ctrl_values: jax.Array | None,
 ) -> None:
     """Raise early when plate_shapes do not align with any batched input source."""
-    has_batched_dynamics = any(axis == 0 for axis in jax.tree.leaves(dyn_axes))
-    has_batched_data = any(axis == 0 for axis in (ot_axis, ov_axis, ct_axis, cv_axis))
-    if has_batched_dynamics or has_batched_data:
+    if _has_any_batched_plate_source(
+        dynamics,
+        plate_shapes,
+        arrays=(obs_times, obs_values, ctrl_times, ctrl_values),
+    ):
         return
 
     n_plates = len(plate_shapes)

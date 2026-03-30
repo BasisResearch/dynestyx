@@ -30,8 +30,11 @@ from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _array_has_plate_dims,
     _build_control_path,
+    _dist_has_plate_batch_dims,
     _ensure_continuous_bm_dim,
     _get_val_or_None,
+    _has_any_batched_plate_source,
+    _leaf_is_plate_batched,
     _validate_site_sorting,
 )
 
@@ -102,39 +105,12 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
         return isinstance(node, numpyro.distributions.Distribution)
 
     def _slice_leaf(leaf):
-        if not isinstance(leaf, jax.Array):
-            return leaf
-        if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
-            return leaf
-
-        suffix_ndim = leaf.ndim - len(plate_shapes)
-        # We slice two cases:
-        # 1) suffix_ndim >= 2: classic batched tensors (e.g. A[M, d, d]).
-        # 2) suffix_ndim == 0: per-member scalar params (e.g. beta[M]) inside
-        #    nonlinear callable modules.
-        #
-        # We intentionally skip suffix_ndim == 1 to avoid ambiguous false
-        # positives where unbatched vectors/matrices happen to start with a size
-        # equal to the plate size (e.g. HMM state dim == plate size).
-        if suffix_ndim == 0 or suffix_ndim >= 2:
+        if _leaf_is_plate_batched(leaf, plate_shapes):
             return leaf[plate_idx]
         return leaf
 
     return jax.tree.map(_slice_leaf, tree, is_leaf=_is_distribution_leaf)
 
-
-def _dist_has_plate_batch_dims(dist_obj, plate_shapes: tuple[int, ...]) -> bool:
-    """Return True when a distribution has plate-shaped leading batch dims."""
-    if dist_obj is None or not hasattr(dist_obj, "batch_shape"):
-        return False
-    batch_shape = tuple(dist_obj.batch_shape)
-    n_plates = len(plate_shapes)
-    if len(batch_shape) < n_plates:
-        return False
-    for i, size in enumerate(plate_shapes):
-        if batch_shape[i] != size:
-            return False
-    return True
 
 
 def _slice_dist_for_plate_member(
@@ -385,37 +361,12 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator over all plate members and stack outputs."""
-        has_batched_source = False
-        for leaf in jax.tree.leaves(
+        if not _has_any_batched_plate_source(
             dynamics,
-            is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+            plate_shapes,
+            arrays=(obs_times, obs_values, ctrl_times, ctrl_values, predict_times, filtered_times),
+            dists=filtered_dists,
         ):
-            if not isinstance(leaf, jax.Array):
-                continue
-            if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
-                continue
-            suffix_ndim = leaf.ndim - len(plate_shapes)
-            if suffix_ndim == 0 or suffix_ndim >= 2:
-                has_batched_source = True
-                break
-
-        has_batched_source = has_batched_source or any(
-            _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1)
-            for arr in (
-                obs_times,
-                obs_values,
-                ctrl_times,
-                ctrl_values,
-                predict_times,
-                filtered_times,
-            )
-        )
-        if (not has_batched_source) and filtered_dists is not None:
-            has_batched_source = any(
-                _dist_has_plate_batch_dims(dist_obj, plate_shapes)
-                for dist_obj in filtered_dists
-            )
-        if not has_batched_source:
             raise ValueError(
                 "Plate simulator received plate_shapes but no plate-batched dynamics/data "
                 "sources were found. At least one source must have leading dimensions "
