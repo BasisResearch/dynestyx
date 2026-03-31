@@ -12,13 +12,13 @@
         <meta name="author" content="Basis Research Institute">
       
       
-        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/linear_gaussian_state_evolution/">
+        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/gaussian_state_evolution/">
       
       
-        <link rel="prev" href="../gaussian_observation/">
+        <link rel="prev" href="../linear_gaussian_state_evolution/">
       
       
-        <link rel="next" href="../gaussian_state_evolution/">
+        <link rel="next" href="../affine_drift/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>LinearGaussianStateEvolution - dynestyx documentation</title>
+        <title>GaussianStateEvolution - dynestyx documentation</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#lineargaussianstateevolution" class="md-skip">
+        <a href="#gaussianstateevolution" class="md-skip">
           Skip to content
         </a>
       
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              LinearGaussianStateEvolution
+              GaussianStateEvolution
             
           </span>
         </div>
@@ -1772,6 +1772,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../linear_gaussian_state_evolution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LinearGaussianStateEvolution
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1791,7 +1819,7 @@
   <span class="md-ellipsis">
     
   
-    LinearGaussianStateEvolution
+    GaussianStateEvolution
   
 
     
@@ -1809,7 +1837,7 @@
   <span class="md-ellipsis">
     
   
-    LinearGaussianStateEvolution
+    GaussianStateEvolution
   
 
     
@@ -1835,7 +1863,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.__init__" class="md-nav__link">
+  <a href="#dynestyx.models.state_evolution.GaussianStateEvolution.__init__" class="md-nav__link">
     <span class="md-ellipsis">
       
         __init__
@@ -1860,34 +1888,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../gaussian_state_evolution/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GaussianStateEvolution
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -3478,7 +3478,7 @@
   
 
 
-<h1 id="lineargaussianstateevolution">LinearGaussianStateEvolution<a class="headerlink" href="#lineargaussianstateevolution" title="Permanent link">&para;</a></h1>
+<h1 id="gaussianstateevolution">GaussianStateEvolution<a class="headerlink" href="#gaussianstateevolution" title="Permanent link">&para;</a></h1>
 
 
 <div class="doc doc-object doc-class">
@@ -3492,14 +3492,13 @@
 
 
 
-        <p>Linear-Gaussian discrete-time state transition.</p>
+        <p>Nonlinear Gaussian discrete-time state transition.</p>
 <p>The next state is modeled as</p>
 <div class="arithmatex">\[
-x_{t_{k+1}} \sim \mathcal{N}(A x_{t_k} + B u_{t_k} + b, Q),
+x_{t_{k+1}} \sim \mathcal{N}(F(x_{t_k}, u_{t_k}, t_k, t_{k+1}), Q),
 \]</div>
-<p>where <span class="arithmatex">\(A\)</span> is the state transition matrix, <span class="arithmatex">\(B\)</span> is an optional control-input
-matrix, <span class="arithmatex">\(b\)</span> is an optional transition bias, and <span class="arithmatex">\(Q\)</span> is the process-noise
-covariance.</p>
+<p>where <span class="arithmatex">\(F\)</span> is a user-provided transition function and <span class="arithmatex">\(Q\)</span> is the
+process-noise covariance.</p>
 
 
 
@@ -3525,10 +3524,10 @@ covariance.</p>
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.state_evolution.LinearGaussianStateEvolution.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">cov</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">bias</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+<h2 id="dynestyx.models.state_evolution.GaussianStateEvolution.__init__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">F</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">],</span> <span class="n">cov</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">)</span></code>
 
-<a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.models.state_evolution.GaussianStateEvolution.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
@@ -3548,15 +3547,15 @@ covariance.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                <code>A</code>
+                <code>F</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="dynestyx.types.State">State</span>, <span title="dynestyx.types.Control">Control</span>, <span title="dynestyx.types.Time">Time</span>, <span title="dynestyx.types.Time">Time</span>], <span title="dynestyx.types.State">State</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>State transition matrix with shape
-<span class="arithmatex">\((d_x, d_x)\)</span>.</p>
+                <p>Transition
+function mapping <span class="arithmatex">\((x, u, t_k, t_{k+1})\)</span> to the conditional mean.</p>
               </div>
             </td>
             <td>
@@ -3580,40 +3579,6 @@ covariance.</p>
                 <em>required</em>
             </td>
           </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>B</code>
-            </td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional control matrix with shape
-<span class="arithmatex">\((d_x, d_u)\)</span>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>bias</code>
-            </td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional additive bias with shape
-<span class="arithmatex">\((d_x,)\)</span>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
       </tbody>
     </table>
 
@@ -3630,11 +3595,11 @@ covariance.</p>
 
 </div><div class="admonition note">
 <p class="admonition-title">Structured inference</p>
-<p>You can represent the same transition dynamics without this class
-(for example, as a generic callable). However, this structured linear-Gaussian
-transition form is what enables fast Kalman-family filtering methods; see
-<a href="../../../inference/filters.md">Filters</a>, especially <code>KFConfig</code> (and
-<code>ContinuousTimeKFConfig</code> for continuous-time settings) in
+<p>You can represent the same transition behavior without this class
+(for example, as a generic callable). However, this structured Gaussian
+transition form is what lets filtering backends use Gaussian filtering
+methods for nonlinear models; see <a href="../../../inference/filters.md">Filters</a>,
+especially <code>EKFConfig</code>, <code>UKFConfig</code>, and <code>EnKFConfig</code> in
 <a href="../../../inference/filter_configs.md">FilterConfigs</a>.</p>
 <p>Without this exploitable structure, marginalizing latent trajectories
 during parameter inference typically falls back to particle filters
@@ -3642,19 +3607,24 @@ during parameter inference typically falls back to particle filters
 </div>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <details class="example">
-<summary>Linear Gaussian transition model</summary>
+<summary>Nonlinear Gaussian transition model</summary>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearGaussianStateEvolution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">GaussianStateEvolution</span>
 
-<span class="n">transition</span> <span class="o">=</span> <span class="n">LinearGaussianStateEvolution</span><span class="p">(</span>
-    <span class="n">A</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]),</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">F</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">):</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">t_next</span> <span class="o">-</span> <span class="n">t_now</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dt</span> <span class="o">*</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">dt</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+    <span class="p">])</span>
+
+<span class="n">transition</span> <span class="o">=</span> <span class="n">GaussianStateEvolution</span><span class="p">(</span>
+    <span class="n">F</span><span class="o">=</span><span class="n">F</span><span class="p">,</span>
     <span class="n">cov</span><span class="o">=</span><span class="mf">0.05</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
-    <span class="n">B</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]]),</span>
-    <span class="n">bias</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
 <span class="p">)</span>
 
 <span class="n">x_t</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">])</span>
-<span class="n">u_t</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.3</span><span class="p">])</span>
+<span class="n">u_t</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="n">dist_next</span> <span class="o">=</span> <span class="n">transition</span><span class="p">(</span><span class="n">x_t</span><span class="p">,</span> <span class="n">u_t</span><span class="p">,</span> <span class="n">t_now</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">t_next</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># p(x_{t+1} | x_t, u_t, t)</span>
 </code></pre></div>
 </details>
