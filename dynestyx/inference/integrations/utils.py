@@ -1,7 +1,6 @@
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 import numpyro.distributions as dist
 from numpyro.distributions import constraints
 
@@ -81,6 +80,4 @@ def particles_to_delta_mixtures(
     )
 
     z = jax.nn.log_softmax(log_weights, axis=-1)
-    return [
-        WeightedParticles(particles[i], z[i]) for i in range(particles.shape[0])
-    ]
+    return [WeightedParticles(particles[i], z[i]) for i in range(particles.shape[0])]
