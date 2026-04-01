@@ -150,16 +150,15 @@ def hmm_filter(
 
         # Update: p(x_t | y_{1:t}) \propto p(y_t | x_t) p(x_t | y_{1:t-1})
         log_alpha = log_emit_t + log_pred
-
+        log_filt = jax.nn.log_softmax(log_alpha, axis=-1)
         log_Z = logsumexp(log_alpha, axis=-1)
-        log_filt = log_alpha - log_Z
 
         return (log_filt, loglik + log_Z), log_filt
 
     # t = 0
     log_alpha0 = log_pi + log_emit_seq[0]
     log_Z0 = logsumexp(log_alpha0, axis=-1)
-    log_filt0 = log_alpha0 - log_Z0
+    log_filt0 = jax.nn.log_softmax(log_alpha0, axis=-1)
 
     # t = 1..T-1
     # Use normalized filtered state (log_filt0) in carry for numerical stability

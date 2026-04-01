@@ -415,10 +415,7 @@ def _add_sites_pf(
     )
 
     if need_filtered_means:
-        log_weights_norm = log_weights - jax.scipy.special.logsumexp(
-            log_weights, axis=1, keepdims=True
-        )
-        w = jnp.exp(log_weights_norm)[..., None]  # (T+1, n_particles, 1)
+        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T+1, n_particles, 1)
         filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
