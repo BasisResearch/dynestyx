@@ -79,10 +79,5 @@ def particles_to_delta_mixtures(
         f"got {particles.shape[:2]} and {log_weights.shape[:2]}."
     )
 
-    log_weights_norm = log_weights - jax.scipy.special.logsumexp(
-        log_weights, axis=-1, keepdims=True
-    )
-    return [
-        WeightedParticles(particles[i], log_weights_norm[i])
-        for i in range(particles.shape[0])
-    ]
+    z = jax.nn.log_softmax(log_weights, axis=-1)
+    return [WeightedParticles(particles[i], z[i]) for i in range(particles.shape[0])]
