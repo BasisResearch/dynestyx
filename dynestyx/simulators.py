@@ -78,7 +78,7 @@ def _merge_segments(
 @contextmanager
 def _suspend_numpyro_plate_frames():
     """Temporarily remove active numpyro.plate frames from the pyro stack.
-    
+
     This is necessary so that `numpyro.sample` statements can be called within
     the simulator inside of a dsx.plate context."""
     stack = numpyro.primitives._PYRO_STACK
@@ -94,7 +94,7 @@ def _slice_array_for_plate_member(
     arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
 ) -> Array | None:
     """Slice leading plate dims if present; otherwise return unchanged.
-    
+
     This is used in our Simulator loops for plated dimensions: we choose the times/values
     for a particular plate member.
     """
@@ -123,9 +123,9 @@ def _slice_dist_for_plate_member(
     dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
 ):
     """Slice plate-batched distribution parameters for one member.
-    
-    To obtain distributions for a particular plate member, we must 
-    slice the corresponding parameter arrays. This function implements 
+
+    To obtain distributions for a particular plate member, we must
+    slice the corresponding parameter arrays. This function implements
     such slicing for:
     - MixtureSameFamily
     - MultivariateNormal
@@ -379,7 +379,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator over all plate members and stack outputs.
-        
+
         Plated simulation enumerates over all plate members and runs
         individual simulations. This is somewhat slower than vmapping,
         but maintains full compatibility with NumPyro's sample semantics."""
