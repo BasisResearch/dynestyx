@@ -27,6 +27,7 @@ nav:
       - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
       - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
       - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
+      - Hierarchical inference: tutorials/gentle_intro/08_hierarchical_inference.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -66,7 +67,7 @@ nav:
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
       - Handlers:
-        - Sample: api_reference/public/handlers.md
+        - Sample & Plate: api_reference/public/handlers.md
       - Simulators:
         - Simulator Classes:
           - Overview: api_reference/public/simulators/overview.md
