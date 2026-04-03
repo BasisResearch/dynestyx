@@ -77,7 +77,10 @@ def _merge_segments(
 
 @contextmanager
 def _suspend_numpyro_plate_frames():
-    """Temporarily remove active numpyro.plate frames from the pyro stack."""
+    """Temporarily remove active numpyro.plate frames from the pyro stack.
+    
+    This is necessary so that `numpyro.sample` statements can be called within
+    the simulator inside of a dsx.plate context."""
     stack = numpyro.primitives._PYRO_STACK
     original = list(stack)
     stack[:] = [f for f in original if not isinstance(f, numpyro.primitives.plate)]
@@ -90,7 +93,11 @@ def _suspend_numpyro_plate_frames():
 def _slice_array_for_plate_member(
     arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
 ) -> Array | None:
-    """Slice leading plate dims if present; otherwise return unchanged."""
+    """Slice leading plate dims if present; otherwise return unchanged.
+    
+    This is used in our Simulator loops for plated dimensions: we choose the times/values
+    for a particular plate member.
+    """
     if arr is None:
         return None
     if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
@@ -115,7 +122,19 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
 def _slice_dist_for_plate_member(
     dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
 ):
-    """Slice plate-batched distribution parameters for one member."""
+    """Slice plate-batched distribution parameters for one member.
+    
+    To obtain distributions for a particular plate member, we must 
+    slice the corresponding parameter arrays. This function implements 
+    such slicing for:
+    - MixtureSameFamily
+    - MultivariateNormal
+    - Delta
+    - WeightedParticles
+    - Categorical
+    - Independent
+    - TransformedDistribution
+    """
     if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
         return dist_obj
 
@@ -359,7 +378,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_dists=None,
         **kwargs,
     ) -> dict[str, Array] | None:
-        """Run simulator over all plate members and stack outputs."""
+        """Run simulator over all plate members and stack outputs.
+        
+        Plated simulation enumerates over all plate members and runs
+        individual simulations. This is somewhat slower than vmapping,
+        but maintains full compatibility with NumPyro's sample semantics."""
         if not _has_any_batched_plate_source(
             dynamics,
             plate_shapes,
@@ -384,9 +407,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         for plate_idx in plate_indices:
             member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
+
+            # We begin by slicing the dynamics tree for each plate member.
             member_dynamics = _slice_tree_for_plate_member(
                 dynamics, plate_shapes, plate_idx
             )
+
+            # If initial conditions have plate dimensions, we also slice & apply them.
             if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
                 member_initial_condition = _slice_dist_for_plate_member(
                     dynamics.initial_condition, plate_shapes, plate_idx
@@ -397,6 +424,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     member_initial_condition,
                     is_leaf=lambda x: x is None,
                 )
+
+            # We then slice each other source to find the member's times/values.
             member_obs_times = _slice_array_for_plate_member(
                 obs_times, plate_shapes, plate_idx
             )
@@ -415,6 +444,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             member_filtered_times = _slice_array_for_plate_member(
                 filtered_times, plate_shapes, plate_idx
             )
+
+            # Same distribution slicing logic as above, but for prediction.
             member_filtered_dists = None
             if filtered_dists is not None:
                 member_filtered_dists = [
@@ -422,6 +453,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     for d in filtered_dists
                 ]
 
+            # To perform inference, we need to suspend the active numpyro.plate frames
+            # This is because the simulator has unguarded numpyro.sample statements inside,
+            # which would otherwise create nested plate frames.
             with _suspend_numpyro_plate_frames():
                 member_result = self._run_single_member_simulation(
                     member_name,
