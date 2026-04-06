@@ -16,7 +16,7 @@ FilterStateOrder = Literal["zeroth", "first", "second"]
 
 @dataclasses.dataclass
 class BaseFilterConfig:
-    """Shared configuration options inherited by all filter configs.
+    r"""Shared configuration options inherited by all filter configs.
 
     You do not instantiate this class directly; use one of the concrete
     subclasses (e.g. `KFConfig`, `PFConfig`).
@@ -266,7 +266,7 @@ class PFConfig(BaseFilterConfig):
 
 @dataclasses.dataclass
 class EKFConfig(BaseFilterConfig):
-    """Extended Kalman Filter (EKF) for discrete-time models.
+    r"""Extended Kalman Filter (EKF) for discrete-time models.
 
     The EKF linearizes nonlinear dynamics at the current mean estimate
     via a first-order Taylor expansion. It is fast and simple, but may
@@ -618,7 +618,7 @@ ContinuousTimeConfigs: tuple[type, ...] = (
 
 @dataclasses.dataclass
 class HMMConfig(BaseFilterConfig):
-    """Exact filter for Hidden Markov Models (finite discrete state space).
+    r"""Exact filter for Hidden Markov Models (finite discrete state space).
 
     Use this when your latent state takes values in a finite set (e.g. a
     discrete regime model). The forward algorithm computes the exact marginal
