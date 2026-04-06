@@ -1,5 +1,9 @@
 """Dynestyx package."""
 
+from importlib.metadata import version
+
+__version__ = version("dynestyx")
+
 from dynestyx.discretizers import Discretizer, euler_maruyama
 from dynestyx.handlers import sample
 from dynestyx.inference.filters import Filter
@@ -25,6 +29,7 @@ from dynestyx.simulators import (
 from dynestyx.utils import flatten_draws
 
 __all__ = [
+    "__version__",
     "ContinuousTimeStateEvolution",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
