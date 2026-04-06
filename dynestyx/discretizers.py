@@ -11,6 +11,7 @@ from dynestyx.models import (
     DiscreteTimeStateEvolution,
     DynamicalModel,
 )
+from dynestyx.models.checkers import _infer_bm_dim
 from dynestyx.types import FunctionOfTime
 
 
@@ -26,21 +27,9 @@ def _ensure_ctse_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
     x0 = jnp.zeros((dynamics.state_dim,))
     u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
     t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    diffusion_shape = jax.eval_shape(
-        lambda: cte.diffusion_coefficient(x0, u0, t0)
-    ).shape
-    if len(diffusion_shape) != 2:
-        raise ValueError(
-            "diffusion_coefficient must return shape (state_dim, bm_dim). "
-            f"Got shape {diffusion_shape}."
-        )
-    if int(diffusion_shape[0]) != int(dynamics.state_dim):
-        raise ValueError(
-            "diffusion_coefficient first dimension must match state_dim. "
-            f"Got diffusion_shape={diffusion_shape}, state_dim={dynamics.state_dim}."
-        )
-    inferred_bm_dim = int(diffusion_shape[1])
-    object.__setattr__(cte, "bm_dim", inferred_bm_dim)
+    inferred_bm_dim = _infer_bm_dim(cte, dynamics.state_dim, x0, u0, t0)
+    if inferred_bm_dim is not None:
+        object.__setattr__(cte, "bm_dim", inferred_bm_dim)
     return dynamics
 
 

@@ -80,6 +80,50 @@ def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
     return jnp.zeros((state_dim,))
 
 
+def _infer_bm_dim(
+    state_evolution: Any,
+    state_dim: int,
+    x0: State,
+    u0: Control | None,
+    t0: Time,
+) -> int | None:
+    """Infer bm_dim from diffusion coefficient output shape.
+
+    Tolerates leading batch dimensions (e.g. from plate-batched parameters)
+    by inspecting only the trailing two dimensions (..., state_dim, bm_dim).
+
+    Returns the inferred bm_dim, or None if there is no diffusion coefficient.
+    """
+    if state_evolution.diffusion_coefficient is None:
+        if state_evolution.bm_dim is not None:
+            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
+        return None
+
+    diffusion_shape = jax.eval_shape(
+        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
+    ).shape
+    if len(diffusion_shape) < 2:
+        raise ValueError(
+            "diffusion_coefficient must return shape (..., state_dim, bm_dim). "
+            f"Got shape {diffusion_shape}."
+        )
+    if int(diffusion_shape[-2]) != state_dim:
+        raise ValueError(
+            "diffusion_coefficient penultimate dimension must match state_dim. "
+            f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
+        )
+    inferred_bm_dim = int(diffusion_shape[-1])
+    if (
+        state_evolution.bm_dim is not None
+        and int(state_evolution.bm_dim) != inferred_bm_dim
+    ):
+        raise ValueError(
+            "bm_dim does not match inferred diffusion_coefficient output shape. "
+            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
+        )
+    return inferred_bm_dim
+
+
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
@@ -98,35 +142,7 @@ def _validate_continuous_state_evolution(
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
 
-    if state_evolution.diffusion_coefficient is not None:
-        diffusion_shape = jax.eval_shape(
-            lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
-        ).shape
-        if len(diffusion_shape) != 2:
-            raise ValueError(
-                "diffusion_coefficient must return a matrix with shape "
-                "(state_dim, bm_dim). "
-                f"Got shape {diffusion_shape}."
-            )
-        if diffusion_shape[0] != state_dim:
-            raise ValueError(
-                "diffusion_coefficient first dimension must match state_dim. "
-                f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
-            )
-        inferred_bm_dim = int(diffusion_shape[1])
-        if (
-            state_evolution.bm_dim is not None
-            and int(state_evolution.bm_dim) != inferred_bm_dim
-        ):
-            raise ValueError(
-                "bm_dim does not match inferred diffusion_coefficient output shape. "
-                f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
-            )
-        return inferred_bm_dim
-    else:
-        if state_evolution.bm_dim is not None:
-            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
-        return None
+    return _infer_bm_dim(state_evolution, state_dim, x0, u0, t0)
 
 
 def _validate_state_evolution_output_shape(

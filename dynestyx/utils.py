@@ -10,6 +10,7 @@ from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
 
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models.checkers import _infer_bm_dim
 
 
 def flatten_draws(arr: Array) -> Array:
@@ -136,21 +137,9 @@ def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
     x0 = jnp.zeros((dynamics.state_dim,))
     u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
     t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    diffusion_shape = jax.eval_shape(
-        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
-    ).shape
-    if len(diffusion_shape) != 2:
-        raise ValueError(
-            "diffusion_coefficient must return shape (state_dim, bm_dim). "
-            f"Got shape {diffusion_shape}."
-        )
-    if int(diffusion_shape[0]) != int(dynamics.state_dim):
-        raise ValueError(
-            "diffusion_coefficient first dimension must match state_dim. "
-            f"Got diffusion_shape={diffusion_shape}, state_dim={dynamics.state_dim}."
-        )
-    inferred_bm_dim = int(diffusion_shape[1])
-    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
+    inferred_bm_dim = _infer_bm_dim(state_evolution, dynamics.state_dim, x0, u0, t0)
+    if inferred_bm_dim is not None:
+        object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
     return dynamics
 
 

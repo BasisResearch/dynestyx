@@ -9,6 +9,7 @@ import jax.numpy as jnp
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
+    _infer_bm_dim,
     _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
     _inside_numpyro_plate_context,
@@ -142,6 +143,24 @@ class DynamicalModel(eqx.Module):
             self.observation_dim = inferred_obs_dim
             self.control_dim = int(control_dim)
             self.categorical_state = bool(inferred_categorical_state)
+
+            # Infer bm_dim for continuous-time models
+            if inferred_continuous_time and isinstance(
+                state_evolution, ContinuousTimeStateEvolution
+            ):
+                x0 = jnp.zeros((inferred_state_dim,))
+                u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+                dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+                inferred_bm_dim = _infer_bm_dim(
+                    state_evolution, inferred_state_dim, x0, u0, dummy_t0
+                )
+                if inferred_bm_dim is not None:
+                    if state_evolution.bm_dim is not None and inferred_bm_dim != state_evolution.bm_dim:
+                        raise ValueError(
+                            "bm_dim does not match inferred diffusion_coefficient output shape. "
+                            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
+                        )
+                    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
             return
 
         x0 = _make_probe_state(
