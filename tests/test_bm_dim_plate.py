@@ -4,7 +4,6 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
-import dynestyx as dsx
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 
 
@@ -43,8 +42,9 @@ def test_bm_dim_inferred_inside_plate():
 
             state_evo = ContinuousTimeStateEvolution(
                 drift=lambda x, u, t: -x,
-                diffusion_coefficient=lambda x, u, t: sigma[..., None, None]
-                * jnp.ones((state_dim, bm_dim)),
+                diffusion_coefficient=lambda x, u, t: (
+                    sigma[..., None, None] * jnp.ones((state_dim, bm_dim))
+                ),
             )
             dynamics = DynamicalModel(
                 initial_condition=dist.MultivariateNormal(

@@ -155,7 +155,10 @@ class DynamicalModel(eqx.Module):
                     state_evolution, inferred_state_dim, x0, u0, dummy_t0
                 )
                 if inferred_bm_dim is not None:
-                    if state_evolution.bm_dim is not None and inferred_bm_dim != state_evolution.bm_dim:
+                    if (
+                        state_evolution.bm_dim is not None
+                        and inferred_bm_dim != state_evolution.bm_dim
+                    ):
                         raise ValueError(
                             "bm_dim does not match inferred diffusion_coefficient output shape. "
                             f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."

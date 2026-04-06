@@ -1,4 +1,3 @@
-import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
