@@ -172,7 +172,7 @@ class HandlesSelf:
 
 
 class plate(ObjectInterpretation):
-    """Hierarchical plate for batched trajectories.
+    """Hierarchical plate for batched trajectories. Allows for multiple levels of hierarchy.
 
     Wraps ``numpyro.plate`` for parameter sampling semantics and intercepts
     ``dsx.sample`` to inject ``plate_shapes`` into the handler chain via ``fwd()``.
@@ -185,27 +185,65 @@ class plate(ObjectInterpretation):
         ...     theta = numpyro.sample("theta", dist.Normal(0, 1))  # shape (M,)
         ...     dynamics = DynamicalModel(...)  # built from theta
         ...     dsx.sample("f", dynamics, obs_times=t, obs_values=y)
+
+        >>> with dsx.plate("groups", G):
+        ...     beta = numpyro.sample("beta", dist.Normal(0, 1))  # shape (G,)
+        ...     with dsx.plate("trajectories", M):
+        ...         alpha = numpyro.sample("alpha", dist.Normal(beta, 1))  # shape (M, G)
+        ...         dynamics = DynamicalModel(...)  # built from alpha
+        ...         dsx.sample("f", dynamics, obs_times=t, obs_values=y)
+
+    Note:
+        The `dim` argument is not currently supported for dynestyx plates.
     """
 
     def __init__(self, name: str, size: int, dim: int | None = None):
+        """Initialize the plate handler.
+
+        Parameters:
+            name: Name of the plate.
+            size: Size of the plate.
+            dim: Dimension of the plate.
+        """
+
+        if dim is not None:
+            raise ValueError(
+                "The `dim` argument is not currently supported for dynestyx plates"
+            )
+
         self.name = name
         self.size = size
         self._numpyro_plate = numpyro.plate(name, size, dim=dim)
         self._cm = None
 
     def __enter__(self):
+        """Enter both numpyro.plate context and dynestyx plate interpretation."""
         self._numpyro_plate.__enter__()
         self._cm = handler(self)
         self._cm.__enter__()
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit both numpyro.plate context and dynestyx plate interpretation."""
         self._cm.__exit__(exc_type, exc, tb)
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
 
     @implements(_sample_intp)
-    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs):
-        # effectful dispatch invokes nested plate handlers inner->outer.
-        # Appending here preserves inner-first ordering in plate_shapes,
-        # matching NumPyro's leftmost-inner batch layout.
+    def _sample_ds(
+        self, name, dynamics, *, plate_shapes=(), **kwargs
+    ) -> FunctionOfTime:
+        """Effectful interpretation for the `sample` primitive in a plate.
+
+        Appends metadata to the argument stack and passes forward.
+
+        Parameters:
+            name: Name of the sample site.
+            dynamics: Dynamical model to sample from.
+            plate_shapes: Shapes of plates (from plates that are more nested than this one).
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            FunctionOfTime: A function of time that samples from the dynamical model.
+        """
+        # Append plate_shapes metadata to the argument stack and pass forward.
         return fwd(name, dynamics, plate_shapes=plate_shapes + (self.size,), **kwargs)
