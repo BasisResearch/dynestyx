@@ -62,6 +62,7 @@ type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     """Build in_axes for a pytree based on whether leaves have plate batch dims.
+    i.e., decide whether or not to vmap over a particular leaf.
 
     A leaf is considered batched if it is a JAX array whose leading dimensions
     match the plate_shapes tuple. Batched leaves get in_axes=0; others get None.
@@ -198,7 +199,7 @@ def _particle_to_batched_dists(
         particles = particles[..., None]
 
     # Flatten plate members -> use the canonical per-member helper from
-    # dynestyx.inference.integrations.utils (main branch path).
+    # dynestyx.inference.integrations.utils.
     n_members = math.prod(plate_shapes) if plate_shapes else 1
     t_len = _time_len_from_array(log_weights, plate_shapes)
     part_tail = particles.shape[len(plate_shapes) :]
@@ -571,6 +572,7 @@ class Filter(BaseLogFactorAdder):
         k_axis = 0 if keys is not None else None
 
         # Nest vmap for each plate dimension.
+        # TODO: Allow for partial plate dimensions here.
         vmapped = compute_output
         for _ in plate_shapes:
             vmapped = jax.vmap(
