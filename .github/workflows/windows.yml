@@ -1,4 +1,4 @@
-name: Windows
+name: Check Build (Windows)
 
 on:
   push:
@@ -38,3 +38,6 @@ jobs:
           uv run mypy tests/ dynestyx/
           uv run ruff check tests/ dynestyx/
           uv run ruff format --diff tests/ dynestyx/
+
+      - name: Check Import
+        run: uv run python -c "import dynestyx; print(dynestyx.__version__)"
