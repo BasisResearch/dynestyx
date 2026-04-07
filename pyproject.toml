@@ -67,7 +67,6 @@ dev = [
     "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
-    "mkdocs-jupyter>=0.24,<0.26",
     "nbconvert>=7"
 ]
 
