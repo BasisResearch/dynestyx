@@ -71,7 +71,7 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
     data_key, mcmc_key = jr.split(rng_key, 2)
 
     n_traj = 8
-    obs_times = jnp.arange(0.0, 2.0, 0.1)
+    obs_times = jnp.arange(0.0, 10.0, 0.01)
     true_params = {
         "mu_raw": jnp.array(1.5),
         "sigma_raw": jnp.array(1.5),
@@ -105,7 +105,7 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
     obs_values = synthetic["f_observations"][0, :, 0]
 
     def data_conditioned_model():
-        with ODESimulator():
+        with ODESimulator(dt0=0.01):
             return hierarchical_ode_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
