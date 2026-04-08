@@ -97,9 +97,7 @@ def test_hierarchical_nonlinear_discretized_multitraj_ekf_science(num_samples: i
         with Discretizer():
             synthetic = predictive(data_key, predict_times=obs_times, M=n_traj)
 
-    output_dir = get_output_dir(
-        "test_nonlinear_discretized_hierarchical_multitraj_ekf"
-    )
+    output_dir = get_output_dir("test_nonlinear_discretized_hierarchical_multitraj_ekf")
     if SAVE_FIG and output_dir is not None:
         import matplotlib.pyplot as plt
 
