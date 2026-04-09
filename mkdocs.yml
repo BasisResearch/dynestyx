@@ -28,6 +28,8 @@ nav:
       - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
       - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
       - Hierarchical inference: tutorials/gentle_intro/08_hierarchical_inference.ipynb
+      - Discrete-time smoothing: tutorials/gentle_intro/09_discrete_smoothing.ipynb
+      - Continuous-time smoothing: tutorials/gentle_intro/10_continuous_smoothing.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -62,6 +64,8 @@ nav:
       - Inference:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/filter_configs.md
+        - Smoothers: api_reference/public/inference/smoothers.md
+        - SmootherOptions: api_reference/public/inference/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
         - MCMCConfigs: api_reference/public/inference/mcmc_configs.md
       - Discretizers:
@@ -88,6 +92,8 @@ nav:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
+        - Smoothers: api_reference/developer/inference/smoothers.md
+        - SmootherOptions: api_reference/developer/inference/smoother_configs.md
         - MCMC: api_reference/developer/inference/mcmc.md
         - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
         - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md
