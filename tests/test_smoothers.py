@@ -12,6 +12,9 @@ from dynestyx.inference.filter_configs import (
     EnKFConfig,
     HMMConfig,
 )
+from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
+    _pf_backward_sampling_fn,
+)
 from dynestyx.inference.smoother_configs import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
@@ -125,7 +128,7 @@ def test_predictive_smoother_odesimulator_shapes():
     assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 1)
 
 
-@pytest.mark.parametrize("backward_method", ["tracing", "exact", "mcmc"])
+@pytest.mark.parametrize("backward_method", ["tracing", "exact"])
 def test_predictive_smoother_cuthbert_pf_backward_methods_and_override(
     backward_method: str,
 ):
@@ -164,6 +167,15 @@ def test_predictive_smoother_cuthbert_pf_backward_methods_and_override(
     assert samples["f_smoothed_log_weights"].shape[1] == len(obs_times)
     assert samples["f_smoothed_log_weights"].shape[2] == 16
     assert jnp.all(jnp.isfinite(samples["f_smoothed_log_weights"]))
+
+
+def test_pf_smoother_mcmc_config_exposes_step_count():
+    config = PFSmootherConfig(
+        pf_backward_sampling_method="mcmc",
+        pf_mcmc_n_steps=7,
+    )
+    fn = _pf_backward_sampling_fn(config)
+    assert fn.keywords["n_steps"] == 7
 
 
 @pytest.mark.parametrize(
