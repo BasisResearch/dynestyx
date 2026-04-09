@@ -64,20 +64,20 @@ def LTI_discrete(
     Returns:
         DynamicalModel: A discrete-time LTI state-space model.
     """
-    state_dim = A.shape[0]
-    control_dim = B.shape[1] if B is not None else 0
+    state_dim = A.shape[-1]
+    control_dim = B.shape[-1] if B is not None else 0
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
-    elif initial_mean.shape != (state_dim,):
+    elif initial_mean.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_mean must have shape ({state_dim},), got {initial_mean.shape}"
+            f"initial_mean must have last dim {state_dim}, got shape {initial_mean.shape}"
         )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
-    elif initial_cov.shape != (state_dim, state_dim):
+    elif initial_cov.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_cov must have shape ({state_dim}, {state_dim}), got {initial_cov.shape}"
+            f"initial_cov must have last dim {state_dim}, got shape {initial_cov.shape}"
         )
 
     initial_condition = dist.MultivariateNormal(
@@ -151,20 +151,20 @@ def LTI_continuous(
     Returns:
         DynamicalModel: A continuous-time LTI state-space model.
     """
-    state_dim = A.shape[0]
-    control_dim = B.shape[1] if B is not None else 0
+    state_dim = A.shape[-1]
+    control_dim = B.shape[-1] if B is not None else 0
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
-    elif initial_mean.shape != (state_dim,):
+    elif initial_mean.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_mean must have shape ({state_dim},), got {initial_mean.shape}"
+            f"initial_mean must have last dim {state_dim}, got shape {initial_mean.shape}"
         )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
-    elif initial_cov.shape != (state_dim, state_dim):
+    elif initial_cov.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_cov must have shape ({state_dim}, {state_dim}), got {initial_cov.shape}"
+            f"initial_cov must have last dim {state_dim}, got shape {initial_cov.shape}"
         )
 
     initial_condition = dist.MultivariateNormal(

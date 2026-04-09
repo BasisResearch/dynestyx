@@ -65,10 +65,10 @@ dev = [
     "pytest>=9.0.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.11",
-    "mkdocs-jupyter>=0.25.1",
+    "mkdocs-jupyter>=0.25.1,<0.26.0",
+    "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
-    "mkdocs-jupyter>=0.24,<0.26",
     "nbconvert>=7"
 ]
 

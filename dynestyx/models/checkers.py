@@ -6,6 +6,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+import numpyro.primitives
 
 from dynestyx.types import Control, State, Time
 
@@ -79,14 +80,61 @@ def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
     return jnp.zeros((state_dim,))
 
 
+def _infer_bm_dim(
+    state_evolution: Any,
+    state_dim: int,
+    x0: State,
+    u0: Control | None,
+    t0: Time,
+) -> int | None:
+    """Infer bm_dim from diffusion coefficient output shape.
+
+    Tolerates leading batch dimensions (e.g. from plate-batched parameters)
+    by inspecting only the trailing two dimensions (..., state_dim, bm_dim).
+
+    Returns the inferred bm_dim, or None if there is no diffusion coefficient.
+    """
+    if state_evolution.diffusion_coefficient is None:
+        if state_evolution.bm_dim is not None:
+            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
+        return None
+
+    diffusion_shape = jax.eval_shape(
+        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
+    ).shape
+    if len(diffusion_shape) < 2:
+        raise ValueError(
+            "diffusion_coefficient must return shape (..., state_dim, bm_dim). "
+            f"Got shape {diffusion_shape}."
+        )
+    if int(diffusion_shape[-2]) != state_dim:
+        raise ValueError(
+            "diffusion_coefficient penultimate dimension must match state_dim. "
+            f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
+        )
+    inferred_bm_dim = int(diffusion_shape[-1])
+    if (
+        state_evolution.bm_dim is not None
+        and int(state_evolution.bm_dim) != inferred_bm_dim
+    ):
+        raise ValueError(
+            "bm_dim does not match inferred diffusion_coefficient output shape. "
+            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
+        )
+    return inferred_bm_dim
+
+
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
     x0: State,
     u0: Control | None,
     t0: Time,
-) -> None:
-    """Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim."""
+) -> int | None:
+    """Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim.
+
+    Returns the inferred bm_dim (or None if no diffusion coefficient).
+    """
     drift_shape = jax.eval_shape(lambda: state_evolution.total_drift(x0, u0, t0)).shape
     if drift_shape != (state_dim,):
         raise ValueError(
@@ -94,35 +142,7 @@ def _validate_continuous_state_evolution(
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
 
-    if state_evolution.diffusion_coefficient is not None:
-        diffusion_shape = jax.eval_shape(
-            lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
-        ).shape
-        if len(diffusion_shape) != 2:
-            raise ValueError(
-                "diffusion_coefficient must return a matrix with shape "
-                "(state_dim, bm_dim). "
-                f"Got shape {diffusion_shape}."
-            )
-        if diffusion_shape[0] != state_dim:
-            raise ValueError(
-                "diffusion_coefficient first dimension must match state_dim. "
-                f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
-            )
-        inferred_bm_dim = int(diffusion_shape[1])
-        if (
-            state_evolution.bm_dim is not None
-            and int(state_evolution.bm_dim) != inferred_bm_dim
-        ):
-            raise ValueError(
-                "bm_dim does not match inferred diffusion_coefficient output shape. "
-                f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
-            )
-        state_evolution.bm_dim = inferred_bm_dim
-    else:
-        if state_evolution.bm_dim is not None:
-            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
-        state_evolution.bm_dim = None
+    return _infer_bm_dim(state_evolution, state_dim, x0, u0, t0)
 
 
 def _validate_state_evolution_output_shape(
@@ -134,10 +154,13 @@ def _validate_state_evolution_output_shape(
     t0: Time,
     *,
     continuous_time: bool,
-) -> None:
-    """Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models)."""
+) -> int | None:
+    """Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models).
+
+    Returns the inferred bm_dim for continuous-time models, or None otherwise.
+    """
     if continuous_time:
-        _validate_continuous_state_evolution(
+        return _validate_continuous_state_evolution(
             state_evolution=state_evolution,
             state_dim=state_dim,
             x0=x0,
@@ -161,3 +184,90 @@ def _validate_state_evolution_output_shape(
                 "State transition shape is inconsistent with state_dim. "
                 f"state_dim={state_dim}, inferred={inferred_state_dim}."
             )
+        return None
+
+
+def _validate_continuous_time_flag(
+    continuous_time: bool | None, inferred_continuous_time: bool
+) -> None:
+    """Ensure optional continuous_time agrees with inferred model type."""
+    if (
+        continuous_time is not None
+        and bool(continuous_time) != inferred_continuous_time
+    ):
+        raise ValueError(
+            "continuous_time does not match inferred state_evolution type."
+        )
+
+
+def _validate_state_dim(state_dim: int | None, inferred_state_dim: int) -> None:
+    """Ensure optional state_dim agrees with inferred initial condition shape."""
+    if state_dim is not None and int(state_dim) != int(inferred_state_dim):
+        raise ValueError(
+            "state_dim does not match inferred initial_condition shape. "
+            f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
+        )
+
+
+def _validate_categorical_state(
+    categorical_state: bool | None, inferred_categorical_state: bool
+) -> None:
+    """Ensure optional categorical_state agrees with inferred initial condition type."""
+    if (
+        categorical_state is not None
+        and bool(categorical_state) != inferred_categorical_state
+    ):
+        raise ValueError(
+            "categorical_state does not match inferred initial_condition type. "
+            f"Got categorical_state={categorical_state}, "
+            f"inferred={inferred_categorical_state}."
+        )
+
+
+def _inside_numpyro_plate_context() -> bool:
+    """Return True when currently executing inside any active numpyro.plate frame."""
+    return any(
+        isinstance(frame, numpyro.primitives.plate)
+        for frame in numpyro.primitives._PYRO_STACK
+    )
+
+
+def _infer_observation_dim_in_plate_context(
+    *,
+    initial_condition: Any,
+    observation_model: Callable[[State, Control | None, Time], Any],
+    inferred_state_dim: int,
+    control_dim: int,
+    t0: float | None,
+    observation_dim: int | None,
+) -> int:
+    """Infer observation dimension in plate context, falling back to explicit value."""
+    if observation_dim is not None:
+        return int(observation_dim)
+
+    x0 = _make_probe_state(
+        initial_condition=initial_condition,
+        state_dim=inferred_state_dim,
+    )
+    u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+    dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+    try:
+        obs_dist = observation_model(x0, u0, dummy_t0)
+        return int(
+            _infer_vector_dim_from_distribution(obs_dist, "observation_model(x, u, t)")
+        )
+    except Exception:
+        return 0
+
+
+def _validate_observation_dim(
+    observation_dim: int | None, inferred_observation_dim: int
+) -> None:
+    """Ensure optional observation_dim agrees with inferred observation shape."""
+    if observation_dim is not None and int(observation_dim) != int(
+        inferred_observation_dim
+    ):
+        raise ValueError(
+            "observation_dim does not match inferred observation_model output shape. "
+            f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
+        )
