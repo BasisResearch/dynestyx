@@ -15,10 +15,10 @@
         <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/filters/">
       
       
-        <link rel="prev" href="../../models/specialized_models/">
+        <link rel="prev" href="../../models/checkers/">
       
       
-        <link rel="next" href="../filter_configs/">
+        <link rel="next" href="../checkers/">
       
       
         
@@ -775,6 +775,34 @@
     
   
     Part 7: Inference in Hidden Markov Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 8: Hierarchical/Mixed-Effect Model Inference
   
 
     
@@ -2244,7 +2272,7 @@
   <span class="md-ellipsis">
     
   
-    Sample
+    Sample & Plate
   
 
     
@@ -2843,6 +2871,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3126,6 +3182,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters.Filter._add_log_factors_batched" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _add_log_factors_batched
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3187,6 +3254,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._array_plate_axis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _array_plate_axis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._cuthbert_states_to_dists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _cuthbert_states_to_dists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.inference.filters._default_filter_config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3219,10 +3308,115 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._get_time_axis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _get_time_axis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._hmm_to_dists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _hmm_to_dists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._make_plate_in_axes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _make_plate_in_axes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._particle_to_batched_dists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _particle_to_batched_dists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._posterior_to_dists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _posterior_to_dists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._slice_time_axis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _slice_time_axis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filters._time_len_from_array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _time_len_from_array
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -3558,6 +3752,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utils
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -3572,10 +3794,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_3_7" id="__nav_4_3_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_3_8" id="__nav_4_3_8_label" tabindex="0">
             
   
   
@@ -3593,8 +3815,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_3_7">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4738,7 +4960,7 @@ is continuous-time or discrete-time.</p>
 
 
 <h3 id="dynestyx.inference.filters.Filter._add_log_factors" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_add_log_factors</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+            <code class=" language-python"><span class="n">_add_log_factors</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="o">=</span><span class="p">(),</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.inference.filters.Filter._add_log_factors" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4789,6 +5011,21 @@ is continuous-time or discrete-time.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>plate_shapes</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Tuple of plate sizes from enclosing dsx.plate contexts.</p>
+              </div>
+            </td>
+            <td>
+                  <code>()</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -4855,6 +5092,27 @@ is continuous-time or discrete-time.</p>
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.inference.filters.Filter._add_log_factors_batched" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_add_log_factors_batched</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+
+<a href="#dynestyx.inference.filters.Filter._add_log_factors_batched" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute batched marginal log-likelihoods via vmap for plate contexts.</p>
+<p>Vmaps the pure-JAX compute function over each plate dimension, issues one
+numpyro.factor with batched log-likelihoods, and reconstructs per-time
+filtered distributions with plate-shaped batch dimensions for rollout.</p>
 
 
     </div>
@@ -5542,6 +5800,42 @@ recover the predicted mean and covariance.</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynestyx.inference.filters._array_plate_axis" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_array_plate_axis</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span></code>
+
+<a href="#dynestyx.inference.filters._array_plate_axis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return 0 if arr has leading dims matching plate_shapes, else None.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._cuthbert_states_to_dists" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_cuthbert_states_to_dists</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+
+<a href="#dynestyx.inference.filters._cuthbert_states_to_dists" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convert vmapped cuthbert outputs to per-time filtered distributions.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynestyx.inference.filters._default_filter_config" class="doc doc-heading">
             <code class=" language-python"><span class="n">_default_filter_config</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">)</span></code>
 
@@ -5850,6 +6144,137 @@ or EKFConfig (cuthbert), PFConfig (cuthbert).</p>
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._get_time_axis" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_get_time_axis</span><span class="p">(</span><span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
+
+<a href="#dynestyx.inference.filters._get_time_axis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the axis index corresponding to time after plate dimensions.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._hmm_to_dists" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_hmm_to_dists</span><span class="p">(</span><span class="n">log_filt_seq</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+
+<a href="#dynestyx.inference.filters._hmm_to_dists" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convert vmapped HMM filtered log-probs to Categorical distributions.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._make_plate_in_axes" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_make_plate_in_axes</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span></code>
+
+<a href="#dynestyx.inference.filters._make_plate_in_axes" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build in_axes for a pytree based on whether leaves have plate batch dims.
+i.e., decide whether or not to vmap over a particular leaf.</p>
+<p>A leaf is considered batched if it is a JAX array whose leading dimensions
+match the plate_shapes tuple. Batched leaves get in_axes=0; others get None.
+The same in_axes can be reused for each nested vmap call since each vmap
+peels off one leading dimension.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._particle_to_batched_dists" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_particle_to_batched_dists</span><span class="p">(</span><span class="n">particles</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">log_weights</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+
+<a href="#dynestyx.inference.filters._particle_to_batched_dists" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build per-time plate-batched WeightedParticles from canonical PF outputs.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._posterior_to_dists" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_posterior_to_dists</span><span class="p">(</span><span class="n">posterior</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">particle_mode</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+
+<a href="#dynestyx.inference.filters._posterior_to_dists" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convert vmapped cd-dynamax posterior objects to per-time distributions.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._slice_time_axis" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_slice_time_axis</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span></code>
+
+<a href="#dynestyx.inference.filters._slice_time_axis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Slice an array at time index t where time axis follows plate dims.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.filters._time_len_from_array" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_time_len_from_array</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
+
+<a href="#dynestyx.inference.filters._time_len_from_array" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Infer sequence length from an array with plate dims followed by time.</p>
 
 
     </div>

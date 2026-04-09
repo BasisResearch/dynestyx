@@ -29,7 +29,7 @@
     
     
       
-        <title>Sample - dynestyx documentation</title>
+        <title>Sample & Plate - dynestyx documentation</title>
       
     
     
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Sample
+              Sample & Plate
             
           </span>
         </div>
@@ -775,6 +775,34 @@
     
   
     Part 7: Inference in Hidden Markov Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 8: Hierarchical/Mixed-Effect Model Inference
   
 
     
@@ -2257,7 +2285,7 @@
   <span class="md-ellipsis">
     
   
-    Sample
+    Sample & Plate
   
 
     
@@ -2275,7 +2303,7 @@
   <span class="md-ellipsis">
     
   
-    Sample
+    Sample & Plate
   
 
     
@@ -2308,6 +2336,56 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.handlers.plate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plate
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="plate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.handlers.plate.__enter__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __enter__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.handlers.plate.__exit__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __exit__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.handlers.plate.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2914,6 +2992,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/models/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2989,6 +3095,34 @@
     
   
     Filters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/inference/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
   
 
     
@@ -3332,6 +3466,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../developer/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utils
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -3346,10 +3508,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_3_7" id="__nav_4_3_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_3_8" id="__nav_4_3_8_label" tabindex="0">
             
   
   
@@ -3367,8 +3529,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_3_7">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3477,7 +3639,7 @@
 
 
 <h1 id="handlers">Handlers<a class="headerlink" href="#handlers" title="Permanent link">&para;</a></h1>
-<p><code>dynestyx</code> is built using <a href="https://github.com/BasisResearch/effectful"><code>effectful</code></a>, which operates using a primitive called a <code>handler</code>. The details of this can be abstracted away from the typical user experience, but impacts the implementation of the <code>sample</code> primitive. The long story short is that the basic implementation of <code>sample</code> is empty, and it is actually "interpreted" by context. For example, </p>
+<p><code>dynestyx</code> is built using <a href="https://github.com/BasisResearch/effectful"><code>effectful</code></a>, which operates using a primitive called a <code>handler</code>. The details of this can be abstracted away from the typical user experience, but impacts the implementation of the <code>sample</code> primitive. The long story short is that the basic implementation of <code>sample</code> is empty, and it is actually "interpreted" by context. For <strong>hierarchical</strong> models with multiple trajectories, use <a href="#plate"><code>plate</code></a> together with NumPyro sampling inside the plate context. For example, </p>
 <div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">EKFConfig</span><span class="p">()):</span>
     <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamical_model</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 </code></pre></div>
@@ -3511,6 +3673,196 @@
 
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.handlers.plate" class="doc doc-heading">
+            <code>plate</code>
+
+
+<a href="#dynestyx.handlers.plate" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="effectful.ops.syntax.ObjectInterpretation">ObjectInterpretation</span></code></p>
+
+
+
+        <p>Hierarchical plate for batched trajectories. Allows for multiple levels of hierarchy.</p>
+<p>Wraps <code>numpyro.plate</code> for parameter sampling semantics and intercepts
+<code>dsx.sample</code> to inject <code>plate_shapes</code> into the handler chain via <code>fwd()</code>.
+Nested plate handlers run from inner to outer under <code>effectful</code> dispatch,
+so each handler appends its size to preserve NumPyro's effective batch order
+(inner plate is the leftmost data batch dim).</p>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="codehilite"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">plate</span><span class="p">(</span><span class="s2">&quot;trajectories&quot;</span><span class="p">,</span> <span class="n">M</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">theta</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;theta&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>  <span class="c1"># shape (M,)</span>
+<span class="gp">... </span>    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># built from theta</span>
+<span class="gp">... </span>    <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</code></pre></div>
+    <div class="codehilite"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">plate</span><span class="p">(</span><span class="s2">&quot;groups&quot;</span><span class="p">,</span> <span class="n">G</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">beta</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;beta&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>  <span class="c1"># shape (G,)</span>
+<span class="gp">... </span>    <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">plate</span><span class="p">(</span><span class="s2">&quot;trajectories&quot;</span><span class="p">,</span> <span class="n">M</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">alpha</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;alpha&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">beta</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>  <span class="c1"># shape (M, G)</span>
+<span class="gp">... </span>        <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># built from alpha</span>
+<span class="gp">... </span>        <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</code></pre></div>
+
+
+<details class="note" open>
+  <summary>Note</summary>
+  <p>The <code>dim</code> argument is not currently supported for dynestyx plates.</p>
+</details>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.handlers.plate.__enter__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__enter__</span><span class="p">()</span></code>
+
+<a href="#dynestyx.handlers.plate.__enter__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Enter both numpyro.plate context and dynestyx plate interpretation.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.handlers.plate.__exit__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__exit__</span><span class="p">(</span><span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">tb</span><span class="p">)</span></code>
+
+<a href="#dynestyx.handlers.plate.__exit__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Exit both numpyro.plate context and dynestyx plate interpretation.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.handlers.plate.__init__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#dynestyx.handlers.plate.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Initialize the plate handler.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the plate.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Size of the plate.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dimension of the plate.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 <div class="doc doc-object doc-function">

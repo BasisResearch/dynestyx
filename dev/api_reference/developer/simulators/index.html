@@ -788,6 +788,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 8: Hierarchical/Mixed-Effect Model Inference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2244,7 +2272,7 @@
   <span class="md-ellipsis">
     
   
-    Sample
+    Sample & Plate
   
 
     
@@ -2843,6 +2871,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../models/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2918,6 +2974,34 @@
     
   
     Filters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inference/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
   
 
     
@@ -3294,6 +3378,28 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#dynestyx.simulators.BaseSimulator._run_plated_simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _run_plated_simulation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.simulators.BaseSimulator._run_single_member_simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _run_single_member_simulation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dynestyx.simulators.BaseSimulator._simulate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3460,10 +3566,54 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.simulators._slice_array_for_plate_member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _slice_array_for_plate_member
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.simulators._slice_dist_for_plate_member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _slice_dist_for_plate_member
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.simulators._slice_tree_for_plate_member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _slice_tree_for_plate_member
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.simulators._solve_de" class="md-nav__link">
     <span class="md-ellipsis">
       
         _solve_de
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.simulators._suspend_numpyro_plate_frames" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _suspend_numpyro_plate_frames
       
     </span>
   </a>
@@ -3532,6 +3682,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utils
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -3546,10 +3724,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_3_7" id="__nav_4_3_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_3_8" id="__nav_4_3_8_label" tabindex="0">
             
   
   
@@ -3567,8 +3745,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_3_7">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3822,6 +4000,45 @@ sites (conventionally <code>"times"</code>, <code>"states"</code>, and <code>"ob
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.simulators.BaseSimulator._run_plated_simulation" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_run_plated_simulation</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.simulators.BaseSimulator._run_plated_simulation" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run simulator over all plate members and stack outputs.</p>
+<p>Plated simulation enumerates over all plate members and runs
+individual simulations. This is somewhat slower than vmapping,
+but maintains full compatibility with NumPyro's sample semantics.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.simulators.BaseSimulator._run_single_member_simulation" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_run_single_member_simulation</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.simulators.BaseSimulator._run_single_member_simulation" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run simulator logic for one unbatched member and return trajectories.</p>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -5079,6 +5296,72 @@ must already be shaped (n_sim, T_seg, dim).</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynestyx.simulators._slice_array_for_plate_member" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_slice_array_for_plate_member</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">plate_idx</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.simulators._slice_array_for_plate_member" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Slice leading plate dims if present; otherwise return unchanged.</p>
+<p>This is used in our Simulator loops for plated dimensions: we choose the times/values
+for a particular plate member.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.simulators._slice_dist_for_plate_member" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_slice_dist_for_plate_member</span><span class="p">(</span><span class="n">dist_obj</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">plate_idx</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span></code>
+
+<a href="#dynestyx.simulators._slice_dist_for_plate_member" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Slice plate-batched distribution parameters for one member.</p>
+<p>To obtain distributions for a particular plate member, we must
+slice the corresponding parameter arrays. This function implements
+such slicing for:
+- MixtureSameFamily
+- MultivariateNormal
+- Delta
+- WeightedParticles
+- Categorical
+- Independent
+- TransformedDistribution</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.simulators._slice_tree_for_plate_member" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_slice_tree_for_plate_member</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">plate_idx</span><span class="p">)</span></code>
+
+<a href="#dynestyx.simulators._slice_tree_for_plate_member" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Slice all plate-batched array leaves in a pytree for one plate member.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynestyx.simulators._solve_de" class="doc doc-heading">
             <code class=" language-python"><span class="n">_solve_de</span><span class="p">(</span><span class="n">dynamics</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">saveat_times</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">x0</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">control_path_eval</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Array</span><span class="p">],</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span> <span class="n">diffeqsolve_settings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tol_vbt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
 
@@ -5090,6 +5373,26 @@ must already be shaped (n_sim, T_seg, dim).</p>
         <p>Solve one ODE/SDE trajectory with diffrax.</p>
 <p>Uses ODE mode when diffusion is None, otherwise SDE mode. <code>t0</code> is explicit
 so rollout segments can start from filtered times.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.simulators._suspend_numpyro_plate_frames" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_suspend_numpyro_plate_frames</span><span class="p">()</span></code>
+
+<a href="#dynestyx.simulators._suspend_numpyro_plate_frames" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Temporarily remove active numpyro.plate frames from the pyro stack.</p>
+<p>This is necessary so that <code>numpyro.sample</code> statements can be called within
+the simulator inside of a dsx.plate context.</p>
 
 
     </div>

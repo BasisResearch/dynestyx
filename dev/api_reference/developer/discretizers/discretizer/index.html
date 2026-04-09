@@ -788,6 +788,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 8: Hierarchical/Mixed-Effect Model Inference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2244,7 +2272,7 @@
   <span class="md-ellipsis">
     
   
-    Sample
+    Sample & Plate
   
 
     
@@ -2843,6 +2871,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2918,6 +2974,34 @@
     
   
     Filters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inference/checkers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkers
   
 
     
@@ -3211,6 +3295,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.discretizers._ensure_ctse_bm_dim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _ensure_ctse_bm_dim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.discretizers.euler_maruyama" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3360,6 +3455,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utils
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -3374,10 +3497,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_3_7" id="__nav_4_3_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_3_8" id="__nav_4_3_8_label" tabindex="0">
             
   
   
@@ -3395,8 +3518,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_3_7">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3736,6 +3859,24 @@ Returns:
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynestyx.discretizers._ensure_ctse_bm_dim" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_ensure_ctse_bm_dim</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicalModel</span></code>
+
+<a href="#dynestyx.discretizers._ensure_ctse_bm_dim" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Infer and set bm_dim when CT dynamics are built under active plates.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynestyx.discretizers.euler_maruyama" class="doc doc-heading">
             <code class=" language-python"><span class="n">euler_maruyama</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiscreteTimeStateEvolution</span></code>
 
@@ -3766,12 +3907,7 @@ The resulting discrete-time state evolution is linear and Gaussian.</p>
                 <code>cte</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution
-
-
-  
-      dataclass
-   (dynestyx.models.ContinuousTimeStateEvolution)" href="../../models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a></code>
+                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.ContinuousTimeStateEvolution)" href="../../models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a></code>
             </td>
             <td>
               <div class="doc-md-description">
