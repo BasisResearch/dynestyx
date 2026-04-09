@@ -1,6 +1,6 @@
-# Smoother Options
+# Smoother Configurations
 
-`Smoother` reuses filter config classes for algorithm selection and accepts a small backend-options object for smoother-specific knobs.
+`Smoother` is configured using explicit `SmootherConfig` classes.
 
 ::: dynestyx.inference.smoother_configs
     options:

@@ -94,6 +94,7 @@ nav:
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
         - Smoothers: api_reference/developer/inference/smoothers.md
         - SmootherOptions: api_reference/developer/inference/smoother_configs.md
+        - Smoothing Handoff: smoothing_handoff.md
         - MCMC: api_reference/developer/inference/mcmc.md
         - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
         - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md

@@ -8,7 +8,7 @@ import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH, Predictive
 
-from dynestyx.inference.filter_configs import KFConfig, PFConfig
+from dynestyx.inference.smoother_configs import KFSmootherConfig, PFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.simulators import DiscreteTimeSimulator
 from tests.models import discrete_time_lti_simplified_model
@@ -78,14 +78,14 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
         plt.close()
 
     if smoother_type == "kf":
-        config = KFConfig(
+        config = KFSmootherConfig(
             filter_source="cd_dynamax",
             record_smoothed_states_mean=True,
             record_smoothed_states_cov_diag=True,
         )
         kernel = NUTS
     else:
-        config = PFConfig(
+        config = PFSmootherConfig(
             filter_source="cuthbert",
             n_particles=256,
             record_smoothed_states_mean=True,
@@ -94,7 +94,7 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
         kernel = BarkerMH
 
     def data_conditioned_model():
-        with Smoother(filter_config=config):
+        with Smoother(smoother_config=config):
             return discrete_time_lti_simplified_model(
                 obs_times=obs_times,
                 obs_values=obs_values,

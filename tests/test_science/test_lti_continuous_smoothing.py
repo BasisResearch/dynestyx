@@ -8,7 +8,7 @@ import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
-from dynestyx.inference.filter_configs import ContinuousTimeKFConfig
+from dynestyx.inference.smoother_configs import ContinuousTimeKFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.simulators import Simulator
 from tests.models import continuous_time_lti_simplified_model
@@ -70,13 +70,13 @@ def test_continuous_lti_smoother_mcmc_science(num_samples: int):
         plt.savefig(output_dir / "data_generation.png", dpi=150, bbox_inches="tight")
         plt.close()
 
-    config = ContinuousTimeKFConfig(
+    config = ContinuousTimeKFSmootherConfig(
         record_smoothed_states_mean=True,
         record_smoothed_states_cov_diag=True,
     )
 
     def data_conditioned_model():
-        with Smoother(filter_config=config):
+        with Smoother(smoother_config=config):
             return continuous_time_lti_simplified_model(
                 obs_times=obs_times,
                 obs_values=obs_values,

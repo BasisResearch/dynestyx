@@ -12,26 +12,26 @@ from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
 
-from dynestyx.inference.filter_configs import (
-    BaseFilterConfig,
-    EKFConfig,
-    KFConfig,
-    PFConfig,
-    _config_to_smoother_record_kwargs,
-)
+from dynestyx.inference.filter_configs import _config_to_smoother_record_kwargs
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
     compute_cuthbert_filter,
 )
 from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
-from dynestyx.inference.smoother_configs import SmootherOptions
+from dynestyx.inference.smoother_configs import (
+    EKFSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
+)
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
 from dynestyx.utils import _should_record_field
+
+CuthbertSmootherConfig = KFSmootherConfig | EKFSmootherConfig | PFSmootherConfig
 
 
 def _kalman_get_dynamics_params(dynamics: DynamicalModel):
@@ -149,14 +149,14 @@ def _pf_resampling_fn(filter_kwargs: dict):
     return base_resampling_fn
 
 
-def _pf_backward_sampling_fn(smoother_options: SmootherOptions):
-    method = smoother_options.pf_backward_sampling_method
+def _pf_backward_sampling_fn(config: PFSmootherConfig):
+    method = config.pf_backward_sampling_method
     if method == "tracing":
         return tracing.simulate
     if method == "exact":
         return exact_sampling.simulate
     if method == "mcmc":
-        return partial(mcmc.simulate, n_steps=smoother_options.pf_mcmc_n_steps)
+        return partial(mcmc.simulate, n_steps=config.pf_mcmc_n_steps)
     raise ValueError(
         "Unsupported PF smoother backward sampling method: "
         f"{method!r}. Expected one of: 'tracing', 'exact', 'mcmc'."
@@ -165,8 +165,7 @@ def _pf_backward_sampling_fn(smoother_options: SmootherOptions):
 
 def compute_cuthbert_smoother(
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    smoother_options: SmootherOptions,
+    smoother_config: CuthbertSmootherConfig,
     key: jax.Array | None = None,
     *,
     obs_times: jax.Array,
@@ -177,7 +176,7 @@ def compute_cuthbert_smoother(
     """Pure-JAX cuthbert smoother computation (no numpyro side-effects)."""
     marginal_loglik, filtered_states = compute_cuthbert_filter(
         dynamics,
-        filter_config,
+        smoother_config,
         key,
         obs_times=obs_times,
         obs_values=obs_values,
@@ -185,16 +184,16 @@ def compute_cuthbert_smoother(
         ctrl_values=ctrl_values,
     )
 
-    filter_kwargs = _config_to_filter_kwargs(filter_config)
+    filter_kwargs = _config_to_filter_kwargs(smoother_config)
 
-    if isinstance(filter_config, KFConfig):
+    if isinstance(smoother_config, KFSmootherConfig):
         smoother_obj = kalman.build_smoother(
             get_dynamics_params=_kalman_get_dynamics_params(dynamics)
         )
         smoothed_states = cuthbert_smoother(
             smoother_obj, filtered_states, model_inputs=None, parallel=False, key=key
         )
-    elif isinstance(filter_config, EKFConfig):
+    elif isinstance(smoother_config, EKFSmootherConfig):
         smoother_obj = taylor.build_smoother(
             _taylor_get_dynamics_log_density(dynamics),
             rtol=filter_kwargs.get("rtol", None),
@@ -203,20 +202,20 @@ def compute_cuthbert_smoother(
         smoothed_states = cuthbert_smoother(
             smoother_obj, filtered_states, model_inputs=None, parallel=False, key=key
         )
-    elif isinstance(filter_config, PFConfig):
+    elif isinstance(smoother_config, PFSmootherConfig):
         if key is None:
             raise ValueError(
                 "Particle smoother requires a PRNG key: set 'crn_seed' in the filter config, "
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
             )
         n_smoother_particles = (
-            smoother_options.pf_n_smoother_particles
-            if smoother_options.pf_n_smoother_particles is not None
-            else int(filter_config.n_particles)
+            smoother_config.pf_n_smoother_particles
+            if smoother_config.pf_n_smoother_particles is not None
+            else int(smoother_config.n_particles)
         )
         smoother_obj = backward_sampler.build_smoother(
             log_potential=_pf_log_potential(dynamics),
-            backward_sampling_fn=_pf_backward_sampling_fn(smoother_options),
+            backward_sampling_fn=_pf_backward_sampling_fn(smoother_config),
             resampling_fn=_pf_resampling_fn(filter_kwargs),
             n_smoother_particles=n_smoother_particles,
         )
@@ -229,8 +228,8 @@ def compute_cuthbert_smoother(
         )
     else:
         raise ValueError(
-            f"Unsupported cuthbert smoother config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, PFConfig."
+            f"Unsupported cuthbert smoother config: {type(smoother_config).__name__}. "
+            "Expected KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig."
         )
 
     return marginal_loglik, smoothed_states
@@ -330,8 +329,7 @@ def _add_sites_taylor_kf(name: str, states, record_kwargs: dict):
 def run_discrete_smoother(
     name: str,
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    smoother_options: SmootherOptions,
+    smoother_config: CuthbertSmootherConfig,
     key: jax.Array | None = None,
     *,
     obs_times: jax.Array,
@@ -347,20 +345,19 @@ def run_discrete_smoother(
 
     marginal_loglik, states = compute_cuthbert_smoother(
         dynamics,
-        filter_config,
-        smoother_options,
+        smoother_config,
         key,
         obs_times=obs_times,
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
-    record_kwargs = _config_to_smoother_record_kwargs(filter_config)
+    record_kwargs = _config_to_smoother_record_kwargs(smoother_config)
 
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
 
-    if isinstance(filter_config, PFConfig):
+    if isinstance(smoother_config, PFSmootherConfig):
         _add_sites_pf(name, states, record_kwargs)
         particles = states.particles[1:]
         log_weights = states.log_weights[1:]

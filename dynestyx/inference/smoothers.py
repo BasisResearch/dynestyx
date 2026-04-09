@@ -9,24 +9,6 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import _validate_batched_plate_alignment
-from dynestyx.inference.filter_configs import (
-    BaseFilterConfig,
-    ContinuousTimeConfigs,
-    ContinuousTimeDPFConfig,
-    ContinuousTimeEKFConfig,
-    ContinuousTimeEnKFConfig,
-    ContinuousTimeKFConfig,
-    ContinuousTimeUKFConfig,
-    DiscreteTimeConfigs,
-    EKFConfig,
-    EnKFConfig,
-    HMMConfig,
-    HMMConfigs,
-    KFConfig,
-    PFConfig,
-    PFResamplingConfig,
-    UKFConfig,
-)
 from dynestyx.inference.filters import (
     _array_plate_axis,
     _make_plate_in_axes,
@@ -50,51 +32,40 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
-from dynestyx.inference.smoother_configs import SmootherOptions
+from dynestyx.inference.smoother_configs import (
+    ContinuousTimeEKFSmootherConfig,
+    ContinuousTimeKFSmootherConfig,
+    ContinuousTimeSmootherConfigs,
+    DiscreteTimeSmootherConfigs,
+    EKFSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
+    SmootherConfig,
+    UKFSmootherConfig,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import _ensure_continuous_bm_dim
 
+DiscreteSmootherConfig = (
+    KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
+)
+ContinuousSmootherConfig = (
+    ContinuousTimeKFSmootherConfig | ContinuousTimeEKFSmootherConfig
+)
 
-def _default_smoother_config(dynamics: DynamicalModel):
+
+def _default_smoother_config(dynamics: DynamicalModel) -> SmootherConfig:
     """Return an appropriate default smoother config when none is specified."""
     if dynamics.continuous_time:
-        return ContinuousTimeEKFConfig()
-    return EKFConfig(filter_source="cuthbert")
+        return ContinuousTimeEKFSmootherConfig()
+    return EKFSmootherConfig(filter_source="cuthbert")
 
 
-def _unsupported_smoother_message(config: BaseFilterConfig) -> str | None:
-    """Return an actionable unsupported message when a smoother is out of scope."""
-    if isinstance(config, HMMConfig):
-        return (
-            "HMM smoothing is not supported in this release. "
-            "Supported smoothers are for Gaussian/PF state-space models only."
-        )
-
-    if isinstance(
-        config,
-        (ContinuousTimeEnKFConfig, ContinuousTimeUKFConfig, ContinuousTimeDPFConfig),
-    ):
-        return (
-            f"{type(config).__name__} smoothing is not supported in this release. "
-            "Supported continuous-time smoothers: ContinuousTimeKFConfig, ContinuousTimeEKFConfig (cd_dynamax)."
-        )
-
-    if isinstance(config, EnKFConfig):
-        return (
-            "EnKF smoothing is not supported for discrete-time models in this release. "
-            "Use KFConfig/EKFConfig/UKFConfig with filter_source='cd_dynamax', "
-            "or KFConfig/EKFConfig/PFConfig with filter_source='cuthbert'."
-        )
-
-    if isinstance(config, UKFConfig) and config.filter_source == "cuthbert":
-        return (
-            "UKF smoothing is not available in cuthbert. "
-            "Use UKFConfig(filter_source='cd_dynamax') or a cuthbert-supported smoother "
-            "(KFConfig, EKFConfig, PFConfig)."
-        )
-
-    return None
+def _valid_smoother_config_names(*, continuous_time: bool) -> list[str]:
+    if continuous_time:
+        return [c.__name__ for c in ContinuousTimeSmootherConfigs]
+    return [c.__name__ for c in DiscreteTimeSmootherConfigs]
 
 
 def _smoothed_posterior_to_dists(
@@ -131,12 +102,12 @@ def _smoothed_posterior_to_dists(
 
 def _cuthbert_smoothed_states_to_dists(
     states,
-    config: BaseFilterConfig,
+    config: SmootherConfig,
     *,
     plate_shapes: tuple[int, ...],
 ):
     """Convert vmapped cuthbert smoother outputs to per-time smoothed distributions."""
-    if isinstance(config, PFConfig):
+    if isinstance(config, PFSmootherConfig):
         particles = states.particles
         log_weights = states.log_weights
         particles = particles[
@@ -227,10 +198,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
 class Smoother(BaseSmootherLogFactorAdder):
     r"""Performs Bayesian smoothing to compute the smoothing distribution p(x_t | y_{1:T})."""
 
-    filter_config: BaseFilterConfig | None = None
-    smoother_options: SmootherOptions = dataclasses.field(
-        default_factory=SmootherOptions
-    )
+    smoother_config: SmootherConfig | None = None
 
     def _add_log_factors(
         self,
@@ -250,14 +218,19 @@ class Smoother(BaseSmootherLogFactorAdder):
         dynamics = _ensure_continuous_bm_dim(dynamics)
 
         config = (
-            self.filter_config
-            if self.filter_config is not None
+            self.smoother_config
+            if self.smoother_config is not None
             else _default_smoother_config(dynamics)
         )
-
-        unsupported = _unsupported_smoother_message(config)
-        if unsupported is not None:
-            raise ValueError(unsupported)
+        if not isinstance(config, SmootherConfig):
+            valid = _valid_smoother_config_names(
+                continuous_time=dynamics.continuous_time
+            )
+            raise ValueError(
+                f"Invalid smoother config: {type(config).__name__}. "
+                "Expected a smoother config class from dynestyx.inference.smoother_configs. "
+                f"Valid types: {valid}"
+            )
 
         key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
 
@@ -275,8 +248,8 @@ class Smoother(BaseSmootherLogFactorAdder):
             )
 
         if dynamics.continuous_time:
-            if not isinstance(config, ContinuousTimeConfigs):
-                valid = [c.__name__ for c in ContinuousTimeConfigs]
+            if not isinstance(config, ContinuousTimeSmootherConfigs):
+                valid = _valid_smoother_config_names(continuous_time=True)
                 raise ValueError(
                     f"Invalid smoother config: {type(config).__name__}. "
                     f"Valid continuous-time config types: {valid}"
@@ -285,7 +258,6 @@ class Smoother(BaseSmootherLogFactorAdder):
                 name,
                 dynamics,
                 config,
-                self.smoother_options,
                 key=key,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -294,37 +266,30 @@ class Smoother(BaseSmootherLogFactorAdder):
                 **kwargs,
             )
 
-        if isinstance(config, HMMConfigs):
+        if not isinstance(config, DiscreteTimeSmootherConfigs):
+            valid = _valid_smoother_config_names(continuous_time=False)
             raise ValueError(
-                "HMM smoothing is not supported in this release. "
-                "Use Filter(HMMConfig()) for filtering only."
+                f"Invalid smoother config: {type(config).__name__}. "
+                f"Valid discrete-time config types: {valid}"
             )
 
-        if isinstance(config, DiscreteTimeConfigs):
-            return _smooth_discrete_time(
-                name,
-                dynamics,
-                config,
-                self.smoother_options,
-                key=key,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                **kwargs,
-            )
-
-        valid = [c.__name__ for c in HMMConfigs + DiscreteTimeConfigs]
-        raise ValueError(
-            f"Invalid smoother config: {type(config).__name__}. "
-            f"Valid discrete-time config types: {valid}"
+        return _smooth_discrete_time(
+            name,
+            dynamics,
+            config,
+            key=key,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            **kwargs,
         )
 
     def _add_log_factors_batched(
         self,
         name: str,
         dynamics: DynamicalModel,
-        config: BaseFilterConfig,
+        config: SmootherConfig,
         *,
         key: jax.Array | None,
         plate_shapes: tuple[int, ...],
@@ -336,8 +301,8 @@ class Smoother(BaseSmootherLogFactorAdder):
         """Compute batched marginal log-likelihoods via vmap for plate contexts."""
         output_kind: str
         if dynamics.continuous_time:
-            if not isinstance(config, ContinuousTimeConfigs):
-                valid = [c.__name__ for c in ContinuousTimeConfigs]
+            if not isinstance(config, ContinuousTimeSmootherConfigs):
+                valid = _valid_smoother_config_names(continuous_time=True)
                 raise ValueError(
                     f"Invalid smoother config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
@@ -348,7 +313,6 @@ class Smoother(BaseSmootherLogFactorAdder):
                 return compute_continuous_smoother(
                     dyn,
                     config,
-                    self.smoother_options,
                     k,
                     obs_times=ot,
                     obs_values=ov,
@@ -356,7 +320,7 @@ class Smoother(BaseSmootherLogFactorAdder):
                     ctrl_values=cv,
                 )
 
-        elif isinstance(config, DiscreteTimeConfigs):
+        elif isinstance(config, DiscreteTimeSmootherConfigs):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
@@ -364,7 +328,6 @@ class Smoother(BaseSmootherLogFactorAdder):
                     return compute_cuthbert_smoother(
                         dyn,
                         config,
-                        self.smoother_options,
                         k,
                         obs_times=ot,
                         obs_values=ov,
@@ -467,8 +430,7 @@ class Smoother(BaseSmootherLogFactorAdder):
 def _smooth_discrete_time(
     name: str,
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    smoother_options: SmootherOptions,
+    smoother_config: DiscreteSmootherConfig,
     key: jax.Array | None = None,
     *,
     obs_times: jax.Array,
@@ -479,17 +441,27 @@ def _smooth_discrete_time(
 ) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax smoothers."""
 
-    if isinstance(filter_config, EnKFConfig):
+    if isinstance(smoother_config, UKFSmootherConfig) and (
+        smoother_config.filter_source == "cuthbert"
+    ):
         raise ValueError(
-            "Discrete EnKF smoothing is not supported. "
-            "Use KFConfig/EKFConfig/UKFConfig (cd_dynamax) or KFConfig/EKFConfig/PFConfig (cuthbert)."
+            "UKF smoothing is not available in cuthbert. "
+            "Use UKFSmootherConfig(filter_source='cd_dynamax') or a cuthbert-supported smoother "
+            "(KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig)."
         )
 
-    if filter_config.filter_source == "cd_dynamax":
+    if isinstance(smoother_config, PFSmootherConfig) and (
+        smoother_config.filter_source != "cuthbert"
+    ):
+        raise ValueError(
+            "PFSmootherConfig is only supported with filter_source='cuthbert'."
+        )
+
+    if smoother_config.filter_source == "cd_dynamax":
         return run_cd_dynamax_discrete_smoother(
             name,
             dynamics,
-            filter_config,
+            smoother_config,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,
@@ -497,12 +469,11 @@ def _smooth_discrete_time(
             **kwargs,
         )
 
-    if filter_config.filter_source == "cuthbert":
+    if smoother_config.filter_source == "cuthbert":
         return run_cuthbert_discrete_smoother(
             name,
             dynamics,
-            filter_config,
-            smoother_options,
+            smoother_config,
             key=key,
             obs_times=obs_times,
             obs_values=obs_values,
@@ -511,14 +482,13 @@ def _smooth_discrete_time(
             **kwargs,
         )
 
-    raise ValueError(f"Unknown filter source: {filter_config.filter_source}")
+    raise ValueError(f"Unknown filter source: {smoother_config.filter_source}")
 
 
 def _smooth_continuous_time(
     name: str,
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    smoother_options: SmootherOptions,
+    smoother_config: ContinuousSmootherConfig,
     key: jax.Array | None = None,
     *,
     obs_times: jax.Array,
@@ -528,20 +498,15 @@ def _smooth_continuous_time(
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax smoothers."""
-    if isinstance(
-        filter_config,
-        (ContinuousTimeEnKFConfig, ContinuousTimeUKFConfig, ContinuousTimeDPFConfig),
-    ):
+    if smoother_config.filter_source != "cd_dynamax":
         raise ValueError(
-            f"{type(filter_config).__name__} smoothing is not supported. "
-            "Supported continuous-time smoothers: ContinuousTimeKFConfig, ContinuousTimeEKFConfig."
+            f"{type(smoother_config).__name__} supports only filter_source='cd_dynamax'."
         )
 
     return run_continuous_smoother(
         name,
         dynamics,
-        filter_config,
-        smoother_options,
+        smoother_config,
         key=key,
         obs_times=obs_times,
         obs_values=obs_values,
@@ -552,19 +517,12 @@ def _smooth_continuous_time(
 
 
 __all__ = [
-    "ContinuousTimeKFConfig",
-    "ContinuousTimeDPFConfig",
-    "ContinuousTimeEnKFConfig",
-    "ContinuousTimeEKFConfig",
-    "ContinuousTimeUKFConfig",
-    "EKFConfig",
-    "EnKFConfig",
+    "ContinuousTimeEKFSmootherConfig",
+    "ContinuousTimeKFSmootherConfig",
+    "EKFSmootherConfig",
+    "KFSmootherConfig",
+    "PFSmootherConfig",
     "Smoother",
-    "SmootherOptions",
-    "HMMConfig",
-    "HMMConfigs",
-    "KFConfig",
-    "PFConfig",
-    "PFResamplingConfig",
-    "UKFConfig",
+    "SmootherConfig",
+    "UKFSmootherConfig",
 ]

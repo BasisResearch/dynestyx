@@ -6,18 +6,21 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
-from dynestyx import DiscreteTimeSimulator, ODESimulator, Smoother
+from dynestyx import DiscreteTimeSimulator, ODESimulator, Simulator, Smoother
 from dynestyx.inference.filter_configs import (
-    ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
     EnKFConfig,
     HMMConfig,
-    KFConfig,
-    PFConfig,
+)
+from dynestyx.inference.smoother_configs import (
+    ContinuousTimeEKFSmootherConfig,
+    ContinuousTimeKFSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
 )
 from tests.models import (
+    continuous_time_lti_simplified_model,
     discrete_time_lti_simplified_model,
-    hmm_model,
     jumpy_controls_model_ode,
 )
 
@@ -74,7 +77,7 @@ def test_predictive_smoother_discretetimesimulator_shapes():
     )
     with DiscreteTimeSimulator(n_simulations=2):
         with Smoother(
-            filter_config=KFConfig(
+            smoother_config=KFSmootherConfig(
                 filter_source="cd_dynamax",
                 record_smoothed_states_mean=True,
                 record_smoothed_states_cov_diag=True,
@@ -104,7 +107,9 @@ def test_predictive_smoother_odesimulator_shapes():
     )
     with ODESimulator(n_simulations=2):
         with Smoother(
-            filter_config=ContinuousTimeEKFConfig(record_smoothed_states_mean=True)
+            smoother_config=ContinuousTimeEKFSmootherConfig(
+                record_smoothed_states_mean=True
+            )
         ):
             samples = predictive(
                 jr.PRNGKey(0),
@@ -120,7 +125,10 @@ def test_predictive_smoother_odesimulator_shapes():
     assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 1)
 
 
-def test_predictive_smoother_cuthbert_pf_records_particles():
+@pytest.mark.parametrize("backward_method", ["tracing", "exact", "mcmc"])
+def test_predictive_smoother_cuthbert_pf_backward_methods_and_override(
+    backward_method: str,
+):
     obs_times, obs_values, predict_times = _gen_obs_discrete()
 
     predictive = Predictive(
@@ -131,9 +139,12 @@ def test_predictive_smoother_cuthbert_pf_records_particles():
     )
     with DiscreteTimeSimulator(n_simulations=1):
         with Smoother(
-            filter_config=PFConfig(
+            smoother_config=PFSmootherConfig(
                 filter_source="cuthbert",
                 n_particles=32,
+                pf_backward_sampling_method=backward_method,
+                pf_mcmc_n_steps=3,
+                pf_n_smoother_particles=16,
                 record_smoothed_particles=True,
                 record_smoothed_log_weights=True,
                 record_smoothed_states_mean=True,
@@ -148,67 +159,83 @@ def test_predictive_smoother_cuthbert_pf_records_particles():
 
     assert samples["f_smoothed_particles"].shape[0] == 1
     assert samples["f_smoothed_particles"].shape[1] == len(obs_times)
+    assert samples["f_smoothed_particles"].shape[2] == 16
     assert samples["f_smoothed_log_weights"].shape[0] == 1
     assert samples["f_smoothed_log_weights"].shape[1] == len(obs_times)
+    assert samples["f_smoothed_log_weights"].shape[2] == 16
     assert jnp.all(jnp.isfinite(samples["f_smoothed_log_weights"]))
 
 
-def test_smoother_unsupported_discrete_enkf_errors():
+@pytest.mark.parametrize(
+    "invalid_config",
+    [
+        EnKFConfig(filter_source="cd_dynamax"),
+        ContinuousTimeEnKFConfig(n_particles=8),
+        HMMConfig(),
+    ],
+)
+def test_smoother_rejects_filter_configs_as_invalid_input(invalid_config):
     obs_times, obs_values, _ = _gen_obs_discrete()
 
-    with pytest.raises(ValueError, match="EnKF smoothing is not supported"):
+    with pytest.raises(
+        ValueError,
+        match="Expected a smoother config class from dynestyx.inference.smoother_configs",
+    ):
         with seed(rng_seed=jr.PRNGKey(0)):
-            with Smoother(filter_config=EnKFConfig(filter_source="cd_dynamax")):
+            with Smoother(smoother_config=invalid_config):
                 discrete_time_lti_simplified_model(
                     obs_times=obs_times,
                     obs_values=obs_values,
                 )
 
 
-def test_smoother_unsupported_continuous_enkf_errors():
-    obs_times, obs_values, _, _, _ = _gen_obs_ode()
+def test_continuous_time_kf_smoother_type_option_smoke():
+    rng = jr.PRNGKey(7)
+    obs_times = jnp.arange(0.0, 1.0, 0.2)
 
-    with pytest.raises(ValueError, match="Supported continuous-time smoothers"):
-        with seed(rng_seed=jr.PRNGKey(0)):
-            with Smoother(filter_config=ContinuousTimeEnKFConfig(n_particles=8)):
-                jumpy_controls_model_ode(
-                    obs_times=obs_times,
-                    obs_values=obs_values,
-                )
-
-
-def test_smoother_unsupported_hmm_errors():
-    obs_times = jnp.arange(0.0, 4.0, 1.0)
-    params = {
-        "A": jnp.array([[0.8, 0.1, 0.1], [0.2, 0.6, 0.2], [0.1, 0.1, 0.8]]),
-        "mu": jnp.array([-1.0, 0.0, 1.0]),
-        "sigma": jnp.array(0.5),
-    }
-
-    with DiscreteTimeSimulator(n_simulations=1):
+    with Simulator(n_simulations=1):
         pred = Predictive(
-            hmm_model,
-            params=params,
+            continuous_time_lti_simplified_model,
+            params={"rho": jnp.array(2.0)},
             num_samples=1,
             exclude_deterministic=False,
         )
-        sim = pred(
-            jr.PRNGKey(1),
-            predict_times=obs_times,
-            ctrl_times=obs_times,
-            ctrl_values=jnp.zeros((len(obs_times), 1)),
-        )
+        sim = pred(rng, predict_times=obs_times)
 
     obs_values = sim["f_observations"][0, 0]
-    with pytest.raises(ValueError, match="HMM smoothing is not supported"):
-        with seed(rng_seed=jr.PRNGKey(0)):
-            with Smoother(filter_config=HMMConfig()):
-                hmm_model(
-                    obs_times=obs_times,
-                    obs_values=obs_values,
-                    ctrl_times=obs_times,
-                    ctrl_values=jnp.zeros((len(obs_times), 1)),
-                )
+
+    with seed(rng_seed=jr.PRNGKey(8)):
+        with Smoother(
+            smoother_config=ContinuousTimeKFSmootherConfig(
+                cdlgssm_smoother_type="cd_smoother_2",
+                record_smoothed_states_mean=True,
+            )
+        ):
+            out = continuous_time_lti_simplified_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    assert out is None
+
+
+def test_smoother_default_configs_discrete_and_continuous_smoke():
+    obs_times_d, obs_values_d, _ = _gen_obs_discrete()
+    obs_times_c, obs_values_c, _, _, _ = _gen_obs_ode()
+
+    with seed(rng_seed=jr.PRNGKey(9)):
+        with Smoother():
+            discrete_time_lti_simplified_model(
+                obs_times=obs_times_d,
+                obs_values=obs_values_d,
+            )
+
+    with seed(rng_seed=jr.PRNGKey(10)):
+        with Smoother():
+            jumpy_controls_model_ode(
+                obs_times=obs_times_c,
+                obs_values=obs_values_c,
+            )
 
 
 def _plate_discrete_model(obs_times=None, obs_values=None, predict_times=None, m=2):
@@ -234,7 +261,7 @@ def test_smoother_plate_batched_loglik_shape():
     obs_values = jnp.zeros((m, len(obs_times), 1))
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-        with Smoother(filter_config=KFConfig(filter_source="cd_dynamax")):
+        with Smoother(smoother_config=KFSmootherConfig(filter_source="cd_dynamax")):
             _plate_discrete_model(
                 obs_times=obs_times,
                 obs_values=obs_values,

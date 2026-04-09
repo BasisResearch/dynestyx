@@ -1,33 +1,79 @@
-"""Smoother options shared across backends.
+"""Smoother configuration dataclasses.
 
-`dynestyx` smoothers reuse existing filter config classes for algorithm selection.
-This module provides lightweight smoother-specific options for backend details
-that do not belong in filter configs.
+Concrete smoother configs inherit from corresponding filter configs and expose
+backend-specific smoothing options directly on the config class.
 """
 
+import abc
 import dataclasses
 from typing import Literal
+
+from dynestyx.inference.filter_configs import (
+    ContinuousTimeEKFConfig,
+    ContinuousTimeKFConfig,
+    EKFConfig,
+    KFConfig,
+    PFConfig,
+    UKFConfig,
+)
 
 PFBackwardSamplingMethod = Literal["tracing", "exact", "mcmc"]
 CDKFSmootherType = Literal["cd_smoother_1", "cd_smoother_2"]
 
 
 @dataclasses.dataclass
-class SmootherOptions:
-    """Backend-specific smoothing options.
+class SmootherConfig(abc.ABC):
+    """Abstract base class for all smoother configs."""
 
-    Attributes:
-        pf_backward_sampling_method: Backward simulation method for cuthbert PF
-            smoothing. Defaults to `"tracing"`.
-        pf_mcmc_n_steps: Number of IMH steps when using
-            `pf_backward_sampling_method="mcmc"`.
-        pf_n_smoother_particles: Number of smoother particles for PF smoothing.
-            If `None`, inherits `PFConfig.n_particles`.
-        cdlgssm_smoother_type: Continuous-discrete Kalman smoother variant used
-            by cd-dynamax for `ContinuousTimeKFConfig`.
-    """
+    def __post_init__(self):
+        if type(self) is SmootherConfig:
+            raise TypeError("SmootherConfig is abstract and cannot be instantiated.")
+
+
+@dataclasses.dataclass
+class KFSmootherConfig(KFConfig, SmootherConfig):
+    """Discrete-time Kalman smoother config."""
+
+
+@dataclasses.dataclass
+class EKFSmootherConfig(EKFConfig, SmootherConfig):
+    """Discrete-time extended Kalman smoother config."""
+
+
+@dataclasses.dataclass
+class UKFSmootherConfig(UKFConfig, SmootherConfig):
+    """Discrete-time unscented Kalman smoother config."""
+
+
+@dataclasses.dataclass
+class PFSmootherConfig(PFConfig, SmootherConfig):
+    """Discrete-time particle smoother config."""
 
     pf_backward_sampling_method: PFBackwardSamplingMethod = "tracing"
     pf_mcmc_n_steps: int = 10
     pf_n_smoother_particles: int | None = None
+
+
+@dataclasses.dataclass
+class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, SmootherConfig):
+    """Continuous-time Kalman smoother config."""
+
     cdlgssm_smoother_type: CDKFSmootherType = "cd_smoother_1"
+
+
+@dataclasses.dataclass
+class ContinuousTimeEKFSmootherConfig(ContinuousTimeEKFConfig, SmootherConfig):
+    """Continuous-time extended Kalman smoother config."""
+
+
+DiscreteTimeSmootherConfigs: tuple[type, ...] = (
+    KFSmootherConfig,
+    EKFSmootherConfig,
+    UKFSmootherConfig,
+    PFSmootherConfig,
+)
+
+ContinuousTimeSmootherConfigs: tuple[type, ...] = (
+    ContinuousTimeKFSmootherConfig,
+    ContinuousTimeEKFSmootherConfig,
+)

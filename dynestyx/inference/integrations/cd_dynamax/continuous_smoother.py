@@ -12,38 +12,30 @@ from cd_dynamax import (
     cdnlgssm_smoother,
 )
 
-from dynestyx.inference.filter_configs import (
-    ContinuousTimeDPFConfig,
-    ContinuousTimeEKFConfig,
-    ContinuousTimeEnKFConfig,
-    ContinuousTimeKFConfig,
-    ContinuousTimeUKFConfig,
-    _config_to_smoother_record_kwargs,
-)
+from dynestyx.inference.filter_configs import _config_to_smoother_record_kwargs
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
-from dynestyx.inference.smoother_configs import SmootherOptions
+from dynestyx.inference.smoother_configs import (
+    ContinuousTimeEKFSmootherConfig,
+    ContinuousTimeKFSmootherConfig,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
 
-ContinuousTimeFilterConfig = (
-    ContinuousTimeKFConfig
-    | ContinuousTimeEnKFConfig
-    | ContinuousTimeDPFConfig
-    | ContinuousTimeEKFConfig
-    | ContinuousTimeUKFConfig
+ContinuousTimeSmootherConfig = (
+    ContinuousTimeKFSmootherConfig | ContinuousTimeEKFSmootherConfig
 )
 
 
 def _add_smoother_sites(
     name: str,
-    filter_config: ContinuousTimeFilterConfig,
+    smoother_config: ContinuousTimeSmootherConfig,
     smoothed,
 ) -> None:
     """Add marginal log-likelihood factor and smoothed state deterministic sites."""
-    record_kwargs = _config_to_smoother_record_kwargs(filter_config)
+    record_kwargs = _config_to_smoother_record_kwargs(smoother_config)
     numpyro.factor(f"{name}_marginal_log_likelihood", smoothed.marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", smoothed.marginal_loglik)
 
@@ -74,8 +66,7 @@ def _add_smoother_sites(
 
 def compute_continuous_smoother(
     dynamics: DynamicalModel,
-    filter_config: ContinuousTimeFilterConfig,
-    smoother_options: SmootherOptions,
+    smoother_config: ContinuousTimeSmootherConfig,
     key: jax.Array | None = None,
     *,
     obs_times: jax.Array,
@@ -95,14 +86,14 @@ def compute_continuous_smoother(
         else jnp.zeros((obs_times_arr.shape[0], control_dim))
     )
 
-    if isinstance(filter_config, ContinuousTimeKFConfig):
+    if isinstance(smoother_config, ContinuousTimeKFSmootherConfig):
         params = dsx_to_cdlgssm_params(dynamics)
         kf_hparams = KFHyperParams(
-            dt_final=float(filter_config.extra_filter_kwargs.get("dt_final", 1e-10)),
+            dt_final=float(smoother_config.extra_filter_kwargs.get("dt_final", 1e-10)),
             diffeqsolve_settings={
-                "dt0": filter_config.diffeqsolve_dt0,
-                "max_steps": filter_config.diffeqsolve_max_steps,
-                **filter_config.diffeqsolve_kwargs,
+                "dt0": smoother_config.diffeqsolve_dt0,
+                "max_steps": smoother_config.diffeqsolve_max_steps,
+                **smoother_config.diffeqsolve_kwargs,
             },
         )
         return cdlgssm_smoother(
@@ -111,11 +102,11 @@ def compute_continuous_smoother(
             t_emissions=obs_times_arr,
             filter_hyperparams=kf_hparams,
             inputs=ctrl_vals,
-            smoother_type=smoother_options.cdlgssm_smoother_type,
-            warn=filter_config.warn,
+            smoother_type=smoother_config.cdlgssm_smoother_type,
+            warn=smoother_config.warn,
         )
 
-    if isinstance(filter_config, ContinuousTimeEKFConfig):
+    if isinstance(smoother_config, ContinuousTimeEKFSmootherConfig):
         cd_model = ContDiscreteNonlinearGaussianSSM(
             state_dim=dynamics.state_dim,
             emission_dim=dynamics.observation_dim,
@@ -123,23 +114,25 @@ def compute_continuous_smoother(
         )
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_model)
         ekf_hparams = EKFHyperParams(
-            dt_final=float(filter_config.extra_filter_kwargs.get("dt_final", 1e-4)),
-            state_order=filter_config.filter_state_order,
-            emission_order=filter_config.filter_emission_order,
+            dt_final=float(smoother_config.extra_filter_kwargs.get("dt_final", 1e-4)),
+            state_order=smoother_config.filter_state_order,
+            emission_order=smoother_config.filter_emission_order,
             smooth_order=str(
-                filter_config.extra_filter_kwargs.get("smooth_order", "first")
+                smoother_config.extra_filter_kwargs.get("smooth_order", "first")
             ),
             cov_rescaling=(
-                filter_config.cov_rescaling
-                if filter_config.cov_rescaling is not None
+                smoother_config.cov_rescaling
+                if smoother_config.cov_rescaling is not None
                 else 1.0
             ),
             diffeqsolve_settings={
-                "dt0": filter_config.diffeqsolve_dt0,
-                "max_steps": filter_config.diffeqsolve_max_steps,
-                **filter_config.diffeqsolve_kwargs,
+                "dt0": smoother_config.diffeqsolve_dt0,
+                "max_steps": smoother_config.diffeqsolve_max_steps,
+                **smoother_config.diffeqsolve_kwargs,
             },
-            dt_average=float(filter_config.extra_filter_kwargs.get("dt_average", 0.1)),
+            dt_average=float(
+                smoother_config.extra_filter_kwargs.get("dt_average", 0.1)
+            ),
         )
         return cdnlgssm_smoother(
             params=params,
@@ -149,20 +142,19 @@ def compute_continuous_smoother(
             inputs=ctrl_vals,
             num_iter=1,
             key=key if key is not None else jax.random.PRNGKey(0),
-            warn=filter_config.warn,
+            warn=smoother_config.warn,
         )
 
     raise ValueError(
-        f"{type(filter_config).__name__} smoothing is not supported in cd_dynamax. "
-        "Supported continuous-time smoothers: ContinuousTimeKFConfig, ContinuousTimeEKFConfig."
+        f"{type(smoother_config).__name__} smoothing is not supported in cd_dynamax. "
+        "Supported continuous-time smoothers: ContinuousTimeKFSmootherConfig, ContinuousTimeEKFSmootherConfig."
     )
 
 
 def run_continuous_smoother(
     name: str,
     dynamics: DynamicalModel,
-    filter_config: ContinuousTimeFilterConfig,
-    smoother_options: SmootherOptions,
+    smoother_config: ContinuousTimeSmootherConfig,
     key: jax.Array | None = None,
     *,
     obs_times: jax.Array,
@@ -174,8 +166,7 @@ def run_continuous_smoother(
     """Run continuous-time smoother via CD-Dynamax."""
     smoothed = compute_continuous_smoother(
         dynamics,
-        filter_config,
-        smoother_options,
+        smoother_config,
         key,
         obs_times=obs_times,
         obs_values=obs_values,
@@ -183,7 +174,7 @@ def run_continuous_smoother(
         ctrl_values=ctrl_values,
     )
 
-    _add_smoother_sites(name, filter_config, smoothed)
+    _add_smoother_sites(name, smoother_config, smoothed)
     means = smoothed.smoothed_means
     covs = smoothed.smoothed_covariances
     return [dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])]
