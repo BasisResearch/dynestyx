@@ -53,9 +53,10 @@ DiscreteSmootherConfig = (
 ContinuousSmootherConfig = (
     ContinuousTimeKFSmootherConfig | ContinuousTimeEKFSmootherConfig
 )
+SmootherAnyConfig = DiscreteSmootherConfig | ContinuousSmootherConfig
 
 
-def _default_smoother_config(dynamics: DynamicalModel) -> SmootherConfig:
+def _default_smoother_config(dynamics: DynamicalModel) -> SmootherAnyConfig:
     """Return an appropriate default smoother config when none is specified."""
     if dynamics.continuous_time:
         return ContinuousTimeEKFSmootherConfig()
@@ -198,7 +199,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
 class Smoother(BaseSmootherLogFactorAdder):
     r"""Performs Bayesian smoothing to compute the smoothing distribution p(x_t | y_{1:T})."""
 
-    smoother_config: SmootherConfig | None = None
+    smoother_config: SmootherAnyConfig | None = None
 
     def _add_log_factors(
         self,
@@ -232,13 +233,18 @@ class Smoother(BaseSmootherLogFactorAdder):
                 f"Valid types: {valid}"
             )
 
-        key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
+        typed_config = config
+        key = (
+            numpyro.prng_key()
+            if typed_config.crn_seed is None
+            else typed_config.crn_seed
+        )
 
         if plate_shapes:
             return self._add_log_factors_batched(
                 name,
                 dynamics,
-                config,
+                typed_config,
                 key=key,
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
@@ -248,16 +254,19 @@ class Smoother(BaseSmootherLogFactorAdder):
             )
 
         if dynamics.continuous_time:
-            if not isinstance(config, ContinuousTimeSmootherConfigs):
+            if not isinstance(
+                typed_config,
+                (ContinuousTimeKFSmootherConfig, ContinuousTimeEKFSmootherConfig),
+            ):
                 valid = _valid_smoother_config_names(continuous_time=True)
                 raise ValueError(
-                    f"Invalid smoother config: {type(config).__name__}. "
+                    f"Invalid smoother config: {type(typed_config).__name__}. "
                     f"Valid continuous-time config types: {valid}"
                 )
             return _smooth_continuous_time(
                 name,
                 dynamics,
-                config,
+                typed_config,
                 key=key,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -266,17 +275,20 @@ class Smoother(BaseSmootherLogFactorAdder):
                 **kwargs,
             )
 
-        if not isinstance(config, DiscreteTimeSmootherConfigs):
+        if not isinstance(
+            typed_config,
+            (KFSmootherConfig, EKFSmootherConfig, UKFSmootherConfig, PFSmootherConfig),
+        ):
             valid = _valid_smoother_config_names(continuous_time=False)
             raise ValueError(
-                f"Invalid smoother config: {type(config).__name__}. "
+                f"Invalid smoother config: {type(typed_config).__name__}. "
                 f"Valid discrete-time config types: {valid}"
             )
 
         return _smooth_discrete_time(
             name,
             dynamics,
-            config,
+            typed_config,
             key=key,
             obs_times=obs_times,
             obs_values=obs_values,
@@ -289,7 +301,7 @@ class Smoother(BaseSmootherLogFactorAdder):
         self,
         name: str,
         dynamics: DynamicalModel,
-        config: SmootherConfig,
+        config: SmootherAnyConfig,
         *,
         key: jax.Array | None,
         plate_shapes: tuple[int, ...],
@@ -301,7 +313,10 @@ class Smoother(BaseSmootherLogFactorAdder):
         """Compute batched marginal log-likelihoods via vmap for plate contexts."""
         output_kind: str
         if dynamics.continuous_time:
-            if not isinstance(config, ContinuousTimeSmootherConfigs):
+            if not isinstance(
+                config,
+                (ContinuousTimeKFSmootherConfig, ContinuousTimeEKFSmootherConfig),
+            ):
                 valid = _valid_smoother_config_names(continuous_time=True)
                 raise ValueError(
                     f"Invalid smoother config: {type(config).__name__}. "
@@ -320,7 +335,10 @@ class Smoother(BaseSmootherLogFactorAdder):
                     ctrl_values=cv,
                 )
 
-        elif isinstance(config, DiscreteTimeSmootherConfigs):
+        elif isinstance(
+            config,
+            (KFSmootherConfig, EKFSmootherConfig, UKFSmootherConfig, PFSmootherConfig),
+        ):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
@@ -470,6 +488,12 @@ def _smooth_discrete_time(
         )
 
     if smoother_config.filter_source == "cuthbert":
+        if isinstance(smoother_config, UKFSmootherConfig):
+            raise ValueError(
+                "UKF smoothing is not available in cuthbert. "
+                "Use UKFSmootherConfig(filter_source='cd_dynamax') or a cuthbert-supported smoother "
+                "(KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig)."
+            )
         return run_cuthbert_discrete_smoother(
             name,
             dynamics,

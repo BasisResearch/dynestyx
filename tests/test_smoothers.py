@@ -19,6 +19,7 @@ from dynestyx.inference.smoother_configs import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
     KFSmootherConfig,
+    PFBackwardSamplingMethod,
     PFSmootherConfig,
 )
 from tests.models import (
@@ -130,7 +131,7 @@ def test_predictive_smoother_odesimulator_shapes():
 
 @pytest.mark.parametrize("backward_method", ["tracing", "exact"])
 def test_predictive_smoother_cuthbert_pf_backward_methods_and_override(
-    backward_method: str,
+    backward_method: PFBackwardSamplingMethod,
 ):
     obs_times, obs_values, predict_times = _gen_obs_discrete()
 

@@ -1,6 +1,8 @@
 """Discrete-time smoothers via cuthbert: Kalman, Taylor-KF, and PF backward sampling."""
 
+from collections.abc import Callable
 from functools import partial
+from typing import cast
 
 import jax
 import jax.numpy as jnp
@@ -83,22 +85,25 @@ def _kalman_get_dynamics_params(dynamics: DynamicalModel):
 
 
 def _taylor_get_dynamics_log_density(dynamics: DynamicalModel):
+    transition = cast(
+        Callable[
+            [jax.Array, jax.Array | None, jax.Array, jax.Array], dist.Distribution
+        ],
+        dynamics.state_evolution,
+    )
+
     def get_dynamics_log_density(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
     ):
         def dynamics_log_density(x_prev, x):
             normal_logp = jnp.asarray(
-                dynamics.state_evolution(
-                    x_prev, mi.u_prev, mi.time_prev, mi.time
-                ).log_prob(x)
+                transition(x_prev, mi.u_prev, mi.time_prev, mi.time).log_prob(x)
             ).sum()
             noop_logp = -1e10 * jnp.sum((x - x_prev) ** 2)
             return jnp.where(mi.is_first_step, noop_logp, normal_logp)
 
         x_prev_lin = jnp.atleast_1d(jnp.asarray(state.mean))
-        dist_at_lin = dynamics.state_evolution(
-            x_prev_lin, mi.u_prev, mi.time_prev, mi.time
-        )
+        dist_at_lin = transition(x_prev_lin, mi.u_prev, mi.time_prev, mi.time)
         try:
             x_lin = jnp.atleast_1d(jnp.asarray(dist_at_lin.mean))
         except Exception as exc:

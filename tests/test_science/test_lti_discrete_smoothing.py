@@ -77,13 +77,15 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
         plt.savefig(output_dir / "data_generation.png", dpi=150, bbox_inches="tight")
         plt.close()
 
+    config: KFSmootherConfig | PFSmootherConfig
+    kernel_cls: type[NUTS] | type[BarkerMH]
     if smoother_type == "kf":
         config = KFSmootherConfig(
             filter_source="cd_dynamax",
             record_smoothed_states_mean=True,
             record_smoothed_states_cov_diag=True,
         )
-        kernel = NUTS
+        kernel_cls = NUTS
     else:
         config = PFSmootherConfig(
             filter_source="cuthbert",
@@ -91,7 +93,7 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
             record_smoothed_states_mean=True,
             record_smoothed_states_cov_diag=True,
         )
-        kernel = BarkerMH
+        kernel_cls = BarkerMH
 
     def data_conditioned_model():
         with Smoother(smoother_config=config):
@@ -101,7 +103,7 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
             )
 
     mcmc = MCMC(
-        kernel(data_conditioned_model),
+        kernel_cls(data_conditioned_model),
         num_samples=num_samples,
         num_warmup=num_samples,
     )
