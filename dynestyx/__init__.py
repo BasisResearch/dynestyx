@@ -7,6 +7,7 @@ __version__ = version("dynestyx")
 from dynestyx.discretizers import Discretizer, euler_maruyama
 from dynestyx.handlers import plate, sample
 from dynestyx.inference.filters import Filter
+from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -41,6 +42,7 @@ __all__ = [
     "Discretizer",
     "ObservationModel",
     "Filter",
+    "Smoother",
     "flatten_draws",
     "plate",
     "sample",
