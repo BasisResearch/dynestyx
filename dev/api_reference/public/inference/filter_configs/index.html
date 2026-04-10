@@ -2272,6 +2272,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#discrete-state-space-configuration-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Discrete State-Space Configuration Classes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filter_configs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter_configs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.filter_configs.HMMConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HMMConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -4263,7 +4296,7 @@ skips observation linearisation.</p>
 linearizations of <span class="arithmatex">\(f\)</span> and <span class="arithmatex">\(h\)</span>:</p>
 <div class="arithmatex">\[
     \hat x_{t|t-1} = f(\hat x_{t-1|t-1}),
-    \quad P_{t|t-1} = F_t P_{t-1|t-1} F_t^      op + Q_t
+    \quad P_{t|t-1} = F_t P_{t-1|t-1} F_t^\top + Q_t
 \]</div>
 <p>where <span class="arithmatex">\(F_t\)</span> is the Jacobian of <span class="arithmatex">\(f\)</span> at <span class="arithmatex">\(\hat x_{t|t-1}\)</span>,
 and proceeds via the typical Kalman update.</p>
@@ -5338,6 +5371,166 @@ SDE model without requiring gradients.</p>
     Autodifferentiable ensemble Kalman filters. SIAM Journal on Mathematics of Data Science, 4(2), 801-833.
     <a href="https://epubs.siam.org/doi/abs/10.1137/21M1434477">Available Online</a>.</li>
 </ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="discrete-state-space-configuration-classes">Discrete State-Space Configuration Classes<a class="headerlink" href="#discrete-state-space-configuration-classes" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="dynestyx.inference.filter_configs"></a>
+    <div class="doc doc-contents first">
+
+        <p>Filter configuration dataclasses. Shared by dispatchers and integration backends.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.filter_configs.HMMConfig" class="doc doc-heading">
+            <code>HMMConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.filter_configs.HMMConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.BaseFilterConfig)" href="../../../developer/inference/filter_configs/#dynestyx.inference.filter_configs.BaseFilterConfig">BaseFilterConfig</a></code></p>
+
+
+
+        <p>Exact filter for Hidden Markov Models (finite discrete state space).</p>
+<p>Use this when your latent state takes values in a finite set (e.g. a
+discrete regime model). The forward algorithm computes the exact marginal
+log-likelihood and filtered belief over states at each time step.</p>
+<p>For continuous latent-state models, use any other filter config.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.filter_configs.HMMConfig.record_filtered">record_filtered</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the filtered state probabilities
+<span class="arithmatex">\(p(z_t \mid y_{1:t})\)</span> as a deterministic site. <code>None</code> defers to
+the backend default.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.filter_configs.HMMConfig.record_log_filtered">record_log_filtered</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the log of the filtered state
+probabilities as a deterministic site. <code>None</code> defers to the
+backend default.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.filter_configs.HMMConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="dynestyx.inference.filter_configs.FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"dynestyx"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>At each step the belief vector <span class="arithmatex">\(\pi_t = p(z_t \mid y_{1:t})\)</span> is
+updated exactly:</p>
+<div class="arithmatex">\[
+    \pi_t^{\text{pred}} = T^\top \pi_{t-1}, \quad
+    \pi_t \propto \ell(y_t \mid z_t) \, \pi_t^{\text{pred}}
+\]</div>
+<p>The log-likelihood is the sum of the log normalisation constants.</p>
 </details>
 
 

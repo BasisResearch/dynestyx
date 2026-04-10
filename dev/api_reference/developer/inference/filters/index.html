@@ -4619,7 +4619,7 @@ skips observation linearisation.</p>
 linearizations of <span class="arithmatex">\(f\)</span> and <span class="arithmatex">\(h\)</span>:</p>
 <div class="arithmatex">\[
     \hat x_{t|t-1} = f(\hat x_{t-1|t-1}),
-    \quad P_{t|t-1} = F_t P_{t-1|t-1} F_t^      op + Q_t
+    \quad P_{t|t-1} = F_t P_{t-1|t-1} F_t^\top + Q_t
 \]</div>
 <p>where <span class="arithmatex">\(F_t\)</span> is the Jacobian of <span class="arithmatex">\(f\)</span> at <span class="arithmatex">\(\hat x_{t|t-1}\)</span>,
 and proceeds via the typical Kalman update.</p>
@@ -5214,8 +5214,8 @@ backend default.</p>
 <p>At each step the belief vector <span class="arithmatex">\(\pi_t = p(z_t \mid y_{1:t})\)</span> is
 updated exactly:</p>
 <div class="arithmatex">\[
-    \pi_t^{     ext{pred}} = T^ op \pi_{t-1}, \quad
-    \pi_t \propto \ell(y_t \mid z_t) \, \pi_t^{ ext{pred}}
+    \pi_t^{\text{pred}} = T^\top \pi_{t-1}, \quad
+    \pi_t \propto \ell(y_t \mid z_t) \, \pi_t^{\text{pred}}
 \]</div>
 <p>The log-likelihood is the sum of the log normalisation constants.</p>
 </details>
