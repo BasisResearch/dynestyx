@@ -31,9 +31,9 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     """
 
     A: jax.Array
+    cov: jax.Array
     B: jax.Array | None = None
     bias: jax.Array | None = None
-    cov: jax.Array
 
     def __init__(
         self,

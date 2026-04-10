@@ -27,6 +27,7 @@ nav:
       - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
       - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
       - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
+      - Hierarchical inference: tutorials/gentle_intro/08_hierarchical_inference.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -66,7 +67,7 @@ nav:
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
       - Handlers:
-        - Sample: api_reference/public/handlers.md
+        - Sample & Plate: api_reference/public/handlers.md
       - Simulators:
         - Simulator Classes:
           - Overview: api_reference/public/simulators/overview.md
@@ -82,8 +83,10 @@ nav:
       - Models:
         - Core Models: api_reference/developer/models/core_models.md
         - Specialized Models: api_reference/developer/models/specialized_models.md
+        - Checkers: api_reference/developer/models/checkers.md
       - Inference:
         - Filters: api_reference/developer/inference/filters.md
+        - Checkers: api_reference/developer/inference/checkers.md
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
         - MCMC: api_reference/developer/inference/mcmc.md
         - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
@@ -93,6 +96,7 @@ nav:
       - Simulators:
         - Simulators: api_reference/developer/simulators.md
       - Handlers: api_reference/developer/handlers.md
+      - Utils: api_reference/developer/utils.md
       - Diagnostics:
         - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - FAQ: faq.md
