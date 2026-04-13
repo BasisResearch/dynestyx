@@ -9,14 +9,21 @@ import jax.random as jr
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
-FilterSource = Literal["cuthbert", "cd_dynamax", "dynestyx"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
 FilterStateOrder = Literal["zeroth", "first", "second"]
+
+CuthbertOnlyFilterSource = Literal["cuthbert"]
+CDDynamaxOnlyFilterSource = Literal["cd_dynamax"]
+DynestyxOnlyFilterSource = Literal["dynestyx"]
+FilterSource = (
+    CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource | DynestyxOnlyFilterSource
+)
+CuthbertOrCDDynamaxFilterSource = CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource
 
 
 @dataclasses.dataclass
 class BaseFilterConfig:
-    """Shared configuration options inherited by all filter configs.
+    r"""Shared configuration options inherited by all filter configs.
 
     You do not instantiate this class directly; use one of the concrete
     subclasses (e.g. `KFConfig`, `PFConfig`).
@@ -152,7 +159,7 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -261,12 +268,12 @@ class PFConfig(BaseFilterConfig):
         default_factory=PFResamplingConfig
     )
     ess_threshold_ratio: float = 0.7
-    filter_source: FilterSource = "cuthbert"
+    filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
 
 @dataclasses.dataclass
 class EKFConfig(BaseFilterConfig):
-    """Extended Kalman Filter (EKF) for discrete-time models.
+    r"""Extended Kalman Filter (EKF) for discrete-time models.
 
     The EKF linearizes nonlinear dynamics at the current mean estimate
     via a first-order Taylor expansion. It is fast and simple, but may
@@ -308,7 +315,7 @@ class EKFConfig(BaseFilterConfig):
             [Available Online](https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf).
     """
 
-    filter_source: FilterSource = "cuthbert"
+    filter_source: CuthbertOrCDDynamaxFilterSource = "cuthbert"
     filter_emission_order: FilterEmissionOrder = "first"
 
 
@@ -368,7 +375,7 @@ class KFConfig(BaseFilterConfig):
         - For more details on the `cuthbert` implementation, see the [cuthbert documentation](https://state-space-models.github.io/cuthbert/cuthbert_api/gaussian/kalman/).
     """
 
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -415,7 +422,7 @@ class UKFConfig(BaseFilterConfig):
     alpha: float = math.sqrt(3)
     beta: int = 2
     kappa: int = 1
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -483,7 +490,7 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
             [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
     """
 
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -513,7 +520,7 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
             [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -541,7 +548,7 @@ class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
         See `PFConfig` for more information.
     """
 
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
     resampling_method: PFResamplingConfig = dataclasses.field(
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
@@ -570,7 +577,7 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
             [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
     """
 
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -596,7 +603,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
             [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
     """
 
-    filter_source: FilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 DiscreteTimeConfigs: tuple[type, ...] = (
@@ -618,7 +625,7 @@ ContinuousTimeConfigs: tuple[type, ...] = (
 
 @dataclasses.dataclass
 class HMMConfig(BaseFilterConfig):
-    """Exact filter for Hidden Markov Models (finite discrete state space).
+    r"""Exact filter for Hidden Markov Models (finite discrete state space).
 
     Use this when your latent state takes values in a finite set (e.g. a
     discrete regime model). The forward algorithm computes the exact marginal
@@ -649,7 +656,7 @@ class HMMConfig(BaseFilterConfig):
 
     record_filtered: bool | None = None
     record_log_filtered: bool | None = None
-    filter_source: FilterSource = "dynestyx"
+    filter_source: DynestyxOnlyFilterSource = "dynestyx"
 
 
 HMMConfigs: tuple[type, ...] = (HMMConfig,)

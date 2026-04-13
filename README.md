@@ -22,15 +22,15 @@ Simultaneously, many strong solutions exist for inference in dynamical systems; 
 
 For installation, we recommend [`uv`](https://docs.astral.sh/uv/):
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install git+https://github.com/BasisResearch/dynestyx.git
+uv pip install dynestyx
 ```
 
 But `pip` works as well:
 ```bash
-pip install git+https://github.com/BasisResearch/dynestyx.git
+pip install dynestyx
 ```
+
+> **Developers**: See [Contributing Guidelines](CONTRIBUTING.md) for the development setup using `uv sync`.
 
 ## Quickstart
 

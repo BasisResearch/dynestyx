@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.0.2"
+version = "0.0.5"
 description = "NumPyro integration for dynamical systems"
 readme = "README.md"
 license = "Apache-2.0"
@@ -25,14 +25,15 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "effectful",
-    "cuthbert @ git+https://github.com/state-space-models/cuthbert.git#subdirectory=pkg/cuthbert",
-    "cuthbertlib @ git+https://github.com/state-space-models/cuthbert.git#subdirectory=pkg/cuthbertlib",
-    "cd-dynamax @ git+https://github.com/HD-UQ/cd_dynamax.git@public",
+    "cuthbert>=0.0.9",
+    "cuthbertlib>=0.0.9",
+    "cd-dynamax",
     "matplotlib>=3.10.7",
     "numpyro>=0.19.0",
     "pytest>=9.0.1",
@@ -45,7 +46,8 @@ dependencies = [
     "equinox>=0.13.2",
     "jax>=0.6.2",
     "jaxlib>=0.6.2",
-    "tfp-nightly>=0.26.0dev20250530"
+    "tfp-nightly>=0.26.0dev20250530",
+    "orbax-checkpoint<0.11.3; sys_platform == 'win32'"
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -53,10 +55,6 @@ packages = ["dynestyx"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
-
-[tool.uv.sources]
-cuthbert = { git = "https://github.com/state-space-models/cuthbert.git", subdirectory = "pkg/cuthbert"}
-cd-dynamax = { git = "https://github.com/HD-UQ/cd_dynamax.git", branch = "public" }
 
 [dependency-groups]
 dev = [
@@ -67,10 +65,10 @@ dev = [
     "pytest>=9.0.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.11",
-    "mkdocs-jupyter>=0.25.1",
+    "mkdocs-jupyter>=0.25.1,<0.26.0",
+    "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
-    "mkdocs-jupyter>=0.24,<0.26",
     "nbconvert>=7"
 ]
 

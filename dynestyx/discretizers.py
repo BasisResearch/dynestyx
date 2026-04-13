@@ -10,11 +10,32 @@ from dynestyx.models import (
     DiscreteTimeStateEvolution,
     DynamicalModel,
 )
+from dynestyx.models.checkers import _infer_bm_dim
 from dynestyx.types import FunctionOfTime
+
+
+def _ensure_ctse_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
+    """Infer and set bm_dim when CT dynamics are built under active plates."""
+    if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+        return dynamics
+
+    cte = dynamics.state_evolution
+    if cte.diffusion_coefficient is None or cte.bm_dim is not None:
+        return dynamics
+
+    x0 = jnp.zeros((dynamics.state_dim,))
+    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
+    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
+    inferred_bm_dim = _infer_bm_dim(cte, dynamics.state_dim, x0, u0, t0)
+    if inferred_bm_dim is not None:
+        object.__setattr__(cte, "bm_dim", inferred_bm_dim)
+    return dynamics
 
 
 class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
     """x_{t+1} ~ N(x + drift*dt, (L@Q@L.T)*dt)."""
+
+    cte: ContinuousTimeStateEvolution
 
     def __init__(self, cte: ContinuousTimeStateEvolution):
         self.cte = cte
@@ -180,6 +201,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
@@ -187,6 +209,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> FunctionOfTime:
         if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+            dynamics = _ensure_ctse_bm_dim(dynamics)
             discrete_evolution = self.discretize(dynamics.state_evolution)
             dynamics = DynamicalModel(
                 initial_condition=dynamics.initial_condition,
@@ -194,10 +217,12 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 observation_model=dynamics.observation_model,
                 control_model=dynamics.control_model,
                 control_dim=dynamics.control_dim,
+                t0=dynamics.t0,
             )
         return fwd(
             name,
             dynamics,
+            plate_shapes=plate_shapes,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,

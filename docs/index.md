@@ -20,15 +20,13 @@ Why `dynestyx`? It seamlessly wraps our favorite ways to learn dynamics from mes
 We recommend [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install git+https://github.com/BasisResearch/dynestyx.git
+uv pip install dynestyx
 ```
 
 Or with `pip`:
 
 ```bash
-pip install git+https://github.com/BasisResearch/dynestyx.git
+pip install dynestyx
 ```
 
 !!! tip "Documentation versions"

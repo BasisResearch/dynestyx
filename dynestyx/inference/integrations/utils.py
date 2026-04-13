@@ -1,6 +1,7 @@
 from typing import Any
 
 import jax
+import jax.numpy as jnp
 import numpyro.distributions as dist
 from numpyro.distributions import constraints
 
@@ -25,8 +26,8 @@ class WeightedParticles(dist.Distribution):
         learnable distribution parameters.
 
     Args:
-        particles: Array of shape ``(n_particles, state_dim)``.
-        log_weights: Array of shape ``(n_particles,)`` containing
+        particles: Array of shape ``(*batch_shape, n_particles, state_dim)``.
+        log_weights: Array of shape ``(*batch_shape, n_particles)`` containing
             (possibly unnormalized) log weights.
     """
 
@@ -39,10 +40,20 @@ class WeightedParticles(dist.Distribution):
     def __init__(
         self, particles: jax.Array, log_weights: jax.Array, validate_args=None
     ):
-        self.particles = particles  # (n_particles, state_dim)
-        self.log_weights = log_weights  # (n_particles,)
-        batch_shape = ()
-        event_shape = particles.shape[1:]
+        if particles.ndim < 2:
+            raise ValueError(
+                "particles must have shape (*batch_shape, n_particles, state_dim)."
+            )
+        if log_weights.shape != particles.shape[:-1]:
+            raise ValueError(
+                "log_weights must have shape particles.shape[:-1]. "
+                f"Got particles.shape={particles.shape}, log_weights.shape={log_weights.shape}."
+            )
+
+        self.particles = particles
+        self.log_weights = log_weights
+        batch_shape = particles.shape[:-2]
+        event_shape = particles.shape[-1:]
         super().__init__(
             batch_shape=batch_shape,
             event_shape=event_shape,
@@ -51,7 +62,17 @@ class WeightedParticles(dist.Distribution):
 
     def sample(self, key, sample_shape=()):
         idx = dist.Categorical(logits=self.log_weights).sample(key, sample_shape)
-        return self.particles[idx]
+        n_particles = self.particles.shape[-2]
+        state_dim = self.particles.shape[-1]
+
+        particles = jnp.broadcast_to(
+            self.particles,
+            idx.shape + (n_particles, state_dim),
+        )
+        flat_particles = particles.reshape((-1, n_particles, state_dim))
+        flat_idx = idx.reshape((-1,))
+        sampled = jax.vmap(lambda p, i: p[i])(flat_particles, flat_idx)
+        return sampled.reshape(idx.shape + (state_dim,))
 
     def log_prob(self, value):
         raise NotImplementedError("log_prob is not implemented for WeightedParticles.")
@@ -79,10 +100,5 @@ def particles_to_delta_mixtures(
         f"got {particles.shape[:2]} and {log_weights.shape[:2]}."
     )
 
-    log_weights_norm = log_weights - jax.scipy.special.logsumexp(
-        log_weights, axis=-1, keepdims=True
-    )
-    return [
-        WeightedParticles(particles[i], log_weights_norm[i])
-        for i in range(particles.shape[0])
-    ]
+    z = jax.nn.log_softmax(log_weights, axis=-1)
+    return [WeightedParticles(particles[i], z[i]) for i in range(particles.shape[0])]

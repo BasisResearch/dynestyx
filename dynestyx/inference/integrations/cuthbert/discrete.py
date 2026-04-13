@@ -54,8 +54,7 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     return kwargs
 
 
-def run_discrete_filter(
-    name: str,
+def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
     key: jax.Array | None = None,
@@ -64,28 +63,22 @@ def run_discrete_filter(
     obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
-    **kwargs,
-) -> list[dist.Distribution]:
-    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
+):
+    """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
     Returns:
-        list[dist.Distribution]: Filtered state distributions at each obs time.
+        tuple: (marginal_loglik, states) where states is the raw cuthbert filter state.
     """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
-    record_kwargs = _config_to_record_kwargs(filter_config)
 
     ys = obs_values
     T1 = int(ys.shape[0])
-    if T1 == 0:
-        return []
-
     times = obs_times
 
     if ctrl_values is None:
         control_dim = dynamics.control_dim
         ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
     elif ctrl_values.shape[0] > T1:
-        # Find controls aligned to obs_times.
         inds = jnp.searchsorted(ctrl_times, times, side="left")
         ctrl_values = ctrl_values[inds]
 
@@ -93,7 +86,6 @@ def run_discrete_filter(
     time_prev = jnp.concatenate([times[:1] - dt0, times[:-1]], axis=0)
     u_prev = jnp.concatenate([ctrl_values[:1], ctrl_values[:-1]], axis=0)
 
-    # Prepend dummy for init step (index 0 in cuthbert scan)
     dummy_y = jnp.zeros_like(ys[:1])
     dummy_u = jnp.zeros_like(ctrl_values[:1])
     dummy_time = jnp.zeros_like(times[:1])
@@ -126,20 +118,52 @@ def run_discrete_filter(
 
     states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
     marginal_loglik = states.log_normalizing_constant[-1]
+    return marginal_loglik, states
+
+
+def run_discrete_filter(
+    name: str,
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    key: jax.Array | None = None,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
+) -> list[dist.Distribution]:
+    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
+
+    Returns:
+        list[dist.Distribution]: Filtered state distributions at each obs time.
+    """
+    T1 = int(obs_values.shape[0])
+    if T1 == 0:
+        return []
+
+    marginal_loglik, states = compute_cuthbert_filter(
+        dynamics,
+        filter_config,
+        key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    record_kwargs = _config_to_record_kwargs(filter_config)
 
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
 
     if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
-        # PF: mixture of deltas
         particles = states.particles
         if particles.ndim == 2:
             particles = particles[..., None]
         return particles_to_delta_mixtures(particles, states.log_weights)
     else:
         _add_sites_taylor_kf(name, states, record_kwargs)
-        # KF/EKF: states.mean (T+1, state_dim), states.chol_cov (T+1, state_dim, state_dim)
         chol_t = jnp.transpose(states.chol_cov, (0, 2, 1))
         cov = jnp.matmul(states.chol_cov, chol_t)
         return [
@@ -391,10 +415,7 @@ def _add_sites_pf(
     )
 
     if need_filtered_means:
-        log_weights_norm = log_weights - jax.scipy.special.logsumexp(
-            log_weights, axis=1, keepdims=True
-        )
-        w = jnp.exp(log_weights_norm)[..., None]  # (T+1, n_particles, 1)
+        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T+1, n_particles, 1)
         filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:

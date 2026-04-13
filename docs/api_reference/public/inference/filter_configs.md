@@ -42,3 +42,10 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
         - ContinuousTimePFConfig
         - ContinuousTimeEnKFConfig
 
+
+## Discrete State-Space Configuration Classes
+
+::: dynestyx.inference.filter_configs
+    options:
+      members:
+        - HMMConfig

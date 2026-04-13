@@ -1,7 +1,9 @@
 """NumPyro-aware simulators/unrollers for dynamical models."""
 
 import dataclasses
+import itertools
 from collections.abc import Callable
+from contextlib import contextmanager
 from typing import Literal, cast
 
 import diffrax as dfx
@@ -17,6 +19,7 @@ from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -26,8 +29,13 @@ from dynestyx.models import (
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
+    _array_has_plate_dims,
     _build_control_path,
+    _dist_has_plate_batch_dims,
+    _ensure_continuous_bm_dim,
     _get_val_or_None,
+    _has_any_batched_plate_source,
+    _leaf_is_plate_batched,
     _validate_site_sorting,
 )
 
@@ -68,6 +76,141 @@ def _merge_segments(
     return out
 
 
+@contextmanager
+def _suspend_numpyro_plate_frames():
+    """Temporarily remove active numpyro.plate frames from the pyro stack.
+
+    This is necessary so that `numpyro.sample` statements can be called within
+    the simulator inside of a dsx.plate context."""
+    stack = numpyro.primitives._PYRO_STACK
+    original = list(stack)
+    stack[:] = [f for f in original if not isinstance(f, numpyro.primitives.plate)]
+    try:
+        yield
+    finally:
+        stack[:] = original
+
+
+def _slice_array_for_plate_member(
+    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+) -> Array | None:
+    """Slice leading plate dims if present; otherwise return unchanged.
+
+    This is used in our Simulator loops for plated dimensions: we choose the times/values
+    for a particular plate member.
+    """
+    if arr is None:
+        return None
+    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
+        return arr[plate_idx]
+    return arr
+
+
+def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
+    """Slice all plate-batched array leaves in a pytree for one plate member."""
+
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
+    def _slice_leaf(leaf):
+        if _leaf_is_plate_batched(leaf, plate_shapes):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree.map(_slice_leaf, tree, is_leaf=_is_distribution_leaf)
+
+
+def _slice_dist_for_plate_member(
+    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+):
+    """Slice plate-batched distribution parameters for one member.
+
+    To obtain distributions for a particular plate member, we must
+    slice the corresponding parameter arrays. This function implements
+    such slicing for:
+    - MixtureSameFamily
+    - MultivariateNormal
+    - Delta
+    - WeightedParticles
+    - Categorical
+    - Independent
+    - TransformedDistribution
+    """
+    if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
+        return dist_obj
+
+    def _slice_required_array(arr_like) -> Array:
+        arr = jnp.asarray(arr_like)
+        sliced = _slice_array_for_plate_member(arr, plate_shapes, plate_idx)
+        if sliced is None:
+            raise ValueError("Expected a concrete array when slicing plate member.")
+        return sliced
+
+    # Rebuild common distributions explicitly so cached/static batch metadata is
+    # consistent after slicing.
+    if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
+        mixture = _slice_dist_for_plate_member(
+            dist_obj.mixing_distribution, plate_shapes, plate_idx
+        )
+        components = _slice_dist_for_plate_member(
+            dist_obj.component_distribution, plate_shapes, plate_idx
+        )
+        return numpyro.distributions.MixtureSameFamily(mixture, components)
+
+    if isinstance(dist_obj, numpyro.distributions.MultivariateNormal):
+        loc = _slice_required_array(dist_obj.loc)
+        cov = _slice_required_array(dist_obj.covariance_matrix)
+        return numpyro.distributions.MultivariateNormal(
+            loc=loc,
+            covariance_matrix=cov,
+        )
+
+    if isinstance(dist_obj, numpyro.distributions.Delta):
+        value = _slice_required_array(dist_obj.v)
+        log_density = _slice_required_array(dist_obj.log_density)
+        return numpyro.distributions.Delta(
+            value,
+            log_density=log_density,
+            event_dim=dist_obj.event_dim,
+        )
+
+    if isinstance(dist_obj, WeightedParticles):
+        particles = _slice_required_array(dist_obj.particles)
+        log_weights = _slice_required_array(dist_obj.log_weights)
+        return WeightedParticles(particles=particles, log_weights=log_weights)
+
+    if dist_obj.__class__.__name__.startswith("Categorical"):
+        if dist_obj.logits is not None:
+            logits = _slice_required_array(dist_obj.logits)
+            return numpyro.distributions.Categorical(logits=logits)
+        probs = _slice_required_array(dist_obj.probs)
+        return numpyro.distributions.Categorical(probs=probs)
+
+    if isinstance(dist_obj, numpyro.distributions.Independent):
+        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        return numpyro.distributions.Independent(
+            base,
+            dist_obj.reinterpreted_batch_ndims,
+        )
+
+    if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
+        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        transforms = getattr(dist_obj, "transforms")
+        return numpyro.distributions.TransformedDistribution(
+            base,
+            transforms,
+        )
+
+    def _slice_leaf(leaf):
+        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
+            leaf, plate_shapes, min_suffix_ndim=1
+        ):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree.map(_slice_leaf, dist_obj)
+
+
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
@@ -90,8 +233,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
     n_simulations: int = 1
 
-    @implements(_sample_intp)
-    def _sample_ds(
+    def _run_single_member_simulation(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -104,12 +246,25 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_times=None,
         filtered_dists=None,
         **kwargs,
-    ) -> FunctionOfTime:
+    ) -> dict[str, Array] | None:
+        """Run simulator logic for one unbatched member and return trajectories."""
+        dynamics = _ensure_continuous_bm_dim(dynamics)
+
+        if (
+            filtered_times is not None
+            and filtered_dists is None
+            and predict_times is not None
+        ):
+            raise ValueError(
+                "Rollout requested with filtered_times but missing filtered_dists. "
+                "Plate-aware rollout requires filtered distributions from the filter."
+            )
+
         # Need times to simulate: predict_times or obs_times
         # For filter rollout, need predict_times
         if predict_times is None:
             if obs_times is None or filtered_times is not None:
-                return fwd(name, dynamics, **kwargs)
+                return None
 
         filter_rollout = filtered_times is not None and filtered_dists is not None
 
@@ -191,14 +346,183 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             }
             n_sim_out = results["predicted_states"].shape[0]
             results["predicted_times"] = _tile_times(predict_times, n_sim_out)
+            return results
 
-        else:
-            if self.n_simulations > 1 and obs_values is not None:
-                raise ValueError(
-                    "n_simulations > 1 is only supported when obs_values is None "
-                    "(forward simulation only)"
+        if self.n_simulations > 1 and obs_values is not None:
+            raise ValueError(
+                "n_simulations > 1 is only supported when obs_values is None "
+                "(forward simulation only)"
+            )
+        return self._simulate(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+            **kwargs,
+        )
+
+    def _run_plated_simulation(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        plate_shapes: tuple[int, ...],
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        predict_times=None,
+        filtered_times=None,
+        filtered_dists=None,
+        **kwargs,
+    ) -> dict[str, Array] | None:
+        """Run simulator over all plate members and stack outputs.
+
+        Plated simulation enumerates over all plate members and runs
+        individual simulations. This is somewhat slower than vmapping,
+        but maintains full compatibility with NumPyro's sample semantics."""
+        if not _has_any_batched_plate_source(
+            dynamics,
+            plate_shapes,
+            arrays=(
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                predict_times,
+                filtered_times,
+            ),
+            dists=filtered_dists,
+        ):
+            raise ValueError(
+                "Plate simulator received plate_shapes but no plate-batched dynamics/data "
+                "sources were found. At least one source must have leading dimensions "
+                "matching plate_shapes."
+            )
+
+        plate_indices = list(itertools.product(*[range(s) for s in plate_shapes]))
+        member_results: list[dict[str, Array]] = []
+
+        for plate_idx in plate_indices:
+            member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
+
+            # We begin by slicing the dynamics tree for each plate member.
+            member_dynamics = _slice_tree_for_plate_member(
+                dynamics, plate_shapes, plate_idx
+            )
+
+            # If initial conditions have plate dimensions, we also slice & apply them.
+            if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
+                member_initial_condition = _slice_dist_for_plate_member(
+                    dynamics.initial_condition, plate_shapes, plate_idx
                 )
-            results = self._simulate(
+                member_dynamics = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    member_dynamics,
+                    member_initial_condition,
+                    is_leaf=lambda x: x is None,
+                )
+
+            # We then slice each other source to find the member's times/values.
+            member_obs_times = _slice_array_for_plate_member(
+                obs_times, plate_shapes, plate_idx
+            )
+            member_obs_values = _slice_array_for_plate_member(
+                obs_values, plate_shapes, plate_idx
+            )
+            member_ctrl_times = _slice_array_for_plate_member(
+                ctrl_times, plate_shapes, plate_idx
+            )
+            member_ctrl_values = _slice_array_for_plate_member(
+                ctrl_values, plate_shapes, plate_idx
+            )
+            member_predict_times = _slice_array_for_plate_member(
+                predict_times, plate_shapes, plate_idx
+            )
+            member_filtered_times = _slice_array_for_plate_member(
+                filtered_times, plate_shapes, plate_idx
+            )
+
+            # Same distribution slicing logic as above, but for prediction.
+            member_filtered_dists = None
+            if filtered_dists is not None:
+                member_filtered_dists = [
+                    _slice_dist_for_plate_member(d, plate_shapes, plate_idx)
+                    for d in filtered_dists
+                ]
+
+            # To perform inference, we need to suspend the active numpyro.plate frames
+            # This is because the simulator has unguarded numpyro.sample statements inside,
+            # which would otherwise create nested plate frames.
+            with _suspend_numpyro_plate_frames():
+                member_result = self._run_single_member_simulation(
+                    member_name,
+                    member_dynamics,
+                    obs_times=member_obs_times,
+                    obs_values=member_obs_values,
+                    ctrl_times=member_ctrl_times,
+                    ctrl_values=member_ctrl_values,
+                    predict_times=member_predict_times,
+                    filtered_times=member_filtered_times,
+                    filtered_dists=member_filtered_dists,
+                    **kwargs,
+                )
+
+            if member_result is not None:
+                member_results.append(member_result)
+
+        if not member_results:
+            return None
+
+        keys = member_results[0].keys()
+        for result in member_results:
+            if result.keys() != keys:
+                raise ValueError(
+                    "Plate simulator members returned inconsistent result keys."
+                )
+
+        stacked: dict[str, Array] = {}
+        for key in keys:
+            values = [r[key] for r in member_results]
+            flat = jnp.stack(values, axis=0)
+            stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
+        return stacked
+
+    @implements(_sample_intp)
+    def _sample_ds(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        plate_shapes=(),
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        predict_times=None,
+        filtered_times=None,
+        filtered_dists=None,
+        **kwargs,
+    ) -> FunctionOfTime:
+        if plate_shapes:
+            results = self._run_plated_simulation(
+                name,
+                dynamics,
+                plate_shapes=plate_shapes,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                predict_times=predict_times,
+                filtered_times=filtered_times,
+                filtered_dists=filtered_dists,
+                **kwargs,
+            )
+        else:
+            results = self._run_single_member_simulation(
                 name,
                 dynamics,
                 obs_times=obs_times,
@@ -206,16 +530,20 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
+                filtered_times=filtered_times,
+                filtered_dists=filtered_dists,
                 **kwargs,
             )
 
-        # Add the results from the simulator as deterministic sites
-        for site_name, trajectory in results.items():
-            numpyro.deterministic(f"{name}_{site_name}", trajectory)
+        if results is not None:
+            # Add the results from the simulator as deterministic sites
+            for site_name, trajectory in results.items():
+                numpyro.deterministic(f"{name}_{site_name}", trajectory)
 
         return fwd(
             name,
             dynamics,
+            plate_shapes=plate_shapes,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,

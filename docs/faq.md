@@ -93,7 +93,7 @@ The `n_simulations` parameter is available on `DiscreteTimeSimulator`, `SDESimul
 
 ## What about hierarchical models?
 
-Feature coming soon.
+Hierarchical models are supported by the [`dsx.plate`](./api_reference/public/handlers.md) primitive! This allows for multiple levels of hierarchy (e.g., modelling populations, treatment arms, and individuals within each treatment arm), or simple multi-trajectory inference. You can see an example [here](./tutorials/gentle_intro/08_hierarchical_inference.ipynb).
 
 ## What about neural nets?
 

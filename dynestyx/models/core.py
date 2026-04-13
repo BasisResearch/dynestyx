@@ -1,6 +1,5 @@
 """Core interfaces and base classes for dynamical models."""
 
-import dataclasses
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -10,9 +9,16 @@ import jax.numpy as jnp
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
+    _infer_bm_dim,
+    _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
+    _inside_numpyro_plate_context,
     _is_categorical_distribution,
     _make_probe_state,
+    _validate_categorical_state,
+    _validate_continuous_time_flag,
+    _validate_observation_dim,
+    _validate_state_dim,
     _validate_state_evolution_output_shape,
 )
 from dynestyx.types import Control, State, Time, dState
@@ -101,13 +107,7 @@ class DynamicalModel(eqx.Module):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
         )
-        if (
-            continuous_time is not None
-            and bool(continuous_time) != inferred_continuous_time
-        ):
-            raise ValueError(
-                "continuous_time does not match inferred state_evolution type."
-            )
+        _validate_continuous_time_flag(continuous_time, inferred_continuous_time)
         self.continuous_time = inferred_continuous_time
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
@@ -118,23 +118,53 @@ class DynamicalModel(eqx.Module):
         inferred_state_dim = _infer_vector_dim_from_distribution(
             initial_condition, "initial_condition"
         )
-        if state_dim is not None and int(state_dim) != int(inferred_state_dim):
-            raise ValueError(
-                "state_dim does not match inferred initial_condition shape. "
-                f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
-            )
+        _validate_state_dim(state_dim, inferred_state_dim)
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
-        if (
-            categorical_state is not None
-            and bool(categorical_state) != inferred_categorical_state
-        ):
-            raise ValueError(
-                "categorical_state does not match inferred initial_condition type. "
-                f"Got categorical_state={categorical_state}, "
-                f"inferred={inferred_categorical_state}."
-            )
+        _validate_categorical_state(categorical_state, inferred_categorical_state)
         if control_dim is None:
             control_dim = 0
+
+        # Skip shape validation when inside a numpyro plate context, since
+        # batched parameters produce shapes that don't match unbatched expectations.
+        _inside_plate = _inside_numpyro_plate_context()
+
+        if _inside_plate:
+            # Cannot validate shapes with batched parameters; trust the user.
+            # Infer observation_dim from observation model if not explicitly provided.
+            inferred_obs_dim = _infer_observation_dim_in_plate_context(
+                initial_condition=initial_condition,
+                observation_model=observation_model,
+                inferred_state_dim=inferred_state_dim,
+                control_dim=control_dim,
+                t0=t0,
+                observation_dim=observation_dim,
+            )
+            self.state_dim = int(inferred_state_dim)
+            self.observation_dim = inferred_obs_dim
+            self.control_dim = int(control_dim)
+            self.categorical_state = bool(inferred_categorical_state)
+
+            # Infer bm_dim for continuous-time models
+            if inferred_continuous_time and isinstance(
+                state_evolution, ContinuousTimeStateEvolution
+            ):
+                x0 = jnp.zeros((inferred_state_dim,))
+                u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+                dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+                inferred_bm_dim = _infer_bm_dim(
+                    state_evolution, inferred_state_dim, x0, u0, dummy_t0
+                )
+                if inferred_bm_dim is not None:
+                    if (
+                        state_evolution.bm_dim is not None
+                        and inferred_bm_dim != state_evolution.bm_dim
+                    ):
+                        raise ValueError(
+                            "bm_dim does not match inferred diffusion_coefficient output shape. "
+                            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
+                        )
+                    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
+            return
 
         x0 = _make_probe_state(
             initial_condition=initial_condition, state_dim=inferred_state_dim
@@ -142,7 +172,7 @@ class DynamicalModel(eqx.Module):
         u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
         dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
 
-        _validate_state_evolution_output_shape(
+        inferred_bm_dim = _validate_state_evolution_output_shape(
             state_evolution=state_evolution,
             state_dim=inferred_state_dim,
             x0=x0,
@@ -150,18 +180,14 @@ class DynamicalModel(eqx.Module):
             t0=dummy_t0,
             continuous_time=self.continuous_time,
         )
+        if self.continuous_time and inferred_bm_dim != state_evolution.bm_dim:
+            object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
 
         obs_dist = observation_model(x0, u0, dummy_t0)
         inferred_observation_dim = _infer_vector_dim_from_distribution(
             obs_dist, "observation_model(x, u, t)"
         )
-        if observation_dim is not None and int(observation_dim) != int(
-            inferred_observation_dim
-        ):
-            raise ValueError(
-                "observation_dim does not match inferred observation_model output shape. "
-                f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
-            )
+        _validate_observation_dim(observation_dim, inferred_observation_dim)
 
         self.state_dim = int(inferred_state_dim)
         self.observation_dim = int(inferred_observation_dim)
@@ -248,8 +274,7 @@ class Potential(Protocol):
         raise NotImplementedError()
 
 
-@dataclasses.dataclass
-class ContinuousTimeStateEvolution:
+class ContinuousTimeStateEvolution(eqx.Module):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
 
@@ -283,9 +308,9 @@ class ContinuousTimeStateEvolution:
 
     drift: Drift | None = None
     potential: Potential | None = None
-    use_negative_gradient: bool = False
+    use_negative_gradient: bool = eqx.field(static=True, default=False)
     diffusion_coefficient: Drift | None = None
-    bm_dim: int | None = dataclasses.field(default=None, repr=False)
+    bm_dim: int | None = eqx.field(static=True, default=None)
 
     def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
         base = self.drift(x, u, t) if self.drift is not None else None
@@ -306,7 +331,7 @@ class ContinuousTimeStateEvolution:
         return base + grad_term
 
 
-class DiscreteTimeStateEvolution:
+class DiscreteTimeStateEvolution(eqx.Module):
     """
     Discrete-time state evolution via Markov transition distributions.
 
