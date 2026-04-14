@@ -7,8 +7,8 @@ from jax import vmap
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
-    DiscreteTimeStateEvolution,
     DynamicalModel,
+    GaussianStateEvolution,
 )
 from dynestyx.models.checkers import _infer_bm_dim
 from dynestyx.types import FunctionOfTime
@@ -32,91 +32,134 @@ def _ensure_ctse_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
     return dynamics
 
 
-class _EulerMaruyamaDiscreteEvolution(DiscreteTimeStateEvolution):
-    """x_{t+1} ~ N(x + drift*dt, (L@Q@L.T)*dt)."""
+def _euler_maruyama_loc_cov(
+    cte: ContinuousTimeStateEvolution,
+    x,
+    u,
+    t_now,
+    t_next,
+):
+    """Euler–Maruyama: mean `x + drift*dt`, cov `(L@Q@L.T)*dt` with `Q=I`.
+
+    Supports batched time (and optional control) matching the previous
+    `EulerMaruyamaGaussianStateEvolution` behavior.
+
+    Returns:
+        dict: {
+            "loc": ndarray
+                Mean of next state(s): shape (dim_state,) or (num_timepoints, dim_state)
+            "cov": ndarray
+                Covariance of next state(s): shape (dim_state, dim_state) or (num_timepoints, dim_state, dim_state)
+        }
+
+    """
+    squeezed = False
+    if x.ndim == 1:
+        squeezed = True
+        x = x[:, None]  # (dim_state, 1) state
+    if u is not None:
+        if u.ndim == 1:
+            u = u[:, None]  # (dim_control, 1) control
+    if t_now.ndim == 0:
+        t_now = t_now[None]  # (1,) timepoint
+    if t_next.ndim == 0:
+        t_next = t_next[None]  # (1,) timepoint
+
+    def _step(_x, _u, _t_now, _t_next):
+        _dt = _t_next - _t_now
+        drift = cte.total_drift(_x, _u, _t_now)
+        x_pred_mean = _x + drift * _dt
+        L = cte.diffusion_coefficient(_x, _u, _t_now)
+        if cte.bm_dim is None:
+            raise ValueError(
+                "ContinuousTimeStateEvolution.bm_dim is not set. "
+                "Construct dynamics via DynamicalModel before discretization."
+            )
+        Q = jnp.eye(cte.bm_dim)
+        x_pred_cov = L @ Q @ L.T * _dt
+        return x_pred_mean, x_pred_cov
+
+    if u is None:
+        loc, cov = vmap(_step, in_axes=(1, None, 0, 0))(x, None, t_now, t_next)
+    else:
+        loc, cov = vmap(_step, in_axes=(1, 1, 0, 0))(x, u, t_now, t_next)
+
+    # vmap stacks the time batch on axis 0: loc is (num_timepoints, dim_state),
+    # cov is (num_timepoints, dim_state, dim_state).
+    if squeezed:
+        loc = loc[0]
+        cov = cov[0]
+
+    return {"loc": loc, "cov": cov}
+
+
+class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
+    """Euler–Maruyama discretization as `GaussianStateEvolution`.
+
+    Holds ``cte`` as an explicit field so `DynamicalModel` pytrees under
+    `numpyro.plate` still expose batched continuous-time parameters for
+    simulator slicing (closures over ``cte`` alone would hide those arrays).
+
+    ``F`` and ``cov`` are optional constructor args so Equinox/dataclass-style
+    ``replace`` can rebuild the module with existing callables.
+    """
 
     cte: ContinuousTimeStateEvolution
 
-    def __init__(self, cte: ContinuousTimeStateEvolution):
+    def __init__(
+        self,
+        cte: ContinuousTimeStateEvolution,
+        F=None,
+        cov=None,
+    ):
+        # `F` and `cov` are accepted only for module reconstruction paths.
+        # Euler-Maruyama always derives both from `cte`.
+        del F, cov
         self.cte = cte
+        super().__init__(
+            F=lambda x, u, t_now, t_next: _euler_maruyama_loc_cov(
+                cte, x, u, t_now, t_next
+            )["loc"],
+            cov=lambda x, u, t_now, t_next: _euler_maruyama_loc_cov(
+                cte, x, u, t_now, t_next
+            )["cov"],
+        )
 
     def __call__(self, x, u, t_now, t_next):
+        """Single-pass transition; avoids calling ``F`` and ``cov`` separately.
+
+        The parent `GaussianStateEvolution.__call__` would evaluate the
+        Euler–Maruyama drift and diffusion twice. Under `jax.vmap` (e.g.
+        plate-batched cuthbert EKF), that split can change tracing/shapes. This
+        override matches the original one-step implementation.
         """
-        Discretize continuous-time state evolution via Euler-Maruyama. (CTSE) -> DTSE.
-
-        We step from t_now to t_next for each timepoint provided (optionally just 1 timepoint provided).
-        The main use case of providing multiple timepoints is when paired with DiracDeltaObservation that
-        allows temporal independence between observations, which allows us to step through all timepoints at once (creating big speedups).
-
-            Args:
-                x: (dim_state,) or (dim_state, num_timepoints)
-                u: (dim_control,) or (dim_control, num_timepoints)
-                t_now: (1,) or (num_timepoints,)
-                t_next: (1,) or (num_timepoints,)
-
-            Returns:
-                dist: MultivariateNormal distribution
-                    - loc: (dim_state, num_timepoints) or (dim_state)
-                    - covariance_matrix: (dim_state, dim_state, num_timepoints) or (dim_state, dim_state)
-        """
-
-        squeezed = False
-        if x.ndim == 1:
-            squeezed = True
-            x = x[:, None]  # (dim_state, 1) state
-        if u is not None:
-            if u.ndim == 1:
-                u = u[:, None]  # (dim_control, 1) control
-        if t_now.ndim == 0:
-            t_now = t_now[None]  # (1,) timepoint
-        if t_next.ndim == 0:
-            t_next = t_next[None]  # (1,) timepoint
-
-        def _step(_x, _u, _t_now, _t_next):
-            _dt = _t_next - _t_now
-            drift = self.cte.total_drift(_x, _u, _t_now)
-            x_pred_mean = _x + drift * _dt
-            L = self.cte.diffusion_coefficient(_x, _u, _t_now)
-            if self.cte.bm_dim is None:
-                raise ValueError(
-                    "ContinuousTimeStateEvolution.bm_dim is not set. "
-                    "Construct dynamics via DynamicalModel before discretization."
-                )
-            Q = jnp.eye(self.cte.bm_dim)
-            x_pred_cov = L @ Q @ L.T * _dt
-            return x_pred_mean, x_pred_cov
-
-        if u is None:
-            loc, cov = vmap(_step, in_axes=(1, None, 0, 0))(x, None, t_now, t_next)
-        else:
-            loc, cov = vmap(_step, in_axes=(1, 1, 0, 0))(x, u, t_now, t_next)
-
-        # If we lifted from unbatched, return unbatched dist shapes
-        if squeezed:
-            loc = loc[0]
-            cov = cov[0]
-
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+        em_result = _euler_maruyama_loc_cov(self.cte, x, u, t_now, t_next)
+        return dist.MultivariateNormal(
+            loc=em_result["loc"], covariance_matrix=em_result["cov"]
+        )
 
 
-def euler_maruyama(cte: ContinuousTimeStateEvolution) -> DiscreteTimeStateEvolution:
+def euler_maruyama(cte: ContinuousTimeStateEvolution) -> GaussianStateEvolution:
     """Discretize continuous-time state evolution via Euler-Maruyama.
 
-    Euler-Maruyama is a first-order discrete approximation of a continuous-time state evolution.
-    It is popular, as it is simple and effective for simple models.
-    The resulting discrete-time state evolution is linear and Gaussian.
+    Euler-Maruyama is a first-order discrete approximation of a continuous-time
+    SDE. The result is a `GaussianStateEvolution` with mean
+    `x + drift(x,u,t)*dt` and covariance `(L@Q@L.T)*dt` (`Q = I`),
+    where `dt = t_next - t_now`. The process covariance is **time-varying**
+    (depends on `t_next - t_now`) and passed as a callable `cov`.
 
     Args:
         cte: `ContinuousTimeStateEvolution` to discretize.
     Returns:
-        DiscreteTimeStateEvolution: The discretized state evolution.
+        GaussianStateEvolution: Discrete-time Gaussian transition with the
+        same Euler–Maruyama semantics as before this refactor.
 
     Note:
-        No dt is passed; it is set to t_next - t_now in the __call__ method.
+        No dt is passed; it is set to t_next - t_now in each step.
 
     ??? note "Algorithm Reference"
         The Euler Maruyama is a first order discretization.
-        The resulting discret-time state evolution is approximated as
+        The resulting discrete-time state evolution is approximated as
 
         x_{t+1} ~ N(x_t + drift * delta_t, (L@Q@L.T)*delta_t)
 
@@ -134,7 +177,8 @@ def euler_maruyama(cte: ContinuousTimeStateEvolution) -> DiscreteTimeStateEvolut
                 Applied Stochastic Differential Equations. Cambridge University Press.
                 [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
     """
-    return _EulerMaruyamaDiscreteEvolution(cte)
+
+    return EulerMaruyamaGaussianStateEvolution(cte)
 
 
 class Discretizer(ObjectInterpretation, HandlesSelf):
