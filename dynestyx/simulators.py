@@ -654,6 +654,12 @@ class SDESimulator(BaseSimulator):
           very high-dimensional latent path and is usually a **poor inference
           strategy** for parameters. Prefer filtering (`Filter` with
           `ContinuousTime*Config`) or particle methods instead.
+
+    Tip for speed:
+        - Use `source="em_scan"` if you are happy with a simple Euler-Maruyama forward simulation
+          (10–20x faster than Diffrax's implementation; see
+          [Diffrax Issue #517](https://github.com/patrick-kidger/diffrax/issues/517)).
+        - Use `source="diffrax"` if you want greater flexibility in the solver and step-size control.
     """
 
     def __init__(
