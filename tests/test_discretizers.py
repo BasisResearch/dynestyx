@@ -8,7 +8,6 @@ import dynestyx as dsx
 from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaGaussianStateEvolution,
-    _euler_maruyama_loc_cov,
     euler_maruyama,
 )
 from dynestyx.inference.filter_configs import EKFConfig
@@ -19,6 +18,7 @@ from dynestyx.models import (
     GaussianStateEvolution,
 )
 from dynestyx.models.observations import LinearGaussianObservation
+from dynestyx.solvers import euler_maruyama_loc_cov
 
 
 def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
@@ -69,7 +69,7 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
     x = jnp.array([0.3])
     t0 = jnp.array(1.0)
     t1 = jnp.array(3.0)
-    d_dict = _euler_maruyama_loc_cov(cte, x, None, t0, t1)
+    d_dict = euler_maruyama_loc_cov(cte, x, None, t0, t1)
     d = evo(x, None, t0, t1)
     assert jnp.allclose(d_dict["loc"], d.loc)
     assert jnp.allclose(d_dict["cov"], d.covariance_matrix)
