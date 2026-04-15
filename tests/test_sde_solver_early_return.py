@@ -44,6 +44,7 @@ def test_sde_solver_early_return_with_key(source, diffeqsolve_settings):
         control_path_eval=lambda t: None,
         diffeqsolve_settings=diffeqsolve_settings,
         key=jr.PRNGKey(0),
+        tol_vbt=0.01 if source == "diffrax" else None,
     )
 
     expected = jnp.broadcast_to(x0, (len(saveat_times), x0.shape[0]))
