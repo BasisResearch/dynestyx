@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, cast
+from typing import Literal
 
 import diffrax as dfx
 import jax.numpy as jnp
 import jax.random as jr
 from jax import Array, lax
 
-from dynestyx.models import DynamicalModel
+from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.types import State
+from dynestyx.utils import _coerce_dt
 
 
 def _apply_diffusion(diffusion_term: Array, dw: Array) -> Array:
@@ -23,6 +24,11 @@ def _apply_diffusion(diffusion_term: Array, dw: Array) -> Array:
             return diffusion_term * dw[0]
         return diffusion_term * dw
     return diffusion_term @ dw
+
+
+def _early_return_states(x0: State, saveat_times: Array) -> Array:
+    """Repeat initial state when no forward integration is required."""
+    return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
 
 
 def _solve_sde_scan(
@@ -39,8 +45,13 @@ def _solve_sde_scan(
         raise ValueError("PRNG key is required for em_scan SDE solves.")
     if dt0 <= 0:
         raise ValueError(f"EM scan requires dt0 > 0, got dt0={dt0}.")
+    if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+        raise TypeError(
+            "SDE solver requires ContinuousTimeStateEvolution, got "
+            f"{type(dynamics.state_evolution)}"
+        )
 
-    state_evolution = cast(Any, dynamics.state_evolution)
+    state_evolution = dynamics.state_evolution
     bm_dim = int(state_evolution.bm_dim) if state_evolution.bm_dim is not None else 1
 
     t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
@@ -100,51 +111,49 @@ def _solve_sde_diffrax(
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, Any],
+    diffeqsolve_settings: dict[str, object],
     *,
     key: Array | None,
     tol_vbt: float | None,
 ) -> Array:
-    t1 = saveat_times[-1]
-
-    def _early_return():
-        return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
-
-    def _solve():
-        if key is None:
-            raise ValueError("PRNG key is required for diffrax SDE solves.")
-
-        def _drift(t, y, args):
-            u_t = args(t) if args is not None else None
-            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
-
-        def _diffusion(t, y, args):
-            u_t = args(t) if args is not None else None
-            return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
-
-        k_bm, _ = jr.split(key, 2)
-        bm = dfx.VirtualBrownianTree(
-            t0=t0,
-            t1=t1,
-            tol=tol_vbt,
-            shape=(dynamics.state_evolution.bm_dim,),
-            key=k_bm,
+    if key is None:
+        raise ValueError("PRNG key is required for diffrax SDE solves.")
+    if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+        raise TypeError(
+            "SDE solver requires ContinuousTimeStateEvolution, got "
+            f"{type(dynamics.state_evolution)}"
         )
-        terms = dfx.MultiTerm(  # type: ignore[arg-type]
-            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-        )
-        sol = dfx.diffeqsolve(
-            terms,
-            t0=t0,
-            t1=t1,
-            y0=x0,
-            saveat=dfx.SaveAt(ts=saveat_times),
-            args=control_path_eval,
-            **diffeqsolve_settings,
-        )
-        return sol.ys
 
-    return lax.cond(t0 >= t1, _early_return, _solve)
+    def _drift(t, y, args):
+        u_t = args(t) if args is not None else None
+        return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
+
+    def _diffusion(t, y, args):
+        u_t = args(t) if args is not None else None
+        u_t = args(t) if args is not None else None
+        return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+
+    k_bm, _ = jr.split(key, 2)
+    bm = dfx.VirtualBrownianTree(
+        t0=t0,
+        t1=saveat_times[-1],
+        tol=tol_vbt,
+        shape=(dynamics.state_evolution.bm_dim,),
+        key=k_bm,
+    )
+    terms = dfx.MultiTerm(  # type: ignore[arg-type]
+        dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
+    )
+    sol = dfx.diffeqsolve(
+        terms,
+        t0=t0,
+        t1=saveat_times[-1],
+        y0=x0,
+        saveat=dfx.SaveAt(ts=saveat_times),
+        args=control_path_eval,
+        **diffeqsolve_settings,
+    )
+    return sol.ys
 
 
 def solve_sde(
@@ -155,38 +164,51 @@ def solve_sde(
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, Any],
+    diffeqsolve_settings: dict[str, object],
     key: Array | None,
     tol_vbt: float | None = None,
 ) -> Array:
     """Dispatch between SDE solver backends used by SDESimulator."""
-    if source == "diffrax":
-        return _solve_sde_diffrax(
-            dynamics,
-            t0,
-            saveat_times,
-            x0,
-            control_path_eval,
-            diffeqsolve_settings,
-            key=key,
-            tol_vbt=tol_vbt,
-        )
+    t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
+    needs_integration = t0_arr < saveat_times[-1]
 
-    if source == "em_scan":
-        dt0_setting = diffeqsolve_settings.get("dt0")
-        if not isinstance(dt0_setting, (int, float)):
+    if key is None:
+        if bool(needs_integration):
             raise ValueError(
-                "solve_sde(source='em_scan') requires a numeric dt0 in "
-                "diffeqsolve_settings."
+                "PRNG key is required for SDE solves when integration horizon "
+                "advances beyond t0."
             )
-        return _solve_sde_scan(
-            dynamics,
-            t0,
-            saveat_times,
-            x0,
-            control_path_eval,
-            float(dt0_setting),
-            key=key,
-        )
+        return _early_return_states(x0, saveat_times)
 
-    raise ValueError(f"Unknown SDE solver source: {source}")
+    def _do_solve(_: Array) -> Array:
+        if source == "diffrax":
+            return _solve_sde_diffrax(
+                dynamics,
+                t0,
+                saveat_times,
+                x0,
+                control_path_eval,
+                diffeqsolve_settings,
+                key=key,
+                tol_vbt=tol_vbt,
+            )
+
+        if source == "em_scan":
+            dt0_setting = diffeqsolve_settings.get("dt0")
+            dt0 = _coerce_dt(dt0_setting, name="dt0")
+            return _solve_sde_scan(
+                dynamics,
+                t0,
+                saveat_times,
+                x0,
+                control_path_eval,
+                dt0,
+                key=key,
+            )
+
+        raise ValueError(f"Unknown SDE solver source: {source}")
+
+    def _do_early_return(_: Array) -> Array:
+        return _early_return_states(x0, saveat_times)
+
+    return lax.cond(needs_integration, _do_solve, _do_early_return, t0_arr)

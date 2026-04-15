@@ -711,20 +711,25 @@ class SDESimulator(BaseSimulator):
         }
         self.n_simulations = n_simulations
         self.source = source
-
-        if tol_vbt is None:
-            self.tol_vbt = dt0 / 2.0
-        else:
-            self.tol_vbt = tol_vbt
-
-        assert self.tol_vbt < dt0, (
-            "tol_vbt must be smaller than dt0 for statistically correct simulation."
-        )
         if self.source not in {"diffrax", "em_scan"}:
             raise ValueError(
                 "SDESimulator source must be one of {'diffrax', 'em_scan'}, "
                 f"got source={self.source!r}."
             )
+
+        self.tol_vbt: float | None
+        if self.source == "diffrax":
+            if tol_vbt is None:
+                self.tol_vbt = dt0 / 2.0
+            else:
+                self.tol_vbt = tol_vbt
+
+            assert self.tol_vbt < dt0, (
+                "tol_vbt must be smaller than dt0 for statistically correct simulation."
+            )
+        else:
+            # tol_vbt is only used by the diffrax backend.
+            self.tol_vbt = None
 
     def _simulate(
         self,

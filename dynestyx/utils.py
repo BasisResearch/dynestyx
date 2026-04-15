@@ -1,4 +1,5 @@
 import math
+from numbers import Real
 
 import diffrax as dfx
 import equinox as eqx
@@ -158,6 +159,31 @@ def _should_record_field(
     if record_val is False:
         return False
     return math.prod(shape) <= max_elems
+
+
+def _coerce_dt(dt: object, *, name: str = "dt") -> float:
+    """Coerce a numeric scalar timestep-like value to Python float."""
+    if isinstance(dt, bool):
+        raise ValueError(
+            f"{name} must be a numeric scalar (Python/NumPy real or scalar JAX array), "
+            f"got {type(dt)}."
+        )
+    if isinstance(dt, Real):
+        return float(dt)
+    if (
+        isinstance(dt, Array)
+        and dt.ndim == 0
+        and not jnp.issubdtype(dt.dtype, jnp.bool_)
+        and (
+            jnp.issubdtype(dt.dtype, jnp.integer)
+            or jnp.issubdtype(dt.dtype, jnp.floating)
+        )
+    ):
+        return float(dt)
+    raise ValueError(
+        f"{name} must be a numeric scalar (Python/NumPy real or scalar JAX array), "
+        f"got {type(dt)}."
+    )
 
 
 def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
