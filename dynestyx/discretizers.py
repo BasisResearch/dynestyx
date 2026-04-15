@@ -39,19 +39,29 @@ def _euler_maruyama_loc_cov(
     t_now,
     t_next,
 ):
-    """Euler–Maruyama: mean `x + drift*dt`, cov `(L@Q@L.T)*dt` with `Q=I`.
+    """One Euler-Maruyama transition step (or batched time steps).
 
-    Supports batched time (and optional control) matching the previous
-    `EulerMaruyamaGaussianStateEvolution` behavior.
+    Args:
+        cte: Continuous-time state evolution providing drift and diffusion.
+        x: Current state, shape `(dim_state,)` or `(dim_state, num_timepoints)`.
+        u: Optional control, shape `(dim_control,)`, `(dim_control, num_timepoints)`,
+            or `None`.
+        t_now: Current time(s), scalar or shape `(num_timepoints,)`.
+        t_next: Next time(s), scalar or shape `(num_timepoints,)`.
 
     Returns:
-        dict: {
-            "loc": ndarray
-                Mean of next state(s): shape (dim_state,) or (num_timepoints, dim_state)
-            "cov": ndarray
-                Covariance of next state(s): shape (dim_state, dim_state) or (num_timepoints, dim_state, dim_state)
-        }
+        dict with:
+        - `"loc"`: `(dim_state,)` or `(num_timepoints, dim_state)`
+        - `"cov"`: `(dim_state, dim_state)` or `(num_timepoints, dim_state, dim_state)`
 
+    Computes:
+    - `loc = x + drift * dt`
+    - `cov = (L @ I_bm @ L.T) * dt`
+    where `dt = t_next - t_now` and `I_bm` is the identity matrix with shape `(cte.bm_dim, cte.bm_dim)`.
+
+    Supports:
+    - unbatched inputs: `x` shape `(dim_state,)`
+    - batched-time inputs: `x` shape `(dim_state, num_timepoints)`
     """
     squeezed = False
     if x.ndim == 1:
@@ -96,12 +106,10 @@ def _euler_maruyama_loc_cov(
 class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
     """Euler–Maruyama discretization as `GaussianStateEvolution`.
 
-    Holds ``cte`` as an explicit field so `DynamicalModel` pytrees under
-    `numpyro.plate` still expose batched continuous-time parameters for
-    simulator slicing (closures over ``cte`` alone would hide those arrays).
+    Holds ``cte`` as an explicit field for Equinox pytree compatibility.
 
     ``F`` and ``cov`` are optional constructor args so Equinox/dataclass-style
-    ``replace`` can rebuild the module with existing callables.
+    but we don't use them.
     """
 
     cte: ContinuousTimeStateEvolution
@@ -126,13 +134,7 @@ class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
         )
 
     def __call__(self, x, u, t_now, t_next):
-        """Single-pass transition; avoids calling ``F`` and ``cov`` separately.
-
-        The parent `GaussianStateEvolution.__call__` would evaluate the
-        Euler–Maruyama drift and diffusion twice. Under `jax.vmap` (e.g.
-        plate-batched cuthbert EKF), that split can change tracing/shapes. This
-        override matches the original one-step implementation.
-        """
+        """Single-pass transition step (or batched time steps)."""
         em_result = _euler_maruyama_loc_cov(self.cte, x, u, t_now, t_next)
         return dist.MultivariateNormal(
             loc=em_result["loc"], covariance_matrix=em_result["cov"]
