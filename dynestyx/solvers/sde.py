@@ -398,7 +398,7 @@ def _solve_sde_diffrax(
     diffeqsolve_settings: dict[str, object],
     *,
     key: Array | None,
-    tol_vbt: float | None,
+    tol_vbt: float,
 ) -> Array:
     """Solve an SDE with Diffrax and a VirtualBrownianTree control.
 
@@ -465,7 +465,7 @@ def solve_sde(
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, object],
-    key: Array | None,
+    key: Array,
     tol_vbt: float | None = None,
 ) -> Array:
     """Dispatch between SDE solver backends.
@@ -487,16 +487,10 @@ def solve_sde(
     t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
     needs_integration = t0_arr < saveat_times[-1]
 
-    if key is None:
-        if bool(needs_integration):
-            raise ValueError(
-                "PRNG key is required for SDE solves when integration horizon "
-                "advances beyond t0."
-            )
-        return _early_return_states(x0, saveat_times)
-
     def _do_solve(_: Array) -> Array:
         if source == "diffrax":
+            if tol_vbt is None:
+                raise ValueError("tol_vbt is required when source='diffrax'.")
             return _solve_sde_diffrax(
                 dynamics,
                 t0,
