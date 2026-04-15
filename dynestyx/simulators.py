@@ -4,7 +4,7 @@ import dataclasses
 import itertools
 from collections.abc import Callable
 from contextlib import contextmanager
-from typing import cast
+from typing import Literal, cast
 
 import diffrax as dfx
 import equinox as eqx
@@ -15,7 +15,7 @@ import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jax import Array, lax
+from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
@@ -26,6 +26,7 @@ from dynestyx.models import (
     DiscreteTimeStateEvolution,
     DynamicalModel,
 )
+from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, State
 from dynestyx.utils import (
     _array_has_plate_dims,
@@ -587,69 +588,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         raise NotImplementedError()
 
 
-def _solve_de(
-    dynamics,
-    t0: float,
-    saveat_times: Array,
-    x0: State,
-    control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict,
-    *,
-    key=None,
-    tol_vbt: float | None = None,
-) -> Array:
-    """Solve one ODE/SDE trajectory with diffrax.
-
-    Uses ODE mode when diffusion is None, otherwise SDE mode. `t0` is explicit
-    so rollout segments can start from filtered times.
-    """
-    t1 = saveat_times[-1]
-
-    # Keep the branch JAX-traceable when t0/t1 are traced.
-    def _early_return():
-        return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
-
-    def _solve():
-        diffusion = dynamics.state_evolution.diffusion_coefficient
-
-        def _drift(t, y, args):
-            u_t = args(t) if args is not None else None
-            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
-
-        if diffusion is None:
-            terms = dfx.ODETerm(_drift)
-        else:
-            k_bm, _ = jr.split(key, 2)
-            bm = dfx.VirtualBrownianTree(
-                t0=t0,
-                t1=t1,
-                tol=tol_vbt,
-                shape=(dynamics.state_evolution.bm_dim,),
-                key=k_bm,
-            )
-
-            def _diffusion(t, y, args):
-                u_t = args(t) if args is not None else None
-                return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
-
-            terms = dfx.MultiTerm(  # type: ignore
-                dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-            )
-
-        sol = dfx.diffeqsolve(
-            terms,
-            t0=t0,
-            t1=t1,
-            y0=x0,
-            saveat=dfx.SaveAt(ts=saveat_times),
-            args=control_path_eval,
-            **diffeqsolve_settings,
-        )
-        return sol.ys
-
-    return lax.cond(t0 >= t1, _early_return, _solve)
-
-
 def _emit_observations(
     name: str,
     dynamics,
@@ -716,6 +654,12 @@ class SDESimulator(BaseSimulator):
           very high-dimensional latent path and is usually a **poor inference
           strategy** for parameters. Prefer filtering (`Filter` with
           `ContinuousTime*Config`) or particle methods instead.
+
+    Tip for speed:
+        - Use `source="em_scan"` if you are happy with a simple Euler-Maruyama forward simulation
+          (10–20x faster than Diffrax's implementation; see
+          [Diffrax Issue #517](https://github.com/patrick-kidger/diffrax/issues/517)).
+        - Use `source="diffrax"` if you want greater flexibility in the solver and step-size control.
     """
 
     def __init__(
@@ -727,6 +671,7 @@ class SDESimulator(BaseSimulator):
         tol_vbt: float | None = None,
         max_steps: int | None = None,
         n_simulations: int = 1,
+        source: Literal["diffrax", "em_scan"] = "diffrax",
     ):
         """Configure SDE integration settings.
 
@@ -748,6 +693,10 @@ class SDESimulator(BaseSimulator):
             max_steps: Optional hard cap on solver steps.
             n_simulations: Number of independent trajectory simulations. When > 1,
                 states and observations have an extra leading dimension (n_simulations, T, ...).
+            source: SDE backend to use. `"diffrax"` uses Diffrax + Brownian tree.
+                `"em_scan"` uses a custom fixed-step Euler-Maruyama `lax.scan`
+                that advances at every `dt0` tick and also lands exactly on all
+                requested solve times.
 
         Notes:
             - `VirtualBrownianTree` draws randomness via `numpyro.prng_key()`, so
@@ -761,15 +710,26 @@ class SDESimulator(BaseSimulator):
             "max_steps": max_steps,
         }
         self.n_simulations = n_simulations
+        self.source = source
+        if self.source not in {"diffrax", "em_scan"}:
+            raise ValueError(
+                "SDESimulator source must be one of {'diffrax', 'em_scan'}, "
+                f"got source={self.source!r}."
+            )
 
-        if tol_vbt is None:
-            self.tol_vbt = dt0 / 2.0
+        self.tol_vbt: float | None
+        if self.source == "diffrax":
+            if tol_vbt is None:
+                self.tol_vbt = dt0 / 2.0
+            else:
+                self.tol_vbt = tol_vbt
+
+            assert self.tol_vbt < dt0, (
+                "tol_vbt must be smaller than dt0 for statistically correct simulation."
+            )
         else:
-            self.tol_vbt = tol_vbt
-
-        assert self.tol_vbt < dt0, (
-            "tol_vbt must be smaller than dt0 for statistically correct simulation."
-        )
+            # tol_vbt is only used by the diffrax backend.
+            self.tol_vbt = None
 
     def _simulate(
         self,
@@ -858,13 +818,14 @@ class SDESimulator(BaseSimulator):
         def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
             """Simulate one SDE trajectory and its emissions."""
             k_solve, k_obs = jr.split(key, 2)
-            states_sol = _solve_de(
-                dynamics,
-                t0,
-                times,
-                x0,
-                control_path_eval,
-                self.diffeqsolve_settings,
+            states_sol = solve_sde(
+                source=self.source,
+                dynamics=dynamics,
+                t0=t0,
+                saveat_times=times,
+                x0=x0,
+                control_path_eval=control_path_eval,
+                diffeqsolve_settings=self.diffeqsolve_settings,
                 key=k_solve,
                 tol_vbt=self.tol_vbt,
             )
@@ -1251,7 +1212,7 @@ class ODESimulator(BaseSimulator):
 
         def _sim_one_trajectory(x0: Array, *, obs_key=None):
             """Simulate one ODE trajectory and emit observations."""
-            states = _solve_de(
+            states = solve_ode(
                 dynamics,
                 t0,
                 times,

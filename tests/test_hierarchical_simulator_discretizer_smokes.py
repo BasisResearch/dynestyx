@@ -214,7 +214,8 @@ def _make_obs_values(shape, dtype=jnp.float32):
     return jnp.zeros(shape, dtype=dtype)
 
 
-def test_plate_forward_discrete_ode_sde_shapes():
+@pytest.mark.parametrize("source", ["diffrax", "em_scan"])
+def test_plate_forward_discrete_ode_sde_shapes(source):
     t = jnp.arange(5.0)
 
     with DiscreteTimeSimulator():
@@ -231,7 +232,7 @@ def test_plate_forward_discrete_ode_sde_shapes():
     assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
     assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
-    with SDESimulator():
+    with SDESimulator(source=source):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(2)):
             _plate_continuous_sde_model(predict_times=t, M=2)
     assert tr["f_times"]["value"].shape == (2, 1, len(t))

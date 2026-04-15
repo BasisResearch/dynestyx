@@ -76,11 +76,12 @@ def test_filter_discretetimesimulator_known_params(filter_type):
     assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 1e-1
 
 
-def test_filter_simulator_sde_explicit():
+@pytest.mark.parametrize("source", ["diffrax", "em_scan"])
+def test_filter_simulator_sde_explicit(source):
     """Filter + SDESimulator: explicit SDESimulator (not Simulator) works."""
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_sde()
     rng_key = jr.PRNGKey(42)
-    with SDESimulator():
+    with SDESimulator(source=source):
         with trace() as tr, seed(rng_seed=rng_key):
             data_conditioned_model()
     assert "f_filtered_states_mean" in tr
@@ -98,7 +99,8 @@ def test_filter_simulator_ode_explicit():
     assert "f_marginal_loglik" in tr
 
 
-def test_filter_sdesimulator_predict_times_n_simulations():
+@pytest.mark.parametrize("source", ["diffrax", "em_scan"])
+def test_filter_sdesimulator_predict_times_n_simulations(source):
     """Filter + SDESimulator with predict_times and n_simulations > 1 produces CI-ready outputs."""
     from numpyro.infer import Predictive
 
@@ -110,7 +112,7 @@ def test_filter_sdesimulator_predict_times_n_simulations():
     true_rho = 28.0
 
     # Generate observations
-    with SDESimulator(n_simulations=1):
+    with SDESimulator(n_simulations=1, source=source):
         pred = Predictive(
             continuous_time_stochastic_l63_model,
             params={"rho": jnp.array(true_rho)},
@@ -125,7 +127,7 @@ def test_filter_sdesimulator_predict_times_n_simulations():
         continuous_time_stochastic_l63_model, data={"rho": jnp.array(true_rho)}
     )
     n_sim = 2
-    with SDESimulator(n_simulations=n_sim):
+    with SDESimulator(n_simulations=n_sim, source=source):
         with Filter(
             filter_config=ContinuousTimeEnKFConfig(
                 n_particles=8, record_filtered_states_mean=True
