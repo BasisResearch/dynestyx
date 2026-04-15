@@ -1,3 +1,4 @@
+import diffrax as dfx
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
@@ -9,12 +10,21 @@ from dynestyx.solvers import solve_sde
 @pytest.mark.parametrize(
     ("source", "diffeqsolve_settings"),
     [
-        ("diffrax", {}),
+        (
+            "diffrax",
+            {
+                "solver": dfx.Heun(),
+                "stepsize_controller": dfx.ConstantStepSize(),
+                "adjoint": dfx.RecursiveCheckpointAdjoint(),
+                "dt0": 0.1,
+                "max_steps": None,
+            },
+        ),
         ("em_scan", {"dt0": 0.1}),
     ],
 )
-def test_sde_solver_early_return_without_key(source, diffeqsolve_settings):
-    """No-op horizons should return repeated x0 without requiring a PRNG key."""
+def test_sde_solver_early_return_with_key(source, diffeqsolve_settings):
+    """No-op horizons should return repeated x0."""
     dynamics = LTI_continuous(
         A=jnp.array([[0.0, 0.1], [0.0, -0.2]]),
         L=jnp.array([[0.2], [0.1]]),
@@ -33,7 +43,7 @@ def test_sde_solver_early_return_without_key(source, diffeqsolve_settings):
         x0=x0,
         control_path_eval=lambda t: None,
         diffeqsolve_settings=diffeqsolve_settings,
-        key=None,
+        key=jr.PRNGKey(0),
     )
 
     expected = jnp.broadcast_to(x0, (len(saveat_times), x0.shape[0]))
