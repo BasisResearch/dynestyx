@@ -130,7 +130,6 @@ def _solve_sde_diffrax(
 
     def _diffusion(t, y, args):
         u_t = args(t) if args is not None else None
-        u_t = args(t) if args is not None else None
         return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
 
     k_bm, _ = jr.split(key, 2)
