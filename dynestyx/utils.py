@@ -1,5 +1,4 @@
 import math
-from numbers import Real
 
 import diffrax as dfx
 import equinox as eqx
@@ -161,31 +160,6 @@ def _should_record_field(
     return math.prod(shape) <= max_elems
 
 
-def _coerce_dt(dt: object, *, name: str = "dt") -> float:
-    """Coerce a numeric scalar timestep-like value to Python float."""
-    if isinstance(dt, bool):
-        raise ValueError(
-            f"{name} must be a numeric scalar (Python/NumPy real or scalar JAX array), "
-            f"got {type(dt)}."
-        )
-    if isinstance(dt, Real):
-        return float(dt)
-    if (
-        isinstance(dt, Array)
-        and dt.ndim == 0
-        and not jnp.issubdtype(dt.dtype, jnp.bool_)
-        and (
-            jnp.issubdtype(dt.dtype, jnp.integer)
-            or jnp.issubdtype(dt.dtype, jnp.floating)
-        )
-    ):
-        return float(dt)
-    raise ValueError(
-        f"{name} must be a numeric scalar (Python/NumPy real or scalar JAX array), "
-        f"got {type(dt)}."
-    )
-
-
 def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
     """
     Validate that control_dim is set in DynamicalModel when controls are present.
@@ -335,12 +309,15 @@ def _get_dynamics_with_t0(
         )
 
     if dynamics.t0 is not None:
+        t0_display = dynamics.t0
+        if isinstance(t0_display, Array) and t0_display.ndim == 0:
+            t0_display = t0_display.item()
         # JIT-safe validation against user-provided t0.
         _ = eqx.error_if(
             inferred_t0,
             inferred_t0 != jnp.asarray(dynamics.t0),
             (
-                f"dynamics.t0={dynamics.t0!r} does not match the earlier of obs_times[0] or predict_times[0]. "
+                f"dynamics.t0={t0_display!r} does not match the earlier of obs_times[0] or predict_times[0]. "
                 "Either set t0=None to auto-infer from provided times, or ensure they agree."
             ),
         )

@@ -21,7 +21,7 @@ from dynestyx.models.checkers import (
     _validate_state_dim,
     _validate_state_evolution_output_shape,
 )
-from dynestyx.types import Control, State, Time, dState
+from dynestyx.types import Control, State, Time, TimeLike, as_scalar_time_array, dState
 
 
 class DynamicalModel(eqx.Module):
@@ -62,7 +62,7 @@ class DynamicalModel(eqx.Module):
             A callable is accepted (e.g., `lambda x, u, t: ...`) as long as it returns a NumPyro-compatible
             distribution, while subclassing `ObservationModel` is recommended for richer reuse and consistency.
         control_model (Any): Optional model for control inputs (e.g., exogenous process). Not currently supported.
-        t0 (float | None): Optional declared start time of the model. If ``None`` (default), the start time
+        t0 (float | Array | None): Optional declared start time of the model. If ``None`` (default), the start time
             is auto-inferred as ``obs_times[0]`` when the simulator runs and recorded as a
             ``numpyro.deterministic("t0", ...)`` site. If provided, it must match ``obs_times[0]``
             exactly; a mismatch raises a ``ValueError`` at simulation time.
@@ -84,7 +84,7 @@ class DynamicalModel(eqx.Module):
     observation_model: Callable[[State, Control, Time], Distribution]
     control_dim: int
     control_model: Any
-    t0: float | None
+    t0: Time | None
     state_dim: int
     observation_dim: int
     categorical_state: bool
@@ -98,7 +98,7 @@ class DynamicalModel(eqx.Module):
         control_dim: int | None = None,
         control_model=None,
         *,
-        t0: float | None = None,
+        t0: TimeLike | None = None,
         state_dim: int | None = None,
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
@@ -113,7 +113,7 @@ class DynamicalModel(eqx.Module):
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
-        self.t0 = t0
+        self.t0 = None if t0 is None else as_scalar_time_array(t0, name="t0")
 
         inferred_state_dim = _infer_vector_dim_from_distribution(
             initial_condition, "initial_condition"
@@ -136,7 +136,7 @@ class DynamicalModel(eqx.Module):
                 observation_model=observation_model,
                 inferred_state_dim=inferred_state_dim,
                 control_dim=control_dim,
-                t0=t0,
+                t0=self.t0,
                 observation_dim=observation_dim,
             )
             self.state_dim = int(inferred_state_dim)
@@ -150,7 +150,7 @@ class DynamicalModel(eqx.Module):
             ):
                 x0 = jnp.zeros((inferred_state_dim,))
                 u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-                dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+                dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
                 inferred_bm_dim = _infer_bm_dim(
                     state_evolution, inferred_state_dim, x0, u0, dummy_t0
                 )
@@ -170,7 +170,7 @@ class DynamicalModel(eqx.Module):
             initial_condition=initial_condition, state_dim=inferred_state_dim
         )
         u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-        dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+        dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
 
         inferred_bm_dim = _validate_state_evolution_output_shape(
             state_evolution=state_evolution,

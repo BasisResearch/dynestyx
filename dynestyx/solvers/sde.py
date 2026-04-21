@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 import diffrax as dfx
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 from jax import Array, lax
 
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.types import State
-from dynestyx.utils import _coerce_dt
+from dynestyx.types import State, Time, TimeLike, as_scalar_time_array
 
 
 def _apply_diffusion(diffusion_term: Array, dw: Array) -> Array:
@@ -33,18 +33,16 @@ def _early_return_states(x0: State, saveat_times: Array) -> Array:
 
 def _solve_sde_scan(
     dynamics: DynamicalModel,
-    t0: float | Array,
+    t0: Time,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    dt0: float,
+    dt0: Time,
     *,
     key: Array | None,
 ) -> Array:
     if key is None:
         raise ValueError("PRNG key is required for em_scan SDE solves.")
-    if dt0 <= 0:
-        raise ValueError(f"EM scan requires dt0 > 0, got dt0={dt0}.")
     if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
         raise TypeError(
             "SDE solver requires ContinuousTimeStateEvolution, got "
@@ -54,8 +52,7 @@ def _solve_sde_scan(
     state_evolution = dynamics.state_evolution
     bm_dim = int(state_evolution.bm_dim) if state_evolution.bm_dim is not None else 1
 
-    t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
-    dt0_arr = jnp.asarray(dt0, dtype=saveat_times.dtype)
+    dt0 = eqx.error_if(dt0, dt0 <= 0, f"EM scan requires dt0 > 0, got dt0={dt0!r}.")
 
     def _integrate_to_target(
         x_init: Array, t_init: Array, key_init: Array, t_target: Array
@@ -66,7 +63,7 @@ def _solve_sde_scan(
 
         def _body_fn(carry):
             x_curr, t_curr, key_curr, t_end = carry
-            h = jnp.minimum(dt0_arr, t_end - t_curr)
+            h = jnp.minimum(dt0, t_end - t_curr)
             key_curr, k_step = jr.split(key_curr)
             z = jr.normal(k_step, shape=(bm_dim,), dtype=jnp.asarray(x_curr).dtype)
             dw = jnp.sqrt(h) * z
@@ -101,20 +98,20 @@ def _solve_sde_scan(
         )
         return (x_next, t_next, key_next), x_next
 
-    (_, _, _), states = lax.scan(_scan_step, (x0, t0_arr, key), saveat_times)
+    (_, _, _), states = lax.scan(_scan_step, (x0, t0, key), saveat_times)
     return states
 
 
 def _solve_sde_diffrax(
     dynamics: DynamicalModel,
-    t0: float | Array,
+    t0: Time,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, object],
+    diffeqsolve_settings: dict[str, Any],
     *,
     key: Array | None,
-    tol_vbt: float,
+    tol_vbt: Time,
 ) -> Array:
     if key is None:
         raise ValueError("PRNG key is required for diffrax SDE solves.")
@@ -159,44 +156,51 @@ def solve_sde(
     *,
     source: Literal["diffrax", "em_scan"],
     dynamics: DynamicalModel,
-    t0: float | Array,
+    t0: TimeLike,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, object],
+    diffeqsolve_settings: dict[str, Any],
     key: Array,
-    tol_vbt: float | None = None,
+    tol_vbt: TimeLike | None = None,
 ) -> Array:
     """Dispatch between SDE solver backends used by SDESimulator."""
 
-    t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=saveat_times.dtype)
     needs_integration = t0_arr < saveat_times[-1]
 
     def _do_solve(_: Array) -> Array:
         if source == "diffrax":
             if tol_vbt is None:
                 raise ValueError("tol_vbt is required when source='diffrax'.")
+            tol_vbt_arr = as_scalar_time_array(
+                tol_vbt, name="tol_vbt", dtype=saveat_times.dtype
+            )
             return _solve_sde_diffrax(
                 dynamics,
-                t0,
+                t0_arr,
                 saveat_times,
                 x0,
                 control_path_eval,
                 diffeqsolve_settings,
                 key=key,
-                tol_vbt=tol_vbt,
+                tol_vbt=tol_vbt_arr,
             )
 
         if source == "em_scan":
-            dt0_setting = diffeqsolve_settings.get("dt0")
-            dt0 = _coerce_dt(dt0_setting, name="dt0")
+            dt0_like = diffeqsolve_settings.get("dt0")
+            if dt0_like is None:
+                raise ValueError("dt0 is required when source='em_scan'.")
+            dt0_arr = as_scalar_time_array(
+                dt0_like, name="dt0", dtype=saveat_times.dtype
+            )
             return _solve_sde_scan(
                 dynamics,
-                t0,
+                t0_arr,
                 saveat_times,
                 x0,
                 control_path_eval,
-                dt0,
+                dt0_arr,
                 key=key,
             )
 
