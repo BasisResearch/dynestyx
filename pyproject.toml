@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.0.5"
+version = "0.0.6"
 description = "NumPyro integration for dynamical systems"
 readme = "README.md"
 license = "Apache-2.0"
