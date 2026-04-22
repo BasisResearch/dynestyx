@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 import diffrax as dfx
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 from jax import Array, lax, vmap
 
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.types import State
-from dynestyx.utils import _coerce_dt
+from dynestyx.types import State, Time, TimeLike, as_scalar_time_array
 
 
 def _apply_diffusion(diffusion_term: Array, dw: Array) -> Array:
@@ -202,11 +202,11 @@ def euler_maruyama_step_sample(
 def euler_maruyama_integrate_state_to_time(
     state_evolution: ContinuousTimeStateEvolution,
     x_init: Array,
-    t_init: Array,
+    t_init: Time,
     key_init: Array,
-    t_target: Array,
+    t_target: Time,
     *,
-    dt0: float,
+    dt0: Time,
     control_path_eval: Callable[[Array], Array | None] | None = None,
 ) -> tuple[Array, Array, Array]:
     """Integrate a sampled EM path from `t_init` to `t_target`.
@@ -214,20 +214,20 @@ def euler_maruyama_integrate_state_to_time(
     Args:
         state_evolution: Continuous-time state evolution.
         x_init: Initial state.
-        t_init: Initial time.
+        t_init: Initial time as a scalar JAX array.
         key_init: Initial PRNG key.
-        t_target: Target end time.
-        dt0: Maximum EM substep size.
+        t_target: Target end time as a scalar JAX array.
+        dt0: Maximum EM substep size as a scalar JAX array.
         control_path_eval: Optional control evaluator `u(t)`.
 
     Returns:
         Tuple `(x_out, t_out, key_out)` at integration end.
     """
-    if dt0 <= 0:
-        raise ValueError(f"EM integration requires dt0 > 0, got dt0={dt0}.")
+    dt0 = eqx.error_if(
+        dt0, dt0 <= 0, f"EM integration requires dt0 > 0, got dt0={dt0!r}."
+    )
 
     bm_dim = _bm_dim_or_default(state_evolution)
-    dt0_arr = jnp.asarray(dt0, dtype=jnp.asarray(t_target).dtype)
 
     def _cond_fn(carry):
         _, t_curr, _, t_end = carry
@@ -235,7 +235,7 @@ def euler_maruyama_integrate_state_to_time(
 
     def _body_fn(carry):
         x_curr, t_curr, key_curr, t_end = carry
-        h = jnp.minimum(dt0_arr, t_end - t_curr)
+        h = jnp.minimum(dt0, t_end - t_curr)
         u_t = control_path_eval(t_curr) if control_path_eval is not None else None
         x_next, key_next = euler_maruyama_step_sample(
             state_evolution,
@@ -324,11 +324,11 @@ def euler_maruyama_loc_cov(
 
 def _solve_sde_scan(
     dynamics: DynamicalModel,
-    t0: float | Array,
+    t0: Time,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    dt0: float,
+    dt0: Time,
     *,
     key: Array | None,
 ) -> Array:
@@ -336,11 +336,11 @@ def _solve_sde_scan(
 
     Args:
         dynamics: Dynamical model with continuous-time state evolution.
-        t0: Initial time.
+        t0: Initial time as a scalar JAX array.
         saveat_times: Times at which to return states.
         x0: Initial state.
         control_path_eval: Optional control evaluator `u(t)`.
-        dt0: Maximum EM substep size.
+        dt0: Maximum EM substep size as a scalar JAX array.
         key: PRNG key for Brownian increments.
 
     Returns:
@@ -348,8 +348,6 @@ def _solve_sde_scan(
     """
     if key is None:
         raise ValueError("PRNG key is required for em_scan SDE solves.")
-    if dt0 <= 0:
-        raise ValueError(f"EM scan requires dt0 > 0, got dt0={dt0}.")
     if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
         raise TypeError(
             "SDE solver requires ContinuousTimeStateEvolution, got "
@@ -357,7 +355,7 @@ def _solve_sde_scan(
         )
 
     state_evolution = dynamics.state_evolution
-    t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
+    dt0 = eqx.error_if(dt0, dt0 <= 0, f"EM scan requires dt0 > 0, got dt0={dt0!r}.")
 
     def _scan_step(carry, t_target):
         x_prev, t_prev, key_prev = carry
@@ -385,32 +383,32 @@ def _solve_sde_scan(
         )
         return (x_next, t_next, key_next), x_next
 
-    (_, _, _), states = lax.scan(_scan_step, (x0, t0_arr, key), saveat_times)
+    (_, _, _), states = lax.scan(_scan_step, (x0, t0, key), saveat_times)
     return states
 
 
 def _solve_sde_diffrax(
     dynamics: DynamicalModel,
-    t0: float | Array,
+    t0: Time,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, object],
+    diffeqsolve_settings: dict[str, Any],
     *,
     key: Array | None,
-    tol_vbt: float,
+    tol_vbt: Time,
 ) -> Array:
     """Solve an SDE with Diffrax and a VirtualBrownianTree control.
 
     Args:
         dynamics: Dynamical model with continuous-time state evolution.
-        t0: Initial time.
+        t0: Initial time as a scalar JAX array.
         saveat_times: Times at which to return states.
         x0: Initial state.
         control_path_eval: Optional control evaluator `u(t)`.
         diffeqsolve_settings: Extra keyword arguments for `dfx.diffeqsolve`.
         key: PRNG key for Brownian tree construction.
-        tol_vbt: VirtualBrownianTree tolerance.
+        tol_vbt: VirtualBrownianTree tolerance as a scalar JAX array.
 
     Returns:
         Simulated state trajectory at `saveat_times`.
@@ -460,13 +458,13 @@ def solve_sde(
     *,
     source: Literal["diffrax", "em_scan"],
     dynamics: DynamicalModel,
-    t0: float | Array,
+    t0: TimeLike,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, object],
+    diffeqsolve_settings: dict[str, Any],
     key: Array,
-    tol_vbt: float | None = None,
+    tol_vbt: TimeLike | None = None,
 ) -> Array:
     """Dispatch between SDE solver backends.
 
@@ -484,34 +482,41 @@ def solve_sde(
     Returns:
         Simulated state trajectory at `saveat_times`.
     """
-    t0_arr = jnp.asarray(t0, dtype=saveat_times.dtype)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=saveat_times.dtype)
     needs_integration = t0_arr < saveat_times[-1]
 
     def _do_solve(_: Array) -> Array:
         if source == "diffrax":
             if tol_vbt is None:
                 raise ValueError("tol_vbt is required when source='diffrax'.")
+            tol_vbt_arr = as_scalar_time_array(
+                tol_vbt, name="tol_vbt", dtype=saveat_times.dtype
+            )
             return _solve_sde_diffrax(
                 dynamics,
-                t0,
+                t0_arr,
                 saveat_times,
                 x0,
                 control_path_eval,
                 diffeqsolve_settings,
                 key=key,
-                tol_vbt=tol_vbt,
+                tol_vbt=tol_vbt_arr,
             )
 
         if source == "em_scan":
-            dt0_setting = diffeqsolve_settings.get("dt0")
-            dt0 = _coerce_dt(dt0_setting, name="dt0")
+            dt0_like = diffeqsolve_settings.get("dt0")
+            if dt0_like is None:
+                raise ValueError("dt0 is required when source='em_scan'.")
+            dt0_arr = as_scalar_time_array(
+                dt0_like, name="dt0", dtype=saveat_times.dtype
+            )
             return _solve_sde_scan(
                 dynamics,
-                t0,
+                t0_arr,
                 saveat_times,
                 x0,
                 control_path_eval,
-                dt0,
+                dt0_arr,
                 key=key,
             )
 

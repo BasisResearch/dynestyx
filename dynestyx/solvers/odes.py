@@ -9,18 +9,19 @@ import diffrax as dfx
 import jax.numpy as jnp
 from jax import Array, lax
 
-from dynestyx.types import State
+from dynestyx.types import State, TimeLike, as_scalar_time_array
 
 
 def solve_ode(
     dynamics: Any,
-    t0: float | Array,
+    t0: TimeLike,
     saveat_times: Array,
     x0: State,
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, Any],
 ) -> Array:
     """Solve one ODE trajectory with Diffrax and save at requested times."""
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=saveat_times.dtype)
     t1 = saveat_times[-1]
 
     def _early_return() -> Array:
@@ -33,7 +34,7 @@ def solve_ode(
 
         sol = dfx.diffeqsolve(
             dfx.ODETerm(_drift),
-            t0=t0,
+            t0=t0_arr,
             t1=t1,
             y0=x0,
             saveat=dfx.SaveAt(ts=saveat_times),
@@ -42,4 +43,4 @@ def solve_ode(
         )
         return sol.ys
 
-    return lax.cond(t0 >= t1, _early_return, _solve)
+    return lax.cond(t0_arr >= t1, _early_return, _solve)

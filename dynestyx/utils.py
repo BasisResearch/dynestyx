@@ -335,12 +335,15 @@ def _get_dynamics_with_t0(
         )
 
     if dynamics.t0 is not None:
+        t0_display = dynamics.t0
+        if isinstance(t0_display, Array) and t0_display.ndim == 0:
+            t0_display = t0_display.item()
         # JIT-safe validation against user-provided t0.
         _ = eqx.error_if(
             inferred_t0,
             inferred_t0 != jnp.asarray(dynamics.t0),
             (
-                f"dynamics.t0={dynamics.t0!r} does not match the earlier of obs_times[0] or predict_times[0]. "
+                f"dynamics.t0={t0_display!r} does not match the earlier of obs_times[0] or predict_times[0]. "
                 "Either set t0=None to auto-infer from provided times, or ensure they agree."
             ),
         )

@@ -1,4 +1,5 @@
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 import numpyro.handlers as nhandlers
@@ -410,6 +411,8 @@ def test_t0_defaults_to_none() -> None:
 
 def test_t0_stored_when_provided() -> None:
     model = _simple_discrete_model(t0=2.5)
+    assert isinstance(model.t0, jax.Array)
+    assert model.t0.shape == ()
     assert model.t0 == 2.5
 
 

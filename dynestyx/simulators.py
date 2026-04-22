@@ -27,7 +27,7 @@ from dynestyx.models import (
     DynamicalModel,
 )
 from dynestyx.solvers import solve_ode, solve_sde
-from dynestyx.types import FunctionOfTime, State
+from dynestyx.types import FunctionOfTime, State, Time, TimeLike, as_scalar_time_array
 from dynestyx.utils import (
     _array_has_plate_dims,
     _build_control_path,
@@ -667,7 +667,7 @@ class SDESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-        dt0: float = 1e-4,
+        dt0: TimeLike = 1e-4,
         tol_vbt: float | None = None,
         max_steps: int | None = None,
         n_simulations: int = 1,
@@ -684,7 +684,7 @@ class SDESimulator(BaseSimulator):
             adjoint: Diffrax adjoint strategy used for differentiation through the
                 solver (relevant when used under gradient-based inference). See
                 [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
-            dt0: Initial step size passed to
+            dt0: Initial step size (float or JAX array) passed to
                 [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
             tol_vbt: Tolerance parameter for
                 [`diffrax.VirtualBrownianTree`](https://docs.kidger.site/diffrax/api/brownian/). If None,
@@ -702,11 +702,12 @@ class SDESimulator(BaseSimulator):
             - `VirtualBrownianTree` draws randomness via `numpyro.prng_key()`, so
               `SDESimulator` must be executed inside a seeded NumPyro context.
         """
+        dt0_arr = as_scalar_time_array(dt0, name="dt0")
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
-            "dt0": dt0,
+            "dt0": dt0_arr,
             "max_steps": max_steps,
         }
         self.n_simulations = n_simulations
@@ -717,14 +718,14 @@ class SDESimulator(BaseSimulator):
                 f"got source={self.source!r}."
             )
 
-        self.tol_vbt: float | None
+        self.tol_vbt: Time | None
         if self.source == "diffrax":
             if tol_vbt is None:
-                self.tol_vbt = dt0 / 2.0
+                self.tol_vbt = dt0_arr / 2.0
             else:
-                self.tol_vbt = tol_vbt
+                self.tol_vbt = as_scalar_time_array(tol_vbt, name="tol_vbt")
 
-            assert self.tol_vbt < dt0, (
+            assert self.tol_vbt < dt0_arr, (
                 "tol_vbt must be smaller than dt0 for statistically correct simulation."
             )
         else:
@@ -1134,7 +1135,7 @@ class ODESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Tsit5(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-        dt0: float = 1e-3,
+        dt0: TimeLike = 1e-3,
         max_steps: int = 100_000,
         n_simulations: int = 1,
     ):
@@ -1148,17 +1149,18 @@ class ODESimulator(BaseSimulator):
                 See [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
             stepsize_controller: Diffrax step-size controller (default:
                 [`dfx.ConstantStepSize`](https://docs.kidger.site/diffrax/api/stepsize_controller/)).
-            dt0: Initial step size passed to
+            dt0: Initial step size (float or JAX array) passed to
                 [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
             max_steps: Hard cap on solver steps.
             n_simulations: Number of independent trajectory simulations. When > 1,
                 states and observations have shape (n_simulations, T, ...).
         """
+        dt0_arr = as_scalar_time_array(dt0, name="dt0")
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
-            "dt0": dt0,
+            "dt0": dt0_arr,
             "max_steps": max_steps,
         }
         self.n_simulations = n_simulations
