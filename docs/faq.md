@@ -97,7 +97,7 @@ Hierarchical models are supported by the [`dsx.plate`](./api_reference/public/ha
 
 ## What about neural nets?
 
-See our [neural drift correction deep dive](deep_dives/neural_drift_correction.ipynb). It shows how to keep the observation model and filter workflow fixed while swapping a mechanistic ODE drift for a mechanistic-plus-neural residual drift.
+We will put examples up soon. See [CD-Dynamax's Lorenz 63 neural drift tutorial](https://github.com/hd-UQ/cd_dynamax/blob/dev-numpyro-api/demos/numpyro/notebooks/lorenz63_nndrift_sgd_fit_to_data_tutorial_newAPI.ipynb) to convince yourself that this will work well.
 
 ## What about SINDy?
 
