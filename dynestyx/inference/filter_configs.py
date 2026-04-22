@@ -74,6 +74,12 @@ class BaseFilterConfig:
     record_filtered_particles: bool | None = None
     record_filtered_log_weights: bool | None = None
     record_filtered_states_chol_cov: bool | None = None
+    record_smoothed_states_mean: bool | None = None
+    record_smoothed_states_cov: bool | None = None
+    record_smoothed_states_cov_diag: bool | None = None
+    record_smoothed_particles: bool | None = None
+    record_smoothed_log_weights: bool | None = None
+    record_smoothed_states_chol_cov: bool | None = None
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
     cov_rescaling: float | None = None
@@ -680,3 +686,20 @@ def _config_to_record_kwargs(config: BaseFilterConfig) -> dict:
             "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
             "record_max_elems": config.record_max_elems,
         }
+
+
+def _config_to_smoother_record_kwargs(config: BaseFilterConfig) -> dict:
+    """Build smoother record kwargs dict from config."""
+    if isinstance(config, HMMConfig):
+        return {
+            "record_max_elems": config.record_max_elems,
+        }
+    return {
+        "record_smoothed_states_mean": config.record_smoothed_states_mean,
+        "record_smoothed_states_cov": config.record_smoothed_states_cov,
+        "record_smoothed_states_cov_diag": config.record_smoothed_states_cov_diag,
+        "record_smoothed_particles": config.record_smoothed_particles,
+        "record_smoothed_log_weights": config.record_smoothed_log_weights,
+        "record_smoothed_states_chol_cov": config.record_smoothed_states_chol_cov,
+        "record_max_elems": config.record_max_elems,
+    }
