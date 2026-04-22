@@ -205,6 +205,33 @@ def test_cuthbert_enkf_accepts_callable_independent_normal_observation():
     assert all(d.event_shape == (dynamics.state_dim,) for d in filtered_dists)
 
 
+def test_cuthbert_enkf_rejects_state_dependent_observation_noise():
+    obs_times = jnp.arange(start=0.0, stop=4.0, step=1.0)
+    obs_values = jnp.zeros((len(obs_times), 2))
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
+        ),
+        state_evolution=lambda x, u, t_now, t_next: dist.MultivariateNormal(
+            loc=0.9 * x, covariance_matrix=0.1 * jnp.eye(2)
+        ),
+        observation_model=lambda x, u, t: dist.Independent(
+            dist.Normal(loc=x, scale=0.1 + 0.5 * jnp.abs(x)), 1
+        ),
+    )
+
+    with pytest.raises(ValueError, match="state-independent"):
+        with trace(), seed(rng_seed=jr.PRNGKey(1)):
+            run_cuthbert_discrete_filter(
+                "f",
+                dynamics,
+                EnKFConfig(n_particles=16, filter_source="cuthbert"),
+                key=jr.PRNGKey(2),
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+
 def test_cuthbert_enkf_records_filtered_gaussian_sites():
     obs_times, obs_values = _make_discrete_lti_data()
     substituted = numpyro.handlers.substitute(

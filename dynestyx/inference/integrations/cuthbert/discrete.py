@@ -47,6 +47,57 @@ class CuthbertInputs(NamedTuple):
     is_first_step: jax.Array  # (T+1,) bool — True only at index 1
 
 
+def _extract_gaussian_chol(d: dist.Distribution, obs_dim: int) -> jax.Array:
+    """Extract a Cholesky factor of the covariance from a Gaussian distribution."""
+    if isinstance(d, dist.MultivariateNormal):
+        return jnp.asarray(d.scale_tril)
+    if isinstance(d, dist.Independent) and isinstance(d.base_dist, dist.Normal):
+        scale = jnp.atleast_1d(jnp.asarray(d.base_dist.scale))
+    elif isinstance(d, dist.Normal):
+        scale = jnp.atleast_1d(jnp.asarray(d.scale))
+    else:
+        raise TypeError(
+            "cuthbert EnKF requires Gaussian observation distributions. "
+            "Expected LinearGaussianObservation, GaussianObservation, or a "
+            "callable returning Normal, Independent(Normal), or "
+            f"MultivariateNormal; got {type(d).__name__}."
+        )
+    if scale.size == 1 and obs_dim > 1:
+        scale = jnp.full((obs_dim,), scale[0])
+    return jnp.diag(scale)
+
+
+def _check_state_independent_noise(
+    chol_R_at_x0: jax.Array, probe_dist_at_x1: dist.Distribution, obs_dim: int
+) -> None:
+    """Raise if the observation noise covariance varies with state.
+
+    cuthbert's EnKF API resolves ``chol_R`` once per step (before the ensemble
+    update), so it may depend on time/controls but NOT on the latent state.
+    Silently using a state-dependent scale would freeze it at the probe state
+    and misrepresent the noise. Detect this under concrete evaluation and raise.
+    Under JAX tracing, the comparison yields a tracer and we skip the check —
+    the constraint is documented in the filter docstring.
+    """
+    chol_R_at_x1 = _extract_gaussian_chol(probe_dist_at_x1, obs_dim)
+    try:
+        equal = bool(
+            jnp.asarray(chol_R_at_x0).shape == jnp.asarray(chol_R_at_x1).shape
+            and jnp.allclose(chol_R_at_x0, chol_R_at_x1)
+        )
+    except jax.errors.TracerBoolConversionError:
+        return
+    if not equal:
+        raise ValueError(
+            "cuthbert EnKF requires state-independent observation noise, but "
+            "the observation scale changes with the latent state (heteroscedastic "
+            "noise). The EnKF API resolves chol_R once per step before the "
+            "ensemble update, so a state-dependent scale cannot be honoured. "
+            "Either make the noise depend only on time/controls, or use a "
+            "particle filter (PFConfig)."
+        )
+
+
 def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     """Build filter_kwargs dict from config dataclass."""
     kwargs = dict(config.extra_filter_kwargs)
@@ -259,6 +310,19 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
+    obs_model = dynamics.observation_model
+    if not isinstance(obs_model, (LinearGaussianObservation, GaussianObservation)):
+        probe_u = jnp.zeros(())
+        probe_t = jnp.zeros(())
+        try:
+            probe_d0 = obs_model(jnp.zeros((state_dim,)), probe_u, probe_t)
+            probe_d1 = obs_model(jnp.ones((state_dim,)), probe_u, probe_t)
+        except Exception:
+            probe_d0 = probe_d1 = None
+        if probe_d0 is not None and probe_d1 is not None:
+            chol0 = _extract_gaussian_chol(probe_d0, obs_dim)
+            _check_state_independent_noise(chol0, probe_d1, obs_dim)
+
     def init_sample(key, mi: CuthbertInputs):
         return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
 
@@ -304,30 +368,13 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             return observation_fn, chol_R, y
         else:
-            probe_x = jnp.zeros((state_dim,), dtype=y.dtype)
-            probe_dist = obs_model(probe_x, mi.u, mi.time)
-
-            if isinstance(probe_dist, dist.MultivariateNormal):
-                chol_R = jnp.asarray(probe_dist.scale_tril)
-            elif isinstance(probe_dist, dist.Normal):
-                scale = jnp.atleast_1d(jnp.asarray(probe_dist.scale))
-                if scale.size == 1 and obs_dim > 1:
-                    scale = jnp.full((obs_dim,), scale[0])
-                chol_R = jnp.diag(scale)
-            elif isinstance(probe_dist, dist.Independent) and isinstance(
-                probe_dist.base_dist, dist.Normal
-            ):
-                scale = jnp.atleast_1d(jnp.asarray(probe_dist.base_dist.scale))
-                if scale.size == 1 and obs_dim > 1:
-                    scale = jnp.full((obs_dim,), scale[0])
-                chol_R = jnp.diag(scale)
-            else:
-                raise TypeError(
-                    "cuthbert EnKF requires Gaussian observation distributions. "
-                    "Expected LinearGaussianObservation, GaussianObservation, or a "
-                    "callable returning Normal, Independent(Normal), or "
-                    f"MultivariateNormal; got {type(probe_dist).__name__}."
-                )
+            probe_x0 = jnp.zeros((state_dim,), dtype=y.dtype)
+            probe_x1 = jnp.ones((state_dim,), dtype=y.dtype)
+            probe_dist = obs_model(probe_x0, mi.u, mi.time)
+            chol_R = _extract_gaussian_chol(probe_dist, obs_dim)
+            _check_state_independent_noise(
+                chol_R, obs_model(probe_x1, mi.u, mi.time), obs_dim
+            )
 
             def observation_fn(x):
                 edist = obs_model(x, mi.u, mi.time)

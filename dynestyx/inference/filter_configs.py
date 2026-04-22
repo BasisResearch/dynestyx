@@ -90,6 +90,11 @@ class EnKFConfig(BaseFilterConfig):
     state dimensions. Cheaper per-step than the particle filter, but assumes
     observations are approximately Gaussian given the ensemble.
 
+    The observation noise covariance must be **state-independent** (it may
+    still depend on time or controls). Using a state-dependent scale with the
+    cuthbert backend raises a `ValueError`; if you need heteroscedastic noise,
+    use `PFConfig` instead.
+
     The primary tuning knob is `n_particles`, with more particles providing
     more accurate results at the cost of higher compute.
     If the ensemble collapses over long trajectories, increase
