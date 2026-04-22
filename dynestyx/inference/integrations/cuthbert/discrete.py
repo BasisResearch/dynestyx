@@ -1,3 +1,4 @@
+import warnings
 from typing import NamedTuple
 
 import jax
@@ -14,6 +15,7 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
+from numpyro.distributions import Distribution
 
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
@@ -315,10 +317,16 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         probe_u = jnp.zeros(())
         probe_t = jnp.zeros(())
         try:
-            probe_d0 = obs_model(jnp.zeros((state_dim,)), probe_u, probe_t)
-            probe_d1 = obs_model(jnp.ones((state_dim,)), probe_u, probe_t)
+            probe_d0: Distribution | None = obs_model(
+                jnp.zeros((state_dim,)), probe_u, probe_t
+            )
+            probe_d1: Distribution | None = obs_model(
+                jnp.ones((state_dim,)), probe_u, probe_t
+            )
         except Exception:
-            probe_d0 = probe_d1 = None
+            warnings.warn(
+                "Failed to probe observation model for state-independent noise check. Please ensure the observation model is state-independent."
+            )
         if probe_d0 is not None and probe_d1 is not None:
             chol0 = _extract_gaussian_chol(probe_d0, obs_dim)
             _check_state_independent_noise(chol0, probe_d1, obs_dim)
