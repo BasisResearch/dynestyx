@@ -62,11 +62,8 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
         )
-        kwargs["perturbed_obs"] = (
-            config.perturb_measurements
-            if config.perturb_measurements is not None
-            else True
-        )
+        if config.perturb_measurements is not None:
+            kwargs["perturbed_obs"] = config.perturb_measurements
     return kwargs
 
 
