@@ -6,6 +6,10 @@ import numpyro.distributions as dist
 from numpyro.distributions import constraints
 
 
+def covariance_from_cholesky(chol_cov: jax.Array) -> jax.Array:
+    return jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
+
+
 class WeightedParticles(dist.Distribution):
     """A distribution over a finite set of weighted particles.
 

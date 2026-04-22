@@ -47,6 +47,7 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 )
 from dynestyx.inference.integrations.utils import (
     WeightedParticles,
+    covariance_from_cholesky,
     particles_to_delta_mixtures,
 )
 from dynestyx.models import DynamicalModel
@@ -130,7 +131,7 @@ def _cuthbert_states_to_dists(
     chol_cov = states.chol_cov[
         (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
     ]
-    cov = jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
+    cov = covariance_from_cholesky(chol_cov)
     t_len = _time_len_from_array(mean, plate_shapes)
     return [
         numpyro.distributions.MultivariateNormal(
@@ -297,8 +298,7 @@ def _default_filter_config(dynamics: DynamicalModel):
     if dynamics.continuous_time:
         return ContinuousTimeEnKFConfig()
 
-    # default to particle filter in discrete time
-    return EKFConfig(filter_source="cuthbert")
+    return EnKFConfig()
 
 
 @dataclasses.dataclass
@@ -342,7 +342,7 @@ class Filter(BaseLogFactorAdder):
     If `filter_config=None`, defaults are:
 
     - `ContinuousTimeEnKFConfig()` for continuous-time models, and
-    - `EKFConfig(filter_source="cuthbert")` for discrete-time models.
+    - `EnKFConfig()` for discrete-time models.
 
     Notes:
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
@@ -643,8 +643,8 @@ def _filter_discrete_time(
 ) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
-    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig (cd-dynamax)
-    or EKFConfig (cuthbert), PFConfig (cuthbert).
+    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
+    (cd-dynamax) or KFConfig, EKFConfig, EnKFConfig, PFConfig (cuthbert).
 
     Args:
         name: Name of the factor.

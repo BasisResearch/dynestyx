@@ -84,7 +84,8 @@ class BaseFilterConfig:
 class EnKFConfig(BaseFilterConfig):
     r"""Ensemble Kalman Filter (EnKF) for discrete-time models.
 
-    A good general-purpose filter for nonlinear models. Works with any
+    The **default filter** for discrete-time models. A good general-purpose
+    filter for nonlinear models with Gaussian observations. Works with any
     differentiable or non-differentiable dynamics and scales well to moderate
     state dimensions. Cheaper per-step than the particle filter, but assumes
     observations are approximately Gaussian given the ensemble.
@@ -108,7 +109,7 @@ class EnKFConfig(BaseFilterConfig):
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
             `None` disables inflation.
-        filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
+        filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
         The ensemble Kalman filter comprises ensemble members $x_t^{(i)}, i = 1, \ldots, N_{\text{particles}}$.
@@ -159,7 +160,7 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+    filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
 
 @dataclasses.dataclass
@@ -281,9 +282,6 @@ class EKFConfig(BaseFilterConfig):
     is automatically performed via Jax autodiff.
 
     This is exact (but wasteful) for linear-Gaussian models.
-
-    This is the **default discrete-time filter** when no `filter_config` is
-    passed to `Filter`.
 
     Attributes:
         filter_emission_order (FilterEmissionOrder): Linearisation order for
@@ -520,7 +518,7 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
             [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
 
 
 @dataclasses.dataclass

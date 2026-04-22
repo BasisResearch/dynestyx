@@ -24,13 +24,13 @@ with Filter(filter_config=HMMConfig()):
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (pseudo-marginal MCMC—parameters only). Note: the usage of discrete-time filters is currently under active development (likely incorrect implementations).
+- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
 For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), use the simulator approach (currently working reliably), do:
 ```python
 with DiscreteTimeSimulator():
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
-For filter-based marginalization (currently not working reliably), do:
+For filter-based marginalization with the default EnKF, do:
 ```python
 with Filter():
     return model(obs_times=obs_times, obs_values=obs_values)
@@ -97,7 +97,7 @@ Hierarchical models are supported by the [`dsx.plate`](./api_reference/public/ha
 
 ## What about neural nets?
 
-We will put examples up soon. See [CD-Dynamax's Lorenz 63 neural drift tutorial](https://github.com/hd-UQ/cd_dynamax/blob/dev-numpyro-api/demos/numpyro/notebooks/lorenz63_nndrift_sgd_fit_to_data_tutorial_newAPI.ipynb) to convince yourself that this will work well.
+See our [neural drift correction deep dive](deep_dives/neural_drift_correction.ipynb). It shows how to keep the observation model and filter workflow fixed while swapping a mechanistic ODE drift for a mechanistic-plus-neural residual drift.
 
 ## What about SINDy?
 
