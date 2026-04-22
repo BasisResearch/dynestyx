@@ -39,7 +39,6 @@ nav:
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
       - GP prior on drift (FitzHugh-Nagumo): deep_dives/gp_drift.ipynb
-      - Neural drift correction for a nonlinear oscillator: deep_dives/neural_drift_correction.ipynb
   - API Reference: 
     - api_reference/index.md
     - Public API:
