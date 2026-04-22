@@ -373,7 +373,7 @@ class KFConfig(BaseFilterConfig):
         - For more details on the `cuthbert` implementation, see the [cuthbert documentation](https://state-space-models.github.io/cuthbert/cuthbert_api/gaussian/kalman/).
     """
 
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+    filter_source: CuthbertOrCDDynamaxFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
