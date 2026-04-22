@@ -3599,17 +3599,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.simulators._solve_de" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _solve_de
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#dynestyx.simulators._suspend_numpyro_plate_frames" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4479,7 +4468,7 @@ as <code>numpyro.deterministic(...)</code> sites.</p>
 
 
 <h3 id="dynestyx.simulators.ODESimulator.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractSolver</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">Tsit5</span><span class="p">(),</span> <span class="n">adjoint</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractAdjoint</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">RecursiveCheckpointAdjoint</span><span class="p">(),</span> <span class="n">stepsize_controller</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractStepSizeController</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">ConstantStepSize</span><span class="p">(),</span> <span class="n">dt0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100000</span><span class="p">,</span> <span class="n">n_simulations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractSolver</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">Tsit5</span><span class="p">(),</span> <span class="n">adjoint</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractAdjoint</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">RecursiveCheckpointAdjoint</span><span class="p">(),</span> <span class="n">stepsize_controller</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractStepSizeController</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">ConstantStepSize</span><span class="p">(),</span> <span class="n">dt0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">=</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100000</span><span class="p">,</span> <span class="n">n_simulations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span></code>
 
 <a href="#dynestyx.simulators.ODESimulator.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4557,11 +4546,11 @@ See <a href="https://docs.kidger.site/diffrax/api/adjoints/">Adjoints</a>.</p>
                 <code>dt0</code>
             </td>
             <td>
-                  <code><span title="float">float</span></code>
+                  <code><span title="dynestyx.types.TimeLike">TimeLike</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Initial step size passed to
+                <p>Initial step size (float or JAX array) passed to
 <a href="https://docs.kidger.site/diffrax/api/diffeqsolve/"><code>diffrax.diffeqsolve</code></a>.</p>
               </div>
             </td>
@@ -4821,6 +4810,16 @@ as <code>numpyro.deterministic(...)</code> sites.</p>
 </ul>
 </details>
 
+<details class="tip-for-speed" open>
+  <summary>Tip for speed</summary>
+  <ul>
+<li>Use <code>source="em_scan"</code> if you are happy with a simple Euler-Maruyama forward simulation
+  (10–20x faster than Diffrax's implementation; see
+  <a href="https://github.com/patrick-kidger/diffrax/issues/517">Diffrax Issue #517</a>).</li>
+<li>Use <code>source="diffrax"</code> if you want greater flexibility in the solver and step-size control.</li>
+</ul>
+</details>
+
 
 
 
@@ -4845,7 +4844,7 @@ as <code>numpyro.deterministic(...)</code> sites.</p>
 
 
 <h3 id="dynestyx.simulators.SDESimulator.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractSolver</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">Heun</span><span class="p">(),</span> <span class="n">stepsize_controller</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractStepSizeController</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">ConstantStepSize</span><span class="p">(),</span> <span class="n">adjoint</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractAdjoint</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">RecursiveCheckpointAdjoint</span><span class="p">(),</span> <span class="n">dt0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0001</span><span class="p">,</span> <span class="n">tol_vbt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">n_simulations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractSolver</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">Heun</span><span class="p">(),</span> <span class="n">stepsize_controller</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractStepSizeController</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">ConstantStepSize</span><span class="p">(),</span> <span class="n">adjoint</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractAdjoint</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">RecursiveCheckpointAdjoint</span><span class="p">(),</span> <span class="n">dt0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">=</span> <span class="mf">0.0001</span><span class="p">,</span> <span class="n">tol_vbt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">n_simulations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;diffrax&#39;</span><span class="p">,</span> <span class="s1">&#39;em_scan&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;diffrax&#39;</span><span class="p">)</span></code>
 
 <a href="#dynestyx.simulators.SDESimulator.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4924,11 +4923,11 @@ solver (relevant when used under gradient-based inference). See
                 <code>dt0</code>
             </td>
             <td>
-                  <code><span title="float">float</span></code>
+                  <code><span title="dynestyx.types.TimeLike">TimeLike</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Initial step size passed to
+                <p>Initial step size (float or JAX array) passed to
 <a href="https://docs.kidger.site/diffrax/api/diffeqsolve/"><code>diffrax.diffeqsolve</code></a>.</p>
               </div>
             </td>
@@ -4986,6 +4985,25 @@ states and observations have an extra leading dimension (n_simulations, T, ...).
             </td>
             <td>
                   <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>source</code>
+            </td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;diffrax&#39;, &#39;em_scan&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>SDE backend to use. <code>"diffrax"</code> uses Diffrax + Brownian tree.
+<code>"em_scan"</code> uses a custom fixed-step Euler-Maruyama <code>lax.scan</code>
+that advances at every <code>dt0</code> tick and also lands exactly on all
+requested solve times.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;diffrax&#39;</code>
             </td>
           </tr>
       </tbody>
@@ -5353,26 +5371,6 @@ such slicing for:
     <div class="doc doc-contents ">
 
         <p>Slice all plate-batched array leaves in a pytree for one plate member.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.simulators._solve_de" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_solve_de</span><span class="p">(</span><span class="n">dynamics</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">saveat_times</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">x0</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">control_path_eval</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Array</span><span class="p">],</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span> <span class="n">diffeqsolve_settings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tol_vbt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
-
-<a href="#dynestyx.simulators._solve_de" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Solve one ODE/SDE trajectory with diffrax.</p>
-<p>Uses ODE mode when diffusion is None, otherwise SDE mode. <code>t0</code> is explicit
-so rollout segments can start from filtered times.</p>
 
 
     </div>

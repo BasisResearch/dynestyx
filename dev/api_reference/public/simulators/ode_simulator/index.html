@@ -3670,7 +3670,7 @@ as <code>numpyro.deterministic(...)</code> sites.</p>
 
 
 <h2 id="dynestyx.simulators.ODESimulator.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractSolver</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">Tsit5</span><span class="p">(),</span> <span class="n">adjoint</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractAdjoint</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">RecursiveCheckpointAdjoint</span><span class="p">(),</span> <span class="n">stepsize_controller</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractStepSizeController</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">ConstantStepSize</span><span class="p">(),</span> <span class="n">dt0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100000</span><span class="p">,</span> <span class="n">n_simulations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractSolver</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">Tsit5</span><span class="p">(),</span> <span class="n">adjoint</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractAdjoint</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">RecursiveCheckpointAdjoint</span><span class="p">(),</span> <span class="n">stepsize_controller</span><span class="p">:</span> <span class="n">dfx</span><span class="o">.</span><span class="n">AbstractStepSizeController</span> <span class="o">=</span> <span class="n">dfx</span><span class="o">.</span><span class="n">ConstantStepSize</span><span class="p">(),</span> <span class="n">dt0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">=</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100000</span><span class="p">,</span> <span class="n">n_simulations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span></code>
 
 <a href="#dynestyx.simulators.ODESimulator.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -3748,11 +3748,11 @@ See <a href="https://docs.kidger.site/diffrax/api/adjoints/">Adjoints</a>.</p>
                 <code>dt0</code>
             </td>
             <td>
-                  <code><span title="float">float</span></code>
+                  <code><span title="dynestyx.types.TimeLike">TimeLike</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Initial step size passed to
+                <p>Initial step size (float or JAX array) passed to
 <a href="https://docs.kidger.site/diffrax/api/diffeqsolve/"><code>diffrax.diffeqsolve</code></a>.</p>
               </div>
             </td>

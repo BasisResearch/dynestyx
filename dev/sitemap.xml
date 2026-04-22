@@ -2,270 +2,270 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/faq/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/math_intro/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/quick_example/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/handlers/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/simulators/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/utils/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/diagnostics/plotting_utils/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/discretizers/discretizer/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/blackjax_integration/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/checkers/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/filter_configs/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/filters/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/mcmc/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/mcmc_configs/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/models/checkers/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/models/core_models/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/models/specialized_models/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/handlers/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/diagnostics/plotting_utils/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/discretizers/discretizer/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/inference/filter_configs/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/inference/filters/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/inference/mcmc/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/inference/mcmc_configs/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core_models/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized_models/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/continuous_time_state_evolution/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/discrete_time_state_evolution/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/drift/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/dynamical_model/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/observation_model/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/potential/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/affine_drift/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/gaussian_observation/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/gaussian_state_evolution/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/linear_gaussian_observation/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/linear_gaussian_state_evolution/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/lti_continuous/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/lti_discrete/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/simulators/discrete_time_simulator/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/simulators/ode_simulator/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/simulators/overview/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/simulators/sde_simulator/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/simulators/simulator_wrapper/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/discrete_time_lti_profile_likelihood/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/fhn_sparse_id/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/gp_drift/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/l63_speedup_dirac_vs_enkf/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/mcmc_inference_algorithm_comparison/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/logo/make_logo/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/quickstart/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/sde_non_gaussian_observations/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/00_index/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/01_numpyro_bayesian_workflow/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/02_dynestyx_discrete_intro/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/03_filtering_mll/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/05_svi/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/06_continuous_time/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/06b_odes/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/07_hmm/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/08_hierarchical_inference/</loc>
-         <lastmod>2026-04-21</lastmod>
+         <lastmod>2026-04-22</lastmod>
     </url>
 </urlset>
