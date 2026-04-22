@@ -238,7 +238,7 @@ def _infer_observation_dim_in_plate_context(
     observation_model: Callable[[State, Control | None, Time], Any],
     inferred_state_dim: int,
     control_dim: int,
-    t0: float | None,
+    t0: Time | None,
     observation_dim: int | None,
 ) -> int:
     """Infer observation dimension in plate context, falling back to explicit value."""
@@ -250,7 +250,7 @@ def _infer_observation_dim_in_plate_context(
         state_dim=inferred_state_dim,
     )
     u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-    dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+    dummy_t0 = jnp.array(0.0) if t0 is None else t0
     try:
         obs_dist = observation_model(x0, u0, dummy_t0)
         return int(
