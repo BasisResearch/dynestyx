@@ -1175,7 +1175,7 @@
   <span class="md-ellipsis">
     
   
-    Profile likelihood for discrete-time LTI: KF vs EKF vs UKF vs PF
+    Profile likelihood for discrete-time LTI: KF vs EnKF vs EKF vs UKF vs PF
   
 
     
@@ -3658,12 +3658,12 @@ Omit <code>ctrl_times</code> and <code>ctrl_values</code> when the model has no 
 </code></pre></div></p>
 </li>
 <li>
-<p><strong>Discrete-time</strong>: Either a <strong>Simulator</strong> (NUTS samples both parameters and latent states) or a <strong>Filter</strong> (pseudo-marginal MCMC—parameters only). Note: the usage of discrete-time filters is currently under active development (likely incorrect implementations).
+<p><strong>Discrete-time</strong>: Either a <strong>Simulator</strong> (NUTS samples both parameters and latent states) or a <strong>Filter</strong> (parameters only, with latent states marginalized by a filtering algorithm). <code>Filter()</code> defaults to the cuthbert-backed EnKF for Gaussian observation models. Use <code>PFConfig</code> when you need non-Gaussian observations or a fully particle-based approximation.
 For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), use the simulator approach (currently working reliably), do:
 <div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">():</span>
     <span class="k">return</span> <span class="n">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 </code></pre></div>
-For filter-based marginalization (currently not working reliably), do:
+For filter-based marginalization with the default EnKF, do:
 <div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">Filter</span><span class="p">():</span>
     <span class="k">return</span> <span class="n">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 </code></pre></div></p>

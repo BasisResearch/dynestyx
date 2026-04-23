@@ -1177,7 +1177,7 @@
   <span class="md-ellipsis">
     
   
-    Profile likelihood for discrete-time LTI: KF vs EKF vs UKF vs PF
+    Profile likelihood for discrete-time LTI: KF vs EnKF vs EKF vs UKF vs PF
   
 
     
@@ -3793,19 +3793,19 @@
 <td>Linear-Gaussian dynamics and linear-Gaussian observations (exact &amp; optimal).</td>
 </tr>
 <tr>
+<td><code>EnKFConfig</code></td>
+<td>Discrete</td>
+<td>Nonlinear or expensive models with Gaussian observations; cuthbert-backed and a good general-purpose default. <em>(default)</em></td>
+</tr>
+<tr>
 <td><code>EKFConfig</code></td>
 <td>Discrete</td>
-<td>Nonlinear, differentiable Gaussian dynamics, nonlinear but differentiable Gaussian observations (approximate). <em>(default)</em>.</td>
+<td>Nonlinear, differentiable Gaussian dynamics, nonlinear (and with <code>cuthbert</code>, non-Gaussian) but differentiable observations (approximate).</td>
 </tr>
 <tr>
 <td><code>UKFConfig</code></td>
 <td>Discrete</td>
 <td>Nonlinear, differentiable Gaussian dynamics, nonlinear but differentiable Gaussian observations (approximate). Generally more accurate, but slower than <code>EKFConfig</code>.</td>
-</tr>
-<tr>
-<td><code>EnKFConfig</code></td>
-<td>Discrete</td>
-<td>High-dimensional or expensive models with lower-dimensional structure and Gaussian observations (approximate).</td>
 </tr>
 <tr>
 <td><code>PFConfig</code></td>
@@ -4247,8 +4247,6 @@ via a first-order Taylor expansion. It is fast and simple, but may
 not work well for strongly nonlinear models. The Taylor series expansion
 is automatically performed via Jax autodiff.</p>
 <p>This is exact (but wasteful) for linear-Gaussian models.</p>
-<p>This is the <strong>default discrete-time filter</strong> when no <code>filter_config</code> is
-passed to <code>Filter</code>.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4666,10 +4664,15 @@ For more information on these options, see <code>PFResamplingConfig</code>.</p>
 
 
         <p>Ensemble Kalman Filter (EnKF) for discrete-time models.</p>
-<p>A good general-purpose filter for nonlinear models. Works with any
+<p>The <strong>default filter</strong> for discrete-time models. A good general-purpose
+filter for nonlinear models with Gaussian observations. Works with any
 differentiable or non-differentiable dynamics and scales well to moderate
 state dimensions. Cheaper per-step than the particle filter, but assumes
 observations are approximately Gaussian given the ensemble.</p>
+<p>The observation noise covariance must be <strong>state-independent</strong> (it may
+still depend on time or controls). Using a state-dependent scale with the
+cuthbert backend raises a <code>ValueError</code>; if you need heteroscedastic noise,
+use <code>PFConfig</code> instead.</p>
 <p>The primary tuning knob is <code>n_particles</code>, with more particles providing
 more accurate results at the cost of higher compute.
 If the ensemble collapses over long trajectories, increase
@@ -4746,7 +4749,7 @@ square-root variant. <code>None</code> defers to the backend default.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Backend. Defaults to <code>"cd_dynamax"</code>.</p>
+                <p>Backend. Defaults to <code>"cuthbert"</code>.</p>
               </div>
             </td>
           </tr>
