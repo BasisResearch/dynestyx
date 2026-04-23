@@ -149,56 +149,6 @@ def _em_sample_from_terms(
     return x_next, key_next
 
 
-def euler_maruyama_step_loc_cov(
-    state_evolution: ContinuousTimeStateEvolution,
-    x: Array,
-    u: Array | None,
-    t_now: Array,
-    dt: Array,
-) -> tuple[Array, Array]:
-    """Compute one EM moment step over a fixed `dt`.
-
-    Args:
-        state_evolution: Continuous-time state evolution.
-        x: Current state.
-        u: Optional control at `t_now`.
-        t_now: Current time.
-        dt: Step size.
-
-    Returns:
-        Tuple `(loc, cov)` for the one-step EM transition.
-    """
-    drift, diffusion = _em_local_terms(state_evolution, x, u, t_now)
-    return _em_moments_from_terms(x, dt, drift, diffusion)
-
-
-def euler_maruyama_step_sample(
-    state_evolution: ContinuousTimeStateEvolution,
-    x: Array,
-    u: Array | None,
-    t_now: Array,
-    dt: Array,
-    *,
-    key: Array,
-) -> tuple[Array, Array]:
-    """Sample one EM step with Brownian increment noise.
-
-    Args:
-        state_evolution: Continuous-time state evolution.
-        x: Current state.
-        u: Optional control at `t_now`.
-        t_now: Current time.
-        dt: Step size.
-        key: PRNG key for sampling.
-
-    Returns:
-        Tuple `(x_next, key_next)` for one sampled EM step.
-    """
-    bm_dim = _require_bm_dim(state_evolution)
-    drift, diffusion = _em_local_terms(state_evolution, x, u, t_now)
-    return _em_sample_from_terms(x, dt, drift, diffusion, key=key, bm_dim=bm_dim)
-
-
 def euler_maruyama_integrate_state_to_time(
     state_evolution: ContinuousTimeStateEvolution,
     x_init: Array,
@@ -227,6 +177,8 @@ def euler_maruyama_integrate_state_to_time(
         dt0, dt0 <= 0, f"EM integration requires dt0 > 0, got dt0={dt0!r}."
     )
 
+    bm_dim = _require_bm_dim(state_evolution)
+
     def _cond_fn(carry):
         _, t_curr, _, t_end = carry
         return t_curr < t_end
@@ -235,13 +187,9 @@ def euler_maruyama_integrate_state_to_time(
         x_curr, t_curr, key_curr, t_end = carry
         h = jnp.minimum(dt0, t_end - t_curr)
         u_t = control_path_eval(t_curr) if control_path_eval is not None else None
-        x_next, key_next = euler_maruyama_step_sample(
-            state_evolution,
-            x_curr,
-            u_t,
-            t_curr,
-            h,
-            key=key_curr,
+        drift, diffusion = _em_local_terms(state_evolution, x_curr, u_t, t_curr)
+        x_next, key_next = _em_sample_from_terms(
+            x_curr, h, drift, diffusion, key=key_curr, bm_dim=bm_dim
         )
         return x_next, t_curr + h, key_next, t_end
 
@@ -300,9 +248,8 @@ def euler_maruyama_loc_cov(
         t_next_arr = t_next_arr[None]
 
     def _step_interval(_x, _u, _t_now, _t_next):
-        return euler_maruyama_step_loc_cov(
-            state_evolution, _x, _u, _t_now, _t_next - _t_now
-        )
+        drift, diffusion = _em_local_terms(state_evolution, _x, _u, _t_now)
+        return _em_moments_from_terms(_x, _t_next - _t_now, drift, diffusion)
 
     if u is None:
         loc, cov = vmap(_step_interval, in_axes=(1, None, 0, 0))(
