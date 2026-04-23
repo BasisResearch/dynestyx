@@ -53,11 +53,10 @@ def test_euler_maruyama_matches_manual_mean_and_variance():
 def test_euler_maruyama_batched_time_covariance_shape():
     cte = _ctse_1d_zero_drift_unit_diffusion()
     evo = euler_maruyama(cte)
-    x = jnp.array([[0.0, 1.0, 2.0]])  # (1, 3)
+    x = jnp.array([[0.0], [1.0], [2.0]])  # (3, 1) = (T, state_dim)
     t_now = jnp.array([0.0, 1.0, 2.0])
     t_next = jnp.array([0.5, 1.5, 2.5])
     d = evo(x, None, t_now, t_next)
-    # vmap stacks the time batch on the leading axis: (num_timepoints, dim_state)
     assert d.loc.shape == (3, 1)
     assert d.covariance_matrix.shape == (3, 1, 1)
     assert jnp.allclose(d.covariance_matrix[:, 0, 0], jnp.array([0.5, 0.5, 0.5]))

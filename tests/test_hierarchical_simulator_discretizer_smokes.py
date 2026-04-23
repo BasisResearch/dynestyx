@@ -435,6 +435,34 @@ def _plate_continuous_for_discretizer_model(
         )
 
 
+def _nested_plate_continuous_for_discretizer_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    G=2,
+    M=2,
+):
+    with dsx.plate("groups", G):
+        beta = numpyro.sample("beta", dist.Normal(0.0, 0.2))
+        with dsx.plate("trajectories", M):
+            alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+            A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(alpha)
+            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
+            L = 0.2 * jnp.array([[1.0], [0.5]])
+            H = jnp.array([[1.0, 0.0]])
+            R = jnp.array([[0.25]])
+            dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                predict_times=predict_times,
+            )
+
+
 def test_plate_discretizer_forward_and_rollout():
     obs_times = jnp.arange(4.0)
     predict_times = jnp.arange(6.0)
@@ -458,6 +486,51 @@ def test_plate_discretizer_forward_and_rollout():
                     )
     assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
     assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
+
+
+def test_nested_plate_discretizer_forward_shapes():
+    obs_times = jnp.arange(4.0)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(19)):
+                _nested_plate_continuous_for_discretizer_model(
+                    predict_times=obs_times, G=2, M=2
+                )
+
+    assert tr["f_times"]["value"].shape == (2, 2, 1, len(obs_times))
+    assert tr["f_states"]["value"].shape == (2, 2, 1, len(obs_times), 2)
+    assert tr["f_observations"]["value"].shape == (2, 2, 1, len(obs_times), 1)
+
+
+def test_nested_plate_discretizer_filter_rollout_shapes():
+    obs_times = jnp.arange(4.0)
+    predict_times = jnp.arange(6.0)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(20)):
+                _nested_plate_continuous_for_discretizer_model(
+                    predict_times=obs_times, G=2, M=2
+                )
+    obs = tr["f_observations"]["value"][:, :, 0]
+
+    with DiscreteTimeSimulator():
+        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+            with Discretizer():
+                with trace() as tr, seed(rng_seed=jr.PRNGKey(21)):
+                    _nested_plate_continuous_for_discretizer_model(
+                        obs_times=obs_times,
+                        obs_values=obs,
+                        predict_times=predict_times,
+                        G=2,
+                        M=2,
+                    )
+
+    assert tr["f_predicted_times"]["value"].shape == (2, 2, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape == (2, 2, 1, len(predict_times), 2)
+    assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
+    assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0, 0], predict_times)
 
 
 def _non_plate_discrete_model(predict_times=None):

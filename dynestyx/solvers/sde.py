@@ -211,58 +211,85 @@ def euler_maruyama_loc_cov(
         state_evolution: Continuous-time state evolution with drift and diffusion.
         x: Current state(s). Supports either:
             - `(state_dim,)` for a single transition, or
-            - `(state_dim, num_timepoints)` for batched transitions.
+            - `(..., state_dim)` for batched transitions, preserving leading dims.
         u: Optional control input(s). If provided, supports either:
             - `(control_dim,)` for a single transition, or
-            - `(control_dim, num_timepoints)` for batched transitions.
+            - `(..., control_dim)` for batched transitions with leading dims
+              matching `x`.
             Pass `None` for uncontrolled dynamics.
-        t_now: Start time(s), scalar or shape `(num_timepoints,)`.
-        t_next: End time(s), scalar or shape `(num_timepoints,)`.
+        t_now: Start time(s), scalar or shape matching the leading dims of `x`.
+        t_next: End time(s), scalar or shape matching the leading dims of `x`.
 
     Returns:
         Dictionary with:
         - `"loc"`: predicted mean(s), shape `(state_dim,)` for single-transition
-          input or `(num_timepoints, state_dim)` for batched-time input.
+          input or `(..., state_dim)` for batched input.
         - `"cov"`: predicted covariance matrix/matrices, shape
           `(state_dim, state_dim)` for single-transition input or
-          `(num_timepoints, state_dim, state_dim)` for batched-time input.
+          `(..., state_dim, state_dim)` for batched input.
 
     Batching behavior:
-        Batched mode maps across the time axis, pairing
-        `x[:, i], u[:, i], t_now[i], t_next[i]` for each `i`.
-        Scalar inputs are promoted to a batch of size 1 internally and squeezed
-        back to single-transition outputs.
+        Leading batch dimensions are preserved. For example, time-batched input
+        of shape `(T, state_dim)` returns `(T, state_dim)` rather than moving
+        the time axis to the front as a side effect of `vmap`.
     """
-    squeezed = False
-    if x.ndim == 1:
-        squeezed = True
-        x = x[:, None]
-    if u is not None and u.ndim == 1:
-        u = u[:, None]
-
-    t_now_arr = jnp.asarray(t_now)
-    if t_now_arr.ndim == 0:
-        t_now_arr = t_now_arr[None]
-    t_next_arr = jnp.asarray(t_next)
-    if t_next_arr.ndim == 0:
-        t_next_arr = t_next_arr[None]
+    x_arr = jnp.asarray(x)
 
     def _step_interval(_x, _u, _t_now, _t_next):
         drift, diffusion = _em_local_terms(state_evolution, _x, _u, _t_now)
         return _em_moments_from_terms(_x, _t_next - _t_now, drift, diffusion)
 
+    if x_arr.ndim == 1:
+        loc, cov = _step_interval(x_arr, u, jnp.asarray(t_now), jnp.asarray(t_next))
+        return {"loc": loc, "cov": cov}
+
+    batch_shape = x_arr.shape[:-1]
+    state_dim = x_arr.shape[-1]
+    x_flat = x_arr.reshape((-1, state_dim))
+
     if u is None:
-        loc, cov = vmap(_step_interval, in_axes=(1, None, 0, 0))(
-            x, None, t_now_arr, t_next_arr
-        )
+        u_flat = None
     else:
-        loc, cov = vmap(_step_interval, in_axes=(1, 1, 0, 0))(
-            x, u, t_now_arr, t_next_arr
+        u_arr = jnp.asarray(u)
+        if u_arr.ndim == 1 or u_arr.shape[:-1] != batch_shape:
+            raise ValueError(
+                "For batched x, u must be None or have leading dimensions "
+                "matching x in euler_maruyama_loc_cov."
+            )
+        u_flat = u_arr.reshape((-1, u_arr.shape[-1]))
+
+    t_now_arr = jnp.asarray(t_now)
+    if t_now_arr.ndim == 0:
+        t_now_arr = jnp.broadcast_to(t_now_arr, batch_shape)
+    elif t_now_arr.shape != batch_shape:
+        raise ValueError(
+            "t_now must be scalar or have shape matching x leading dimensions "
+            "in euler_maruyama_loc_cov."
         )
 
-    if squeezed:
-        loc = loc[0]
-        cov = cov[0]
+    t_next_arr = jnp.asarray(t_next)
+    if t_next_arr.ndim == 0:
+        t_next_arr = jnp.broadcast_to(t_next_arr, batch_shape)
+    elif t_next_arr.shape != batch_shape:
+        raise ValueError(
+            "t_next must be scalar or have shape matching x leading dimensions "
+            "in euler_maruyama_loc_cov."
+        )
+
+    t_now_flat = t_now_arr.reshape((-1,))
+    t_next_flat = t_next_arr.reshape((-1,))
+
+    if u_flat is None:
+        loc_flat, cov_flat = vmap(_step_interval, in_axes=(0, None, 0, 0))(
+            x_flat, None, t_now_flat, t_next_flat
+        )
+    else:
+        loc_flat, cov_flat = vmap(_step_interval, in_axes=(0, 0, 0, 0))(
+            x_flat, u_flat, t_now_flat, t_next_flat
+        )
+
+    loc = loc_flat.reshape(batch_shape + (state_dim,))
+    cov = cov_flat.reshape(batch_shape + cov_flat.shape[-2:])
     return {"loc": loc, "cov": cov}
 
 
