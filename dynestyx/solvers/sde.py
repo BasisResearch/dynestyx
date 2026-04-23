@@ -47,8 +47,8 @@ def _early_return_states(x0: State, saveat_times: Array) -> Array:
     return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
 
 
-def _bm_dim_or_default(state_evolution: ContinuousTimeStateEvolution) -> int:
-    """Return Brownian dimension, defaulting to 1 when unspecified.
+def _require_bm_dim(state_evolution: ContinuousTimeStateEvolution) -> int:
+    """Return Brownian dimension or raise if unspecified.
 
     Args:
         state_evolution: Continuous-time state evolution.
@@ -56,7 +56,9 @@ def _bm_dim_or_default(state_evolution: ContinuousTimeStateEvolution) -> int:
     Returns:
         Brownian motion dimension used by EM sampling.
     """
-    return int(state_evolution.bm_dim) if state_evolution.bm_dim is not None else 1
+    if state_evolution.bm_dim is None:
+        raise ValueError("SDE sampling requires state_evolution.bm_dim to be set.")
+    return int(state_evolution.bm_dim)
 
 
 def _require_diffusion_fn(
@@ -178,7 +180,6 @@ def euler_maruyama_step_sample(
     dt: Array,
     *,
     key: Array,
-    bm_dim: int | None = None,
 ) -> tuple[Array, Array]:
     """Sample one EM step with Brownian increment noise.
 
@@ -189,14 +190,13 @@ def euler_maruyama_step_sample(
         t_now: Current time.
         dt: Step size.
         key: PRNG key for sampling.
-        bm_dim: Optional Brownian dimension override.
 
     Returns:
         Tuple `(x_next, key_next)` for one sampled EM step.
     """
-    bm_dim_step = _bm_dim_or_default(state_evolution) if bm_dim is None else bm_dim
+    bm_dim = _require_bm_dim(state_evolution)
     drift, diffusion = _em_local_terms(state_evolution, x, u, t_now)
-    return _em_sample_from_terms(x, dt, drift, diffusion, key=key, bm_dim=bm_dim_step)
+    return _em_sample_from_terms(x, dt, drift, diffusion, key=key, bm_dim=bm_dim)
 
 
 def euler_maruyama_integrate_state_to_time(
@@ -227,7 +227,7 @@ def euler_maruyama_integrate_state_to_time(
         dt0, dt0 <= 0, f"EM integration requires dt0 > 0, got dt0={dt0!r}."
     )
 
-    bm_dim = _bm_dim_or_default(state_evolution)
+    _require_bm_dim(state_evolution)
 
     def _cond_fn(carry):
         _, t_curr, _, t_end = carry
@@ -244,7 +244,6 @@ def euler_maruyama_integrate_state_to_time(
             t_curr,
             h,
             key=key_curr,
-            bm_dim=bm_dim,
         )
         return x_next, t_curr + h, key_next, t_end
 
