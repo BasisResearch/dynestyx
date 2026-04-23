@@ -1,3 +1,4 @@
+import warnings
 from typing import NamedTuple
 
 import jax
@@ -5,6 +6,7 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from cuthbert import filter as cuthbert_filter
+from cuthbert.enkf import ensemble_kalman_filter
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import particle_filter
 from cuthbertlib.resampling import (
@@ -13,17 +15,23 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
+from numpyro.distributions import Distribution
 
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
+    EnKFConfig,
     KFConfig,
     PFConfig,
     _config_to_record_kwargs,
 )
-from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
+from dynestyx.inference.integrations.utils import (
+    covariance_from_cholesky,
+    particles_to_delta_mixtures,
+)
 from dynestyx.models import (
     DynamicalModel,
+    GaussianObservation,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
@@ -41,6 +49,81 @@ class CuthbertInputs(NamedTuple):
     is_first_step: jax.Array  # (T+1,) bool — True only at index 1
 
 
+def _extract_gaussian_chol(d: dist.Distribution, obs_dim: int) -> jax.Array:
+    """Extract a Cholesky factor of the covariance from a Gaussian distribution."""
+    if isinstance(d, dist.MultivariateNormal):
+        return jnp.asarray(d.scale_tril)
+    if isinstance(d, dist.Independent) and isinstance(d.base_dist, dist.Normal):
+        scale = jnp.atleast_1d(jnp.asarray(d.base_dist.scale))
+    elif isinstance(d, dist.Normal):
+        scale = jnp.atleast_1d(jnp.asarray(d.scale))
+    else:
+        raise TypeError(
+            "cuthbert EnKF requires Gaussian observation distributions. "
+            "Expected LinearGaussianObservation, GaussianObservation, or a "
+            "callable returning Normal, Independent(Normal), or "
+            f"MultivariateNormal; got {type(d).__name__}."
+        )
+    if scale.size == 1 and obs_dim > 1:
+        scale = jnp.full((obs_dim,), scale[0])
+    return jnp.diag(scale)
+
+
+def _check_state_independent_noise(
+    chol_R_at_x0: jax.Array, probe_dist_at_x1: dist.Distribution, obs_dim: int
+) -> None:
+    """Raise if the observation noise covariance varies with state.
+
+    cuthbert's EnKF API resolves ``chol_R`` once per step (before the ensemble
+    update), so it may depend on time/controls but NOT on the latent state.
+    Silently using a state-dependent scale would freeze it at the probe state
+    and misrepresent the noise. Detect this under concrete evaluation and raise.
+    Under JAX tracing, the comparison yields a tracer and we skip the check —
+    the constraint is documented in the filter docstring.
+    """
+    chol_R_at_x1 = _extract_gaussian_chol(probe_dist_at_x1, obs_dim)
+    try:
+        equal = bool(
+            jnp.asarray(chol_R_at_x0).shape == jnp.asarray(chol_R_at_x1).shape
+            and jnp.allclose(chol_R_at_x0, chol_R_at_x1)
+        )
+    except jax.errors.TracerBoolConversionError:
+        return
+    if not equal:
+        raise ValueError(
+            "cuthbert EnKF requires state-independent observation noise, but "
+            "the observation scale changes with the latent state (heteroscedastic "
+            "noise). The EnKF API resolves chol_R once per step before the "
+            "ensemble update, so a state-dependent scale cannot be honoured. "
+            "Either make the noise depend only on time/controls, or use a "
+            "particle filter (PFConfig)."
+        )
+
+
+def _probe_state_independent_observation_noise(
+    obs_model, *, state_dim: int, obs_dim: int
+) -> None:
+    """Probe custom observation callables for state-dependent noise."""
+    probe_u = jnp.zeros(())
+    probe_t = jnp.zeros(())
+    try:
+        probe_d0: Distribution | None = obs_model(
+            jnp.zeros((state_dim,)), probe_u, probe_t
+        )
+        probe_d1: Distribution | None = obs_model(
+            jnp.ones((state_dim,)), probe_u, probe_t
+        )
+    except Exception:
+        warnings.warn(
+            "Failed to probe observation model for state-independent noise check. Please ensure the observation model is state-independent."
+        )
+        return
+
+    if probe_d0 is not None and probe_d1 is not None:
+        chol0 = _extract_gaussian_chol(probe_d0, obs_dim)
+        _check_state_independent_noise(chol0, probe_d1, obs_dim)
+
+
 def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     """Build filter_kwargs dict from config dataclass."""
     kwargs = dict(config.extra_filter_kwargs)
@@ -51,7 +134,30 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
         kwargs["resampling_differential_method"] = (
             config.resampling_method.differential_method
         )
+    elif isinstance(config, EnKFConfig):
+        kwargs["n_particles"] = config.n_particles
+        kwargs["inflation"] = (
+            config.inflation_delta if config.inflation_delta is not None else 0.0
+        )
+        if config.perturb_measurements is not None:
+            kwargs["perturbed_obs"] = config.perturb_measurements
     return kwargs
+
+
+def _drop_cuthbert_dummy_step(states, *, obs_len: int):
+    """Drop cuthbert's leading dummy state from every time-indexed leaf."""
+    raw_len = obs_len + 1
+
+    def _drop_if_time_leaf(leaf):
+        shape = getattr(leaf, "shape", None)
+        ndim = getattr(leaf, "ndim", None)
+        if ndim is None and shape is not None:
+            ndim = len(shape)
+        if shape is not None and ndim is not None and ndim > 0 and shape[0] == raw_len:
+            return leaf[1:]
+        return leaf
+
+    return jax.tree.map(_drop_if_time_leaf, states)
 
 
 def compute_cuthbert_filter(
@@ -67,18 +173,18 @@ def compute_cuthbert_filter(
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
     Returns:
-        tuple: (marginal_loglik, states) where states is the raw cuthbert filter state.
+        tuple: (marginal_loglik, states) where states are aligned to obs_times.
     """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
 
     ys = obs_values
-    T1 = int(ys.shape[0])
+    obs_len = int(ys.shape[0])
     times = obs_times
 
     if ctrl_values is None:
         control_dim = dynamics.control_dim
-        ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
-    elif ctrl_values.shape[0] > T1:
+        ctrl_values = jnp.zeros((obs_len, control_dim), dtype=ys.dtype)
+    elif ctrl_values.shape[0] > obs_len:
         inds = jnp.searchsorted(ctrl_times, times, side="left")
         ctrl_values = ctrl_values[inds]
 
@@ -96,7 +202,7 @@ def compute_cuthbert_filter(
         u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
         time=jnp.concatenate([dummy_time, times], axis=0),
         time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(T1 + 1) == 1,
+        is_first_step=jnp.arange(obs_len + 1) == 1,
     )
 
     if isinstance(filter_config, PFConfig):
@@ -106,6 +212,13 @@ def compute_cuthbert_filter(
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
             )
         filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, EnKFConfig):
+        if key is None:
+            raise ValueError(
+                "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
     elif isinstance(filter_config, KFConfig):
         filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
     elif isinstance(filter_config, EKFConfig):
@@ -113,11 +226,12 @@ def compute_cuthbert_filter(
     else:
         raise ValueError(
             f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, PFConfig."
+            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
         )
 
-    states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
-    marginal_loglik = states.log_normalizing_constant[-1]
+    raw_states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
+    marginal_loglik = raw_states.log_normalizing_constant[-1]
+    states = _drop_cuthbert_dummy_step(raw_states, obs_len=obs_len)
     return marginal_loglik, states
 
 
@@ -133,13 +247,13 @@ def run_discrete_filter(
     ctrl_values=None,
     **kwargs,
 ) -> list[dist.Distribution]:
-    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
+    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, EnKF, PF).
 
     Returns:
         list[dist.Distribution]: Filtered state distributions at each obs time.
     """
-    T1 = int(obs_values.shape[0])
-    if T1 == 0:
+    obs_len = int(obs_values.shape[0])
+    if obs_len == 0:
         return []
 
     marginal_loglik, states = compute_cuthbert_filter(
@@ -163,12 +277,13 @@ def run_discrete_filter(
             particles = particles[..., None]
         return particles_to_delta_mixtures(particles, states.log_weights)
     else:
-        _add_sites_taylor_kf(name, states, record_kwargs)
-        chol_t = jnp.transpose(states.chol_cov, (0, 2, 1))
-        cov = jnp.matmul(states.chol_cov, chol_t)
+        _add_sites_gaussian_filter(name, states, record_kwargs)
+        mean = states.mean
+        chol_cov = states.chol_cov
+        cov = covariance_from_cholesky(chol_cov)
         return [
-            dist.MultivariateNormal(states.mean[i], covariance_matrix=cov[i])
-            for i in range(states.mean.shape[0])
+            dist.MultivariateNormal(mean[i], covariance_matrix=cov[i])
+            for i in range(mean.shape[0])
         ]
 
 
@@ -229,6 +344,100 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
         resampling_fn=resampling_fn,  # type: ignore
     )
     return pf
+
+
+def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
+    if filter_kwargs is None:
+        filter_kwargs = {}
+
+    state_dim = dynamics.state_dim
+    obs_dim = dynamics.observation_dim
+
+    obs_model = dynamics.observation_model
+    if not isinstance(obs_model, (LinearGaussianObservation, GaussianObservation)):
+        _probe_state_independent_observation_noise(
+            obs_model, state_dim=state_dim, obs_dim=obs_dim
+        )
+
+    def init_sample(key, mi: CuthbertInputs):
+        return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
+
+    def get_dynamics(mi: CuthbertInputs):
+        def dynamics_fn(x, key):
+            def _noop(key):
+                return x
+
+            def _evolve(key):
+                d = dynamics.state_evolution(x, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
+                return jnp.atleast_1d(jnp.asarray(d.sample(key)))  # type: ignore
+
+            return jax.lax.cond(mi.is_first_step, _noop, _evolve, key)
+
+        return dynamics_fn
+
+    def get_observations(mi: CuthbertInputs):
+        obs_model = dynamics.observation_model
+        y = jnp.atleast_1d(jnp.asarray(mi.y))
+
+        if isinstance(obs_model, LinearGaussianObservation):
+            H = jnp.asarray(obs_model.H)
+            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+            bias = (
+                jnp.zeros((obs_dim,), dtype=y.dtype)
+                if obs_model.bias is None
+                else jnp.atleast_1d(jnp.asarray(obs_model.bias))
+            )
+            D = None if obs_model.D is None else jnp.asarray(obs_model.D)
+
+            def observation_fn(x):
+                loc = H @ x + bias
+                if D is not None:
+                    loc = loc + D @ jnp.atleast_1d(jnp.asarray(mi.u))
+                return jnp.atleast_1d(jnp.asarray(loc))
+
+            return observation_fn, chol_R, y
+        elif isinstance(obs_model, GaussianObservation):
+            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+
+            def observation_fn(x):
+                return jnp.atleast_1d(jnp.asarray(obs_model.h(x, mi.u, mi.time)))
+
+            return observation_fn, chol_R, y
+        else:
+            probe_x0 = jnp.zeros((state_dim,), dtype=y.dtype)
+            probe_x1 = jnp.ones((state_dim,), dtype=y.dtype)
+            probe_dist = obs_model(probe_x0, mi.u, mi.time)
+            chol_R = _extract_gaussian_chol(probe_dist, obs_dim)
+            _check_state_independent_noise(
+                chol_R, obs_model(probe_x1, mi.u, mi.time), obs_dim
+            )
+
+            def observation_fn(x):
+                edist = obs_model(x, mi.u, mi.time)
+                if not (
+                    isinstance(edist, (dist.MultivariateNormal, dist.Normal))
+                    or (
+                        isinstance(edist, dist.Independent)
+                        and isinstance(edist.base_dist, dist.Normal)
+                    )
+                ):
+                    raise TypeError(
+                        "cuthbert EnKF observation callable must keep returning "
+                        "Gaussian distributions; got "
+                        f"{type(edist).__name__}."
+                    )
+                return jnp.atleast_1d(jnp.asarray(edist.mean))
+
+            return observation_fn, chol_R, y
+
+    return ensemble_kalman_filter.build_filter(
+        init_sample=init_sample,  # type: ignore
+        get_dynamics=get_dynamics,  # type: ignore
+        get_observations=get_observations,  # type: ignore
+        n_particles=int(filter_kwargs.get("n_particles", 30)),
+        inflation=float(filter_kwargs.get("inflation", 0.0)),
+        perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
+    )
 
 
 def _cuthbert_filter_kalman(
@@ -349,7 +558,7 @@ def _cuthbert_filter_taylor_kf(
         )
         try:
             x_lin = jnp.atleast_1d(jnp.asarray(dist_at_lin.mean))  # type: ignore
-        except Exception as exc:
+        except (AttributeError, NotImplementedError) as exc:
             raise ValueError(
                 "dist_at_lin.mean is not available. Linearized Kalman filter requires a mean-able distribution."
             ) from exc
@@ -382,15 +591,12 @@ def _cuthbert_filter_taylor_kf(
 def _add_sites_pf(
     name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
 ):
-    # Strip the init entry (index 0) — cuthbert output is (T+1, ...),
-    # we want (T, ...) matching dynestyx's convention where output[0]
-    # is the filtered state after observing y_0.
-    log_weights = states.log_weights[1:]
-    particles = states.particles[1:]
+    log_weights = states.log_weights
+    particles = states.particles
     if particles.ndim == 2:
         particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
-    t1, n_particles, state_dim = particles.shape
+    t_len, n_particles, state_dim = particles.shape
 
     add_particles = _should_record_field(
         record_kwargs["record_filtered_particles"], particles.shape, max_elems
@@ -399,15 +605,15 @@ def _add_sites_pf(
         record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
     )
     add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_mean"], (t_len, state_dim), max_elems
     )
     add_filtered_states_cov = _should_record_field(
         record_kwargs["record_filtered_states_cov"],
-        (t1, state_dim, state_dim),
+        (t_len, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
     )
 
     need_filtered_means = (
@@ -415,8 +621,8 @@ def _add_sites_pf(
     )
 
     if need_filtered_means:
-        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T+1, n_particles, 1)
-        filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
+        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T, n_particles, 1)
+        filtered_means = jnp.sum(particles * w, axis=1)  # (T, state_dim)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
         second_mom = jnp.einsum(
@@ -439,15 +645,15 @@ def _add_sites_pf(
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
 
 
-def _add_sites_taylor_kf(
-    name: str, states: taylor.LinearizedKalmanFilterState, record_kwargs: dict
+def _add_sites_gaussian_filter(
+    name: str,
+    states: taylor.LinearizedKalmanFilterState | ensemble_kalman_filter.EnKFState,
+    record_kwargs: dict,
 ):
     max_elems = record_kwargs["record_max_elems"]
-    # Strip the init entry (index 0) — cuthbert output is (T+1, ...),
-    # we want (T, ...) matching dynestyx's convention.
-    mean = states.mean[1:]
-    chol_cov = states.chol_cov[1:]
-    t1, state_dim, _ = chol_cov.shape
+    mean = states.mean
+    chol_cov = states.chol_cov
+    t_len, state_dim, _ = chol_cov.shape
 
     add_mean = _should_record_field(
         record_kwargs["record_filtered_states_mean"], mean.shape, max_elems
@@ -459,11 +665,11 @@ def _add_sites_taylor_kf(
     )
     add_filtered_states_cov = _should_record_field(
         record_kwargs["record_filtered_states_cov"],
-        (t1, state_dim, state_dim),
+        (t_len, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
     )
 
     if add_mean:
@@ -472,8 +678,7 @@ def _add_sites_taylor_kf(
         numpyro.deterministic(f"{name}_filtered_states_chol_cov", chol_cov)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
-        chol_t = jnp.transpose(chol_cov, (0, 2, 1))
-        filtered_cov = jnp.matmul(chol_cov, chol_t)
+        filtered_cov = covariance_from_cholesky(chol_cov)
 
     if add_filtered_states_cov:
         numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
