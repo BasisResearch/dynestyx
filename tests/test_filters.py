@@ -9,11 +9,15 @@ from numpyro.infer import Predictive
 import dynestyx as dsx
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
+    EKFConfig,
     EnKFConfig,
     KFConfig,
     PFConfig,
 )
 from dynestyx.inference.filters import Filter
+from dynestyx.inference.integrations.cuthbert.discrete import (
+    compute_cuthbert_filter,
+)
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
@@ -139,6 +143,40 @@ def _make_discrete_lti_dynamics(alpha=0.35):
     "filter_config",
     [
         KFConfig(filter_source="cuthbert"),
+        EKFConfig(filter_source="cuthbert"),
+        EnKFConfig(n_particles=16, filter_source="cuthbert"),
+        PFConfig(n_particles=16, filter_source="cuthbert"),
+    ],
+)
+def test_compute_cuthbert_filter_returns_observation_aligned_states(filter_config):
+    obs_times, obs_values = _make_discrete_lti_data()
+    dynamics = _make_discrete_lti_dynamics()
+
+    marginal_loglik, states = compute_cuthbert_filter(
+        dynamics,
+        filter_config,
+        key=jr.PRNGKey(2),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    assert jnp.ndim(marginal_loglik) == 0
+    assert states.log_normalizing_constant.shape[0] == len(obs_times)
+    assert states.model_inputs.y.shape[0] == len(obs_times)
+
+    if isinstance(filter_config, PFConfig):
+        assert states.particles.shape[0] == len(obs_times)
+        assert states.log_weights.shape[0] == len(obs_times)
+    else:
+        assert states.mean.shape[0] == len(obs_times)
+        assert states.chol_cov.shape[0] == len(obs_times)
+
+
+@pytest.mark.parametrize(
+    "filter_config",
+    [
+        KFConfig(filter_source="cuthbert"),
+        EKFConfig(filter_source="cuthbert"),
         EnKFConfig(n_particles=16, filter_source="cuthbert"),
         PFConfig(n_particles=16, filter_source="cuthbert"),
     ],

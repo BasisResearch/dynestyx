@@ -120,6 +120,22 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     return kwargs
 
 
+def _drop_cuthbert_dummy_step(states, *, obs_len: int):
+    """Drop cuthbert's leading dummy state from every time-indexed leaf."""
+    raw_len = obs_len + 1
+
+    def _drop_if_time_leaf(leaf):
+        shape = getattr(leaf, "shape", None)
+        ndim = getattr(leaf, "ndim", None)
+        if ndim is None and shape is not None:
+            ndim = len(shape)
+        if shape is not None and ndim is not None and ndim > 0 and shape[0] == raw_len:
+            return leaf[1:]
+        return leaf
+
+    return jax.tree.map(_drop_if_time_leaf, states)
+
+
 def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
@@ -133,18 +149,18 @@ def compute_cuthbert_filter(
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
     Returns:
-        tuple: (marginal_loglik, states) where states is the raw cuthbert filter state.
+        tuple: (marginal_loglik, states) where states are aligned to obs_times.
     """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
 
     ys = obs_values
-    T1 = int(ys.shape[0])
+    obs_len = int(ys.shape[0])
     times = obs_times
 
     if ctrl_values is None:
         control_dim = dynamics.control_dim
-        ctrl_values = jnp.zeros((T1, control_dim), dtype=ys.dtype)
-    elif ctrl_values.shape[0] > T1:
+        ctrl_values = jnp.zeros((obs_len, control_dim), dtype=ys.dtype)
+    elif ctrl_values.shape[0] > obs_len:
         inds = jnp.searchsorted(ctrl_times, times, side="left")
         ctrl_values = ctrl_values[inds]
 
@@ -162,7 +178,7 @@ def compute_cuthbert_filter(
         u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
         time=jnp.concatenate([dummy_time, times], axis=0),
         time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(T1 + 1) == 1,
+        is_first_step=jnp.arange(obs_len + 1) == 1,
     )
 
     if isinstance(filter_config, PFConfig):
@@ -189,8 +205,9 @@ def compute_cuthbert_filter(
             "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
         )
 
-    states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
-    marginal_loglik = states.log_normalizing_constant[-1]
+    raw_states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
+    marginal_loglik = raw_states.log_normalizing_constant[-1]
+    states = _drop_cuthbert_dummy_step(raw_states, obs_len=obs_len)
     return marginal_loglik, states
 
 
@@ -211,8 +228,8 @@ def run_discrete_filter(
     Returns:
         list[dist.Distribution]: Filtered state distributions at each obs time.
     """
-    T1 = int(obs_values.shape[0])
-    if T1 == 0:
+    obs_len = int(obs_values.shape[0])
+    if obs_len == 0:
         return []
 
     marginal_loglik, states = compute_cuthbert_filter(
@@ -231,14 +248,14 @@ def run_discrete_filter(
 
     if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
-        particles = states.particles[1:]
+        particles = states.particles
         if particles.ndim == 2:
             particles = particles[..., None]
-        return particles_to_delta_mixtures(particles, states.log_weights[1:])
+        return particles_to_delta_mixtures(particles, states.log_weights)
     else:
         _add_sites_gaussian_filter(name, states, record_kwargs)
-        mean = states.mean[1:]
-        chol_cov = states.chol_cov[1:]
+        mean = states.mean
+        chol_cov = states.chol_cov
         cov = covariance_from_cholesky(chol_cov)
         return [
             dist.MultivariateNormal(mean[i], covariance_matrix=cov[i])
@@ -563,15 +580,12 @@ def _cuthbert_filter_taylor_kf(
 def _add_sites_pf(
     name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
 ):
-    # Strip the init entry (index 0) — cuthbert output is (T+1, ...),
-    # we want (T, ...) matching dynestyx's convention where output[0]
-    # is the filtered state after observing y_0.
-    log_weights = states.log_weights[1:]
-    particles = states.particles[1:]
+    log_weights = states.log_weights
+    particles = states.particles
     if particles.ndim == 2:
         particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
-    t1, n_particles, state_dim = particles.shape
+    t_len, n_particles, state_dim = particles.shape
 
     add_particles = _should_record_field(
         record_kwargs["record_filtered_particles"], particles.shape, max_elems
@@ -580,15 +594,15 @@ def _add_sites_pf(
         record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
     )
     add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_mean"], (t_len, state_dim), max_elems
     )
     add_filtered_states_cov = _should_record_field(
         record_kwargs["record_filtered_states_cov"],
-        (t1, state_dim, state_dim),
+        (t_len, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
     )
 
     need_filtered_means = (
@@ -596,8 +610,8 @@ def _add_sites_pf(
     )
 
     if need_filtered_means:
-        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T+1, n_particles, 1)
-        filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
+        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T, n_particles, 1)
+        filtered_means = jnp.sum(particles * w, axis=1)  # (T, state_dim)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
         second_mom = jnp.einsum(
@@ -626,11 +640,9 @@ def _add_sites_gaussian_filter(
     record_kwargs: dict,
 ):
     max_elems = record_kwargs["record_max_elems"]
-    # Strip the init entry (index 0) — cuthbert output is (T+1, ...),
-    # we want (T, ...) matching dynestyx's convention.
-    mean = states.mean[1:]
-    chol_cov = states.chol_cov[1:]
-    t1, state_dim, _ = chol_cov.shape
+    mean = states.mean
+    chol_cov = states.chol_cov
+    t_len, state_dim, _ = chol_cov.shape
 
     add_mean = _should_record_field(
         record_kwargs["record_filtered_states_mean"], mean.shape, max_elems
@@ -642,11 +654,11 @@ def _add_sites_gaussian_filter(
     )
     add_filtered_states_cov = _should_record_field(
         record_kwargs["record_filtered_states_cov"],
-        (t1, state_dim, state_dim),
+        (t_len, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t1, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
     )
 
     if add_mean:

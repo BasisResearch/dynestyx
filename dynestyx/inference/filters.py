@@ -113,24 +113,14 @@ def _cuthbert_states_to_dists(
     if isinstance(config, PFConfig):
         particles = states.particles
         log_weights = states.log_weights
-        # cuthbert includes an init step at index 0; align with dynestyx T convention.
-        particles = particles[
-            (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
-        ]
-        log_weights = log_weights[
-            (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
-        ]
         return _particle_to_batched_dists(
             particles,
             log_weights,
             plate_shapes=plate_shapes,
         )
 
-    # Kalman / Taylor-KF variants expose mean/chol_cov and include init at index 0.
-    mean = states.mean[(slice(None),) * len(plate_shapes) + (slice(1, None), ...)]
-    chol_cov = states.chol_cov[
-        (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
-    ]
+    mean = states.mean
+    chol_cov = states.chol_cov
     cov = covariance_from_cholesky(chol_cov)
     t_len = _time_len_from_array(mean, plate_shapes)
     return [
