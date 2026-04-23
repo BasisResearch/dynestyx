@@ -100,6 +100,30 @@ def _check_state_independent_noise(
         )
 
 
+def _probe_state_independent_observation_noise(
+    obs_model, *, state_dim: int, obs_dim: int
+) -> None:
+    """Probe custom observation callables for state-dependent noise."""
+    probe_u = jnp.zeros(())
+    probe_t = jnp.zeros(())
+    try:
+        probe_d0: Distribution | None = obs_model(
+            jnp.zeros((state_dim,)), probe_u, probe_t
+        )
+        probe_d1: Distribution | None = obs_model(
+            jnp.ones((state_dim,)), probe_u, probe_t
+        )
+    except Exception:
+        warnings.warn(
+            "Failed to probe observation model for state-independent noise check. Please ensure the observation model is state-independent."
+        )
+        return
+
+    if probe_d0 is not None and probe_d1 is not None:
+        chol0 = _extract_gaussian_chol(probe_d0, obs_dim)
+        _check_state_independent_noise(chol0, probe_d1, obs_dim)
+
+
 def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     """Build filter_kwargs dict from config dataclass."""
     kwargs = dict(config.extra_filter_kwargs)
@@ -331,22 +355,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
     obs_model = dynamics.observation_model
     if not isinstance(obs_model, (LinearGaussianObservation, GaussianObservation)):
-        probe_u = jnp.zeros(())
-        probe_t = jnp.zeros(())
-        try:
-            probe_d0: Distribution | None = obs_model(
-                jnp.zeros((state_dim,)), probe_u, probe_t
-            )
-            probe_d1: Distribution | None = obs_model(
-                jnp.ones((state_dim,)), probe_u, probe_t
-            )
-        except Exception:
-            warnings.warn(
-                "Failed to probe observation model for state-independent noise check. Please ensure the observation model is state-independent."
-            )
-        if probe_d0 is not None and probe_d1 is not None:
-            chol0 = _extract_gaussian_chol(probe_d0, obs_dim)
-            _check_state_independent_noise(chol0, probe_d1, obs_dim)
+        _probe_state_independent_observation_noise(
+            obs_model, state_dim=state_dim, obs_dim=obs_dim
+        )
 
     def init_sample(key, mi: CuthbertInputs):
         return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
