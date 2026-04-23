@@ -352,6 +352,26 @@ def test_plate_rollout_discrete_gaussian_pf_hmm():
     assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
 
 
+def test_plate_rollout_discrete_cuthbert_kf_keeps_filtered_time_alignment():
+    obs_times = jnp.arange(4.0)
+    predict_times = jnp.arange(6.0)
+    obs_gaussian = _make_obs_values((2, len(obs_times), 1))
+
+    with DiscreteTimeSimulator():
+        with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(18)):
+                _plate_discrete_lti_model(
+                    obs_times=obs_times,
+                    obs_values=obs_gaussian,
+                    predict_times=predict_times,
+                    M=2,
+                )
+
+    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
+    assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0], predict_times)
+
+
 def test_plate_rollout_continuous_gaussian_and_dpf():
     obs_times = jnp.linspace(0.0, 0.3, 4)
     predict_times = jnp.linspace(0.0, 0.5, 6)
