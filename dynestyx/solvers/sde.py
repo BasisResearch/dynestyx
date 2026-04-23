@@ -227,8 +227,6 @@ def euler_maruyama_integrate_state_to_time(
         dt0, dt0 <= 0, f"EM integration requires dt0 > 0, got dt0={dt0!r}."
     )
 
-    _require_bm_dim(state_evolution)
-
     def _cond_fn(carry):
         _, t_curr, _, t_end = carry
         return t_curr < t_end
