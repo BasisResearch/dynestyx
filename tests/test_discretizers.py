@@ -16,11 +16,11 @@ from dynestyx.inference.filter_configs import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
     DynamicalModel,
     GaussianStateEvolution,
 )
 from dynestyx.models.observations import LinearGaussianObservation
-from dynestyx.models import DiracIdentityObservation
 from dynestyx.solvers import euler_maruyama_loc_cov
 from tests.models import continuous_time_stochastic_l63_model_dirac_obs
 
