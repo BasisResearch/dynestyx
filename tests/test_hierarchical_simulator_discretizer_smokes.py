@@ -28,6 +28,7 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
     DynamicalModel,
     GaussianStateEvolution,
     LinearGaussianObservation,
@@ -177,6 +178,13 @@ class _PlateNonlinearTransition(eqx.Module):
 
     def __call__(self, x, u, t_now, t_next):
         return 0.75 * x + self.beta * jnp.tanh(x)
+
+
+class _PlateLinearTransition(eqx.Module):
+    A: jnp.ndarray
+
+    def __call__(self, x, u, t_now, t_next):
+        return x @ jnp.swapaxes(self.A, -1, -2)
 
 
 def _plate_nonlinear_discrete_model(
@@ -463,6 +471,154 @@ def _nested_plate_continuous_for_discretizer_model(
             )
 
 
+def _plate_discrete_dirac_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=2,
+):
+    state_dim = 2
+    Q = 0.1 * jnp.eye(state_dim)
+
+    with dsx.plate("trajectories", M):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
+        dynamics = DynamicalModel(
+            control_dim=0,
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(state_dim), covariance_matrix=jnp.eye(state_dim)
+            ),
+            state_evolution=GaussianStateEvolution(
+                F=_PlateLinearTransition(A=A), cov=Q
+            ),
+            observation_model=DiracIdentityObservation(),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
+def _nested_plate_discrete_dirac_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    G=2,
+    M=2,
+):
+    state_dim = 2
+    Q = 0.1 * jnp.eye(state_dim)
+
+    with dsx.plate("groups", G):
+        beta = numpyro.sample("beta", dist.Normal(0.0, 0.2))
+        with dsx.plate("trajectories", M):
+            alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+            A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(alpha)
+            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
+            dynamics = DynamicalModel(
+                control_dim=0,
+                initial_condition=dist.MultivariateNormal(
+                    loc=jnp.zeros(state_dim), covariance_matrix=jnp.eye(state_dim)
+                ),
+                state_evolution=GaussianStateEvolution(
+                    F=_PlateLinearTransition(A=A), cov=Q
+                ),
+                observation_model=DiracIdentityObservation(),
+            )
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                predict_times=predict_times,
+            )
+
+
+def _plate_continuous_dirac_for_discretizer_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=2,
+):
+    with dsx.plate("trajectories", M):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
+        L = 0.2 * jnp.array([[1.0], [0.5]])
+        dynamics = DynamicalModel(
+            control_dim=0,
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
+            ),
+            state_evolution=ContinuousTimeStateEvolution(
+                drift=AffineDrift(A=A), diffusion_coefficient=lambda x, u, t: L
+            ),
+            observation_model=DiracIdentityObservation(),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
+def _nested_plate_continuous_dirac_for_discretizer_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    G=2,
+    M=2,
+):
+    with dsx.plate("groups", G):
+        beta = numpyro.sample("beta", dist.Normal(0.0, 0.2))
+        with dsx.plate("trajectories", M):
+            alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+            A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(alpha)
+            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
+            L = 0.2 * jnp.array([[1.0], [0.5]])
+            dynamics = DynamicalModel(
+                control_dim=0,
+                initial_condition=dist.MultivariateNormal(
+                    loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
+                ),
+                state_evolution=ContinuousTimeStateEvolution(
+                    drift=AffineDrift(A=A), diffusion_coefficient=lambda x, u, t: L
+                ),
+                observation_model=DiracIdentityObservation(),
+            )
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                predict_times=predict_times,
+            )
+
+
+def _assert_hierarchical_dirac_shapes(tr, plate_shape, t, state_dim):
+    states = tr["f_states"]["value"]
+    observations = tr["f_observations"]["value"]
+    expected = plate_shape + (1, len(t), state_dim)
+    assert states.shape == expected
+    assert observations.shape == expected
+    assert jnp.array_equal(jnp.isnan(states), jnp.isnan(observations))
+    assert jnp.allclose(jnp.nan_to_num(states), jnp.nan_to_num(observations))
+
+
+def _squeeze_n_sim_axis(observations, plate_ndim):
+    return jnp.squeeze(observations, axis=plate_ndim)
+
+
 def test_plate_discretizer_forward_and_rollout():
     obs_times = jnp.arange(4.0)
     predict_times = jnp.arange(6.0)
@@ -531,6 +687,76 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
     assert tr["f_predicted_states"]["value"].shape == (2, 2, 1, len(predict_times), 2)
     assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
     assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0, 0], predict_times)
+
+
+def test_plate_discrete_dirac_forward_and_conditioning_shapes():
+    t = jnp.arange(4.0)
+
+    with DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(22)):
+            _plate_discrete_dirac_model(predict_times=t, M=2)
+    _assert_hierarchical_dirac_shapes(tr, (2,), t, state_dim=2)
+    obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=1)
+
+    with DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(23)):
+            _plate_discrete_dirac_model(obs_times=t, obs_values=obs, M=2)
+    _assert_hierarchical_dirac_shapes(tr, (2,), t, state_dim=2)
+
+
+def test_nested_plate_discrete_dirac_forward_and_conditioning_shapes():
+    t = jnp.arange(4.0)
+
+    with DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(24)):
+            _nested_plate_discrete_dirac_model(predict_times=t, G=2, M=2)
+    _assert_hierarchical_dirac_shapes(tr, (2, 2), t, state_dim=2)
+    obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=2)
+
+    with DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(25)):
+            _nested_plate_discrete_dirac_model(obs_times=t, obs_values=obs, G=2, M=2)
+    _assert_hierarchical_dirac_shapes(tr, (2, 2), t, state_dim=2)
+
+
+def test_plate_discretized_dirac_forward_and_conditioning_shapes():
+    t = jnp.arange(0.0, 0.4, 0.1)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(26)):
+                _plate_continuous_dirac_for_discretizer_model(predict_times=t, M=2)
+    _assert_hierarchical_dirac_shapes(tr, (2,), t, state_dim=2)
+    obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=1)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(27)):
+                _plate_continuous_dirac_for_discretizer_model(
+                    obs_times=t, obs_values=obs, M=2
+                )
+    _assert_hierarchical_dirac_shapes(tr, (2,), t, state_dim=2)
+
+
+def test_nested_plate_discretized_dirac_forward_and_conditioning_shapes():
+    t = jnp.arange(0.0, 0.4, 0.1)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(28)):
+                _nested_plate_continuous_dirac_for_discretizer_model(
+                    predict_times=t, G=2, M=2
+                )
+    _assert_hierarchical_dirac_shapes(tr, (2, 2), t, state_dim=2)
+    obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=2)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(29)):
+                _nested_plate_continuous_dirac_for_discretizer_model(
+                    obs_times=t, obs_values=obs, G=2, M=2
+                )
+    _assert_hierarchical_dirac_shapes(tr, (2, 2), t, state_dim=2)
 
 
 def _non_plate_discrete_model(predict_times=None):

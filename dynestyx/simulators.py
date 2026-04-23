@@ -671,7 +671,7 @@ class SDESimulator(BaseSimulator):
         tol_vbt: float | None = None,
         max_steps: int | None = None,
         n_simulations: int = 1,
-        source: Literal["diffrax", "em_scan"] = "diffrax",
+        source: Literal["diffrax", "em_scan"] = "em_scan",
     ):
         """Configure SDE integration settings.
 
@@ -696,7 +696,7 @@ class SDESimulator(BaseSimulator):
             source: SDE backend to use. `"diffrax"` uses Diffrax + Brownian tree.
                 `"em_scan"` uses a custom fixed-step Euler-Maruyama `lax.scan`
                 that advances at every `dt0` tick and also lands exactly on all
-                requested solve times.
+                requested solve times. Default is `"em_scan"` for speed.
 
         Notes:
             - `VirtualBrownianTree` draws randomness via `numpyro.prng_key()`, so
@@ -970,25 +970,16 @@ class DiscreteTimeSimulator(BaseSimulator):
             t_now = times[:-1]
             t_next = times[1:]
 
-            # Pass state (and controls) with batch as last axis so drift can use
-            # naive indexing (x[0], x[1], ...) and discretizer broadcasts correctly.
-            x_prev_batch_last = jnp.swapaxes(x_prev, 0, 1)
-            x_next_batch_last = jnp.swapaxes(x_next, 0, 1)
-            u_prev_batch_last = (
-                jnp.swapaxes(u_prev, 0, 1) if u_prev is not None else None
-            )
-
             with numpyro.plate("time", T - 1):
                 trans = dynamics.state_evolution(
-                    x_prev_batch_last,
-                    u_prev_batch_last,
+                    x_prev,
+                    u_prev,
                     t_now,
                     t_next,  # type: ignore
                 )
-                # obs shape must match trans.batch_shape + trans.event_shape: use
-                # time-first (T-1, state_dim) for e.g. discretizer; batch-last (state_dim, T-1) for scalar.
-                obs_next = x_next_batch_last if dynamics.state_dim == 1 else x_next
-                numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
+                # Transition distributions are batched over time, so observations
+                # follow the same leading-time convention: (T-1, state_dim).
+                numpyro.sample(f"{name}_x_next", trans, obs=x_next)  # type: ignore
 
             # Always return (n_sim, T, state_dim) for consistent shaping
             obs_exp = _ensure_trailing_dim(jnp.expand_dims(obs_values, axis=0))

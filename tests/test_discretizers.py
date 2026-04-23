@@ -1,8 +1,10 @@
 """Tests for Euler–Maruyama discretization and Discretizer wrapping."""
 
 import jax.numpy as jnp
+import jax.random as jr
 import numpyro.distributions as dist
 from numpyro.handlers import seed, trace
+from numpyro.infer import Predictive
 
 import dynestyx as dsx
 from dynestyx.discretizers import (
@@ -18,7 +20,9 @@ from dynestyx.models import (
     GaussianStateEvolution,
 )
 from dynestyx.models.observations import LinearGaussianObservation
+from dynestyx.models import DiracIdentityObservation
 from dynestyx.solvers import euler_maruyama_loc_cov
+from tests.models import continuous_time_stochastic_l63_model_dirac_obs
 
 
 def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
@@ -72,6 +76,30 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
     d = evo(x, None, t0, t1)
     assert jnp.allclose(d_dict["loc"], d.loc)
     assert jnp.allclose(d_dict["cov"], d.covariance_matrix)
+
+
+def test_discretized_dirac_observations_preserve_state_dimension():
+    obs_times = jnp.arange(0.0, 0.05, 0.01)
+    predictive = Predictive(
+        continuous_time_stochastic_l63_model_dirac_obs,
+        params={"rho": jnp.array(28.0)},
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+
+    with dsx.DiscreteTimeSimulator():
+        with Discretizer():
+            samples = predictive(jr.PRNGKey(0), predict_times=obs_times)
+
+    assert samples["f_states"].shape[-1] == 3
+    assert samples["f_observations"].shape[-1] == 3
+    assert jnp.allclose(samples["f_states"], samples["f_observations"])
+
+
+def test_dirac_identity_observation_preserves_scalar_event_shape():
+    obs = DiracIdentityObservation()(jnp.array(1.23), None, jnp.array(0.0))
+    assert obs.batch_shape == ()
+    assert obs.event_shape == ()
 
 
 def test_discretized_gaussian_state_evolution_ekf_cuthbert_smoke():

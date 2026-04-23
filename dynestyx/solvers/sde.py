@@ -288,7 +288,13 @@ def euler_maruyama_loc_cov(
             x_flat, u_flat, t_now_flat, t_next_flat
         )
 
-    loc = loc_flat.reshape(batch_shape + (state_dim,))
+    loc_state_dim = loc_flat.shape[-1]
+    if loc_state_dim != state_dim:
+        raise ValueError(
+            "euler_maruyama_loc_cov produced a location shape inconsistent with "
+            f"the input state shape: x.shape={x_arr.shape}, loc.shape={loc_flat.shape}."
+        )
+    loc = loc_flat.reshape(batch_shape + (loc_state_dim,))
     cov = cov_flat.reshape(batch_shape + cov_flat.shape[-2:])
     return {"loc": loc, "cov": cov}
 

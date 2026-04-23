@@ -109,4 +109,8 @@ class DiracIdentityObservation(ObservationModel):
     """
 
     def __call__(self, x, u, t):
-        return dist.Delta(x)
+        # Treat scalar latent states as scalar events, and otherwise use only
+        # the trailing state axis as the event dimension so any leading batch
+        # or plate axes are preserved.
+        event_dim = 0 if jnp.ndim(x) == 0 else 1
+        return dist.Delta(x, event_dim=event_dim)
