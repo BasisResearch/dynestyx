@@ -1,5 +1,5 @@
 import warnings
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -239,7 +239,7 @@ def compute_cuthbert_filter(
     raw_states = cuthbert_filter(
         filter_obj,
         cuthbert_inputs,
-        parallel=parallel,
+        parallel=cast(bool, parallel),
         key=key,
     )
     marginal_loglik = raw_states.log_normalizing_constant[-1]

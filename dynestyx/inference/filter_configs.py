@@ -382,9 +382,15 @@ class KFConfig(BaseFilterConfig):
     """
 
     filter_source: CuthbertOrCDDynamaxFilterSource = "cd_dynamax"
-    associative: bool = True
+    associative: bool | None = None
 
     def __post_init__(self):
+        if self.associative is None:
+            if self.filter_source == "cuthbert":
+                self.associative = True
+            else:
+                self.associative = False
+
         if self.associative and self.filter_source != "cuthbert":
             raise ValueError(
                 "KFConfig(associative=True) is only supported with "
