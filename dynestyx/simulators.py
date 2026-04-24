@@ -970,13 +970,18 @@ class DiscreteTimeSimulator(BaseSimulator):
             t_now = times[:-1]
             t_next = times[1:]
 
+            def _step_dist(x_prev_t, u_prev_t, t_now_t, t_next_t):
+                return dynamics.state_evolution(x_prev_t, u_prev_t, t_now_t, t_next_t)
+
             with numpyro.plate("time", T - 1):
-                trans = dynamics.state_evolution(
-                    x_prev,
-                    u_prev,
-                    t_now,
-                    t_next,  # type: ignore
-                )
+                if u_prev is None:
+                    trans = jax.vmap(_step_dist, in_axes=(0, None, 0, 0))(
+                        x_prev, None, t_now, t_next
+                    )
+                else:
+                    trans = jax.vmap(_step_dist, in_axes=(0, 0, 0, 0))(
+                        x_prev, u_prev, t_now, t_next
+                    )
                 # Transition distributions are batched over time, so observations
                 # follow the same leading-time convention: (T-1, state_dim).
                 numpyro.sample(f"{name}_x_next", trans, obs=x_next)  # type: ignore

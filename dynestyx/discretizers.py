@@ -33,13 +33,7 @@ def _ensure_ctse_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
 
 
 class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
-    """Euler–Maruyama discretization as `GaussianStateEvolution`.
-
-    Holds ``cte`` as an explicit field for Equinox pytree compatibility.
-
-    ``F`` and ``cov`` are optional constructor args so Equinox/dataclass-style
-    but we don't use them.
-    """
+    """`GaussianStateEvolution` backed by Euler-Maruyama moments."""
 
     cte: ContinuousTimeStateEvolution
 
@@ -49,8 +43,7 @@ class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
         F=None,
         cov=None,
     ):
-        # `F` and `cov` are accepted only for module reconstruction paths.
-        # Euler-Maruyama always derives both from `cte`.
+        # Accept these for reconstruction paths, but derive both from `cte`.
         del F, cov
         self.cte = cte
         super().__init__(

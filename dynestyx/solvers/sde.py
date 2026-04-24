@@ -245,10 +245,9 @@ def euler_maruyama_loc_cov(
 
     batch_shape = x_arr.shape[:-1]
     state_dim = x_arr.shape[-1]
-    x_flat = x_arr.reshape((-1, state_dim))
 
     if u is None:
-        u_flat = None
+        u_arr = None
     else:
         u_arr = jnp.asarray(u)
         if u_arr.ndim == 1 or u_arr.shape[:-1] != batch_shape:
@@ -256,7 +255,6 @@ def euler_maruyama_loc_cov(
                 "For batched x, u must be None or have leading dimensions "
                 "matching x in euler_maruyama_loc_cov."
             )
-        u_flat = u_arr.reshape((-1, u_arr.shape[-1]))
 
     t_now_arr = jnp.asarray(t_now)
     if t_now_arr.ndim == 0:
@@ -276,26 +274,27 @@ def euler_maruyama_loc_cov(
             "in euler_maruyama_loc_cov."
         )
 
-    t_now_flat = t_now_arr.reshape((-1,))
-    t_next_flat = t_next_arr.reshape((-1,))
-
-    if u_flat is None:
-        loc_flat, cov_flat = vmap(_step_interval, in_axes=(0, None, 0, 0))(
-            x_flat, None, t_now_flat, t_next_flat
-        )
-    else:
-        loc_flat, cov_flat = vmap(_step_interval, in_axes=(0, 0, 0, 0))(
-            x_flat, u_flat, t_now_flat, t_next_flat
+    def _batched_step(_x, _u, _t_now, _t_next):
+        if _x.ndim == 1:
+            return _step_interval(_x, _u, _t_now, _t_next)
+        in_axes_u = None if _u is None else 0
+        return vmap(_batched_step, in_axes=(0, in_axes_u, 0, 0))(
+            _x, _u, _t_now, _t_next
         )
 
-    loc_state_dim = loc_flat.shape[-1]
-    if loc_state_dim != state_dim:
+    loc, cov = _batched_step(x_arr, u_arr, t_now_arr, t_next_arr)
+
+    if loc.shape != x_arr.shape:
         raise ValueError(
             "euler_maruyama_loc_cov produced a location shape inconsistent with "
-            f"the input state shape: x.shape={x_arr.shape}, loc.shape={loc_flat.shape}."
+            f"the input state shape: x.shape={x_arr.shape}, loc.shape={loc.shape}."
         )
-    loc = loc_flat.reshape(batch_shape + (loc_state_dim,))
-    cov = cov_flat.reshape(batch_shape + cov_flat.shape[-2:])
+    expected_cov_shape = batch_shape + (state_dim, state_dim)
+    if cov.shape != expected_cov_shape:
+        raise ValueError(
+            "euler_maruyama_loc_cov produced a covariance shape inconsistent with "
+            f"the input state shape: expected {expected_cov_shape}, got {cov.shape}."
+        )
     return {"loc": loc, "cov": cov}
 
 
