@@ -333,6 +333,11 @@ class KFConfig(BaseFilterConfig):
 
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
+        associative (bool | None): Whether to enable cuthbert's associative
+            parallel-in-time scan. This is only supported when
+            `filter_source="cuthbert"`. Defaults to `None`, which selects
+            an associative scan if `filter_source="cuthbert"`, and a
+            sequential scan otherwise.
 
     ??? note "Algorithm Reference"
         When the dynamics and observation process of a dynamical system are both linear-Gaussian,
@@ -379,6 +384,20 @@ class KFConfig(BaseFilterConfig):
     """
 
     filter_source: CuthbertOrCDDynamaxFilterSource = "cd_dynamax"
+    associative: bool | None = None
+
+    def __post_init__(self):
+        if self.associative is None:
+            if self.filter_source == "cuthbert":
+                self.associative = True
+            else:
+                self.associative = False
+
+        if self.associative and self.filter_source != "cuthbert":
+            raise ValueError(
+                "KFConfig(associative=True) is only supported with "
+                "filter_source='cuthbert'."
+            )
 
 
 @dataclasses.dataclass

@@ -139,10 +139,15 @@ def _make_discrete_lti_dynamics(alpha=0.35):
     )
 
 
+def _covariance_from_cholesky(chol_cov):
+    return chol_cov @ jnp.swapaxes(chol_cov, -1, -2)
+
+
 @pytest.mark.parametrize(
     "filter_config",
     [
         KFConfig(filter_source="cuthbert"),
+        KFConfig(filter_source="cuthbert", associative=True),
         EKFConfig(filter_source="cuthbert"),
         EnKFConfig(n_particles=16, filter_source="cuthbert"),
         PFConfig(n_particles=16, filter_source="cuthbert"),
@@ -176,6 +181,7 @@ def test_compute_cuthbert_filter_returns_observation_aligned_states(filter_confi
     "filter_config",
     [
         KFConfig(filter_source="cuthbert"),
+        KFConfig(filter_source="cuthbert", associative=True),
         EKFConfig(filter_source="cuthbert"),
         EnKFConfig(n_particles=16, filter_source="cuthbert"),
         PFConfig(n_particles=16, filter_source="cuthbert"),
@@ -211,6 +217,46 @@ def test_cuthbert_filtered_distribution_shapes_match_observations(filter_config)
                 dynamics.state_dim,
                 dynamics.state_dim,
             )
+
+
+def test_cuthbert_associative_kf_matches_sequential():
+    obs_times, obs_values = _make_discrete_lti_data()
+    dynamics = _make_discrete_lti_dynamics()
+
+    seq_marginal_loglik, seq_states = compute_cuthbert_filter(
+        dynamics,
+        KFConfig(filter_source="cuthbert"),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+    assoc_marginal_loglik, assoc_states = compute_cuthbert_filter(
+        dynamics,
+        KFConfig(filter_source="cuthbert", associative=True),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    assert jnp.allclose(
+        seq_marginal_loglik, assoc_marginal_loglik, rtol=1e-6, atol=1e-6
+    )
+    assert jnp.allclose(seq_states.mean, assoc_states.mean, rtol=1e-6, atol=1e-6)
+    assert jnp.allclose(
+        _covariance_from_cholesky(seq_states.chol_cov),
+        _covariance_from_cholesky(assoc_states.chol_cov),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    assert jnp.allclose(
+        seq_states.log_normalizing_constant,
+        assoc_states.log_normalizing_constant,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_kf_config_rejects_associative_outside_cuthbert():
+    with pytest.raises(ValueError, match="filter_source='cuthbert'"):
+        KFConfig(filter_source="cd_dynamax", associative=True)
 
 
 def test_cuthbert_enkf_accepts_callable_independent_normal_observation():
