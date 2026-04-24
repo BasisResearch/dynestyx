@@ -1114,6 +1114,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Associative Kalman Filters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
         
   
@@ -4146,6 +4174,21 @@ nonlinear Gaussian models, use <code>EKFConfig</code>, <code>UKFConfig</code>, o
             <td>
               <div class="doc-md-description">
                 <p>Backend. Defaults to <code>"cd_dynamax"</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.filter_configs.KFConfig.associative">associative</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to enable cuthbert's associative
+parallel-in-time scan. This is only supported when
+<code>filter_source="cuthbert"</code>. Defaults to <code>None</code>, which selects
+an associative scan if <code>filter_source="cuthbert"</code>, and a
+sequential scan otherwise.</p>
               </div>
             </td>
           </tr>
