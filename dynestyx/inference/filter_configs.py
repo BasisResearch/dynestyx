@@ -336,7 +336,7 @@ class KFConfig(BaseFilterConfig):
         associative (bool | None): Whether to enable cuthbert's associative
             parallel-in-time scan. This is only supported when
             `filter_source="cuthbert"`. Defaults to `None`, which selects
-            an associative scan if `filter_source="cuthbert"`, and a 
+            an associative scan if `filter_source="cuthbert"`, and a
             sequential scan otherwise.
 
     ??? note "Algorithm Reference"
