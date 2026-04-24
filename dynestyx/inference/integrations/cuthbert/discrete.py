@@ -229,7 +229,19 @@ def compute_cuthbert_filter(
             "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
         )
 
-    raw_states = cuthbert_filter(filter_obj, cuthbert_inputs, parallel=False, key=key)
+    parallel = isinstance(filter_config, KFConfig) and filter_config.associative
+    if parallel and not filter_obj.associative:
+        raise ValueError(
+            "Associative filtering was requested, but the constructed cuthbert "
+            f"filter is not associative: {type(filter_config).__name__}."
+        )
+
+    raw_states = cuthbert_filter(
+        filter_obj,
+        cuthbert_inputs,
+        parallel=parallel,
+        key=key,
+    )
     marginal_loglik = raw_states.log_normalizing_constant[-1]
     states = _drop_cuthbert_dummy_step(raw_states, obs_len=obs_len)
     return marginal_loglik, states
