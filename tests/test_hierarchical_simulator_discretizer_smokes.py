@@ -214,7 +214,8 @@ def _make_obs_values(shape, dtype=jnp.float32):
     return jnp.zeros(shape, dtype=dtype)
 
 
-def test_plate_forward_discrete_ode_sde_shapes():
+@pytest.mark.parametrize("source", ["diffrax", "em_scan"])
+def test_plate_forward_discrete_ode_sde_shapes(source):
     t = jnp.arange(5.0)
 
     with DiscreteTimeSimulator():
@@ -231,7 +232,7 @@ def test_plate_forward_discrete_ode_sde_shapes():
     assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
     assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
-    with SDESimulator():
+    with SDESimulator(source=source):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(2)):
             _plate_continuous_sde_model(predict_times=t, M=2)
     assert tr["f_times"]["value"].shape == (2, 1, len(t))
@@ -349,6 +350,26 @@ def test_plate_rollout_discrete_gaussian_pf_hmm():
                 )
     assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
     assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
+
+
+def test_plate_rollout_discrete_cuthbert_kf_keeps_filtered_time_alignment():
+    obs_times = jnp.arange(4.0)
+    predict_times = jnp.arange(6.0)
+    obs_gaussian = _make_obs_values((2, len(obs_times), 1))
+
+    with DiscreteTimeSimulator():
+        with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(18)):
+                _plate_discrete_lti_model(
+                    obs_times=obs_times,
+                    obs_values=obs_gaussian,
+                    predict_times=predict_times,
+                    M=2,
+                )
+
+    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
+    assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0], predict_times)
 
 
 def test_plate_rollout_continuous_gaussian_and_dpf():

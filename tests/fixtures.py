@@ -79,6 +79,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EKFConfig,
+    EnKFConfig,
     KFConfig,
     PFConfig,
     UKFConfig,
@@ -958,6 +959,11 @@ def data_conditioned_jumpy_controls(
             "ekf": EKFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
             ),
+            "enkf": EnKFConfig(
+                record_filtered_states_mean=True,
+                n_particles=_n_particles(64),
+                filter_source=filter_source,
+            ),
             "ukf": UKFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
             ),
@@ -1075,11 +1081,13 @@ def data_conditioned_jumpy_controls_ode():
         (False, "kf", "cd_dynamax"),
         (False, "kf", "cuthbert"),
         (False, "ekf", "cuthbert"),
+        (False, "enkf", "cuthbert"),
         (False, "ekf", "cd_dynamax"),
         (False, "ukf", "cd_dynamax"),
         (True, "kf", "cd_dynamax"),
         (True, "kf", "cuthbert"),
         (True, "ekf", "cuthbert"),
+        (True, "enkf", "cuthbert"),
         (True, "ekf", "cd_dynamax"),
         (True, "ukf", "cd_dynamax"),
     ],
@@ -1135,6 +1143,9 @@ def data_conditioned_discrete_time_lti_kf(request):
         config = {
             "kf": KFConfig(filter_source=filter_source),
             "ekf": EKFConfig(filter_source=filter_source),
+            "enkf": EnKFConfig(
+                n_particles=_n_particles(64), filter_source=filter_source
+            ),
             "ukf": UKFConfig(filter_source=filter_source),
         }[filter_type]
         with Filter(filter_config=config):
