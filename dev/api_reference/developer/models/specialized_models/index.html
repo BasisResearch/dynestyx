@@ -4342,7 +4342,7 @@ is accepted for compatibility with the <code>Drift</code> protocol but is not us
 x_{t_{k+1}} \sim \mathcal{N}(F(x_{t_k}, u_{t_k}, t_k, t_{k+1}), Q),
 \]</div>
 <p>where <span class="arithmatex">\(F\)</span> is a user-provided transition function and <span class="arithmatex">\(Q\)</span> is the
-process-noise covariance.</p>
+process-noise covariance (either constant or state/time dependent).</p>
 
 
 
@@ -4369,7 +4369,7 @@ process-noise covariance.</p>
 
 
 <h3 id="dynestyx.models.state_evolution.GaussianStateEvolution.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">F</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">],</span> <span class="n">cov</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">F</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">],</span> <span class="n">cov</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">])</span></code>
 
 <a href="#dynestyx.models.state_evolution.GaussianStateEvolution.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4411,12 +4411,12 @@ function mapping <span class="arithmatex">\((x, u, t_k, t_{k+1})\)</span> to the
                 <code>cov</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span>[[<span title="dynestyx.types.State">State</span>, <span title="dynestyx.types.Control">Control</span>, <span title="dynestyx.types.Time">Time</span>, <span title="dynestyx.types.Time">Time</span>], <span title="jax.Array">Array</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Process-noise covariance with shape
-<span class="arithmatex">\((d_x, d_x)\)</span>.</p>
+                <p>Process-noise covariance with shape <span class="arithmatex">\((d_x, d_x)\)</span>, or a callable
+mapping <span class="arithmatex">\((x, u, t_k, t_{k+1})\)</span> to that covariance.</p>
               </div>
             </td>
             <td>

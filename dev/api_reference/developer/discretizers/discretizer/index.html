@@ -3295,19 +3295,19 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.discretizers._EulerMaruyamaDiscreteEvolution" class="md-nav__link">
+  <a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution" class="md-nav__link">
     <span class="md-ellipsis">
       
-        _EulerMaruyamaDiscreteEvolution
+        EulerMaruyamaGaussianStateEvolution
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="_EulerMaruyamaDiscreteEvolution">
+    <nav class="md-nav" aria-label="EulerMaruyamaGaussianStateEvolution">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#dynestyx.discretizers._EulerMaruyamaDiscreteEvolution.__call__" class="md-nav__link">
+  <a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution.__call__" class="md-nav__link">
     <span class="md-ellipsis">
       
         __call__
@@ -3807,20 +3807,20 @@ Applied Stochastic Differential Equations. Cambridge University Press.
 
 
 
-<h2 id="dynestyx.discretizers._EulerMaruyamaDiscreteEvolution" class="doc doc-heading">
-            <code>_EulerMaruyamaDiscreteEvolution</code>
+<h2 id="dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution" class="doc doc-heading">
+            <code>EulerMaruyamaGaussianStateEvolution</code>
 
 
-<a href="#dynestyx.discretizers._EulerMaruyamaDiscreteEvolution" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="DiscreteTimeStateEvolution (dynestyx.models.DiscreteTimeStateEvolution)" href="../../models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" title="GaussianStateEvolution (dynestyx.models.GaussianStateEvolution)" href="../../models/specialized_models/#dynestyx.models.state_evolution.GaussianStateEvolution">GaussianStateEvolution</a></code></p>
 
 
 
-        <p>x_{t+1} ~ N(x + drift<em>dt, (L@Q@L.T)</em>dt).</p>
+        <p><code>GaussianStateEvolution</code> backed by Euler-Maruyama moments.</p>
 
 
 
@@ -3846,29 +3846,15 @@ Applied Stochastic Differential Equations. Cambridge University Press.
 <div class="doc doc-object doc-function">
 
 
-<h3 id="dynestyx.discretizers._EulerMaruyamaDiscreteEvolution.__call__" class="doc doc-heading">
+<h3 id="dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution.__call__" class="doc doc-heading">
             <code class=" language-python"><span class="fm">__call__</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">)</span></code>
 
-<a href="#dynestyx.discretizers._EulerMaruyamaDiscreteEvolution.__call__" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution.__call__" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Discretize continuous-time state evolution via Euler-Maruyama. (CTSE) -&gt; DTSE.</p>
-<p>We step from t_now to t_next for each timepoint provided (optionally just 1 timepoint provided).
-The main use case of providing multiple timepoints is when paired with DiracDeltaObservation that
-allows temporal independence between observations, which allows us to step through all timepoints at once (creating big speedups).</p>
-<div class="codehilite"><pre><span></span><code>Args:
-    x: (dim_state,) or (dim_state, num_timepoints)
-    u: (dim_control,) or (dim_control, num_timepoints)
-    t_now: (1,) or (num_timepoints,)
-    t_next: (1,) or (num_timepoints,)
-
-Returns:
-    dist: MultivariateNormal distribution
-        - loc: (dim_state, num_timepoints) or (dim_state)
-        - covariance_matrix: (dim_state, dim_state, num_timepoints) or (dim_state, dim_state)
-</code></pre></div>
+        <p>Single-pass transition step (or batched time steps).</p>
 
 
     </div>
@@ -3906,7 +3892,7 @@ Returns:
 
 
 <h2 id="dynestyx.discretizers.euler_maruyama" class="doc doc-heading">
-            <code class=" language-python"><span class="n">euler_maruyama</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiscreteTimeStateEvolution</span></code>
+            <code class=" language-python"><span class="n">euler_maruyama</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GaussianStateEvolution</span></code>
 
 <a href="#dynestyx.discretizers.euler_maruyama" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -3914,9 +3900,11 @@ Returns:
     <div class="doc doc-contents ">
 
         <p>Discretize continuous-time state evolution via Euler-Maruyama.</p>
-<p>Euler-Maruyama is a first-order discrete approximation of a continuous-time state evolution.
-It is popular, as it is simple and effective for simple models.
-The resulting discrete-time state evolution is linear and Gaussian.</p>
+<p>Euler-Maruyama is a first-order discrete approximation of a continuous-time
+SDE. The result is a <code>GaussianStateEvolution</code> with mean
+<code>x + drift(x,u,t)*dt</code> and covariance <code>(L@Q@L.T)*dt</code> (<code>Q = I</code>),
+where <code>dt = t_next - t_now</code>. The process covariance is <strong>time-varying</strong>
+(depends on <code>t_next - t_now</code>) and passed as a callable <code>cov</code>.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3949,16 +3937,18 @@ The resulting discrete-time state evolution is linear and Gaussian.</p>
       </tbody>
     </table>
         <p>Returns:
-    DiscreteTimeStateEvolution: The discretized state evolution.</p>
+    GaussianStateEvolution: Discrete-time Gaussian transition with the
+    same Euler–Maruyama semantics as before this refactor.</p>
 
 
 <details class="note" open>
   <summary>Note</summary>
-  <p>No dt is passed; it is set to t_next - t_now in the <strong>call</strong> method.</p>
+  <p>Each transition uses one Euler-Maruyama step with
+<code>dt = t_next - t_now</code>.</p>
 </details>        <details class="note">
 <summary>Algorithm Reference</summary>
 <p>The Euler Maruyama is a first order discretization.
-The resulting discret-time state evolution is approximated as</p>
+The resulting discrete-time state evolution is approximated as</p>
 <p>x_{t+1} ~ N(x_t + drift * delta_t, (L@Q@L.T)*delta_t)</p>
 <p>where:
     x_t is the current state
