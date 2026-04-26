@@ -6,6 +6,7 @@ import numpyro.handlers as nhandlers
 import pytest
 
 import dynestyx as dsx
+from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
 from dynestyx.models.core import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.simulators import DiscreteTimeSimulator
 
@@ -63,6 +64,46 @@ def test_discrete_state_evolution_receives_probe_inputs() -> None:
     assert seen["u_shape"] == (2,)
     assert seen["t_now"] == 0.0
     assert seen["t_next"] == 1.0
+
+
+def test_gaussian_state_evolution_supports_callable_cov() -> None:
+    def F(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return x
+
+    def cov_fn(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return (1.0 + jnp.square(x[0])) * jnp.eye(2)
+
+    evo = dsx.GaussianStateEvolution(F=F, cov=cov_fn)
+    x = jnp.array([2.0, -1.0])
+    d = evo(x=x, u=None, t_now=jnp.array(0.0), t_next=jnp.array(1.0))
+    assert jnp.allclose(d.covariance_matrix, 5.0 * jnp.eye(2))
+
+
+def test_gaussian_to_nlgssm_params_rejects_callable_cov() -> None:
+    def F(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return x
+
+    def h(x, u, t):
+        del u, t
+        return x
+
+    def cov_fn(x, u, t_now, t_next):
+        del x, u, t_now, t_next
+        return jnp.eye(2)
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
+        ),
+        state_evolution=dsx.GaussianStateEvolution(F=F, cov=cov_fn),
+        observation_model=dsx.GaussianObservation(h=h, R=jnp.eye(2)),
+    )
+
+    with pytest.raises(TypeError, match="array-valued process covariance"):
+        gaussian_to_nlgssm_params(dynamics)
 
 
 def test_continuous_state_evolution_rejects_scalar_drift_for_1d_state() -> None:

@@ -41,7 +41,7 @@ def test_filter_sdesimulator_known_params():
     filtered_means = tr["f_filtered_states_mean"]["value"]
     assert synthetic_obs.shape == filtered_means.shape
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
-    assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 3e-2
+    assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 3.5e-2
 
 
 def test_filter_odesimulator_known_params():

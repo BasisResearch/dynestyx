@@ -408,6 +408,13 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     state_dim = dynamics.state_dim
     control_dim = dynamics.control_dim
 
+    if callable(evo.cov):
+        raise TypeError(
+            "cd_dynamax discrete EKF/UKF requires array-valued process covariance. "
+            "Received callable state_evolution.cov. Use a fixed covariance matrix, "
+            "or choose a backend that supports callable covariances."
+        )
+
     if isinstance(ic, dist.MultivariateNormal):
         initial_mean = jnp.asarray(ic.loc)
         initial_covariance = jnp.asarray(ic.covariance_matrix)
