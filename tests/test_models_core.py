@@ -499,7 +499,7 @@ def test_cd_dynamax_rejects_full_diffusion_with_bm_dim_not_equal_state_dim() -> 
         diffusion_type="full",
         bm_dim=2,
     )
-    with pytest.raises(ValueError, match="bm_dim == state_dim"):
+    with pytest.raises(ValueError, match="bm_dim <= state_dim"):
         _normalize_cd_dynamax_diffusion(state_evolution, state_dim=1)(
             jnp.zeros(1),
             None,
@@ -528,7 +528,7 @@ def test_continuous_cd_dynamax_rejects_rectangular_diffusion_early() -> None:
     )
 
     with pytest.raises(
-        ValueError, match="Continuous cd-dynamax filters require full diffusion"
+        ValueError, match="Continuous cd-dynamax filters require bm_dim <= state_dim"
     ):
         dsx_to_cd_dynamax(dynamics)
 

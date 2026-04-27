@@ -34,8 +34,9 @@ def _normalize_cd_dynamax_diffusion(
     """Return a diffusion coeff compatible with cd-dynamax's EnKF SDE solve.
 
     cd-dynamax's internal diffrax wrapper builds Brownian controls with shape
-    equal to `y0.shape` (state_dim), so this path only supports diffusion
-    matrices with `bm_dim == state_dim`.
+    equal to `y0.shape` (state_dim). For diffusion with `bm_dim < state_dim`,
+    pad trailing Brownian columns with zeros to match `(state_dim, state_dim)`.
+    Diffusion with `bm_dim > state_dim` is rejected.
     """
 
     def _wrapped(x, u, t):
@@ -49,18 +50,14 @@ def _normalize_cd_dynamax_diffusion(
             state_dim=state_dim,
         )
         L = diffusion_as_matrix(diffusion, state_dim=state_dim)
-        if L.ndim == 1:
-            L = jnp.diag(L)
-        if L.ndim != 2:
-            raise ValueError(
-                "diffusion_coefficient must return a vector or matrix for cd-dynamax."
-            )
         n_cols = L.shape[-1]
-        if n_cols != state_dim:
+        if n_cols > state_dim:
             raise ValueError(
-                "cd-dynamax continuous diffusion requires bm_dim == state_dim. "
+                "cd-dynamax continuous diffusion requires bm_dim <= state_dim. "
                 f"Got state_dim={state_dim}, bm_dim={n_cols}."
             )
+        if n_cols < state_dim:
+            L = jnp.pad(L, ((0, 0), (0, state_dim - n_cols)))
         return L
 
     return _wrapped
@@ -85,12 +82,10 @@ def _validate_cd_dynamax_continuous_diffusion(
         state_dim=state_dim,
     )
     bm_dim = diffusion_as_matrix(diffusion, state_dim=state_dim).shape[-1]
-    if bm_dim != state_dim:
+    if bm_dim > state_dim:
         raise ValueError(
-            "Continuous cd-dynamax filters require full diffusion with "
-            f"bm_dim == state_dim. Got state_dim={state_dim}, bm_dim={bm_dim}. "
-            "Use em_scan-based simulation for rectangular diffusion, or provide "
-            "a square full diffusion for this backend."
+            "Continuous cd-dynamax filters require bm_dim <= state_dim. "
+            f"Got state_dim={state_dim}, bm_dim={bm_dim}."
         )
 
 
