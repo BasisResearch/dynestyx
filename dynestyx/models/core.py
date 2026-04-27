@@ -21,7 +21,15 @@ from dynestyx.models.checkers import (
     _validate_state_dim,
     _validate_state_evolution_output_shape,
 )
-from dynestyx.types import Control, State, Time, TimeLike, as_scalar_time_array, dState
+from dynestyx.models.diffusions import DiffusionSpec, DiffusionType
+from dynestyx.types import (
+    Control,
+    State,
+    Time,
+    TimeLike,
+    as_scalar_time_array,
+    dState,
+)
 
 
 class DynamicalModel(eqx.Module):
@@ -298,18 +306,25 @@ class ContinuousTimeStateEvolution(eqx.Module):
             At least one of `drift` or `potential` must be non-None.
         use_negative_gradient (bool): If True, use $-\\nabla_x V$ (e.g., gradient descent on potential);
             otherwise use $+\\nabla_x V$. Default is False.
-        diffusion_coefficient (Drift | None): Diffusion coefficient $L(x, u, t)$ mapping to a matrix;
-            multiplies the Brownian increment $dW_t$.
-            Defaults to zero if None (i.e., deterministic ODE).
+        diffusion_coefficient (DiffusionSpec | None): Diffusion coefficient specification.
+            This may be a callable `L(x, u, t)`, a constant scalar/vector/matrix, or `None`
+            for deterministic dynamics.
+        diffusion_type ("full" | "diag" | "scalar" | None): Optional explicit diffusion semantics.
+            Use `"full"` for matrix-valued diffusion, `"diag"` for diagonal shorthand with
+            trailing shape `(..., state_dim)`, and `"scalar"` for scalar shorthand with shape
+            `()` or `(..., 1)`. If omitted, legacy behavior infers `"full"` from trailing
+            shape `(..., state_dim, bm_dim)` and otherwise infers scalar/diagonal shorthand
+            from the trailing dimension.
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
-            Inferred automatically from the output shape of `diffusion_coefficient`;
-            if passed by the user, it must match diffusion_coefficient(...).shape[1].
+            Inferred automatically only for full matrix diffusion. Scalar and diagonal
+            diffusion require explicit `bm_dim`, which must be either `1` or `state_dim`.
     """
 
     drift: Drift | None = None
     potential: Potential | None = None
     use_negative_gradient: bool = eqx.field(static=True, default=False)
-    diffusion_coefficient: Drift | None = None
+    diffusion_coefficient: DiffusionSpec | None = None
+    diffusion_type: DiffusionType | None = eqx.field(static=True, default=None)
     bm_dim: int | None = eqx.field(static=True, default=None)
 
     def total_drift(self, x: State, u: Control | None, t: Time) -> dState:

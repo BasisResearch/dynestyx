@@ -102,7 +102,8 @@ def _plate_continuous_sde_model(
         alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
         A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
         A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
-        L = 0.2 * jnp.array([[1.0], [0.5]])
+        # Continuous cd-dynamax filters require full diffusion (bm_dim == state_dim).
+        L = 0.2 * jnp.diag(jnp.array([1.0, 0.5]))
         H = jnp.array([[1.0, 0.0]])
         R = jnp.array([[0.25]])
         dynamics = LTI_continuous(A=A, L=L, H=H, R=R)

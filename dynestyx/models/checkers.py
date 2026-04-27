@@ -8,6 +8,10 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 import numpyro.primitives
 
+from dynestyx.models.diffusions import (
+    evaluate_diffusion_value,
+    resolve_diffusion_metadata,
+)
 from dynestyx.types import Control, State, Time
 
 
@@ -100,27 +104,16 @@ def _infer_bm_dim(
         return None
 
     diffusion_shape = jax.eval_shape(
-        lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
+        lambda: evaluate_diffusion_value(
+            state_evolution.diffusion_coefficient, x0, u0, t0
+        )
     ).shape
-    if len(diffusion_shape) < 2:
-        raise ValueError(
-            "diffusion_coefficient must return shape (..., state_dim, bm_dim). "
-            f"Got shape {diffusion_shape}."
-        )
-    if int(diffusion_shape[-2]) != state_dim:
-        raise ValueError(
-            "diffusion_coefficient penultimate dimension must match state_dim. "
-            f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
-        )
-    inferred_bm_dim = int(diffusion_shape[-1])
-    if (
-        state_evolution.bm_dim is not None
-        and int(state_evolution.bm_dim) != inferred_bm_dim
-    ):
-        raise ValueError(
-            "bm_dim does not match inferred diffusion_coefficient output shape. "
-            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
-        )
+    _, inferred_bm_dim = resolve_diffusion_metadata(
+        diffusion_shape,
+        state_dim=state_dim,
+        diffusion_type=state_evolution.diffusion_type,
+        bm_dim=state_evolution.bm_dim,
+    )
     return inferred_bm_dim
 
 

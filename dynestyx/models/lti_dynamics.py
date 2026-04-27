@@ -175,7 +175,8 @@ def LTI_continuous(
 
     state_evolution = ContinuousTimeStateEvolution(
         drift=drift,
-        diffusion_coefficient=lambda x, u, t: L,
+        diffusion_coefficient=L,
+        diffusion_type="full",
     )
 
     observation_model = LinearGaussianObservation(H=H, R=R, D=D, bias=d)

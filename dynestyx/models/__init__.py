@@ -10,6 +10,7 @@ from dynestyx.models.core import (
     DynamicalModel,
     ObservationModel,
 )
+from dynestyx.models.diffusions import DiffusionType
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
@@ -27,6 +28,7 @@ __all__ = [
     "AffineDrift",
     "DiracIdentityObservation",
     "DiscreteTimeStateEvolution",
+    "DiffusionType",
     "DynamicalModel",
     "Drift",
     "GaussianObservation",

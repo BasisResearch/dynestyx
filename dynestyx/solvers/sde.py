@@ -12,26 +12,14 @@ import jax.random as jr
 from jax import Array, lax, vmap
 
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models.diffusions import (
+    EvaluatedDiffusion,
+    apply_diffusion,
+    diffusion_as_matrix,
+    diffusion_covariance,
+    evaluate_diffusion,
+)
 from dynestyx.types import State, Time, TimeLike, as_scalar_time_array
-
-
-def _apply_diffusion(diffusion_term: Array, dw: Array) -> Array:
-    """Apply diffusion operator to a Brownian increment.
-
-    Args:
-        diffusion_term: Diffusion coefficient with shape compatible with `dw`.
-        dw: Brownian increment vector.
-
-    Returns:
-        State increment induced by the diffusion term.
-    """
-    if diffusion_term.ndim == 0:
-        return diffusion_term * dw[0]
-    if diffusion_term.ndim == 1:
-        if dw.shape[0] == 1:
-            return diffusion_term * dw[0]
-        return diffusion_term * dw
-    return diffusion_term @ dw
 
 
 def _early_return_states(x0: State, saveat_times: Array) -> Array:
@@ -61,21 +49,21 @@ def _require_bm_dim(state_evolution: ContinuousTimeStateEvolution) -> int:
     return int(state_evolution.bm_dim)
 
 
-def _require_diffusion_fn(
+def _require_diffusion_spec(
     state_evolution: ContinuousTimeStateEvolution,
-) -> Callable[[Array, Array | None, Array], Array]:
-    """Get diffusion callable or raise if unavailable.
+) -> Any:
+    """Get diffusion spec or raise if unavailable.
 
     Args:
         state_evolution: Continuous-time state evolution.
 
     Returns:
-        Diffusion function with signature `(x, u, t) -> diffusion`.
+        Diffusion callable or constant spec.
     """
-    diffusion_fn = state_evolution.diffusion_coefficient
-    if diffusion_fn is None:
+    diffusion_spec = state_evolution.diffusion_coefficient
+    if diffusion_spec is None:
         raise ValueError("SDE solver requires diffusion_coefficient to be defined.")
-    return diffusion_fn
+    return diffusion_spec
 
 
 def _em_local_terms(
@@ -83,7 +71,7 @@ def _em_local_terms(
     x: Array,
     u: Array | None,
     t_now: Array,
-) -> tuple[Array, Array]:
+) -> tuple[Array, EvaluatedDiffusion]:
     """Compute local EM drift and diffusion terms.
 
     Args:
@@ -96,13 +84,21 @@ def _em_local_terms(
         Tuple `(drift, diffusion)` at `(x, u, t_now)`.
     """
     drift = state_evolution.total_drift(x=x, u=u, t=t_now)
-    diffusion_fn = _require_diffusion_fn(state_evolution)
-    diffusion = jnp.asarray(diffusion_fn(x, u, t_now))
+    diffusion_spec = _require_diffusion_spec(state_evolution)
+    diffusion = evaluate_diffusion(
+        diffusion_spec,
+        diffusion_type=state_evolution.diffusion_type,
+        bm_dim=state_evolution.bm_dim,
+        x=x,
+        u=u,
+        t=t_now,
+        state_dim=x.shape[-1],
+    )
     return drift, diffusion
 
 
 def _em_moments_from_terms(
-    x: Array, dt: Array, drift: Array, diffusion: Array
+    x: Array, dt: Array, drift: Array, diffusion: EvaluatedDiffusion
 ) -> tuple[Array, Array]:
     """Convert local EM terms to one-step Gaussian moments.
 
@@ -116,7 +112,7 @@ def _em_moments_from_terms(
         Tuple `(loc, cov)` for the EM Gaussian approximation.
     """
     loc = x + drift * dt
-    cov = diffusion @ diffusion.T * dt
+    cov = diffusion_covariance(diffusion, state_dim=x.shape[-1]) * dt
     return loc, cov
 
 
@@ -124,7 +120,7 @@ def _em_sample_from_terms(
     x: Array,
     dt: Array,
     drift: Array,
-    diffusion: Array,
+    diffusion: EvaluatedDiffusion,
     *,
     key: Array,
     bm_dim: int,
@@ -145,7 +141,7 @@ def _em_sample_from_terms(
     key_next, k_step = jr.split(key)
     z = jr.normal(k_step, shape=(bm_dim,), dtype=jnp.asarray(x).dtype)
     dw = jnp.sqrt(dt) * z
-    x_next = x + drift * dt + _apply_diffusion(diffusion, dw)
+    x_next = x + drift * dt + apply_diffusion(diffusion, dw, state_dim=x.shape[-1])
     return x_next, key_next
 
 
@@ -405,7 +401,17 @@ def _solve_sde_diffrax(
 
     def _diffusion(t, y, args):
         u_t = args(t) if args is not None else None
-        return state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+        diffusion_spec = _require_diffusion_spec(state_evolution)
+        diffusion = evaluate_diffusion(
+            diffusion_spec,
+            diffusion_type=state_evolution.diffusion_type,
+            bm_dim=state_evolution.bm_dim,
+            x=y,
+            u=u_t,
+            t=t,
+            state_dim=y.shape[-1],
+        )
+        return diffusion_as_matrix(diffusion, state_dim=y.shape[-1])
 
     k_bm, _ = jr.split(key, 2)
     bm = dfx.VirtualBrownianTree(

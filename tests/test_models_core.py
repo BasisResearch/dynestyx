@@ -6,8 +6,18 @@ import numpyro.handlers as nhandlers
 import pytest
 
 import dynestyx as dsx
-from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.integrations.cd_dynamax.utils import (
+    _normalize_cd_dynamax_diffusion,
+    dsx_to_cd_dynamax,
+    gaussian_to_nlgssm_params,
+)
 from dynestyx.models.core import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models.diffusions import (
+    DiffusionType,
+    diffusion_as_matrix,
+    diffusion_covariance,
+    evaluate_diffusion,
+)
 from dynestyx.simulators import DiscreteTimeSimulator
 
 
@@ -324,6 +334,203 @@ def test_continuous_state_evolution_bm_dim_without_diffusion_raises() -> None:
             observation_model=observation_model,
             control_dim=0,
         )
+
+
+def test_continuous_state_evolution_requires_explicit_bm_dim_for_diag_diffusion() -> (
+    None
+):
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=jnp.ones((2,)),
+    )
+
+    with pytest.raises(ValueError, match="diag diffusion requires explicit bm_dim"):
+        DynamicalModel(
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(2),
+                covariance_matrix=jnp.eye(2),
+            ),
+            state_evolution=state_evolution,
+            observation_model=_observation_model_2d,
+            control_dim=0,
+        )
+
+
+def test_continuous_state_evolution_requires_explicit_bm_dim_for_scalar_diffusion() -> (
+    None
+):
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=jnp.array(0.3),
+    )
+
+    with pytest.raises(ValueError, match="scalar diffusion requires explicit bm_dim"):
+        DynamicalModel(
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(2),
+                covariance_matrix=jnp.eye(2),
+            ),
+            state_evolution=state_evolution,
+            observation_model=_observation_model_2d,
+            control_dim=0,
+        )
+
+
+def test_continuous_state_evolution_rejects_invalid_shorthand_trailing_dim() -> None:
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=jnp.ones((3,)),
+    )
+
+    with pytest.raises(ValueError, match="treated as scalar/diagonal shorthand"):
+        DynamicalModel(
+            initial_condition=dist.MultivariateNormal(
+                loc=jnp.zeros(2),
+                covariance_matrix=jnp.eye(2),
+            ),
+            state_evolution=state_evolution,
+            observation_model=_observation_model_2d,
+            control_dim=0,
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "diffusion_coefficient",
+        "diffusion_type",
+        "bm_dim",
+        "expected_matrix",
+        "expected_cov",
+    ),
+    [
+        (
+            jnp.array(0.5),
+            "scalar",
+            1,
+            0.5 * jnp.ones((2, 1)),
+            0.25 * jnp.ones((2, 2)),
+        ),
+        (
+            jnp.array(0.5),
+            "scalar",
+            2,
+            0.5 * jnp.eye(2),
+            0.25 * jnp.eye(2),
+        ),
+        (
+            jnp.array([0.2, 0.4]),
+            "diag",
+            1,
+            jnp.array([[0.2], [0.4]]),
+            jnp.array([[0.04, 0.08], [0.08, 0.16]]),
+        ),
+        (
+            jnp.array([0.2, 0.4]),
+            "diag",
+            2,
+            jnp.diag(jnp.array([0.2, 0.4])),
+            jnp.diag(jnp.array([0.04, 0.16])),
+        ),
+    ],
+)
+def test_diffusion_helpers_preserve_shorthand_semantics(
+    diffusion_coefficient,
+    diffusion_type,
+    bm_dim,
+    expected_matrix,
+    expected_cov,
+) -> None:
+    evaluated = evaluate_diffusion(
+        diffusion_coefficient,
+        diffusion_type=diffusion_type,
+        bm_dim=bm_dim,
+        x=jnp.zeros(2),
+        u=None,
+        t=jnp.array(0.0),
+        state_dim=2,
+    )
+
+    assert jnp.allclose(
+        diffusion_as_matrix(evaluated, state_dim=2),
+        expected_matrix,
+    )
+    assert jnp.allclose(
+        diffusion_covariance(evaluated, state_dim=2),
+        expected_cov,
+    )
+
+
+@pytest.mark.parametrize("callable_form", ["scalar", "diag", "full"])
+def test_diffusion_helpers_support_callable_shorthands(callable_form: str) -> None:
+    diffusion_type: DiffusionType
+    if callable_form == "scalar":
+        diffusion_coefficient = lambda x, u, t: 0.5 + 0.0 * t
+        diffusion_type = "scalar"
+        bm_dim = 2
+        expected = 0.5 * jnp.eye(2)
+    elif callable_form == "diag":
+        diffusion_coefficient = lambda x, u, t: jnp.array([0.2, 0.4]) + 0.0 * t
+        diffusion_type = "diag"
+        bm_dim = 2
+        expected = jnp.diag(jnp.array([0.2, 0.4]))
+    else:
+        diffusion_coefficient = lambda x, u, t: jnp.eye(2) * (1.0 + 0.0 * t)
+        diffusion_type = "full"
+        bm_dim = None
+        expected = jnp.eye(2)
+
+    evaluated = evaluate_diffusion(
+        diffusion_coefficient,
+        diffusion_type=diffusion_type,
+        bm_dim=bm_dim,
+        x=jnp.zeros(2),
+        u=None,
+        t=jnp.array(1.0),
+        state_dim=2,
+    )
+
+    assert jnp.allclose(diffusion_as_matrix(evaluated, state_dim=2), expected)
+
+
+def test_cd_dynamax_rejects_full_diffusion_with_bm_dim_not_equal_state_dim() -> None:
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=jnp.ones((1, 2)),
+        diffusion_type="full",
+        bm_dim=2,
+    )
+    with pytest.raises(ValueError, match="bm_dim == state_dim"):
+        _normalize_cd_dynamax_diffusion(state_evolution, state_dim=1)(
+            jnp.zeros(1),
+            None,
+            jnp.array(0.0),
+        )
+
+
+def test_continuous_cd_dynamax_rejects_rectangular_diffusion_early() -> None:
+    state_evolution = ContinuousTimeStateEvolution(
+        drift=lambda x, u, t: x,
+        diffusion_coefficient=jnp.ones((1, 2)),
+        diffusion_type="full",
+        bm_dim=2,
+    )
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(1),
+            covariance_matrix=jnp.eye(1),
+        ),
+        state_evolution=state_evolution,
+        observation_model=dsx.LinearGaussianObservation(
+            H=jnp.array([[1.0]]),
+            R=jnp.array([[1.0]]),
+        ),
+        control_dim=0,
+    )
+
+    with pytest.raises(
+        ValueError, match="Continuous cd-dynamax filters require full diffusion"
+    ):
+        dsx_to_cd_dynamax(dynamics)
 
 
 def test_discrete_state_evolution_bm_dim_override_raises() -> None:
