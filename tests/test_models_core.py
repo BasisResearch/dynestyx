@@ -507,7 +507,9 @@ def test_cd_dynamax_rejects_diffusion_with_bm_dim_exceeds_state_dim() -> None:
         )
 
 
-def test_continuous_cd_dynamax_rejects_diffusion_with_bm_dim_exceeds_state_dim_early() -> None:
+def test_continuous_cd_dynamax_rejects_diffusion_with_bm_dim_exceeds_state_dim_early() -> (
+    None
+):
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x,
         diffusion_coefficient=jnp.ones((1, 2)),
