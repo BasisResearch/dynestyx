@@ -57,7 +57,8 @@ def _normalize_cd_dynamax_diffusion(
                 f"Got state_dim={state_dim}, bm_dim={n_cols}."
             )
         if n_cols < state_dim:
-            L = jnp.pad(L, ((0, 0), (0, state_dim - n_cols)))
+            pad_width = ((0, 0),) * (L.ndim - 1) + ((0, state_dim - n_cols),)
+            L = jnp.pad(L, pad_width)
         return L
 
     return _wrapped
