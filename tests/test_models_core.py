@@ -492,7 +492,7 @@ def test_diffusion_helpers_support_callable_shorthands(callable_form: str) -> No
     assert jnp.allclose(diffusion_as_matrix(evaluated, state_dim=2), expected)
 
 
-def test_cd_dynamax_rejects_full_diffusion_with_bm_dim_not_equal_state_dim() -> None:
+def test_cd_dynamax_rejects_diffusion_with_bm_dim_exceeds_state_dim() -> None:
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x,
         diffusion_coefficient=jnp.ones((1, 2)),
@@ -507,7 +507,7 @@ def test_cd_dynamax_rejects_full_diffusion_with_bm_dim_not_equal_state_dim() -> 
         )
 
 
-def test_continuous_cd_dynamax_rejects_rectangular_diffusion_early() -> None:
+def test_continuous_cd_dynamax_rejects_diffusion_with_bm_dim_exceeds_state_dim_early() -> None:
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x,
         diffusion_coefficient=jnp.ones((1, 2)),
