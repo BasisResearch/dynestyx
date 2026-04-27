@@ -180,8 +180,10 @@ def apply_diffusion(
 
     scalar = value if value.ndim == 0 else jnp.squeeze(value, axis=-1)
     if diffusion.bm_dim == 1:
-        return jnp.broadcast_to(scalar * dw[0], (state_dim,))
-    return scalar * dw
+        return jnp.broadcast_to(
+            (scalar * dw[0])[..., None], scalar.shape + (state_dim,)
+        )
+    return scalar[..., None] * dw
 
 
 def _infer_diffusion_type(
