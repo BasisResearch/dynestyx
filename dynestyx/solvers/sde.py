@@ -12,6 +12,7 @@ import jax.random as jr
 from jax import Array, lax, vmap
 
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models.checkers import _resolve_ctse_diffusion_metadata
 from dynestyx.models.diffusions import (
     EvaluatedDiffusion,
     apply_diffusion,
@@ -66,6 +67,28 @@ def _require_diffusion_spec(
     return diffusion_spec
 
 
+def _ensure_resolved_diffusion_metadata(
+    state_evolution: ContinuousTimeStateEvolution,
+    *,
+    state_dim: int,
+    u: Array | None,
+    t: Array,
+) -> None:
+    """Resolve diffusion metadata for standalone low-level SDE helpers."""
+    if state_evolution.diffusion_coefficient is None or (
+        state_evolution.diffusion_type is not None
+        and state_evolution.bm_dim is not None
+    ):
+        return
+
+    x0 = jnp.zeros((state_dim,))
+    resolved = _resolve_ctse_diffusion_metadata(state_evolution, state_dim, x0, u, t)
+    if resolved is not None:
+        resolved_type, resolved_bm_dim = resolved
+        object.__setattr__(state_evolution, "diffusion_type", resolved_type)
+        object.__setattr__(state_evolution, "bm_dim", resolved_bm_dim)
+
+
 def _em_local_terms(
     state_evolution: ContinuousTimeStateEvolution,
     x: Array,
@@ -83,6 +106,12 @@ def _em_local_terms(
     Returns:
         Tuple `(drift, diffusion)` at `(x, u, t_now)`.
     """
+    _ensure_resolved_diffusion_metadata(
+        state_evolution,
+        state_dim=x.shape[-1],
+        u=u,
+        t=t_now,
+    )
     drift = state_evolution.total_drift(x=x, u=u, t=t_now)
     diffusion_spec = _require_diffusion_spec(state_evolution)
     diffusion = evaluate_diffusion(
