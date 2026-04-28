@@ -9,19 +9,27 @@ import jax.numpy as jnp
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
-    _infer_bm_dim,
     _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
     _inside_numpyro_plate_context,
     _is_categorical_distribution,
     _make_probe_state,
+    _resolve_ctse_diffusion_metadata,
     _validate_categorical_state,
     _validate_continuous_time_flag,
     _validate_observation_dim,
     _validate_state_dim,
     _validate_state_evolution_output_shape,
 )
-from dynestyx.types import Control, State, Time, TimeLike, as_scalar_time_array, dState
+from dynestyx.models.diffusions import DiffusionSpec, DiffusionType
+from dynestyx.types import (
+    Control,
+    State,
+    Time,
+    TimeLike,
+    as_scalar_time_array,
+    dState,
+)
 
 
 class DynamicalModel(eqx.Module):
@@ -144,26 +152,20 @@ class DynamicalModel(eqx.Module):
             self.control_dim = int(control_dim)
             self.categorical_state = bool(inferred_categorical_state)
 
-            # Infer bm_dim for continuous-time models
+            # Resolve diffusion metadata for continuous-time models
             if inferred_continuous_time and isinstance(
                 state_evolution, ContinuousTimeStateEvolution
             ):
                 x0 = jnp.zeros((inferred_state_dim,))
                 u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
                 dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
-                inferred_bm_dim = _infer_bm_dim(
+                resolved_diffusion = _resolve_ctse_diffusion_metadata(
                     state_evolution, inferred_state_dim, x0, u0, dummy_t0
                 )
-                if inferred_bm_dim is not None:
-                    if (
-                        state_evolution.bm_dim is not None
-                        and inferred_bm_dim != state_evolution.bm_dim
-                    ):
-                        raise ValueError(
-                            "bm_dim does not match inferred diffusion_coefficient output shape. "
-                            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
-                        )
-                    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
+                if resolved_diffusion is not None:
+                    resolved_type, resolved_bm_dim = resolved_diffusion
+                    object.__setattr__(state_evolution, "diffusion_type", resolved_type)
+                    object.__setattr__(state_evolution, "bm_dim", resolved_bm_dim)
             return
 
         x0 = _make_probe_state(
@@ -180,8 +182,24 @@ class DynamicalModel(eqx.Module):
             t0=dummy_t0,
             continuous_time=self.continuous_time,
         )
-        if self.continuous_time and inferred_bm_dim != state_evolution.bm_dim:
-            object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
+        if self.continuous_time and isinstance(
+            state_evolution, ContinuousTimeStateEvolution
+        ):
+            resolved_diffusion = _resolve_ctse_diffusion_metadata(
+                state_evolution,
+                inferred_state_dim,
+                x0,
+                u0,
+                dummy_t0,
+            )
+            if resolved_diffusion is not None:
+                resolved_type, resolved_bm_dim = resolved_diffusion
+                if state_evolution.diffusion_type != resolved_type:
+                    object.__setattr__(state_evolution, "diffusion_type", resolved_type)
+                if inferred_bm_dim != resolved_bm_dim:
+                    inferred_bm_dim = resolved_bm_dim
+                if state_evolution.bm_dim != resolved_bm_dim:
+                    object.__setattr__(state_evolution, "bm_dim", resolved_bm_dim)
 
         obs_dist = observation_model(x0, u0, dummy_t0)
         inferred_observation_dim = _infer_vector_dim_from_distribution(
@@ -298,18 +316,25 @@ class ContinuousTimeStateEvolution(eqx.Module):
             At least one of `drift` or `potential` must be non-None.
         use_negative_gradient (bool): If True, use $-\\nabla_x V$ (e.g., gradient descent on potential);
             otherwise use $+\\nabla_x V$. Default is False.
-        diffusion_coefficient (Drift | None): Diffusion coefficient $L(x, u, t)$ mapping to a matrix;
-            multiplies the Brownian increment $dW_t$.
-            Defaults to zero if None (i.e., deterministic ODE).
+        diffusion_coefficient (DiffusionSpec | None): Diffusion coefficient specification.
+            This may be a callable `L(x, u, t)`, a constant scalar/vector/matrix, or `None`
+            for deterministic dynamics.
+        diffusion_type ("full" | "diag" | "scalar" | None): Optional explicit diffusion semantics.
+            Use `"full"` for matrix-valued diffusion, `"diag"` for diagonal shorthand with
+            trailing shape `(..., state_dim)`, and `"scalar"` for scalar shorthand with shape
+            `()` or `(..., 1)`. If omitted, legacy behavior infers `"full"` from trailing
+            shape `(..., state_dim, bm_dim)` and otherwise infers scalar/diagonal shorthand
+            from the trailing dimension.
         bm_dim (int | None): Dimension of the Brownian motion $W_t$.
-            Inferred automatically from the output shape of `diffusion_coefficient`;
-            if passed by the user, it must match diffusion_coefficient(...).shape[1].
+            Inferred automatically only for full matrix diffusion. Scalar and diagonal
+            diffusion require explicit `bm_dim`, which must be either `1` or `state_dim`.
     """
 
     drift: Drift | None = None
     potential: Potential | None = None
     use_negative_gradient: bool = eqx.field(static=True, default=False)
-    diffusion_coefficient: Drift | None = None
+    diffusion_coefficient: DiffusionSpec | None = None
+    diffusion_type: DiffusionType | None = eqx.field(static=True, default=None)
     bm_dim: int | None = eqx.field(static=True, default=None)
 
     def total_drift(self, x: State, u: Control | None, t: Time) -> dState:

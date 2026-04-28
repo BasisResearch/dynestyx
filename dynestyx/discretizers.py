@@ -9,26 +9,47 @@ from dynestyx.models import (
     DynamicalModel,
     GaussianStateEvolution,
 )
-from dynestyx.models.checkers import _infer_bm_dim
+from dynestyx.models.checkers import _resolve_ctse_diffusion_metadata
 from dynestyx.solvers import euler_maruyama_loc_cov
 from dynestyx.types import FunctionOfTime
 
 
+def _ensure_ctse_diffusion_metadata(
+    cte: ContinuousTimeStateEvolution,
+    *,
+    state_dim: int,
+    control_dim: int = 0,
+    t0=None,
+) -> ContinuousTimeStateEvolution:
+    """Resolve and set diffusion metadata on a CTSE when missing."""
+    if cte.diffusion_coefficient is None:
+        return cte
+    if cte.diffusion_type is not None and cte.bm_dim is not None:
+        return cte
+
+    x0 = jnp.zeros((state_dim,))
+    u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+    probe_t0 = jnp.array(0.0) if t0 is None else jnp.asarray(t0)
+    resolved = _resolve_ctse_diffusion_metadata(cte, state_dim, x0, u0, probe_t0)
+    if resolved is not None:
+        resolved_type, resolved_bm_dim = resolved
+        object.__setattr__(cte, "diffusion_type", resolved_type)
+        object.__setattr__(cte, "bm_dim", resolved_bm_dim)
+    return cte
+
+
 def _ensure_ctse_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
-    """Infer and set bm_dim when CT dynamics are built under active plates."""
+    """Resolve diffusion metadata when CT dynamics are built under active plates."""
     if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
         return dynamics
 
     cte = dynamics.state_evolution
-    if cte.diffusion_coefficient is None or cte.bm_dim is not None:
-        return dynamics
-
-    x0 = jnp.zeros((dynamics.state_dim,))
-    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    inferred_bm_dim = _infer_bm_dim(cte, dynamics.state_dim, x0, u0, t0)
-    if inferred_bm_dim is not None:
-        object.__setattr__(cte, "bm_dim", inferred_bm_dim)
+    _ensure_ctse_diffusion_metadata(
+        cte,
+        state_dim=dynamics.state_dim,
+        control_dim=dynamics.control_dim,
+        t0=dynamics.t0,
+    )
     return dynamics
 
 
@@ -46,13 +67,24 @@ class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
         # Accept these for reconstruction paths, but derive both from `cte`.
         del F, cov
         self.cte = cte
+
+        def _loc(x, u, t_now, t_next):
+            _ensure_ctse_diffusion_metadata(
+                cte,
+                state_dim=jnp.asarray(x).shape[-1],
+            )
+            return euler_maruyama_loc_cov(cte, x, u, t_now, t_next)["loc"]
+
+        def _cov(x, u, t_now, t_next):
+            _ensure_ctse_diffusion_metadata(
+                cte,
+                state_dim=jnp.asarray(x).shape[-1],
+            )
+            return euler_maruyama_loc_cov(cte, x, u, t_now, t_next)["cov"]
+
         super().__init__(
-            F=lambda x, u, t_now, t_next: euler_maruyama_loc_cov(
-                cte, x, u, t_now, t_next
-            )["loc"],
-            cov=lambda x, u, t_now, t_next: euler_maruyama_loc_cov(
-                cte, x, u, t_now, t_next
-            )["cov"],
+            F=_loc,
+            cov=_cov,
         )
 
     def __call__(self, x, u, t_now, t_next):

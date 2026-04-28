@@ -22,38 +22,65 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
+from dynestyx.models.diffusions import diffusion_as_matrix, evaluate_diffusion
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 def _normalize_cd_dynamax_diffusion(
-    diffusion_coefficient,
+    state_evolution: ContinuousTimeStateEvolution,
     state_dim: int,
 ):
     """Return a diffusion coeff compatible with cd-dynamax's EnKF SDE solve.
 
     cd-dynamax's internal diffrax wrapper builds Brownian controls with shape
-    equal to `y0.shape` (state_dim). For non-square diffusion coefficients
-    (state_dim, bm_dim) with bm_dim != state_dim, pad/truncate columns so the
-    returned matrix is always (state_dim, state_dim).
+    equal to `y0.shape` (state_dim). For diffusion with `bm_dim < state_dim`,
+    pad trailing Brownian columns with zeros to match `(state_dim, state_dim)`.
+    Diffusion with `bm_dim > state_dim` is rejected.
     """
 
     def _wrapped(x, u, t):
-        L = diffusion_coefficient(x, u, t)
-        if L.ndim == 1:
-            L = jnp.diag(L)
-        if L.ndim != 2:
-            raise ValueError(
-                "diffusion_coefficient must return a vector or matrix for cd-dynamax."
-            )
+        diffusion = evaluate_diffusion(
+            state_evolution.diffusion_coefficient,
+            diffusion_type=state_evolution.diffusion_type,
+            bm_dim=state_evolution.bm_dim,
+            x=x,
+            u=u,
+            t=t,
+            state_dim=state_dim,
+        )
+        L = diffusion_as_matrix(diffusion, state_dim=state_dim)
         n_cols = L.shape[-1]
-        if n_cols == state_dim:
-            return L
+        if n_cols > state_dim:
+            raise ValueError(
+                "cd-dynamax continuous diffusion requires bm_dim <= state_dim. "
+                f"Got state_dim={state_dim}, bm_dim={n_cols}."
+            )
         if n_cols < state_dim:
-            return jnp.pad(L, ((0, 0), (0, state_dim - n_cols)))
-        return L[:, :state_dim]
+            pad_width = ((0, 0),) * (L.ndim - 1) + ((0, state_dim - n_cols),)
+            L = jnp.pad(L, pad_width)
+        return L
 
     return _wrapped
+
+
+def _validate_cd_dynamax_continuous_diffusion(
+    state_evolution: ContinuousTimeStateEvolution,
+    state_dim: int,
+) -> None:
+    """Eagerly validate diffusion shape constraints for cd-dynamax continuous filters."""
+    if state_evolution.diffusion_coefficient is None:
+        return
+    if state_evolution.bm_dim is None:
+        raise ValueError(
+            "Continuous cd-dynamax filters require resolved bm_dim on "
+            "ContinuousTimeStateEvolution."
+        )
+    if state_evolution.bm_dim > state_dim:
+        raise ValueError(
+            "Continuous cd-dynamax filters require bm_dim <= state_dim. "
+            f"Got state_dim={state_dim}, bm_dim={state_evolution.bm_dim}."
+        )
 
 
 class _ConstantFunction(eqx.Module):
@@ -198,7 +225,16 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
 
     # Extract constant L and use inferred Brownian dimension.
     x0 = jnp.zeros(dsx_model.state_dim)
-    L = state_evo.diffusion_coefficient(x0, None, jnp.array(0.0))
+    diffusion = evaluate_diffusion(
+        state_evo.diffusion_coefficient,
+        diffusion_type=state_evo.diffusion_type,
+        bm_dim=state_evo.bm_dim,
+        x=x0,
+        u=None,
+        t=jnp.array(0.0),
+        state_dim=dsx_model.state_dim,
+    )
+    L = diffusion_as_matrix(diffusion, state_dim=dsx_model.state_dim)
     if state_evo.bm_dim is None:
         raise ValueError(
             "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
@@ -273,8 +309,12 @@ def dsx_to_cd_dynamax(
                 raise ValueError(
                     "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
                 )
+            _validate_cd_dynamax_continuous_diffusion(
+                state_evo,
+                dsx_model.state_dim,
+            )
             diffusion_coeff = _normalize_cd_dynamax_diffusion(
-                state_evo.diffusion_coefficient,
+                state_evo,
                 dsx_model.state_dim,
             )
             shared_params.update(

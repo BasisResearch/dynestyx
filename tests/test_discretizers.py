@@ -3,6 +3,7 @@
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
+import pytest
 from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
@@ -31,6 +32,52 @@ def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
         diffusion_coefficient=lambda x, u, t: jnp.ones((1, 1)),
         bm_dim=1,
     )
+
+
+def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
+    if diffusion_form == "full":
+        return ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion_coefficient=jnp.eye(2),
+            diffusion_type="full",
+            bm_dim=2,
+        )
+    if diffusion_form == "diag":
+        return ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion_coefficient=jnp.ones((2,)),
+            diffusion_type="diag",
+            bm_dim=2,
+        )
+    if diffusion_form == "scalar":
+        return ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion_coefficient=jnp.array(1.0),
+            diffusion_type="scalar",
+            bm_dim=2,
+        )
+    if diffusion_form == "callable_full":
+        return ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion_coefficient=lambda x, u, t: jnp.eye(2),
+            diffusion_type="full",
+            bm_dim=2,
+        )
+    if diffusion_form == "callable_diag":
+        return ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros((2,)),
+            diffusion_coefficient=lambda x, u, t: jnp.ones((2,)),
+            diffusion_type="diag",
+            bm_dim=2,
+        )
+    if diffusion_form == "callable_scalar":
+        return ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion_coefficient=lambda x, u, t: jnp.array(1.0),
+            diffusion_type="scalar",
+            bm_dim=2,
+        )
+    raise ValueError(f"Unknown diffusion form: {diffusion_form}")
 
 
 def test_euler_maruyama_returns_gaussian_state_evolution_with_callable_cov():
@@ -76,6 +123,21 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
     d = evo(x, None, t0, t1)
     assert jnp.allclose(d_dict["loc"], d.loc)
     assert jnp.allclose(d_dict["cov"], d.covariance_matrix)
+
+
+@pytest.mark.parametrize(
+    "diffusion_form",
+    ["full", "diag", "scalar", "callable_full", "callable_diag", "callable_scalar"],
+)
+def test_euler_maruyama_structured_diffusions_match_dense_covariance(diffusion_form):
+    cte = _ctse_2d_zero_drift(diffusion_form)
+    x = jnp.array([0.3, -0.1])
+    t0 = jnp.array(1.0)
+    t1 = jnp.array(3.0)
+    out = euler_maruyama_loc_cov(cte, x, None, t0, t1)
+    expected_cov = (t1 - t0) * jnp.eye(2)
+    assert jnp.allclose(out["loc"], x)
+    assert jnp.allclose(out["cov"], expected_cov)
 
 
 def test_discretized_dirac_observations_preserve_state_dimension():
