@@ -9,6 +9,7 @@ import numpyro.distributions as dist
 import numpyro.primitives
 
 from dynestyx.models.diffusions import (
+    DiffusionType,
     evaluate_diffusion_value,
     resolve_diffusion_metadata,
 )
@@ -84,23 +85,30 @@ def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
     return jnp.zeros((state_dim,))
 
 
-def _infer_bm_dim(
+def _resolve_ctse_diffusion_metadata(
     state_evolution: Any,
     state_dim: int,
     x0: State,
     u0: Control | None,
     t0: Time,
-) -> int | None:
-    """Infer bm_dim from diffusion coefficient output shape.
+) -> tuple[DiffusionType, int] | None:
+    """Resolve diffusion metadata from one probe evaluation.
 
     Tolerates leading batch dimensions (e.g. from plate-batched parameters)
     by inspecting only the trailing two dimensions (..., state_dim, bm_dim).
 
-    Returns the inferred bm_dim, or None if there is no diffusion coefficient.
+    Returns the resolved diffusion type and bm_dim, or None if there is no
+    diffusion coefficient.
     """
     if state_evolution.diffusion_coefficient is None:
-        if state_evolution.bm_dim is not None:
-            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
+        if (
+            state_evolution.bm_dim is not None
+            or state_evolution.diffusion_type is not None
+        ):
+            raise ValueError(
+                "diffusion_type and bm_dim cannot be set when "
+                "diffusion_coefficient is None."
+            )
         return None
 
     diffusion_shape = jax.eval_shape(
@@ -108,13 +116,24 @@ def _infer_bm_dim(
             state_evolution.diffusion_coefficient, x0, u0, t0
         )
     ).shape
-    _, inferred_bm_dim = resolve_diffusion_metadata(
+    return resolve_diffusion_metadata(
         diffusion_shape,
         state_dim=state_dim,
         diffusion_type=state_evolution.diffusion_type,
         bm_dim=state_evolution.bm_dim,
     )
-    return inferred_bm_dim
+
+
+def _infer_bm_dim(
+    state_evolution: Any,
+    state_dim: int,
+    x0: State,
+    u0: Control | None,
+    t0: Time,
+) -> int | None:
+    """Compatibility wrapper returning only the resolved bm_dim."""
+    resolved = _resolve_ctse_diffusion_metadata(state_evolution, state_dim, x0, u0, t0)
+    return None if resolved is None else resolved[1]
 
 
 def _validate_continuous_state_evolution(
@@ -123,10 +142,10 @@ def _validate_continuous_state_evolution(
     x0: State,
     u0: Control | None,
     t0: Time,
-) -> int | None:
+) -> tuple[DiffusionType, int] | None:
     """Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim.
 
-    Returns the inferred bm_dim (or None if no diffusion coefficient).
+    Returns the resolved diffusion metadata (or None if no diffusion coefficient).
     """
     drift_shape = jax.eval_shape(lambda: state_evolution.total_drift(x0, u0, t0)).shape
     if drift_shape != (state_dim,):
@@ -135,7 +154,7 @@ def _validate_continuous_state_evolution(
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
 
-    return _infer_bm_dim(state_evolution, state_dim, x0, u0, t0)
+    return _resolve_ctse_diffusion_metadata(state_evolution, state_dim, x0, u0, t0)
 
 
 def _validate_state_evolution_output_shape(
@@ -150,16 +169,17 @@ def _validate_state_evolution_output_shape(
 ) -> int | None:
     """Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models).
 
-    Returns the inferred bm_dim for continuous-time models, or None otherwise.
+    Returns the resolved bm_dim for continuous-time models, or None otherwise.
     """
     if continuous_time:
-        return _validate_continuous_state_evolution(
+        resolved_diffusion = _validate_continuous_state_evolution(
             state_evolution=state_evolution,
             state_dim=state_dim,
             x0=x0,
             u0=u0,
             t0=t0,
         )
+        return None if resolved_diffusion is None else resolved_diffusion[1]
     else:
         if getattr(state_evolution, "bm_dim", None) is not None:
             raise ValueError(

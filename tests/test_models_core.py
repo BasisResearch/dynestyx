@@ -476,7 +476,7 @@ def test_diffusion_helpers_support_callable_shorthands(callable_form: str) -> No
     else:
         diffusion_coefficient = lambda x, u, t: jnp.eye(2) * (1.0 + 0.0 * t)
         diffusion_type = "full"
-        bm_dim = None
+        bm_dim = 2
         expected = jnp.eye(2)
 
     evaluated = evaluate_diffusion(

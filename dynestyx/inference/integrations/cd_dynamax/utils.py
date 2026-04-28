@@ -71,22 +71,15 @@ def _validate_cd_dynamax_continuous_diffusion(
     """Eagerly validate diffusion shape constraints for cd-dynamax continuous filters."""
     if state_evolution.diffusion_coefficient is None:
         return
-
-    probe_x = jnp.zeros(state_dim)
-    diffusion = evaluate_diffusion(
-        state_evolution.diffusion_coefficient,
-        diffusion_type=state_evolution.diffusion_type,
-        bm_dim=state_evolution.bm_dim,
-        x=probe_x,
-        u=None,
-        t=jnp.array(0.0),
-        state_dim=state_dim,
-    )
-    bm_dim = diffusion_as_matrix(diffusion, state_dim=state_dim).shape[-1]
-    if bm_dim > state_dim:
+    if state_evolution.bm_dim is None:
+        raise ValueError(
+            "Continuous cd-dynamax filters require resolved bm_dim on "
+            "ContinuousTimeStateEvolution."
+        )
+    if state_evolution.bm_dim > state_dim:
         raise ValueError(
             "Continuous cd-dynamax filters require bm_dim <= state_dim. "
-            f"Got state_dim={state_dim}, bm_dim={bm_dim}."
+            f"Got state_dim={state_dim}, bm_dim={state_evolution.bm_dim}."
         )
 
 

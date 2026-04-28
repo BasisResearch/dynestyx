@@ -101,18 +101,17 @@ def evaluate_diffusion(
     t: Time,
     state_dim: int,
 ) -> EvaluatedDiffusion:
-    """Evaluate a diffusion spec and resolve its semantics."""
+    """Evaluate a diffusion spec using already-resolved metadata."""
     value = evaluate_diffusion_value(diffusion_coefficient, x, u, t)
-    resolved_type, resolved_bm_dim = resolve_diffusion_metadata(
-        value.shape,
-        state_dim=state_dim,
-        diffusion_type=diffusion_type,
-        bm_dim=bm_dim,
-    )
+    if diffusion_type is None or bm_dim is None:
+        raise ValueError(
+            "Diffusion metadata must be resolved at model initialization before "
+            "runtime evaluation."
+        )
     return EvaluatedDiffusion(
-        diffusion_type=resolved_type,
+        diffusion_type=diffusion_type,
         value=value,
-        bm_dim=resolved_bm_dim,
+        bm_dim=int(bm_dim),
     )
 
 
