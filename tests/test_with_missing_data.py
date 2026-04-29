@@ -415,9 +415,7 @@ def test_diagonal_obs_missing_data_science(
         pytest.param("particle_sde", "random", id="particle_sde-random"),
         pytest.param("particle_sde", "sequential", id="particle_sde-sequential"),
         pytest.param("particle_sde", "block", id="particle_sde-block"),
-        pytest.param(
-            "interacting_particles", "none", id="interacting_particles-none"
-        ),
+        pytest.param("interacting_particles", "none", id="interacting_particles-none"),
         pytest.param(
             "interacting_particles", "block", id="interacting_particles-block"
         ),
@@ -443,9 +441,10 @@ def test_particle_model_missing_data_svi(
     # With unroll_missing=True the scan creates latent sample sites at missing
     # rows — too many for SVI to converge. Use MCMC for this combination.
     use_mcmc = (
-        (model_type == "particle_sde" and unroll_missing and missingness_pattern != "none")
-        or missingness_pattern == "partial"
-    )
+        model_type == "particle_sde"
+        and unroll_missing
+        and missingness_pattern != "none"
+    ) or missingness_pattern == "partial"
 
     rng_key = jr.PRNGKey(42)
     data_key, svi_key, missing_key = jr.split(rng_key, 3)
@@ -456,7 +455,9 @@ def test_particle_model_missing_data_svi(
     if model_type == "particle_sde":
         N = 20 if SMOKE else 200
         D, K, sigma = 1, 2, 0.3
-        obs_times = jnp.arange(start=0.0, stop=5.0 if SMOKE else 10.0, step=0.1 if SMOKE else 0.05)
+        obs_times = jnp.arange(
+            start=0.0, stop=5.0 if SMOKE else 10.0, step=0.1 if SMOKE else 0.05
+        )
         true_centers = jnp.array([[-2.0], [2.0]])
         true_strengths = jnp.array([1.0, 1.5])
         true_params = {"centers": true_centers, "strengths": true_strengths}
@@ -612,9 +613,7 @@ def test_particle_model_missing_data_svi(
             sort_idx = jnp.argsort(post_centers_mean[:, 0])
             post_centers_sorted = post_centers_mean[sort_idx]
             true_centers_sorted = true_centers[jnp.argsort(true_centers[:, 0])]
-            assert jnp.allclose(
-                post_centers_sorted, true_centers_sorted, atol=tol
-            ), (
+            assert jnp.allclose(post_centers_sorted, true_centers_sorted, atol=tol), (
                 f"Centers not recovered: {post_centers_sorted} vs {true_centers_sorted}"
             )
         else:
@@ -677,7 +676,9 @@ def test_particle_model_missing_data_svi(
                     obs_values=obs_values,
                     bg_centers=bg_centers,
                 )
-            pred_states = np.asarray(_trajectory_draws(pp_result, "states"))  # (200, T, N)
+            pred_states = np.asarray(
+                _trajectory_draws(pp_result, "states")
+            )  # (200, T, N)
             plot_times_np = np.asarray(obs_times)
             obs_np = np.asarray(obs_values)
             clean_np = np.asarray(obs_values_clean)
@@ -768,12 +769,16 @@ def test_particle_model_missing_data_svi(
             fig2, (ax_c, ax_s) = plt.subplots(1, 2, figsize=(9, 3))
             az.plot_posterior(
                 np.asarray(posterior_samples["coefficient"]),
-                hdi_prob=0.95, ref_val=true_coefficient, ax=ax_c,
+                hdi_prob=0.95,
+                ref_val=true_coefficient,
+                ax=ax_c,
             )
             ax_c.set_title("coefficient")
             az.plot_posterior(
                 np.asarray(posterior_samples["scale"]),
-                hdi_prob=0.95, ref_val=true_scale, ax=ax_s,
+                hdi_prob=0.95,
+                ref_val=true_scale,
+                ax=ax_s,
             )
             ax_s.set_title("scale")
             fig2.suptitle(f"Posteriors — {missingness_pattern}")

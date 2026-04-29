@@ -1160,9 +1160,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         return {
             "times": _tile_times(times, 1),
             "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
-            "observations": _ensure_trailing_dim(
-                jnp.expand_dims(observations, axis=0)
-            ),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
         }
 
     def _simulate_row_filter(
@@ -1307,9 +1305,7 @@ class DiscreteTimeSimulator(BaseSimulator):
                         jnp.where(row_obs, trans_dist.log_prob(safe_obs_t), 0.0),
                     )
                     with numpyro.handlers.mask(mask=~row_obs):
-                        x_t_full = numpyro.sample(
-                            f"{name}_x_{t_idx + 1}", trans_dist
-                        )
+                        x_t_full = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
                     x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
@@ -1329,7 +1325,9 @@ class DiscreteTimeSimulator(BaseSimulator):
                 step_fn = _step_dirac_observed
 
         else:
-            x_prev = cast(State, numpyro.sample(f"{name}_x_0", dynamics.initial_condition))
+            x_prev = cast(
+                State, numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+            )
             obs_model = dynamics.observation_model
 
             if has_partial:
