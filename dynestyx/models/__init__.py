@@ -12,6 +12,8 @@ from dynestyx.models.core import (
 )
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
+    DiagonalGaussianObservation,
+    DiagonalLinearGaussianObservation,
     DiracIdentityObservation,
     GaussianObservation,
     LinearGaussianObservation,
@@ -25,6 +27,8 @@ from dynestyx.models.state_evolution import (
 __all__ = [
     "ContinuousTimeStateEvolution",
     "AffineDrift",
+    "DiagonalGaussianObservation",
+    "DiagonalLinearGaussianObservation",
     "DiracIdentityObservation",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",

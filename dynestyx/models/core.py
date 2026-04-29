@@ -1,5 +1,6 @@
 """Core interfaces and base classes for dynamical models."""
 
+from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -399,3 +400,42 @@ class ObservationModel(eqx.Module):
             seed = kwargs.pop("seed")
             kwargs["key"] = seed
         return dist.sample(*args, **kwargs)
+
+    @abstractmethod
+    def __call__(self, x, u, t) -> Distribution: ...
+
+    def masked_log_prob(
+        self,
+        y: jax.Array,
+        obs_mask: jax.Array,
+        x: Any,
+        u: Any = None,
+        t: Any = None,
+    ) -> jax.Array:
+        """Log p(y_obs | x) scoring only observed dimensions.
+
+        Args:
+            y: Observation with NaN replaced by safe values. Shape (obs_dim,).
+            obs_mask: Boolean array, True = observed. Shape (obs_dim,).
+            x: Latent state.
+            u: Control or None.
+            t: Time or None.
+
+        Returns:
+            Scalar log-probability summed over observed dims only.
+        """
+        import numpyro.distributions as _dist_mod
+
+        d = self(x, u, t)
+        # Unwrap Independent(base, 1) to get per-element log_probs
+        base = d
+        if isinstance(d, _dist_mod.Independent) and d.reinterpreted_batch_ndims == 1:
+            base = d.base_dist
+        per_dim_lp = base.log_prob(y)  # (obs_dim,) if base is element-wise
+        if jnp.ndim(per_dim_lp) == 0:
+            raise NotImplementedError(
+                f"{type(self).__name__}.masked_log_prob: distribution "
+                f"{type(d).__name__} does not decompose per-dimension. "
+                "Override masked_log_prob in the subclass."
+            )
+        return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))

@@ -25,6 +25,7 @@ from dynestyx.models import (
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    ObservationModel,
 )
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, State, Time, TimeLike, as_scalar_time_array
@@ -878,6 +879,16 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         The returned `"states"` and `"observations"` are both `obs_values`.
 
+    Partial missingness:
+        When `obs_values` contains NaN entries the simulator selects a path
+        automatically:
+
+        - Partial NaN rows use a per-step scan with observation masks.
+        - Entirely missing rows with `unroll_missing=True` use a per-step scan
+          and keep full-length outputs with NaN observations at missing rows.
+        - Entirely missing rows with `unroll_missing=False` are filtered out,
+          producing a shorter simulated timeline.
+
     Deterministic outputs:
         When run, the simulator records `"times"`, `"states"`, and `"observations"`
         as `numpyro.deterministic(...)` sites.
@@ -885,6 +896,7 @@ class DiscreteTimeSimulator(BaseSimulator):
     """
 
     n_simulations: int = 1
+    unroll_missing: bool = True
 
     def _simulate(
         self,
@@ -930,6 +942,45 @@ class DiscreteTimeSimulator(BaseSimulator):
             raise ValueError("obs_times must contain at least one timepoint")
 
         n_sim = self.n_simulations
+
+        if obs_values is not None:
+            obs_np = np.asarray(obs_values)
+            if np.isnan(obs_np).any():
+                obs_nan = np.isnan(obs_np)
+                row_nan = (
+                    obs_nan[:, None]
+                    if obs_nan.ndim == 1
+                    else obs_nan.reshape((obs_nan.shape[0], -1))
+                )
+                nan_per_row = row_nan.any(axis=1)
+                all_nan_per_row = row_nan.all(axis=1)
+                has_partial = bool((nan_per_row & ~all_nan_per_row).any())
+                has_entire_row_missing = bool(all_nan_per_row.any())
+                is_dirac = isinstance(
+                    dynamics.observation_model, DiracIdentityObservation
+                )
+
+                if has_partial or (self.unroll_missing and has_entire_row_missing):
+                    return self._simulate_missing_scan(
+                        name,
+                        dynamics,
+                        times=times,
+                        ctrl_values=ctrl_values,
+                        obs_np=obs_np,
+                        has_partial=has_partial,
+                        T=T,
+                        is_dirac=is_dirac,
+                    )
+
+                if has_entire_row_missing:
+                    return self._simulate_row_filter(
+                        name,
+                        dynamics,
+                        times=times,
+                        ctrl_times=ctrl_times,
+                        ctrl_values=ctrl_values,
+                        obs_np=obs_np,
+                    )
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
@@ -1099,6 +1150,257 @@ class DiscreteTimeSimulator(BaseSimulator):
             "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
         }
+
+    @staticmethod
+    def _format_single_result(
+        times: Array,
+        states: Array,
+        observations: Array,
+    ) -> dict[str, State]:
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+        }
+
+    def _simulate_row_filter(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        times,
+        ctrl_times,
+        ctrl_values,
+        obs_np: np.ndarray,
+    ) -> dict[str, State]:
+        """Filter entirely missing rows and simulate on the compressed timeline."""
+        obs_nan = np.isnan(obs_np)
+        row_nan = (
+            obs_nan[:, None]
+            if obs_nan.ndim == 1
+            else obs_nan.reshape((obs_nan.shape[0], -1))
+        )
+        observed_mask = ~row_nan.all(axis=1)
+        obs_values_filtered = jnp.asarray(obs_np[observed_mask])
+        times_filtered = jnp.asarray(np.asarray(times)[observed_mask])
+        ctrl_values_filtered = (
+            jnp.asarray(np.asarray(ctrl_values)[observed_mask])
+            if ctrl_values is not None
+            else None
+        )
+        if len(times_filtered) < 1:
+            raise ValueError(
+                "obs_times must contain at least one timepoint after removing missing data"
+            )
+        return self._simulate(
+            name,
+            dynamics,
+            obs_times=times_filtered,
+            obs_values=obs_values_filtered,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values_filtered,
+            predict_times=None,
+        )
+
+    def _simulate_missing_scan(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        times,
+        ctrl_values,
+        obs_np: np.ndarray,
+        has_partial: bool,
+        T: int,
+        is_dirac: bool,
+    ) -> dict[str, State]:
+        """Scan through NaN observations while scoring only observed entries."""
+        obs_mask_np = ~np.isnan(obs_np)
+        safe_obs_np = np.where(obs_mask_np, obs_np, 0.0)
+        obs_mask_jax = jnp.asarray(obs_mask_np)
+        safe_obs_jax = jnp.asarray(safe_obs_np)
+
+        u_0 = _get_val_or_None(ctrl_values, 0)
+        obs_mask_0 = obs_mask_jax[0]
+        safe_obs_0 = safe_obs_jax[0]
+
+        x_prev: State
+        step_fn: object
+
+        if is_dirac:
+            has_any_latent = bool((~obs_mask_np).any())
+
+            if has_any_latent and has_partial:
+                if not hasattr(dynamics.initial_condition, "base_dist"):
+                    raise NotImplementedError(
+                        "DiracIdentityObservation partial missingness requires "
+                        "elementwise independent initial and transition distributions."
+                    )
+                obs_lp_0 = dynamics.initial_condition.base_dist.log_prob(safe_obs_0)
+                numpyro.factor(
+                    f"{name}_x_0_obs",
+                    jnp.sum(jnp.where(obs_mask_0, obs_lp_0, 0.0)),
+                )
+                with numpyro.handlers.mask(mask=~obs_mask_0):
+                    x_0_full = numpyro.sample(
+                        f"{name}_x_0", dynamics.initial_condition.base_dist
+                    )
+                x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
+
+                def _step_dirac_partial(x_prev, t_idx):
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
+                    u_now = _get_val_or_None(ctrl_values, t_idx)
+                    obs_mask_t = obs_mask_jax[t_idx + 1]
+                    safe_obs_t = safe_obs_jax[t_idx + 1]
+                    trans_dist = dynamics.state_evolution(
+                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                    )
+                    if not hasattr(trans_dist, "base_dist"):
+                        raise NotImplementedError(
+                            "DiracIdentityObservation partial missingness requires "
+                            "elementwise independent transition distributions."
+                        )
+                    obs_lp = trans_dist.base_dist.log_prob(safe_obs_t)
+                    numpyro.factor(
+                        f"{name}_x_{t_idx + 1}_obs",
+                        jnp.sum(jnp.where(obs_mask_t, obs_lp, 0.0)),
+                    )
+                    with numpyro.handlers.mask(mask=~obs_mask_t):
+                        x_t_full = numpyro.sample(
+                            f"{name}_x_{t_idx + 1}", trans_dist.base_dist
+                        )
+                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
+                    y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
+                    return x_t, (x_t, y_t)
+
+                step_fn = _step_dirac_partial
+
+            elif has_any_latent:
+                row_obs_0 = jnp.all(obs_mask_0)
+                numpyro.factor(
+                    f"{name}_x_0_obs",
+                    jnp.where(
+                        row_obs_0,
+                        dynamics.initial_condition.log_prob(safe_obs_0),
+                        0.0,
+                    ),
+                )
+                with numpyro.handlers.mask(mask=~row_obs_0):
+                    x_0_full = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+                x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
+
+                def _step_dirac_wholerow(x_prev, t_idx):
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
+                    u_now = _get_val_or_None(ctrl_values, t_idx)
+                    obs_mask_t = obs_mask_jax[t_idx + 1]
+                    safe_obs_t = safe_obs_jax[t_idx + 1]
+                    trans_dist = dynamics.state_evolution(
+                        x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                    )
+                    row_obs = jnp.all(obs_mask_t)
+                    numpyro.factor(
+                        f"{name}_x_{t_idx + 1}_obs",
+                        jnp.where(row_obs, trans_dist.log_prob(safe_obs_t), 0.0),
+                    )
+                    with numpyro.handlers.mask(mask=~row_obs):
+                        x_t_full = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
+                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
+                    y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
+                    return x_t, (x_t, y_t)
+
+                step_fn = _step_dirac_wholerow
+
+            else:
+                x_prev = safe_obs_0
+
+                def _step_dirac_observed(x_prev, t_idx):
+                    obs_mask_t = obs_mask_jax[t_idx + 1]
+                    safe_obs_t = safe_obs_jax[t_idx + 1]
+                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_prev)
+                    y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
+                    return x_t, (x_t, y_t)
+
+                step_fn = _step_dirac_observed
+
+        else:
+            x_prev = cast(
+                State, numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+            )
+            obs_model = dynamics.observation_model
+
+            if has_partial:
+                if not isinstance(obs_model, ObservationModel):
+                    raise NotImplementedError(
+                        "Partial missingness requires an ObservationModel with masked_log_prob."
+                    )
+                obs_lp_0 = obs_model.masked_log_prob(
+                    y=safe_obs_0, obs_mask=obs_mask_0, x=x_prev, u=u_0, t=times[0]
+                )
+                numpyro.factor(f"{name}_y_0_lp", obs_lp_0)
+
+                def _step_partial(x_prev, t_idx):
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
+                    u_now = _get_val_or_None(ctrl_values, t_idx)
+                    u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+                    x_t = numpyro.sample(
+                        f"{name}_x_{t_idx + 1}",
+                        dynamics.state_evolution(
+                            x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                        ),
+                    )
+                    obs_mask_t = obs_mask_jax[t_idx + 1]
+                    safe_obs_t = safe_obs_jax[t_idx + 1]
+                    obs_lp = obs_model.masked_log_prob(
+                        y=safe_obs_t, obs_mask=obs_mask_t, x=x_t, u=u_next, t=t_next
+                    )
+                    numpyro.factor(f"{name}_y_{t_idx + 1}_lp", obs_lp)
+                    y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
+                    return x_t, (x_t, y_t)
+
+                step_fn = _step_partial
+
+            else:
+                obs_dist_0 = obs_model(x_prev, u_0, times[0])
+                lp_0 = obs_dist_0.log_prob(safe_obs_0)
+                numpyro.factor(
+                    f"{name}_y_0_lp", jnp.where(jnp.any(obs_mask_0), lp_0, 0.0)
+                )
+
+                def _step_allornone(x_prev, t_idx):
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
+                    u_now = _get_val_or_None(ctrl_values, t_idx)
+                    u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+                    x_t = numpyro.sample(
+                        f"{name}_x_{t_idx + 1}",
+                        dynamics.state_evolution(
+                            x=x_prev, u=u_now, t_now=t_now, t_next=t_next
+                        ),
+                    )
+                    obs_mask_t = obs_mask_jax[t_idx + 1]
+                    safe_obs_t = safe_obs_jax[t_idx + 1]
+                    obs_dist_t = obs_model(x_t, u_next, t_next)
+                    lp_t = obs_dist_t.log_prob(safe_obs_t)
+                    numpyro.factor(
+                        f"{name}_y_{t_idx + 1}_lp",
+                        jnp.where(jnp.any(obs_mask_t), lp_t, 0.0),
+                    )
+                    y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
+                    return x_t, (x_t, y_t)
+
+                step_fn = _step_allornone
+
+        y_0 = jnp.where(obs_mask_0, safe_obs_0, jnp.nan)
+        _, scan_outputs = nscan(step_fn, x_prev, jnp.arange(T - 1))  # type: ignore[arg-type]
+        scan_states, scan_observations = scan_outputs
+        states = jnp.concatenate([jnp.expand_dims(x_prev, axis=0), scan_states], axis=0)
+        observations = jnp.concatenate(
+            [jnp.expand_dims(y_0, axis=0), scan_observations], axis=0
+        )
+        return self._format_single_result(times, states, observations)
 
 
 class ODESimulator(BaseSimulator):

@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
@@ -591,5 +592,133 @@ def jumpy_controls_model_ode(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
+    )
+
+
+def interacting_particles_gaussian_kernel_model(
+    N=4,
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    sigma: float = 0.2,
+    bg_centers=None,
+    bg_strengths=None,
+):
+    """N particles in 1D with pairwise Gaussian interaction kernel + known background potential.
+
+    Drift for particle i:
+        interaction: coefficient * sum_j K(x_j - x_i; scale) * (x_j - x_i) / N
+        background:  -grad V(x_i),  V = -sum_k bg_strengths[k] * exp(-0.5*||x_i - bg_centers[k]||^2)
+
+    where K(r; scale) = exp(-0.5 * (r / scale)^2)  (kernel centred at r=0).
+
+    Learnable parameters:
+      coefficient – interaction amplitude; negative = repulsion (particles spread within wells)
+      scale       – kernel width (range of the interaction)
+    Background potential parameters (bg_centers, bg_strengths) are KNOWN / fixed.
+    Observations are noise-free (DiracIdentityObservation); partial NaN rows
+    trigger the per-step missing-data scan which samples latent states for unobserved particles.
+    """
+    if bg_centers is None:
+        bg_centers = jnp.array([[-2.0], [2.0]])  # (K, 1)
+    if bg_strengths is None:
+        bg_strengths = jnp.array([1.0, 1.0])  # (K,)
+
+    K_bg = bg_centers.shape[0]
+
+    coefficient = numpyro.sample("coefficient", dist.Normal(0.0, 2.0))
+    scale = numpyro.sample("scale", dist.LogNormal(0.0, 0.5))
+
+    def state_evolution(x, u, t_now, t_next):
+        dt = t_next - t_now
+        # Pairwise Gaussian interaction drift (kernel centred at r=0)
+        r = x[None, :] - x[:, None]  # (N, N) r_ij = x_j - x_i
+        K_pair = jnp.exp(-0.5 * (r / scale) ** 2)
+        interaction_drift = coefficient * jnp.sum(K_pair * r, axis=1) / N  # (N,)
+
+        # Background Gaussian-mixture drift: -grad V per particle
+        def bg_drift_single(x_i):
+            g = jnp.zeros(())
+            for k in range(K_bg):
+                diff = x_i - bg_centers[k, 0]
+                g = g - bg_strengths[k] * (-diff) * jnp.exp(-0.5 * diff**2)
+            return -g
+
+        bg_drift = jax.vmap(bg_drift_single)(x)  # (N,)
+        drift = interaction_drift + bg_drift
+        mean = x + dt * drift  # (N,) in scan, (N, T-1) in plate
+        std = jnp.sqrt(sigma**2 * dt) * jnp.ones_like(mean)
+        # Transpose so event_shape=(N,) and batch_shape=(T-1,) in plate;
+        # .T is a no-op on 1D arrays in scan.
+        return dist.Independent(dist.Normal(mean.T, std.T), 1)
+
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Independent(
+            dist.Normal(jnp.zeros(N), jnp.full(N, jnp.sqrt(8.0))), 1
+        ),
+        state_evolution=state_evolution,
+        observation_model=DiracIdentityObservation(),
+    )
+
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
+
+
+def particle_sde_gaussian_potential_model(
+    N=3,
+    D=2,
+    K=2,
+    sigma=0.5,
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+):
+    """N particles in D dimensions with drift = -grad(V), V = sum of weighted Gaussians.
+
+    Learnable parameters: centers (K, D) and strengths (K,) of the Gaussian components.
+    Diffusion is diagonal with known sigma.
+    """
+    centers = numpyro.sample(
+        "centers", dist.Normal(0.0, 3.0).expand([K, D]).to_event(2)
+    )
+    strengths = numpyro.sample(
+        "strengths", dist.LogNormal(0.0, 1.0).expand([K]).to_event(1)
+    )
+
+    def potential(x, u, t):
+        particles = x.reshape(N, D)
+        V = 0.0
+        for k in range(K):
+            diff = particles - centers[k]
+            V = V - strengths[k] * jnp.sum(jnp.exp(-0.5 * jnp.sum(diff**2, axis=-1)))
+        return V
+
+    state_dim = N * D
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(state_dim),
+            covariance_matrix=2.0**2 * jnp.eye(state_dim),
+        ),
+        state_evolution=ContinuousTimeStateEvolution(
+            potential=potential,
+            use_negative_gradient=True,
+            diffusion_coefficient=lambda x, u, t: sigma * jnp.eye(state_dim),
+        ),
+        observation_model=DiracIdentityObservation(),
+    )
+
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
         predict_times=predict_times,
     )
