@@ -3,12 +3,13 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
 
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import _should_record_field, _validate_controls
+from dynestyx.utils import _should_record_field
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
@@ -149,16 +150,15 @@ def hmm_filter(
 
         # Update: p(x_t | y_{1:t}) \propto p(y_t | x_t) p(x_t | y_{1:t-1})
         log_alpha = log_emit_t + log_pred
-
+        log_filt = jax.nn.log_softmax(log_alpha, axis=-1)
         log_Z = logsumexp(log_alpha, axis=-1)
-        log_filt = log_alpha - log_Z
 
         return (log_filt, loglik + log_Z), log_filt
 
     # t = 0
     log_alpha0 = log_pi + log_emit_seq[0]
     log_Z0 = logsumexp(log_alpha0, axis=-1)
-    log_filt0 = log_alpha0 - log_Z0
+    log_filt0 = jax.nn.log_softmax(log_alpha0, axis=-1)
 
     # t = 1..T-1
     # Use normalized filtered state (log_filt0) in carry for numerical stability
@@ -173,6 +173,33 @@ def hmm_filter(
     return loglik, log_filt_seq
 
 
+def compute_hmm_filter(
+    dynamics: DynamicalModel,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_values=None,
+):
+    """Pure-JAX HMM filter computation (no numpyro side-effects).
+
+    Returns:
+        tuple: (loglik, log_filt_seq) where loglik is the marginal log-likelihood
+        and log_filt_seq is (T, K) log-filtered state probabilities.
+    """
+    log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+        dynamics,
+        obs_times,
+        obs_values,
+        ctrl_values=ctrl_values,
+    )
+
+    return hmm_filter(
+        log_pi,
+        log_A_seq,
+        log_emit_seq,
+    )
+
+
 def _filter_hmm(
     name: str,
     dynamics: DynamicalModel,
@@ -183,7 +210,7 @@ def _filter_hmm(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> None:
+) -> list[dist.Distribution]:
     """Exact HMM marginal likelihood via forward filtering.
 
     Args:
@@ -194,20 +221,16 @@ def _filter_hmm(
         obs_values: Observed values.
         ctrl_times: Control times (optional).
         ctrl_values: Control values (optional).
+
+    Returns:
+        List of Categorical distributions p(x_t | y_{1:t}) at each obs time,
+        for use with Filter + DiscreteTimeSimulator rollout.
     """
-    _validate_controls(obs_times, ctrl_times, ctrl_values)
-
-    log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+    loglik, log_filt_seq = compute_hmm_filter(
         dynamics,
-        obs_times,
-        obs_values,
+        obs_times=obs_times,
+        obs_values=obs_values,
         ctrl_values=ctrl_values,
-    )
-
-    loglik, log_filt_seq = hmm_filter(
-        log_pi,
-        log_A_seq,
-        log_emit_seq,
     )
 
     numpyro.factor(f"{name}_marginal_log_likelihood", loglik)
@@ -230,3 +253,9 @@ def _filter_hmm(
             f"{name}_filtered_states",
             jnp.exp(log_filt_seq),  # (T, K)
         )
+
+    # Return filtered distributions for Filter + DiscreteTimeSimulator rollout
+    return [
+        dist.Categorical(probs=jnp.exp(log_filt_seq[i]))
+        for i in range(log_filt_seq.shape[0])
+    ]

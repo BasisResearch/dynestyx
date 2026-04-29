@@ -6,7 +6,7 @@
 
 `dynestyx` is a library designed for Bayesian modeling and inference of dynamical systems. It is an extension of [NumPyro](https://num.pyro.ai/en/stable/), and incorporates a wide variety of state-of-the-art inference methods for state space models.
 
-To get started, you can [read the documentation](https://basisresearch.github.io/dynestyx) or go straight to the [quickstart](https://basisresearch.github.io/dynestyx/tutorials/quickstart/).
+To get started, you can [read the documentation](https://basisresearch.github.io/dynestyx) (version menu: **stable** = latest release, **latest** = `main`) or go straight to the [quickstart](https://basisresearch.github.io/dynestyx/tutorials/quickstart/). See [Versioned documentation](docs/versioning.md) for details.
 
 ## Goals of `dynestyx`
 
@@ -22,15 +22,15 @@ Simultaneously, many strong solutions exist for inference in dynamical systems; 
 
 For installation, we recommend [`uv`](https://docs.astral.sh/uv/):
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install git+https://github.com/BasisResearch/dynestyx.git
+uv pip install dynestyx
 ```
 
 But `pip` works as well:
 ```bash
-pip install git+https://github.com/BasisResearch/dynestyx.git
+pip install dynestyx
 ```
+
+> **Developers**: See [Contributing Guidelines](CONTRIBUTING.md) for the development setup using `uv sync`.
 
 ## Quickstart
 

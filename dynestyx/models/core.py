@@ -1,6 +1,5 @@
 """Core interfaces and base classes for dynamical models."""
 
-import dataclasses
 from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -8,15 +7,22 @@ from typing import Any, Protocol
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from numpyro._typing import DistributionT
+from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
+    _infer_bm_dim,
+    _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
+    _inside_numpyro_plate_context,
     _is_categorical_distribution,
     _make_probe_state,
+    _validate_categorical_state,
+    _validate_continuous_time_flag,
+    _validate_observation_dim,
+    _validate_state_dim,
     _validate_state_evolution_output_shape,
 )
-from dynestyx.types import Control, State, Time, dState
+from dynestyx.types import Control, State, Time, TimeLike, as_scalar_time_array, dState
 
 
 class DynamicalModel(eqx.Module):
@@ -46,8 +52,7 @@ class DynamicalModel(eqx.Module):
             Gets inferred automatically from the type of `initial_condition`.
         control_dim (int): Dimension of the control/input vector $u_t \\in \\mathbb{R}^{d_u}$. Defaults to 0 if not provided (assumes no controls).
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
-            In the codebase this is annotated as `DistributionT` (a typing alias); in practice you should pass
-            a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
+            Pass a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
             [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
         state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
             Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
@@ -58,7 +63,7 @@ class DynamicalModel(eqx.Module):
             A callable is accepted (e.g., `lambda x, u, t: ...`) as long as it returns a NumPyro-compatible
             distribution, while subclassing `ObservationModel` is recommended for richer reuse and consistency.
         control_model (Any): Optional model for control inputs (e.g., exogenous process). Not currently supported.
-        t0 (float | None): Optional declared start time of the model. If ``None`` (default), the start time
+        t0 (float | Array | None): Optional declared start time of the model. If ``None`` (default), the start time
             is auto-inferred as ``obs_times[0]`` when the simulator runs and recorded as a
             ``numpyro.deterministic("t0", ...)`` site. If provided, it must match ``obs_times[0]``
             exactly; a mismatch raises a ``ValueError`` at simulation time.
@@ -72,15 +77,15 @@ class DynamicalModel(eqx.Module):
     
     """
 
-    initial_condition: DistributionT
+    initial_condition: Distribution
     state_evolution: (
         Callable[[State, Control, Time], State]
         | Callable[[State, Control, Time, Time], State]
     )
-    observation_model: Callable[[State, Control, Time], DistributionT]
+    observation_model: Callable[[State, Control, Time], Distribution]
     control_dim: int
     control_model: Any
-    t0: float | None
+    t0: Time | None
     state_dim: int
     observation_dim: int
     categorical_state: bool
@@ -94,7 +99,7 @@ class DynamicalModel(eqx.Module):
         control_dim: int | None = None,
         control_model=None,
         *,
-        t0: float | None = None,
+        t0: TimeLike | None = None,
         state_dim: int | None = None,
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
@@ -103,48 +108,72 @@ class DynamicalModel(eqx.Module):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
         )
-        if (
-            continuous_time is not None
-            and bool(continuous_time) != inferred_continuous_time
-        ):
-            raise ValueError(
-                "continuous_time does not match inferred state_evolution type."
-            )
+        _validate_continuous_time_flag(continuous_time, inferred_continuous_time)
         self.continuous_time = inferred_continuous_time
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
         self.control_model = control_model
-        self.t0 = t0
+        self.t0 = None if t0 is None else as_scalar_time_array(t0, name="t0")
 
         inferred_state_dim = _infer_vector_dim_from_distribution(
             initial_condition, "initial_condition"
         )
-        if state_dim is not None and int(state_dim) != int(inferred_state_dim):
-            raise ValueError(
-                "state_dim does not match inferred initial_condition shape. "
-                f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
-            )
+        _validate_state_dim(state_dim, inferred_state_dim)
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
-        if (
-            categorical_state is not None
-            and bool(categorical_state) != inferred_categorical_state
-        ):
-            raise ValueError(
-                "categorical_state does not match inferred initial_condition type. "
-                f"Got categorical_state={categorical_state}, "
-                f"inferred={inferred_categorical_state}."
-            )
+        _validate_categorical_state(categorical_state, inferred_categorical_state)
         if control_dim is None:
             control_dim = 0
+
+        # Skip shape validation when inside a numpyro plate context, since
+        # batched parameters produce shapes that don't match unbatched expectations.
+        _inside_plate = _inside_numpyro_plate_context()
+
+        if _inside_plate:
+            # Cannot validate shapes with batched parameters; trust the user.
+            # Infer observation_dim from observation model if not explicitly provided.
+            inferred_obs_dim = _infer_observation_dim_in_plate_context(
+                initial_condition=initial_condition,
+                observation_model=observation_model,
+                inferred_state_dim=inferred_state_dim,
+                control_dim=control_dim,
+                t0=self.t0,
+                observation_dim=observation_dim,
+            )
+            self.state_dim = int(inferred_state_dim)
+            self.observation_dim = inferred_obs_dim
+            self.control_dim = int(control_dim)
+            self.categorical_state = bool(inferred_categorical_state)
+
+            # Infer bm_dim for continuous-time models
+            if inferred_continuous_time and isinstance(
+                state_evolution, ContinuousTimeStateEvolution
+            ):
+                x0 = jnp.zeros((inferred_state_dim,))
+                u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
+                dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
+                inferred_bm_dim = _infer_bm_dim(
+                    state_evolution, inferred_state_dim, x0, u0, dummy_t0
+                )
+                if inferred_bm_dim is not None:
+                    if (
+                        state_evolution.bm_dim is not None
+                        and inferred_bm_dim != state_evolution.bm_dim
+                    ):
+                        raise ValueError(
+                            "bm_dim does not match inferred diffusion_coefficient output shape. "
+                            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
+                        )
+                    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
+            return
 
         x0 = _make_probe_state(
             initial_condition=initial_condition, state_dim=inferred_state_dim
         )
         u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-        dummy_t0 = jnp.array(0.0) if t0 is None else jnp.array(t0)
+        dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
 
-        _validate_state_evolution_output_shape(
+        inferred_bm_dim = _validate_state_evolution_output_shape(
             state_evolution=state_evolution,
             state_dim=inferred_state_dim,
             x0=x0,
@@ -152,18 +181,14 @@ class DynamicalModel(eqx.Module):
             t0=dummy_t0,
             continuous_time=self.continuous_time,
         )
+        if self.continuous_time and inferred_bm_dim != state_evolution.bm_dim:
+            object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
 
         obs_dist = observation_model(x0, u0, dummy_t0)
         inferred_observation_dim = _infer_vector_dim_from_distribution(
             obs_dist, "observation_model(x, u, t)"
         )
-        if observation_dim is not None and int(observation_dim) != int(
-            inferred_observation_dim
-        ):
-            raise ValueError(
-                "observation_dim does not match inferred observation_model output shape. "
-                f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
-            )
+        _validate_observation_dim(observation_dim, inferred_observation_dim)
 
         self.state_dim = int(inferred_state_dim)
         self.observation_dim = int(inferred_observation_dim)
@@ -250,8 +275,7 @@ class Potential(Protocol):
         raise NotImplementedError()
 
 
-@dataclasses.dataclass
-class ContinuousTimeStateEvolution:
+class ContinuousTimeStateEvolution(eqx.Module):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
 
@@ -285,9 +309,9 @@ class ContinuousTimeStateEvolution:
 
     drift: Drift | None = None
     potential: Potential | None = None
-    use_negative_gradient: bool = False
+    use_negative_gradient: bool = eqx.field(static=True, default=False)
     diffusion_coefficient: Drift | None = None
-    bm_dim: int | None = dataclasses.field(default=None, repr=False)
+    bm_dim: int | None = eqx.field(static=True, default=None)
 
     def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
         base = self.drift(x, u, t) if self.drift is not None else None
@@ -308,7 +332,7 @@ class ContinuousTimeStateEvolution:
         return base + grad_term
 
 
-class DiscreteTimeStateEvolution:
+class DiscreteTimeStateEvolution(eqx.Module):
     """
     Discrete-time state evolution via Markov transition distributions.
 
@@ -329,7 +353,7 @@ class DiscreteTimeStateEvolution:
         t_next (Time): Next time index $t_{k+1}$ (for non-uniform sampling or continuous-time embeddings).
 
     Returns:
-        DistributionT: Distribution over the next state $x_{t_{k+1}}$.
+        numpyro.distributions.Distribution: Distribution over the next state $x_{t_{k+1}}$.
             In practice this should be a `numpyro.distributions.Distribution` instance.
     """
 
@@ -339,7 +363,7 @@ class DiscreteTimeStateEvolution:
         u: Control | None,
         t_now: Time,
         t_next: Time,
-    ) -> DistributionT:
+    ) -> Distribution:
         raise NotImplementedError()
 
 
@@ -378,7 +402,7 @@ class ObservationModel(eqx.Module):
         return dist.sample(*args, **kwargs)
 
     @abstractmethod
-    def __call__(self, x, u, t) -> DistributionT: ...
+    def __call__(self, x, u, t) -> Distribution: ...
 
     def masked_log_prob(
         self,

@@ -19,6 +19,7 @@ def hmm_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     K = 3  # number of discrete states
 
@@ -77,6 +78,7 @@ def hmm_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -85,6 +87,7 @@ def discrete_time_l63_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
@@ -140,6 +143,7 @@ def discrete_time_l63_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -148,6 +152,7 @@ def continuous_time_stochastic_l63_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Model that samples drift parameter rho and uses it in dynamics."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
@@ -195,6 +200,7 @@ def continuous_time_stochastic_l63_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -203,6 +209,7 @@ def continuous_time_stochastic_l63_model_dirac_obs(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """L63 SDE with full-state Dirac observations (observation_dim=state_dim=3)."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
@@ -234,6 +241,7 @@ def continuous_time_stochastic_l63_model_dirac_obs(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -242,6 +250,7 @@ def continuous_time_lti_simplified_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Continuous-time LTI using LTI_continuous factory: only rho = A[1,0] is sampled."""
     rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
@@ -259,6 +268,7 @@ def continuous_time_lti_simplified_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -267,6 +277,7 @@ def continuous_time_LTI_gaussian(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """2D linear SDE with a sampled coupling."""
     rho = numpyro.sample("rho", dist.Uniform(0.0, 5.0))
@@ -293,6 +304,7 @@ def continuous_time_LTI_gaussian(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -302,6 +314,7 @@ def stochastic_volatility(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Discrete-time stochastic volatility: log-variance follows AR(1).
     One unknown parameter: phi (persistence). No controls.
@@ -335,6 +348,7 @@ def stochastic_volatility(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -343,6 +357,7 @@ def continuous_time_deterministic_l63_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Model that samples drift parameter rho and uses it in dynamics (ODE, no diffusion)."""
     rho = numpyro.sample("rho", dist.Uniform(10.0, 40.0))
@@ -378,6 +393,7 @@ def continuous_time_deterministic_l63_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -385,6 +401,7 @@ def continuous_time_potential_dynamics_model(
     mode: str = "both",
     obs_times=None,
     obs_values=None,
+    predict_times=None,
 ):
     """1D continuous-time model supporting drift-only, grad-only, or both."""
     if mode not in {"drift_only", "grad_only", "both"}:
@@ -419,6 +436,7 @@ def continuous_time_potential_dynamics_model(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
+        predict_times=predict_times,
     )
 
 
@@ -427,6 +445,7 @@ def discrete_time_lti_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Discrete-time LTI with one sampled parameter alpha (F[0,0]); for use with filter_type='kf'.
     Supports controls: when control_trajectory is provided in context, B and D are used (state_dim=2, control_dim=1).
@@ -458,6 +477,7 @@ def discrete_time_lti_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -466,6 +486,7 @@ def discrete_time_lti_simplified_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     """Discrete-time LTI using LTI_discrete factory: only alpha = A[0,0] is sampled."""
     alpha = numpyro.sample("alpha", dist.Uniform(-0.7, 0.7))
@@ -484,6 +505,7 @@ def discrete_time_lti_simplified_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -492,6 +514,7 @@ def jumpy_controls_model(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     dynamics = LTI_discrete(
         A=jnp.array([[1.0]]),
@@ -508,6 +531,7 @@ def jumpy_controls_model(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -516,6 +540,7 @@ def jumpy_controls_model_sde(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x + u,
@@ -537,6 +562,7 @@ def jumpy_controls_model_sde(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -545,6 +571,7 @@ def jumpy_controls_model_ode(
     obs_values=None,
     ctrl_times=None,
     ctrl_values=None,
+    predict_times=None,
 ):
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x + u,
@@ -565,6 +592,7 @@ def jumpy_controls_model_ode(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        predict_times=predict_times,
     )
 
 
@@ -572,6 +600,7 @@ def interacting_particles_gaussian_kernel_model(
     N=4,
     obs_times=None,
     obs_values=None,
+    predict_times=None,
     sigma: float = 0.2,
     bg_centers=None,
     bg_strengths=None,
@@ -633,7 +662,13 @@ def interacting_particles_gaussian_kernel_model(
         observation_model=DiracIdentityObservation(),
     )
 
-    dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
 
 
 def particle_sde_gaussian_potential_model(
@@ -643,6 +678,7 @@ def particle_sde_gaussian_potential_model(
     sigma=0.5,
     obs_times=None,
     obs_values=None,
+    predict_times=None,
 ):
     """N particles in D dimensions with drift = -grad(V), V = sum of weighted Gaussians.
 
@@ -679,4 +715,10 @@ def particle_sde_gaussian_potential_model(
         observation_model=DiracIdentityObservation(),
     )
 
-    dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )

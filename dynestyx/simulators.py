@@ -1,11 +1,16 @@
 """NumPyro-aware simulators/unrollers for dynamical models."""
 
 import dataclasses
+import itertools
 from collections.abc import Callable
-from typing import cast
+from contextlib import contextmanager
+from typing import Literal, cast
 
 import diffrax as dfx
+import equinox as eqx
+import jax
 import jax.numpy as jnp
+import jax.random as jr
 import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
@@ -14,6 +19,7 @@ from jax import Array
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -21,13 +27,189 @@ from dynestyx.models import (
     DynamicalModel,
     ObservationModel,
 )
-from dynestyx.types import FunctionOfTime, State
+from dynestyx.solvers import solve_ode, solve_sde
+from dynestyx.types import FunctionOfTime, State, Time, TimeLike, as_scalar_time_array
 from dynestyx.utils import (
+    _array_has_plate_dims,
     _build_control_path,
+    _dist_has_plate_batch_dims,
+    _ensure_continuous_bm_dim,
     _get_val_or_None,
-    _validate_control_dim,
-    _validate_controls,
+    _has_any_batched_plate_source,
+    _leaf_is_plate_batched,
+    _validate_site_sorting,
 )
+
+
+def _tile_times(times: Array, n_sim: int) -> Array:
+    """Return times tiled to shape (n_sim, T)."""
+    return jnp.broadcast_to(jnp.expand_dims(times, axis=0), (n_sim, len(times)))
+
+
+def _ensure_trailing_dim(arr: Array) -> Array:
+    """Ensure simulator outputs follow shape (n_sim, T, dim)."""
+    return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
+
+
+def _merge_segments(
+    arr_list: list[Array],
+    seg_masks: list[Array],
+    n_pred: int,
+) -> Array:
+    """Merge segment outputs into one array in predict-time order.
+
+    Each segment contributes values only where its mask is True. Input arrays
+    must already be shaped (n_sim, T_seg, dim).
+    """
+    first = arr_list[0]
+    assert first.ndim == 3, (
+        f"_merge_segments expects ndim==3 arrays (n_sim, T, D), got ndim={first.ndim} "
+        f"with shape {first.shape}. Ensure _ensure_trailing_dim is applied before "
+        "calling this function."
+    )
+    out = jnp.zeros((first.shape[0], n_pred, first.shape[2]), dtype=first.dtype)
+    for arr, mask in zip(arr_list, seg_masks):
+        cumsum = jnp.cumsum(mask)
+        local_idx = jnp.where(mask, cumsum - 1, 0)
+        gathered = arr[:, local_idx, :]
+        mask_bc = jnp.expand_dims(jnp.expand_dims(mask, 0), -1)  # (1, T, 1)
+        out = jnp.where(mask_bc, gathered, out)
+    return out
+
+
+@contextmanager
+def _suspend_numpyro_plate_frames():
+    """Temporarily remove active numpyro.plate frames from the pyro stack.
+
+    This is necessary so that `numpyro.sample` statements can be called within
+    the simulator inside of a dsx.plate context."""
+    stack = numpyro.primitives._PYRO_STACK
+    original = list(stack)
+    stack[:] = [f for f in original if not isinstance(f, numpyro.primitives.plate)]
+    try:
+        yield
+    finally:
+        stack[:] = original
+
+
+def _slice_array_for_plate_member(
+    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+) -> Array | None:
+    """Slice leading plate dims if present; otherwise return unchanged.
+
+    This is used in our Simulator loops for plated dimensions: we choose the times/values
+    for a particular plate member.
+    """
+    if arr is None:
+        return None
+    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
+        return arr[plate_idx]
+    return arr
+
+
+def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
+    """Slice all plate-batched array leaves in a pytree for one plate member."""
+
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
+    def _slice_leaf(leaf):
+        if _leaf_is_plate_batched(leaf, plate_shapes):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree.map(_slice_leaf, tree, is_leaf=_is_distribution_leaf)
+
+
+def _slice_dist_for_plate_member(
+    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+):
+    """Slice plate-batched distribution parameters for one member.
+
+    To obtain distributions for a particular plate member, we must
+    slice the corresponding parameter arrays. This function implements
+    such slicing for:
+    - MixtureSameFamily
+    - MultivariateNormal
+    - Delta
+    - WeightedParticles
+    - Categorical
+    - Independent
+    - TransformedDistribution
+    """
+    if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
+        return dist_obj
+
+    def _slice_required_array(arr_like) -> Array:
+        arr = jnp.asarray(arr_like)
+        sliced = _slice_array_for_plate_member(arr, plate_shapes, plate_idx)
+        if sliced is None:
+            raise ValueError("Expected a concrete array when slicing plate member.")
+        return sliced
+
+    # Rebuild common distributions explicitly so cached/static batch metadata is
+    # consistent after slicing.
+    if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
+        mixture = _slice_dist_for_plate_member(
+            dist_obj.mixing_distribution, plate_shapes, plate_idx
+        )
+        components = _slice_dist_for_plate_member(
+            dist_obj.component_distribution, plate_shapes, plate_idx
+        )
+        return numpyro.distributions.MixtureSameFamily(mixture, components)
+
+    if isinstance(dist_obj, numpyro.distributions.MultivariateNormal):
+        loc = _slice_required_array(dist_obj.loc)
+        cov = _slice_required_array(dist_obj.covariance_matrix)
+        return numpyro.distributions.MultivariateNormal(
+            loc=loc,
+            covariance_matrix=cov,
+        )
+
+    if isinstance(dist_obj, numpyro.distributions.Delta):
+        value = _slice_required_array(dist_obj.v)
+        log_density = _slice_required_array(dist_obj.log_density)
+        return numpyro.distributions.Delta(
+            value,
+            log_density=log_density,
+            event_dim=dist_obj.event_dim,
+        )
+
+    if isinstance(dist_obj, WeightedParticles):
+        particles = _slice_required_array(dist_obj.particles)
+        log_weights = _slice_required_array(dist_obj.log_weights)
+        return WeightedParticles(particles=particles, log_weights=log_weights)
+
+    if dist_obj.__class__.__name__.startswith("Categorical"):
+        if dist_obj.logits is not None:
+            logits = _slice_required_array(dist_obj.logits)
+            return numpyro.distributions.Categorical(logits=logits)
+        probs = _slice_required_array(dist_obj.probs)
+        return numpyro.distributions.Categorical(probs=probs)
+
+    if isinstance(dist_obj, numpyro.distributions.Independent):
+        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        return numpyro.distributions.Independent(
+            base,
+            dist_obj.reinterpreted_batch_ndims,
+        )
+
+    if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
+        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        transforms = getattr(dist_obj, "transforms")
+        return numpyro.distributions.TransformedDistribution(
+            base,
+            transforms,
+        )
+
+    def _slice_leaf(leaf):
+        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
+            leaf, plate_shapes, min_suffix_ndim=1
+        ):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree.map(_slice_leaf, dist_obj)
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -44,7 +226,271 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         - If `obs_times` is None, the handler is a no-op.
         - If `obs_values` is provided, observation sample sites are conditioned via
           `obs=...`.
+        - Conditioning (`obs_values is not None`) is only supported for
+          ``n_simulations == 1``.  Subclasses that permit conditioning enforce this
+          via the base-class guard in ``_sample_ds``; they do not need to duplicate
+          the check themselves.
     """
+
+    n_simulations: int = 1
+
+    def _run_single_member_simulation(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        predict_times=None,
+        filtered_times=None,
+        filtered_dists=None,
+        **kwargs,
+    ) -> dict[str, Array] | None:
+        """Run simulator logic for one unbatched member and return trajectories."""
+        dynamics = _ensure_continuous_bm_dim(dynamics)
+
+        if (
+            filtered_times is not None
+            and filtered_dists is None
+            and predict_times is not None
+        ):
+            raise ValueError(
+                "Rollout requested with filtered_times but missing filtered_dists. "
+                "Plate-aware rollout requires filtered distributions from the filter."
+            )
+
+        # Need times to simulate: predict_times or obs_times
+        # For filter rollout, need predict_times
+        if predict_times is None:
+            if obs_times is None or filtered_times is not None:
+                return None
+
+        filter_rollout = filtered_times is not None and filtered_dists is not None
+
+        if filter_rollout:
+            _validate_site_sorting(filtered_times, name="filtered_times")
+            n_pred = len(predict_times)
+
+            # Build segment ids on host once.
+            # seg_id == -1 means "before first filtered time" (use model prior).
+            pt_host = np.asarray(jax.device_get(predict_times))
+            ft_host = np.asarray(jax.device_get(filtered_times))
+            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
+
+            def _ctrl_for_segment(sub_times):
+                if ctrl_times is None or ctrl_values is None:
+                    return None, None
+                inds = jnp.searchsorted(ctrl_times, sub_times, side="left")
+                return sub_times, ctrl_values[inds]
+
+            def _dynamics_for_segment(seg_id: int):
+                if seg_id < 0:
+                    return dynamics, f"{name}_0"
+
+                filtered_time = filtered_times[seg_id]
+                filtered_dist = filtered_dists[seg_id]
+                dynamics_with_filtered_time = eqx.tree_at(
+                    lambda m: m.t0,
+                    dynamics,
+                    filtered_time,
+                    is_leaf=lambda x: x is None,
+                )
+                dynamics_seg = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    dynamics_with_filtered_time,
+                    filtered_dist,
+                    is_leaf=lambda x: x is None,
+                )
+                return dynamics_seg, f"{name}_{seg_id + 1}"
+
+            seg_results = []
+            seg_masks = []
+            # Simulate one segment per present anchor (skip empty segments).
+            for seg_id in [int(s) for s in np.unique(seg_ids_host)]:
+                # mask_host[i] = True iff predict_times[i] belongs to this segment id.
+                # This is the global-to-segment membership mask over the full prediction grid.
+                mask_host = seg_ids_host == seg_id
+                # Some segment ids may not own any prediction times. np.any here is host-side,
+                # avoids traced bool conversion, and lets us skip empty segment solves.
+                if not np.any(mask_host):
+                    continue
+
+                # Keep the same membership mask as a JAX array for scatter/merge later.
+                mask_seg = jnp.asarray(mask_host)
+                # Extract just this segment's prediction times (variable-length sub-grid).
+                sub_times = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
+                dynamics_seg, seg_name = _dynamics_for_segment(seg_id)
+
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_times)
+                seg_results.append(
+                    self._simulate(
+                        seg_name,
+                        dynamics_seg,
+                        obs_times=None,
+                        obs_values=None,
+                        ctrl_times=ctrl_t_seg,
+                        ctrl_values=ctrl_v_seg,
+                        predict_times=sub_times,
+                    )
+                )
+                seg_masks.append(mask_seg)
+
+            # Scatter each segment's output into the global predict_times order.
+            merge = lambda key: _merge_segments(
+                [r[key] for r in seg_results], seg_masks, n_pred
+            )
+            results = {
+                "predicted_states": merge("states"),
+                "predicted_observations": merge("observations"),
+            }
+            n_sim_out = results["predicted_states"].shape[0]
+            results["predicted_times"] = _tile_times(predict_times, n_sim_out)
+            return results
+
+        if self.n_simulations > 1 and obs_values is not None:
+            raise ValueError(
+                "n_simulations > 1 is only supported when obs_values is None "
+                "(forward simulation only)"
+            )
+        return self._simulate(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+            **kwargs,
+        )
+
+    def _run_plated_simulation(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        plate_shapes: tuple[int, ...],
+        obs_times=None,
+        obs_values=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        predict_times=None,
+        filtered_times=None,
+        filtered_dists=None,
+        **kwargs,
+    ) -> dict[str, Array] | None:
+        """Run simulator over all plate members and stack outputs.
+
+        Plated simulation enumerates over all plate members and runs
+        individual simulations. This is somewhat slower than vmapping,
+        but maintains full compatibility with NumPyro's sample semantics."""
+        if not _has_any_batched_plate_source(
+            dynamics,
+            plate_shapes,
+            arrays=(
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                predict_times,
+                filtered_times,
+            ),
+            dists=filtered_dists,
+        ):
+            raise ValueError(
+                "Plate simulator received plate_shapes but no plate-batched dynamics/data "
+                "sources were found. At least one source must have leading dimensions "
+                "matching plate_shapes."
+            )
+
+        plate_indices = list(itertools.product(*[range(s) for s in plate_shapes]))
+        member_results: list[dict[str, Array]] = []
+
+        for plate_idx in plate_indices:
+            member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
+
+            # We begin by slicing the dynamics tree for each plate member.
+            member_dynamics = _slice_tree_for_plate_member(
+                dynamics, plate_shapes, plate_idx
+            )
+
+            # If initial conditions have plate dimensions, we also slice & apply them.
+            if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
+                member_initial_condition = _slice_dist_for_plate_member(
+                    dynamics.initial_condition, plate_shapes, plate_idx
+                )
+                member_dynamics = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    member_dynamics,
+                    member_initial_condition,
+                    is_leaf=lambda x: x is None,
+                )
+
+            # We then slice each other source to find the member's times/values.
+            member_obs_times = _slice_array_for_plate_member(
+                obs_times, plate_shapes, plate_idx
+            )
+            member_obs_values = _slice_array_for_plate_member(
+                obs_values, plate_shapes, plate_idx
+            )
+            member_ctrl_times = _slice_array_for_plate_member(
+                ctrl_times, plate_shapes, plate_idx
+            )
+            member_ctrl_values = _slice_array_for_plate_member(
+                ctrl_values, plate_shapes, plate_idx
+            )
+            member_predict_times = _slice_array_for_plate_member(
+                predict_times, plate_shapes, plate_idx
+            )
+            member_filtered_times = _slice_array_for_plate_member(
+                filtered_times, plate_shapes, plate_idx
+            )
+
+            # Same distribution slicing logic as above, but for prediction.
+            member_filtered_dists = None
+            if filtered_dists is not None:
+                member_filtered_dists = [
+                    _slice_dist_for_plate_member(d, plate_shapes, plate_idx)
+                    for d in filtered_dists
+                ]
+
+            # To perform inference, we need to suspend the active numpyro.plate frames
+            # This is because the simulator has unguarded numpyro.sample statements inside,
+            # which would otherwise create nested plate frames.
+            with _suspend_numpyro_plate_frames():
+                member_result = self._run_single_member_simulation(
+                    member_name,
+                    member_dynamics,
+                    obs_times=member_obs_times,
+                    obs_values=member_obs_values,
+                    ctrl_times=member_ctrl_times,
+                    ctrl_values=member_ctrl_values,
+                    predict_times=member_predict_times,
+                    filtered_times=member_filtered_times,
+                    filtered_dists=member_filtered_dists,
+                    **kwargs,
+                )
+
+            if member_result is not None:
+                member_results.append(member_result)
+
+        if not member_results:
+            return None
+
+        keys = member_results[0].keys()
+        for result in member_results:
+            if result.keys() != keys:
+                raise ValueError(
+                    "Plate simulator members returned inconsistent result keys."
+                )
+
+        stacked: dict[str, Array] = {}
+        for key in keys:
+            values = [r[key] for r in member_results]
+            flat = jnp.stack(values, axis=0)
+            stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
+        return stacked
 
     @implements(_sample_intp)
     def _sample_ds(
@@ -52,32 +498,62 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        plate_shapes=(),
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
+        filtered_times=None,
+        filtered_dists=None,
         **kwargs,
     ) -> FunctionOfTime:
-        self._add_solved_sites(
-            name,
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
-        )
+        if plate_shapes:
+            results = self._run_plated_simulation(
+                name,
+                dynamics,
+                plate_shapes=plate_shapes,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                predict_times=predict_times,
+                filtered_times=filtered_times,
+                filtered_dists=filtered_dists,
+                **kwargs,
+            )
+        else:
+            results = self._run_single_member_simulation(
+                name,
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                predict_times=predict_times,
+                filtered_times=filtered_times,
+                filtered_dists=filtered_dists,
+                **kwargs,
+            )
+
+        if results is not None:
+            # Add the results from the simulator as deterministic sites
+            for site_name, trajectory in results.items():
+                numpyro.deterministic(f"{name}_{site_name}", trajectory)
+
         return fwd(
             name,
             dynamics,
+            plate_shapes=plate_shapes,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
             **kwargs,
         )
 
-    def _add_solved_sites(
+    def _simulate(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -86,34 +562,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
-        **kwargs,
-    ):
-        # Only simulate if we have observation times
-        if obs_times is None:
-            return
-
-        # Run the simulator
-        simulated = self._simulate(
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
-        )
-
-        # Add the results from the simulator as deterministic sites
-        for site_name, trajectory in simulated.items():
-            numpyro.deterministic(site_name, trajectory)
-
-    def _simulate(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll `dynamics` as a NumPyro model.
@@ -130,13 +579,56 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 are conditioned via `obs=...`.
             ctrl_times: Optional control times.
             ctrl_values: Optional control values aligned to `ctrl_times`.
-
+            predict_times: Optional prediction times. If provided, prediction sites are
+                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
         Returns:
             dict[str, State]: Mapping from deterministic site names to
                 trajectories. Conventionally includes `"times"`, `"states"`,
                 and `"observations"`.
         """
         raise NotImplementedError()
+
+
+def _emit_observations(
+    name: str,
+    dynamics,
+    states: Array,
+    times: Array,
+    obs_values: Array | None,
+    control_path_eval: Callable[[Array], Array | None],
+    key=None,
+) -> Array:
+    """Emit observations via numpyro.sample (conditioning) or dist.sample (vmap)."""
+    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
+    T = len(times)
+
+    if key is not None:
+        obs_keys = jr.split(key, T)
+
+        def _obs_step(t_idx):
+            x_t = states[t_idx]
+            t = times[t_idx]
+            u_t = ctrl(t)
+            obs_dist = dynamics.observation_model(x=x_t, u=u_t, t=t)
+            return obs_dist.sample(obs_keys[t_idx])
+
+        return jax.vmap(_obs_step)(jnp.arange(T))
+    else:
+
+        def _step(carry, t_idx):
+            x_t = states[t_idx]
+            t = times[t_idx]
+            u_t = ctrl(t)
+            obs_t = _get_val_or_None(obs_values, t_idx)
+            y_t = numpyro.sample(
+                f"{name}_y_{t_idx}",
+                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                obs=obs_t,
+            )
+            return carry, y_t
+
+        _, observations = nscan(_step, None, jnp.arange(T))
+        return observations
 
 
 class SDESimulator(BaseSimulator):
@@ -163,6 +655,12 @@ class SDESimulator(BaseSimulator):
           very high-dimensional latent path and is usually a **poor inference
           strategy** for parameters. Prefer filtering (`Filter` with
           `ContinuousTime*Config`) or particle methods instead.
+
+    Tip for speed:
+        - Use `source="em_scan"` if you are happy with a simple Euler-Maruyama forward simulation
+          (10–20x faster than Diffrax's implementation; see
+          [Diffrax Issue #517](https://github.com/patrick-kidger/diffrax/issues/517)).
+        - Use `source="diffrax"` if you want greater flexibility in the solver and step-size control.
     """
 
     def __init__(
@@ -170,9 +668,11 @@ class SDESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-        dt0: float = 1e-4,
+        dt0: TimeLike = 1e-4,
         tol_vbt: float | None = None,
         max_steps: int | None = None,
+        n_simulations: int = 1,
+        source: Literal["diffrax", "em_scan"] = "em_scan",
     ):
         """Configure SDE integration settings.
 
@@ -185,43 +685,64 @@ class SDESimulator(BaseSimulator):
             adjoint: Diffrax adjoint strategy used for differentiation through the
                 solver (relevant when used under gradient-based inference). See
                 [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
-            dt0: Initial step size passed to
+            dt0: Initial step size (float or JAX array) passed to
                 [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
             tol_vbt: Tolerance parameter for
                 [`diffrax.VirtualBrownianTree`](https://docs.kidger.site/diffrax/api/brownian/). If None,
                 defaults to `dt0 / 2`. For statistically correct simulation, this
                 must be smaller than `dt0`.
             max_steps: Optional hard cap on solver steps.
+            n_simulations: Number of independent trajectory simulations. When > 1,
+                states and observations have an extra leading dimension (n_simulations, T, ...).
+            source: SDE backend to use. `"diffrax"` uses Diffrax + Brownian tree.
+                `"em_scan"` uses a custom fixed-step Euler-Maruyama `lax.scan`
+                that advances at every `dt0` tick and also lands exactly on all
+                requested solve times. Default is `"em_scan"` for speed.
 
         Notes:
             - `VirtualBrownianTree` draws randomness via `numpyro.prng_key()`, so
               `SDESimulator` must be executed inside a seeded NumPyro context.
         """
+        dt0_arr = as_scalar_time_array(dt0, name="dt0")
         self.diffeqsolve_settings = {
             "solver": solver,
             "stepsize_controller": stepsize_controller,
             "adjoint": adjoint,
-            "dt0": dt0,
+            "dt0": dt0_arr,
             "max_steps": max_steps,
         }
+        self.n_simulations = n_simulations
+        self.source = source
+        if self.source not in {"diffrax", "em_scan"}:
+            raise ValueError(
+                "SDESimulator source must be one of {'diffrax', 'em_scan'}, "
+                f"got source={self.source!r}."
+            )
 
-        if tol_vbt is None:
-            self.tol_vbt = dt0 / 2.0
+        self.tol_vbt: Time | None
+        if self.source == "diffrax":
+            if tol_vbt is None:
+                self.tol_vbt = dt0_arr / 2.0
+            else:
+                self.tol_vbt = as_scalar_time_array(tol_vbt, name="tol_vbt")
+
+            assert self.tol_vbt < dt0_arr, (
+                "tol_vbt must be smaller than dt0 for statistically correct simulation."
+            )
         else:
-            self.tol_vbt = tol_vbt
-
-        assert self.tol_vbt < dt0, (
-            "tol_vbt must be smaller than dt0 for statistically correct simulation."
-        )
+            # tol_vbt is only used by the diffrax backend.
+            self.tol_vbt = None
 
     def _simulate(
         self,
+        name: str,
         dynamics,
         *,
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         """
@@ -247,7 +768,8 @@ class SDESimulator(BaseSimulator):
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
             ctrl_values: Optional control values aligned to `ctrl_times`.
-
+            predict_times: Optional prediction times. If provided, prediction sites are
+                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
         Returns:
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
@@ -269,14 +791,21 @@ class SDESimulator(BaseSimulator):
                 "Use ODESimulator for deterministic dynamics."
             )
 
-        if obs_times is None:
-            raise ValueError("obs_times must be provided")
-        times = obs_times
+        if obs_times is not None:
+            raise ValueError(
+                "obs_times must not be provided to an SDESimulator; it cannot be used for inference. \
+                Please use a filter, or discretize the SDE and use a DiscreteTimeSimulator. \
+                A natural example forthcoming (i.e., to be implemented) is the SimulatedLikelihoodDiscretizer."
+            )
 
-        _validate_controls(times, ctrl_times, ctrl_values)
-        _validate_control_dim(dynamics, ctrl_values)
+        if obs_values is not None:
+            raise ValueError(
+                "obs_values conditioning is not supported for SDESimulator. "
+                "Use Filter for inference with SDEs."
+            )
 
-        initial_state = numpyro.sample("x_0", dynamics.initial_condition)
+        times = predict_times
+        n_sim = self.n_simulations
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
@@ -286,63 +815,50 @@ class SDESimulator(BaseSimulator):
         else:
             control_path_eval = lambda t: None
 
-        def _drift(t, y, args):
-            u_t = args(t)
-            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
+        t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
 
-        def _diffusion(t, y, args):
-            u_t = args(t)
-            return dynamics.state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
-
-        if dynamics.state_evolution.bm_dim is None:
-            raise ValueError(
-                "SDESimulator requires state_evolution.bm_dim to be inferred. "
-                "Construct dynamics via DynamicalModel before simulation."
+        def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
+            """Simulate one SDE trajectory and its emissions."""
+            k_solve, k_obs = jr.split(key, 2)
+            states_sol = solve_sde(
+                source=self.source,
+                dynamics=dynamics,
+                t0=t0,
+                saveat_times=times,
+                x0=x0,
+                control_path_eval=control_path_eval,
+                diffeqsolve_settings=self.diffeqsolve_settings,
+                key=k_solve,
+                tol_vbt=self.tol_vbt,
             )
-
-        bm = dfx.VirtualBrownianTree(
-            t0=times[0],
-            t1=times[-1],
-            tol=self.tol_vbt,
-            shape=(dynamics.state_evolution.bm_dim,),
-            key=numpyro.prng_key(),
-        )
-
-        terms = dfx.MultiTerm(  # type: ignore
-            dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-        )
-
-        sol = dfx.diffeqsolve(
-            terms,
-            t0=times[0],
-            t1=times[-1],
-            y0=initial_state,
-            args=control_path_eval,
-            saveat=dfx.SaveAt(ts=times),
-            **self.diffeqsolve_settings,
-        )
-        states_sol = sol.ys  # (T, ..., state_dim)
-
-        def _create_observations_step(carry, t_idx):
-            x_t = states_sol[t_idx]
-            t = times[t_idx]
-            u_t = control_path_eval(t)
-            y_t = numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
+            emissions = _emit_observations(
+                name, dynamics, states_sol, times, None, control_path_eval, key=k_obs
             )
-            return carry, y_t
+            return states_sol, emissions
 
-        states = states_sol
-        _, emissions = nscan(_create_observations_step, None, jnp.arange(len(times)))
-
-        return {"times": times, "states": states, "observations": emissions}
+        prng_key = numpyro.prng_key()
+        if prng_key is None:
+            raise ValueError("PRNG key required for simulation")
+        with numpyro.plate(f"{name}_n_simulations", n_sim):
+            initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+        keys = jr.split(prng_key, n_sim)
+        states, emissions = jax.vmap(_sim_one_trajectory)(
+            keys, jnp.asarray(initial_state)
+        )
+        return {
+            "times": _tile_times(times, n_sim),
+            "states": states,
+            "observations": emissions,
+        }
 
 
 @dataclasses.dataclass
 class DiscreteTimeSimulator(BaseSimulator):
     """Simulator for discrete-time dynamical models.
+
+    n_simulations: Number of independent trajectory simulations. When > 1,
+        states and observations have an extra leading dimension (n_simulations, T, ...).
+        Only supported when obs_values is None (forward simulation).
 
     This unrolls a discrete-time `DynamicalModel` as a NumPyro model:
 
@@ -354,8 +870,12 @@ class DiscreteTimeSimulator(BaseSimulator):
     Optimization for fully observed state:
         If `dynamics.observation_model` is `DiracIdentityObservation` and
         `obs_values` is provided, then $y_t = x_t$ and the latent state is
-        observed directly. In this case, the simulator vectorizes the transition
-        likelihood across time using a `numpyro.plate("time", T-1)` for efficiency.
+        observed directly. In this case, the simulator:
+
+        - conditions the initial state as `numpyro.sample("x_0", ..., obs=obs_values[0])`,
+        - records `"y_0"` deterministically,
+        - and vectorizes the transition likelihood across time using a
+          `numpyro.plate("time", T-1)` rather than a scan, for efficiency.
 
         The returned `"states"` and `"observations"` are both `obs_values`.
 
@@ -363,351 +883,405 @@ class DiscreteTimeSimulator(BaseSimulator):
         When `obs_values` contains NaN entries the simulator selects a path
         automatically:
 
-        - **Partial NaN rows** (some but not all dims NaN): per-step scan
-          with observation masks.  For `DiracIdentityObservation` a
-          correction-factor approach is used.  For other models,
-          `obs_model.masked_log_prob` is called; models that do not implement
-          it (e.g. `LinearGaussianObservation`) raise `NotImplementedError`.
-        - **Entirely-missing rows** + ``unroll_missing=True`` (default): per-step
-          scan; full-length output with NaN observations at missing rows. Works
-          for any observation model.
-        - **Entirely-missing rows** + ``unroll_missing=False``: filter rows;
-          shorter output.
+        - Partial NaN rows use a per-step scan with observation masks.
+        - Entirely missing rows with `unroll_missing=True` use a per-step scan
+          and keep full-length outputs with NaN observations at missing rows.
+        - Entirely missing rows with `unroll_missing=False` are filtered out,
+          producing a shorter simulated timeline.
 
     Deterministic outputs:
         When run, the simulator records `"times"`, `"states"`, and `"observations"`
         as `numpyro.deterministic(...)` sites.
 
-    Args:
-        unroll_missing: When True (default) and obs_values contains entirely-missing
-            rows, step through all T time steps (sampling latent states for missing
-            rows) rather than filtering them out. Produces full-length output arrays
-            with NaN in the observations at missing rows. Set to False to filter out
-            missing rows and produce shorter output.
     """
 
+    n_simulations: int = 1
     unroll_missing: bool = True
 
     def _simulate(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
+        """Unroll a discrete-time model as a NumPyro model.
 
-        _validate_controls(obs_times, ctrl_times, ctrl_values)
+        Creates NumPyro sample sites for the initial condition (`"x_0"`), subsequent
+        states (`"x_1"`, ...), and observations (`"y_0"`, ...). If `obs_values` is
+        provided, observation sites are conditioned via `obs=...`.
 
-        T = len(obs_times)
+        Notes:
+            - For `DiracIdentityObservation` with provided `obs_values`, the latent
+              state is observed directly (`y_t = x_t`) and this uses a plated
+              transition likelihood instead of a scan for efficiency.
+
+        Args:
+            dynamics: Discrete-time `DynamicalModel` to unroll.
+            obs_times: Discrete observation indices/times. Required.
+            obs_values: Optional observations for conditioning.
+            ctrl_times: Optional control times.
+            ctrl_values: Optional controls aligned to `ctrl_times`.
+            predict_times: Optional prediction times. If provided, prediction sites are
+                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
+        Returns:
+            dict[str, State]: Dictionary with `"times"`, `"states"`, and
+                `"observations"` trajectories.
+        """
+        times = obs_times if obs_times is not None else predict_times
+        if times is None:
+            raise ValueError("obs_times or predict_times must be provided")
+
+        T = len(times)
         if T < 1:
             raise ValueError("obs_times must contain at least one timepoint")
 
-        has_no_obs = obs_values is None
-        is_dirac = isinstance(dynamics.observation_model, DiracIdentityObservation)
+        n_sim = self.n_simulations
 
-        has_partial = False
-        has_entire_row_missing = False
-        obs_np = None
-
-        if not has_no_obs and np.isnan(np.asarray(obs_values)).any():
+        if obs_values is not None:
             obs_np = np.asarray(obs_values)
-            nan_per_row = np.isnan(obs_np).any(axis=1)
-            all_nan_per_row = np.isnan(obs_np).all(axis=1)
-            has_partial = bool((nan_per_row & ~all_nan_per_row).any())
-            has_entire_row_missing = bool(all_nan_per_row.any())
+            if np.isnan(obs_np).any():
+                obs_nan = np.isnan(obs_np)
+                row_nan = (
+                    obs_nan[:, None]
+                    if obs_nan.ndim == 1
+                    else obs_nan.reshape((obs_nan.shape[0], -1))
+                )
+                nan_per_row = row_nan.any(axis=1)
+                all_nan_per_row = row_nan.all(axis=1)
+                has_partial = bool((nan_per_row & ~all_nan_per_row).any())
+                has_entire_row_missing = bool(all_nan_per_row.any())
+                is_dirac = isinstance(
+                    dynamics.observation_model, DiracIdentityObservation
+                )
 
-        if has_partial or (self.unroll_missing and has_entire_row_missing):
-            if obs_np is None:
-                obs_np = np.asarray(obs_values)
-            return self._simulate_missing_scan(
-                dynamics,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                obs_np=obs_np,
-                has_partial=has_partial,
-                T=T,
-                is_dirac=is_dirac,
-            )
-        elif has_entire_row_missing:
-            assert obs_np is not None
-            return self._simulate_row_filter(
-                dynamics,
-                obs_times=obs_times,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                obs_np=obs_np,
-                is_dirac=is_dirac,
-            )
-        elif is_dirac and not has_no_obs:
-            return self._simulate_plate(
-                dynamics,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                T=T,
-            )
-        else:
-            return self._simulate_scan(
-                dynamics,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                T=T,
-            )
+                if has_partial or (self.unroll_missing and has_entire_row_missing):
+                    return self._simulate_missing_scan(
+                        name,
+                        dynamics,
+                        times=times,
+                        ctrl_values=ctrl_values,
+                        obs_np=obs_np,
+                        has_partial=has_partial,
+                        T=T,
+                        is_dirac=is_dirac,
+                    )
 
-    def _simulate_row_filter(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        obs_times,
-        ctrl_times,
-        ctrl_values,
-        obs_np: np.ndarray,
-        is_dirac: bool,
-    ) -> dict[str, State]:
-        """Filter entirely-missing rows and re-simulate on the compressed timeline."""
-        all_nan_per_row = np.isnan(obs_np).all(axis=1)
-        observed_mask = ~all_nan_per_row
-        obs_values_filtered = jnp.array(obs_np[observed_mask])
-        obs_times_filtered = jnp.array(np.asarray(obs_times)[observed_mask])
-        ctrl_values_filtered = (
-            jnp.array(np.asarray(ctrl_values)[observed_mask])
-            if ctrl_values is not None
-            else None
-        )
-        T = len(obs_times_filtered)
-        if T < 1:
-            raise ValueError(
-                "obs_times must contain at least one timepoint after removing missing data"
-            )
-        if is_dirac:
-            return self._simulate_plate(
-                dynamics,
-                obs_times=obs_times_filtered,
-                obs_values=obs_values_filtered,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values_filtered,
-                T=T,
-            )
-        return self._simulate_scan(
-            dynamics,
-            obs_times=obs_times_filtered,
-            obs_values=obs_values_filtered,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values_filtered,
-            T=T,
-        )
+                if has_entire_row_missing:
+                    return self._simulate_row_filter(
+                        name,
+                        dynamics,
+                        times=times,
+                        ctrl_times=ctrl_times,
+                        ctrl_values=ctrl_values,
+                        obs_np=obs_np,
+                    )
 
-    def _simulate_plate(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        obs_times,
-        obs_values,
-        ctrl_times,
-        ctrl_values,
-        T: int,
-    ) -> dict[str, State]:
-        """DiracIdentity with fully-observed data: vectorized plate over transitions."""
-        numpyro.sample("x_0", dynamics.initial_condition, obs=obs_values[0])
-        numpyro.deterministic("y_0", obs_values[0])
-        if T == 1:
-            # No transitions exist for a single-timepoint trajectory.
+        # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
+        # instead of scan. state_evolution returns a dist; call it with batched inputs.
+        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
+            obs_values is not None
+        ):
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                numpyro.sample(
+                    f"{name}_x_0",
+                    dynamics.initial_condition,
+                    obs=jnp.expand_dims(obs_values[0], axis=0),
+                )
+            numpyro.deterministic(f"{name}_y_0", jnp.expand_dims(obs_values[0], axis=0))
+            if T == 1:
+                # No transitions exist for a single-timepoint trajectory.
+                # Always return (n_sim, T, state_dim) for consistent shaping
+                obs_exp = _ensure_trailing_dim(jnp.expand_dims(obs_values, axis=0))
+                return {
+                    "times": _tile_times(times, 1),
+                    "states": obs_exp,
+                    "observations": obs_exp,
+                }
+
+            # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
+            if obs_values.ndim == 1:
+                x_prev = obs_values[:-1][:, None]
+                x_next = obs_values[1:][:, None]
+            else:
+                x_prev = obs_values[:-1]
+                x_next = obs_values[1:]
+            if ctrl_values is not None:
+                if ctrl_values.ndim == 1:
+                    u_prev = ctrl_values[:-1][:, None]
+                else:
+                    u_prev = ctrl_values[:-1]
+            else:
+                u_prev = None
+            t_now = times[:-1]
+            t_next = times[1:]
+
+            def _step_dist(x_prev_t, u_prev_t, t_now_t, t_next_t):
+                return dynamics.state_evolution(x_prev_t, u_prev_t, t_now_t, t_next_t)
+
+            with numpyro.plate("time", T - 1):
+                if u_prev is None:
+                    trans = jax.vmap(_step_dist, in_axes=(0, None, 0, 0))(
+                        x_prev, None, t_now, t_next
+                    )
+                else:
+                    trans = jax.vmap(_step_dist, in_axes=(0, 0, 0, 0))(
+                        x_prev, u_prev, t_now, t_next
+                    )
+                # Transition distributions are batched over time, so observations
+                # follow the same leading-time convention: (T-1, state_dim).
+                numpyro.sample(f"{name}_x_next", trans, obs=x_next)  # type: ignore
+
+            # Always return (n_sim, T, state_dim) for consistent shaping
+            obs_exp = _ensure_trailing_dim(jnp.expand_dims(obs_values, axis=0))
             return {
-                "times": obs_times,
-                "states": obs_values,
-                "observations": obs_values,
+                "times": _tile_times(times, 1),
+                "states": obs_exp,
+                "observations": obs_exp,
             }
 
-        # Ensure (T-1, state_dim) so swapaxes to (state_dim, T-1) is valid (state_dim=1 => 1D otherwise).
-        if obs_values.ndim == 1:
-            x_prev = obs_values[:-1][:, None]
-            x_next = obs_values[1:][:, None]
-        else:
-            x_prev = obs_values[:-1]
-            x_next = obs_values[1:]
-        if ctrl_values is not None:
-            u_prev: Array | None = (
-                ctrl_values[:-1][:, None] if ctrl_values.ndim == 1 else ctrl_values[:-1]
-            )
-        else:
-            u_prev = None
-        t_now = obs_times[:-1]
-        t_next = obs_times[1:]
-
-        # Pass state (and controls) with batch as last axis so drift can use
-        # naive indexing (x[0], x[1], ...) and discretizer broadcasts correctly.
-        x_prev_bl = jnp.swapaxes(x_prev, 0, 1)
-        x_next_bl = jnp.swapaxes(x_next, 0, 1)
-        u_prev_bl = jnp.swapaxes(u_prev, 0, 1) if u_prev is not None else None
-
-        with numpyro.plate("time", T - 1):
-            trans = dynamics.state_evolution(
-                x_prev_bl,
-                u_prev_bl,
-                t_now,
-                t_next,  # type: ignore
-            )
-            # obs shape must match trans.batch_shape + trans.event_shape: use
-            # time-first (T-1, state_dim) for e.g. discretizer; batch-last (state_dim, T-1) for scalar.
-            obs_next = x_next_bl if dynamics.state_dim == 1 else x_next
-            numpyro.sample("x_next", trans, obs=obs_next)  # type: ignore
-
-        return {"times": obs_times, "states": obs_values, "observations": obs_values}
-
-    def _simulate_scan(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        obs_times,
-        obs_values,
-        ctrl_times,
-        ctrl_values,
-        T: int,
-    ) -> dict[str, State]:
-        """Default path: sequential scan sampling states and observations."""
-        # Sample initial state
-        x_prev: State = numpyro.sample("x_0", dynamics.initial_condition)  # type: ignore
-        u_0 = _get_val_or_None(ctrl_values, 0)
-        # Sample initial observation
-        y_0 = numpyro.sample(  # type: ignore[assignment]
-            "y_0",
-            dynamics.observation_model(x_prev, u_0, obs_times[0]),
-            obs=_get_val_or_None(obs_values, 0),
-        )
-
-        def _step(x_prev, t_idx):
-            t_now = obs_times[t_idx]
-            t_next = obs_times[t_idx + 1]
+        def _step_dists(x_prev, t_idx):
+            """Compute transition distribution and step metadata from a single state."""
+            t_now = times[t_idx]
+            t_next = times[t_idx + 1]
             u_now = _get_val_or_None(ctrl_values, t_idx)
             u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-            # Sample next state
-            x_t = numpyro.sample(
-                f"x_{t_idx + 1}",
-                dynamics.state_evolution(x=x_prev, u=u_now, t_now=t_now, t_next=t_next),
+            trans_dist = dynamics.state_evolution(
+                x=x_prev, u=u_now, t_now=t_now, t_next=t_next
             )
-            # Sample observation
-            y_t = numpyro.sample(
-                f"y_{t_idx + 1}",
-                dynamics.observation_model(x=x_t, u=u_next, t=t_next),
-                obs=_get_val_or_None(obs_values, t_idx + 1),
+            return t_next, u_next, trans_dist
+
+        # n_simulations > 1: vmapped pure-JAX loop; avoid numpyro.sample in vmap body.
+        # can't do obs= conditioning with the lax.scan.
+        if n_sim > 1:
+            with numpyro.plate(f"{name}_n_simulations", n_sim):
+                initial_state = numpyro.sample(
+                    f"{name}_x_0", dynamics.initial_condition
+                )
+            prng_key = numpyro.prng_key()
+            if prng_key is None:
+                raise ValueError("PRNG key required for n_simulations > 1")
+            keys = jr.split(prng_key, n_sim)
+
+            def _sim_one_trajectory(key, x0):
+                """Simulate one discrete trajectory and its emissions."""
+                keys_t = jr.split(key, T)
+
+                def _step(carry, t_idx):
+                    x_prev = carry
+                    k_trans, k_obs = jr.split(keys_t[t_idx], 2)
+                    t_next, u_next, trans_dist = _step_dists(x_prev, t_idx)
+                    x_t = trans_dist.sample(k_trans)
+                    y_t = dynamics.observation_model(x=x_t, u=u_next, t=t_next).sample(
+                        k_obs
+                    )
+                    return x_t, (x_t, y_t)
+
+                u_0 = _get_val_or_None(ctrl_values, 0)
+                y_0 = dynamics.observation_model(x=x0, u=u_0, t=times[0]).sample(
+                    keys_t[0]
+                )
+                _, (scan_states, scan_obs) = jax.lax.scan(_step, x0, jnp.arange(T - 1))
+                states = jnp.concatenate([jnp.expand_dims(x0, 0), scan_states], axis=0)
+                observations = jnp.concatenate(
+                    [jnp.expand_dims(y_0, 0), scan_obs], axis=0
+                )
+                return states, observations
+
+            states, observations = jax.vmap(_sim_one_trajectory)(keys, initial_state)
+            return {
+                "times": _tile_times(times, n_sim),
+                "states": _ensure_trailing_dim(states),
+                "observations": _ensure_trailing_dim(observations),
+            }
+
+        # Default: scan over time (n_simulations == 1)...allows for obs= conditioning.
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            x_prev_site: State = numpyro.sample(  # type: ignore
+                f"{name}_x_0", dynamics.initial_condition
             )
+        x_prev = x_prev_site[0]
+
+        u_0 = _get_val_or_None(ctrl_values, 0)
+        obs_0 = _get_val_or_None(obs_values, 0)
+        if obs_0 is not None:
+            obs_0 = jnp.expand_dims(obs_0, axis=0)
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            y_0_site = numpyro.sample(
+                f"{name}_y_0",
+                dynamics.observation_model(x_prev, u_0, times[0]),
+                obs=obs_0,
+            )
+        y_0_arr = cast(Array, jnp.asarray(y_0_site))
+        y_0 = y_0_arr[0]
+
+        def _step(x_prev, t_idx):
+            t_next, u_next, trans_dist = _step_dists(x_prev, t_idx)
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x_t_site = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
+            x_t = x_t_site[0]
+            obs_next = _get_val_or_None(obs_values, t_idx + 1)
+            if obs_next is not None:
+                obs_next = jnp.expand_dims(obs_next, axis=0)
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                y_t_site = numpyro.sample(
+                    f"{name}_y_{t_idx + 1}",
+                    dynamics.observation_model(x=x_t, u=u_next, t=t_next),
+                    obs=obs_next,
+                )
+            y_t = y_t_site[0]
             return x_t, (x_t, y_t)
 
-        # Run scan and collect states and observations
-        # scan_outputs will be (scan_states, scan_observations) where each is shape (T-1, ...)
         _, scan_outputs = nscan(_step, x_prev, jnp.arange(T - 1))
         scan_states, scan_observations = scan_outputs
 
-        # Stack initial state/observation with scanned results
-        # x_prev is shape (state_dim,) or scalar, scan_states is (T-1, state_dim)
-        # y_0 is shape (obs_dim,) or scalar, scan_observations is (T-1, obs_dim)
-        # Use expand_dims to ensure proper shape for concatenation
-        x_0_exp = jnp.expand_dims(x_prev, axis=0)  # type: ignore  # shape (1, state_dim) or (1,)
-        y_0_exp = jnp.expand_dims(y_0, axis=0)  # shape (1, obs_dim) or (1,)
-        states = jnp.concatenate([x_0_exp, scan_states], axis=0)  # shape (T, state_dim)
-        observations = jnp.concatenate(
-            [y_0_exp, scan_observations], axis=0
-        )  # shape (T, obs_dim)
-        return {"times": obs_times, "states": states, "observations": observations}
+        x_0_expanded = jnp.expand_dims(x_prev, axis=0)  # type: ignore
+        y_0_expanded = jnp.expand_dims(y_0, axis=0)
+        states = jnp.concatenate([x_0_expanded, scan_states], axis=0)
+        observations = jnp.concatenate([y_0_expanded, scan_observations], axis=0)
+        # Always return (n_sim, T, state_dim) for consistent shaping
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+        }
+
+    @staticmethod
+    def _format_single_result(
+        times: Array,
+        states: Array,
+        observations: Array,
+    ) -> dict[str, State]:
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(
+                jnp.expand_dims(observations, axis=0)
+            ),
+        }
+
+    def _simulate_row_filter(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        times,
+        ctrl_times,
+        ctrl_values,
+        obs_np: np.ndarray,
+    ) -> dict[str, State]:
+        """Filter entirely missing rows and simulate on the compressed timeline."""
+        obs_nan = np.isnan(obs_np)
+        row_nan = (
+            obs_nan[:, None]
+            if obs_nan.ndim == 1
+            else obs_nan.reshape((obs_nan.shape[0], -1))
+        )
+        observed_mask = ~row_nan.all(axis=1)
+        obs_values_filtered = jnp.asarray(obs_np[observed_mask])
+        times_filtered = jnp.asarray(np.asarray(times)[observed_mask])
+        ctrl_values_filtered = (
+            jnp.asarray(np.asarray(ctrl_values)[observed_mask])
+            if ctrl_values is not None
+            else None
+        )
+        if len(times_filtered) < 1:
+            raise ValueError(
+                "obs_times must contain at least one timepoint after removing missing data"
+            )
+        return self._simulate(
+            name,
+            dynamics,
+            obs_times=times_filtered,
+            obs_values=obs_values_filtered,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values_filtered,
+            predict_times=None,
+        )
 
     def _simulate_missing_scan(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times,
-        obs_values,
-        ctrl_times,
+        times,
         ctrl_values,
         obs_np: np.ndarray,
         has_partial: bool,
         T: int,
         is_dirac: bool,
     ) -> dict[str, State]:
-        """Per-step scan handling partial missingness and unroll_missing=True.
-
-        Sub-path A (DiracIdentity): correction-factor approach for observed dims.
-        Sub-path B (non-Dirac):
-          - has_partial=True  → masked_log_prob (requires DiagonalGaussianObservation or similar)
-          - has_partial=False → full joint log_prob zeroed at missing rows (works for any model)
-        """
+        """Scan through NaN observations while scoring only observed entries."""
         obs_mask_np = ~np.isnan(obs_np)
         safe_obs_np = np.where(obs_mask_np, obs_np, 0.0)
-        obs_mask_jax = jnp.array(obs_mask_np)
-        safe_obs_jax = jnp.array(safe_obs_np)
+        obs_mask_jax = jnp.asarray(obs_mask_np)
+        safe_obs_jax = jnp.asarray(safe_obs_np)
 
         u_0 = _get_val_or_None(ctrl_values, 0)
         obs_mask_0 = obs_mask_jax[0]
         safe_obs_0 = safe_obs_jax[0]
 
         x_prev: State
-        _step_fn: object
+        step_fn: object
 
         if is_dirac:
-            # ------------------------------------------------------------------
-            # Sub-path A: DiracIdentity — factor + masked-sample approach.
-            # For observed dims/rows: score via numpyro.factor (no sample site).
-            # For latent dims/rows: sample with numpyro.handlers.mask so that
-            # observed dims/rows contribute zero to the ELBO (both model and
-            # guide terms are zeroed by the mask).
-            # ------------------------------------------------------------------
             has_any_latent = bool((~obs_mask_np).any())
 
             if has_any_latent and has_partial:
-                # Partial missingness: per-dim mask. Requires Independent(Normal, 1)
-                # transitions so that base_dist.log_prob gives per-dim scores.
-                # We sample from base_dist (Normal, batch_shape=(d,)) so the
-                # per-dim mask aligns with the batch dimensions.
+                if not hasattr(dynamics.initial_condition, "base_dist"):
+                    raise NotImplementedError(
+                        "DiracIdentityObservation partial missingness requires "
+                        "elementwise independent initial and transition distributions."
+                    )
                 obs_lp_0 = dynamics.initial_condition.base_dist.log_prob(safe_obs_0)
                 numpyro.factor(
-                    "x_0_obs",
+                    f"{name}_x_0_obs",
                     jnp.sum(jnp.where(obs_mask_0, obs_lp_0, 0.0)),
                 )
                 with numpyro.handlers.mask(mask=~obs_mask_0):
                     x_0_full = numpyro.sample(
-                        "x_0", dynamics.initial_condition.base_dist
+                        f"{name}_x_0", dynamics.initial_condition.base_dist
                     )
                 x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
 
                 def _step_dirac_partial(x_prev, t_idx):
-                    t_now = obs_times[t_idx]
-                    t_next = obs_times[t_idx + 1]
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
                     u_now = _get_val_or_None(ctrl_values, t_idx)
                     obs_mask_t = obs_mask_jax[t_idx + 1]
                     safe_obs_t = safe_obs_jax[t_idx + 1]
                     trans_dist = dynamics.state_evolution(
                         x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     )
+                    if not hasattr(trans_dist, "base_dist"):
+                        raise NotImplementedError(
+                            "DiracIdentityObservation partial missingness requires "
+                            "elementwise independent transition distributions."
+                        )
                     obs_lp = trans_dist.base_dist.log_prob(safe_obs_t)
                     numpyro.factor(
-                        f"x_{t_idx + 1}_obs",
+                        f"{name}_x_{t_idx + 1}_obs",
                         jnp.sum(jnp.where(obs_mask_t, obs_lp, 0.0)),
                     )
                     with numpyro.handlers.mask(mask=~obs_mask_t):
                         x_t_full = numpyro.sample(
-                            f"x_{t_idx + 1}", trans_dist.base_dist
+                            f"{name}_x_{t_idx + 1}", trans_dist.base_dist
                         )
                     x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
-                _step_fn = _step_dirac_partial
+                step_fn = _step_dirac_partial
 
             elif has_any_latent:
-                # Whole-row missingness only: scalar mask per row. Works for
-                # any transition distribution (including MultivariateNormal).
-                row_obs_0 = obs_mask_0.all()
+                row_obs_0 = jnp.all(obs_mask_0)
                 numpyro.factor(
-                    "x_0_obs",
+                    f"{name}_x_0_obs",
                     jnp.where(
                         row_obs_0,
                         dynamics.initial_condition.log_prob(safe_obs_0),
@@ -715,59 +1289,66 @@ class DiscreteTimeSimulator(BaseSimulator):
                     ),
                 )
                 with numpyro.handlers.mask(mask=~row_obs_0):
-                    x_0_full = numpyro.sample("x_0", dynamics.initial_condition)
+                    x_0_full = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
                 x_prev = jnp.where(obs_mask_0, safe_obs_0, x_0_full)
 
                 def _step_dirac_wholerow(x_prev, t_idx):
-                    t_now = obs_times[t_idx]
-                    t_next = obs_times[t_idx + 1]
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
                     u_now = _get_val_or_None(ctrl_values, t_idx)
                     obs_mask_t = obs_mask_jax[t_idx + 1]
                     safe_obs_t = safe_obs_jax[t_idx + 1]
                     trans_dist = dynamics.state_evolution(
                         x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                     )
-                    row_obs = obs_mask_t.all()
+                    row_obs = jnp.all(obs_mask_t)
                     numpyro.factor(
-                        f"x_{t_idx + 1}_obs",
-                        jnp.where(
-                            row_obs, trans_dist.log_prob(safe_obs_t), 0.0
-                        ),
+                        f"{name}_x_{t_idx + 1}_obs",
+                        jnp.where(row_obs, trans_dist.log_prob(safe_obs_t), 0.0),
                     )
                     with numpyro.handlers.mask(mask=~row_obs):
                         x_t_full = numpyro.sample(
-                            f"x_{t_idx + 1}", trans_dist
+                            f"{name}_x_{t_idx + 1}", trans_dist
                         )
                     x_t = jnp.where(obs_mask_t, safe_obs_t, x_t_full)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
-                _step_fn = _step_dirac_wholerow
+                step_fn = _step_dirac_wholerow
+
+            else:
+                x_prev = safe_obs_0
+
+                def _step_dirac_observed(x_prev, t_idx):
+                    obs_mask_t = obs_mask_jax[t_idx + 1]
+                    safe_obs_t = safe_obs_jax[t_idx + 1]
+                    x_t = jnp.where(obs_mask_t, safe_obs_t, x_prev)
+                    y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
+                    return x_t, (x_t, y_t)
+
+                step_fn = _step_dirac_observed
 
         else:
-            # ------------------------------------------------------------------
-            # Sub-path B: non-Dirac — sample state unconditionally, score obs.
-            # ------------------------------------------------------------------
-            x_prev = cast(State, numpyro.sample("x_0", dynamics.initial_condition))
+            x_prev = cast(State, numpyro.sample(f"{name}_x_0", dynamics.initial_condition))
             obs_model = dynamics.observation_model
-            assert isinstance(obs_model, ObservationModel)
 
             if has_partial:
-                # Partial obs_mask: requires masked_log_prob
-                # (e.g. DiagonalLinearGaussianObservation / DiagonalGaussianObservation).
-                # Models without masked_log_prob raise NotImplementedError.
+                if not isinstance(obs_model, ObservationModel):
+                    raise NotImplementedError(
+                        "Partial missingness requires an ObservationModel with masked_log_prob."
+                    )
                 obs_lp_0 = obs_model.masked_log_prob(
-                    y=safe_obs_0, obs_mask=obs_mask_0, x=x_prev, u=u_0, t=obs_times[0]
+                    y=safe_obs_0, obs_mask=obs_mask_0, x=x_prev, u=u_0, t=times[0]
                 )
-                numpyro.factor("y_0_lp", obs_lp_0)
+                numpyro.factor(f"{name}_y_0_lp", obs_lp_0)
 
                 def _step_partial(x_prev, t_idx):
-                    t_now = obs_times[t_idx]
-                    t_next = obs_times[t_idx + 1]
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
                     u_now = _get_val_or_None(ctrl_values, t_idx)
                     u_next = _get_val_or_None(ctrl_values, t_idx + 1)
                     x_t = numpyro.sample(
-                        f"x_{t_idx + 1}",
+                        f"{name}_x_{t_idx + 1}",
                         dynamics.state_evolution(
                             x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                         ),
@@ -777,27 +1358,26 @@ class DiscreteTimeSimulator(BaseSimulator):
                     obs_lp = obs_model.masked_log_prob(
                         y=safe_obs_t, obs_mask=obs_mask_t, x=x_t, u=u_next, t=t_next
                     )
-                    numpyro.factor(f"y_{t_idx + 1}_lp", obs_lp)
+                    numpyro.factor(f"{name}_y_{t_idx + 1}_lp", obs_lp)
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
-                _step_fn = _step_partial
+                step_fn = _step_partial
 
             else:
-                # All-or-nothing rows (unroll_missing=True): score the full joint
-                # log_prob at observed rows, zero it out at missing rows.
-                # Works for any obs model regardless of R structure.
-                obs_dist_0 = obs_model(x_prev, u_0, obs_times[0])
+                obs_dist_0 = obs_model(x_prev, u_0, times[0])
                 lp_0 = obs_dist_0.log_prob(safe_obs_0)
-                numpyro.factor("y_0_lp", jnp.where(obs_mask_0.any(), lp_0, 0.0))
+                numpyro.factor(
+                    f"{name}_y_0_lp", jnp.where(jnp.any(obs_mask_0), lp_0, 0.0)
+                )
 
                 def _step_allornone(x_prev, t_idx):
-                    t_now = obs_times[t_idx]
-                    t_next = obs_times[t_idx + 1]
+                    t_now = times[t_idx]
+                    t_next = times[t_idx + 1]
                     u_now = _get_val_or_None(ctrl_values, t_idx)
                     u_next = _get_val_or_None(ctrl_values, t_idx + 1)
                     x_t = numpyro.sample(
-                        f"x_{t_idx + 1}",
+                        f"{name}_x_{t_idx + 1}",
                         dynamics.state_evolution(
                             x=x_prev, u=u_now, t_now=t_now, t_next=t_next
                         ),
@@ -807,32 +1387,35 @@ class DiscreteTimeSimulator(BaseSimulator):
                     obs_dist_t = obs_model(x_t, u_next, t_next)
                     lp_t = obs_dist_t.log_prob(safe_obs_t)
                     numpyro.factor(
-                        f"y_{t_idx + 1}_lp", jnp.where(obs_mask_t.any(), lp_t, 0.0)
+                        f"{name}_y_{t_idx + 1}_lp",
+                        jnp.where(jnp.any(obs_mask_t), lp_t, 0.0),
                     )
                     y_t = jnp.where(obs_mask_t, safe_obs_t, jnp.nan)
                     return x_t, (x_t, y_t)
 
-                _step_fn = _step_allornone
+                step_fn = _step_allornone
 
         y_0 = jnp.where(obs_mask_0, safe_obs_0, jnp.nan)
-
-        _, scan_outputs = nscan(_step_fn, x_prev, jnp.arange(T - 1))  # type: ignore[arg-type]
+        _, scan_outputs = nscan(step_fn, x_prev, jnp.arange(T - 1))  # type: ignore[arg-type]
         scan_states, scan_observations = scan_outputs
+        states = jnp.concatenate([jnp.expand_dims(x_prev, axis=0), scan_states], axis=0)
+        observations = jnp.concatenate(
+            [jnp.expand_dims(y_0, axis=0), scan_observations], axis=0
+        )
+        return self._format_single_result(times, states, observations)
 
-        x_0_exp = jnp.expand_dims(x_prev, axis=0)
-        y_0_exp = jnp.expand_dims(y_0, axis=0)
-        states = jnp.concatenate([x_0_exp, scan_states], axis=0)
-        observations = jnp.concatenate([y_0_exp, scan_observations], axis=0)
-        return {"times": obs_times, "states": states, "observations": observations}
 
-
-@dataclasses.dataclass
 class ODESimulator(BaseSimulator):
     """Simulator for continuous-time deterministic dynamics (ODEs).
 
     This unrolls a `ContinuousTimeStateEvolution` with **no diffusion** by solving
     an ODE using Diffrax and then emitting observations at `obs_times` as NumPyro
     sample sites. Solver options can be configured via the constructor.
+
+    n_simulations: Number of independent trajectory simulations. When > 1,
+        samples multiple initial conditions and runs the ODE from each; states
+        and observations have shape (n_simulations, T, ...). When 1, shape is
+        (1, T, ...) for consistency.
 
     Controls:
         If `ctrl_times` / `ctrl_values` are provided at the `dsx.sample(...)` site,
@@ -847,19 +1430,14 @@ class ODESimulator(BaseSimulator):
         as `numpyro.deterministic(...)` sites.
     """
 
-    solver: dfx.AbstractSolver = dfx.Tsit5()
-    adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint()
-    stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize()
-    dt0: float = 1e-3
-    max_steps: int = 10_000
-
     def __init__(
         self,
         solver: dfx.AbstractSolver = dfx.Tsit5(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-        dt0: float = 1e-3,
+        dt0: TimeLike = 1e-3,
         max_steps: int = 100_000,
+        n_simulations: int = 1,
     ):
         """Configure ODE integration settings.
 
@@ -871,110 +1449,118 @@ class ODESimulator(BaseSimulator):
                 See [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
             stepsize_controller: Diffrax step-size controller (default:
                 [`dfx.ConstantStepSize`](https://docs.kidger.site/diffrax/api/stepsize_controller/)).
-            dt0: Initial step size passed to
+            dt0: Initial step size (float or JAX array) passed to
                 [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
             max_steps: Hard cap on solver steps.
+            n_simulations: Number of independent trajectory simulations. When > 1,
+                states and observations have shape (n_simulations, T, ...).
         """
-        self.solver = solver
-        self.adjoint = adjoint
-        self.stepsize_controller = stepsize_controller
-        self.dt0 = dt0
-        self.max_steps = max_steps
+        dt0_arr = as_scalar_time_array(dt0, name="dt0")
+        self.diffeqsolve_settings = {
+            "solver": solver,
+            "stepsize_controller": stepsize_controller,
+            "adjoint": adjoint,
+            "dt0": dt0_arr,
+            "max_steps": max_steps,
+        }
+        self.n_simulations = n_simulations
 
     def _simulate(
         self,
+        name: str,
         dynamics: DynamicalModel,
         *,
         obs_times=None,
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> dict[str, State]:
         """Unroll a deterministic continuous-time model as a NumPyro model.
 
         This method:
         - samples the initial state as `numpyro.sample("x_0", ...)`,
-        - solves the ODE and saves the solution at `obs_times`,
+        - solves the ODE and saves the solution at the time grid,
         - emits observations as `numpyro.sample("y_i", ..., obs=...)`.
 
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `ContinuousTimeStateEvolution` with deterministic dynamics.
             obs_times: Times at which to save the latent state and emit observations.
-                Required.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
+            predict_times: Used when obs_times is None (e.g. from Filter).
 
         Returns:
             dict[str, State]: Dictionary with `"times"`, `"states"`, and
                 `"observations"` trajectories.
         """
-        if obs_times is None:
-            raise ValueError("obs_times must be provided, but got None")
+        times = obs_times if obs_times is not None else predict_times
+        if times is None:
+            raise ValueError("obs_times or predict_times must be provided")
 
-        _validate_controls(obs_times, ctrl_times, ctrl_values)
+        n_sim = self.n_simulations
 
-        T = len(obs_times)
-
-        # Sample initial state
-        x_prev = numpyro.sample("x_0", dynamics.initial_condition)
-
-        # Create drift function that interpolates controls
         if ctrl_times is not None and ctrl_values is not None:
-            control_path = _build_control_path(ctrl_times, ctrl_values, obs_times)
-
-            def f(t, y, args):
-                # Evaluate control at time t using interpolation
-                u_t = args(t)
-                return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
-
-            args = lambda t: control_path.evaluate(t, left=False)
-
+            control_path = _build_control_path(ctrl_times, ctrl_values, times)
+            control_path_eval = lambda t: control_path.evaluate(t, left=False)
         else:
+            control_path_eval = lambda t: None
 
-            def f(t, y, args):
-                return dynamics.state_evolution.total_drift(x=y, u=None, t=t)
+        t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
 
-            args = None
-
-        # Solve ODE at all observation times using diffrax
-        sol = dfx.diffeqsolve(
-            terms=dfx.ODETerm(f),
-            solver=self.solver,
-            t0=obs_times[0],
-            t1=obs_times[-1],
-            dt0=self.dt0,
-            y0=x_prev,
-            saveat=dfx.SaveAt(ts=obs_times),
-            stepsize_controller=self.stepsize_controller,
-            adjoint=self.adjoint,
-            max_steps=self.max_steps,
-            args=args,
-        )
-        x_sol = sol.ys  # shape (T, state_dim) # includes initial state at t0
-
-        # use scan to sample observations and collect them
-        def _step(carry, t_idx):
-            x_t = x_sol[t_idx]
-            t = obs_times[t_idx]
-            u_t = None if args is None else args(t)
-            # Sample observation
-            y_t = numpyro.sample(
-                f"y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
-                obs=_get_val_or_None(obs_values, t_idx),
+        def _sim_one_trajectory(x0: Array, *, obs_key=None):
+            """Simulate one ODE trajectory and emit observations."""
+            states = solve_ode(
+                dynamics,
+                t0,
+                times,
+                x0,
+                control_path_eval,
+                self.diffeqsolve_settings,
             )
-            return carry, y_t
+            observations = _emit_observations(
+                name,
+                dynamics,
+                states,
+                times,
+                obs_values,
+                control_path_eval,
+                key=obs_key,
+            )
+            return states, observations
 
-        # Run scan and collect observations
-        # scan_outputs will be observations of shape (T, obs_dim)
-        _, scan_observations = nscan(_step, None, jnp.arange(T))
-        observations = scan_observations  # shape (T, obs_dim)
+        if obs_values is not None:
+            # Conditioning mode (n_sim must be 1 due to guard above).
+            # Uses numpyro.sample per observation site to support obs= conditioning.
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+            x0_arr: Array = jnp.asarray(x0)[0]
+            states, observations = _sim_one_trajectory(x0_arr)
+            return {
+                "times": _tile_times(times, 1),
+                "states": jnp.expand_dims(states, axis=0),
+                "observations": jnp.expand_dims(observations, axis=0),
+            }
 
-        return {"times": obs_times, "states": x_sol, "observations": observations}
+        # Forward simulation (obs_values is None): vmap over all n_sim, including 1.
+        with numpyro.plate(f"{name}_n_simulations", n_sim):
+            initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
+        prng_key = numpyro.prng_key()
+        if prng_key is None:
+            raise ValueError("PRNG key required for simulation")
+        obs_keys = jr.split(prng_key, n_sim)
+        states, observations = jax.vmap(_sim_one_trajectory)(
+            jnp.asarray(initial_state), obs_key=obs_keys
+        )
+        return {
+            "times": _tile_times(times, n_sim),
+            "states": states,
+            "observations": observations,
+        }
 
 
 class Simulator(BaseSimulator):
@@ -996,37 +1582,22 @@ class Simulator(BaseSimulator):
         - If structure cannot be inferred (e.g., a generic callable state
           evolution), routing may fail and you should instantiate a concrete
           simulator class directly.
+
+    Warning:
+        The concrete simulator type is determined lazily on the **first call** and
+        cached in ``self.simulator``. Re-using the same ``Simulator`` instance
+        across models with different ``state_evolution`` types (e.g., first an ODE
+        model, then an SDE model) will silently reuse the wrong backend. If you
+        need to switch model types, create a new ``Simulator()`` instance.
     """
 
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
 
-        self.simulator = None
+        self.simulator: BaseSimulator | None = None
 
     def _simulate(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        **kwargs,
-    ) -> dict[str, State]:
-        if self.simulator is None:
-            raise ValueError("Simulator not initialized. This shouldn't happen.")
-
-        return self.simulator._simulate(
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
-        )
-
-    def _add_solved_sites(
         self,
         name: str,
         dynamics: DynamicalModel,
@@ -1035,8 +1606,9 @@ class Simulator(BaseSimulator):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
-    ):
+    ) -> dict[str, State]:
         if self.simulator is None:
             if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
                 if dynamics.state_evolution.diffusion_coefficient is None:
@@ -1051,12 +1623,13 @@ class Simulator(BaseSimulator):
                     + "If using a generic function as a state evolution, you must specify the type of simulator manually."
                 )
 
-        return self.simulator._add_solved_sites(
+        return self.simulator._simulate(
             name,
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
             **kwargs,
         )

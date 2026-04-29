@@ -31,9 +31,9 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     """
 
     A: jax.Array
+    cov: jax.Array
     B: jax.Array | None = None
     bias: jax.Array | None = None
-    cov: jax.Array
 
     def __init__(
         self,
@@ -79,31 +79,33 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
     $$
 
     where $F$ is a user-provided transition function and $Q$ is the
-    process-noise covariance.
+    process-noise covariance (either constant or state/time dependent).
     """
 
     F: Callable[[State, Control, Time, Time], State]
-    cov: jax.Array
+    cov: jax.Array | Callable[[State, Control, Time, Time], jax.Array]
 
     def __init__(
         self,
         F: Callable[[State, Control, Time, Time], State],
-        cov: jax.Array,
+        cov: jax.Array | Callable[[State, Control, Time, Time], jax.Array],
     ):
         """
         Args:
             F (Callable[[State, Control, Time, Time], State]): Transition
                 function mapping $(x, u, t_k, t_{k+1})$ to the conditional mean.
-            cov (jax.Array): Process-noise covariance with shape
-                $(d_x, d_x)$.
+            cov (jax.Array | Callable[[State, Control, Time, Time], jax.Array]):
+                Process-noise covariance with shape $(d_x, d_x)$, or a callable
+                mapping $(x, u, t_k, t_{k+1})$ to that covariance.
         """
         self.F = F
         self.cov = cov
 
     def __call__(self, x, u, t_now, t_next):
         loc = self.F(x, u, t_now, t_next)
+        cov = self.cov(x, u, t_now, t_next) if callable(self.cov) else self.cov
 
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
 
 class AffineDrift(eqx.Module):

@@ -34,6 +34,24 @@ SAVE_FIG = True
 SMOKE = os.environ.get("DYNESTYX_SMOKE_TEST", "0") == "1"
 
 
+def _sim_site(result: dict, key: str, name: str = "f"):
+    return result[key] if key in result else result[f"{name}_{key}"]
+
+
+def _single_trajectory(result: dict, key: str, name: str = "f"):
+    value = _sim_site(result, key, name=name)
+    while value.ndim > 1 and value.shape[0] == 1:
+        value = value[0]
+    return value
+
+
+def _trajectory_draws(result: dict, key: str, name: str = "f"):
+    value = _sim_site(result, key, name=name)
+    if value.ndim >= 3 and value.shape[1] == 1:
+        return value[:, 0]
+    return value
+
+
 # ---------------------------------------------------------------------------
 # Missingness helpers
 # ---------------------------------------------------------------------------
@@ -166,12 +184,12 @@ def test_lti_system_missing_data_science(
     with DiscreteTimeSimulator():
         synthetic = predictive(
             data_init_key,
-            obs_times=obs_times,
+            predict_times=obs_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
 
-    obs_values = synthetic["observations"].squeeze(0)
+    obs_values = _single_trajectory(synthetic, "observations")
     obs_values = _apply_missingness_pattern(
         obs_values, missingness_pattern, missing_key
     )
@@ -195,12 +213,13 @@ def test_lti_system_missing_data_science(
     if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
-        plot_times = synthetic["times"].squeeze(0)
-        plt.plot(plot_times, synthetic["states"].squeeze(0)[:, 0], label="x[0]")
-        plt.plot(plot_times, synthetic["states"].squeeze(0)[:, 1], label="x[1]")
+        plot_times = _single_trajectory(synthetic, "times")
+        states = _single_trajectory(synthetic, "states")
+        plt.plot(plot_times, states[:, 0], label="x[0]")
+        plt.plot(plot_times, states[:, 1], label="x[1]")
         plt.plot(
             plot_times,
-            synthetic["observations"].squeeze(0)[:, 0],
+            _single_trajectory(synthetic, "observations")[:, 0],
             label="observations",
             linestyle="--",
         )
@@ -265,7 +284,7 @@ def test_diagonal_obs_missing_data_science(
     obs_times = jnp.arange(start=0.0, stop=float(T), step=1.0)
     state_dim = 2
 
-    def make_model(obs_times=None, obs_values=None):
+    def make_model(obs_times=None, obs_values=None, predict_times=None):
         alpha = numpyro.sample("alpha", _dist.Uniform(-0.7, 0.7))
         if obs_model_type == "diagonal_linear_gaussian":
             state_evo = LinearGaussianStateEvolution(
@@ -294,16 +313,22 @@ def test_diagonal_obs_missing_data_science(
             state_evolution=state_evo,
             observation_model=obs_model,
         )
-        dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
 
     true_params = {"alpha": jnp.array(true_alpha)}
     predictive = Predictive(
         make_model, params=true_params, num_samples=1, exclude_deterministic=False
     )
     with DiscreteTimeSimulator():
-        synthetic = predictive(data_init_key, obs_times=obs_times)
+        synthetic = predictive(data_init_key, predict_times=obs_times)
 
-    obs_values = synthetic["observations"].squeeze(0)  # (T, 2)
+    obs_values = _single_trajectory(synthetic, "observations")  # (T, 2)
     obs_values = _apply_missingness_pattern(
         obs_values, missingness_pattern, missing_key
     )
@@ -323,8 +348,8 @@ def test_diagonal_obs_missing_data_science(
         import matplotlib.pyplot as plt
         import numpy as np
 
-        plot_times = np.asarray(synthetic["times"].squeeze(0))
-        states_np = np.asarray(synthetic["states"].squeeze(0))
+        plot_times = np.asarray(_single_trajectory(synthetic, "times"))
+        states_np = np.asarray(_single_trajectory(synthetic, "states"))
         obs_np = np.asarray(obs_values)
         fig, axes = plt.subplots(1, state_dim, figsize=(12, 4), sharey=False)
         for dim in range(state_dim):
@@ -449,10 +474,10 @@ def test_particle_model_missing_data_svi(
         with DiscreteTimeSimulator():
             with Discretizer():
                 synthetic = predictive(
-                    data_key, N=N, D=D, K=K, sigma=sigma, obs_times=obs_times
+                    data_key, N=N, D=D, K=K, sigma=sigma, predict_times=obs_times
                 )
 
-        obs_values = synthetic["observations"].squeeze(0)
+        obs_values = _single_trajectory(synthetic, "observations")
         obs_values = _apply_missingness_pattern(
             obs_values, missingness_pattern, missing_key
         )
@@ -493,10 +518,14 @@ def test_particle_model_missing_data_svi(
         )
         with DiscreteTimeSimulator():
             synthetic = predictive(
-                data_key, N=N, sigma=sigma, obs_times=obs_times, bg_centers=bg_centers
+                data_key,
+                N=N,
+                sigma=sigma,
+                predict_times=obs_times,
+                bg_centers=bg_centers,
             )
 
-        obs_values_clean = synthetic["observations"].squeeze(0)  # (T, N)
+        obs_values_clean = _single_trajectory(synthetic, "observations")  # (T, N)
         obs_values = _apply_particle_trajectory_missingness(
             obs_values_clean, missingness_pattern, missing_key
         )
@@ -518,8 +547,8 @@ def test_particle_model_missing_data_svi(
         import matplotlib.pyplot as plt
         import numpy as np
 
-        plot_times = np.asarray(synthetic["times"].squeeze(0))
-        states_np = np.asarray(synthetic["states"].squeeze(0))
+        plot_times = np.asarray(_single_trajectory(synthetic, "times"))
+        states_np = np.asarray(_single_trajectory(synthetic, "states"))
         fig, ax = plt.subplots(figsize=(10, 4))
         n_plot = min(10, states_np.shape[1])
         for i in range(n_plot):
@@ -648,7 +677,7 @@ def test_particle_model_missing_data_svi(
                     obs_values=obs_values,
                     bg_centers=bg_centers,
                 )
-            pred_states = np.asarray(pp_result["states"])  # (200, T, N)
+            pred_states = np.asarray(_trajectory_draws(pp_result, "states"))  # (200, T, N)
             plot_times_np = np.asarray(obs_times)
             obs_np = np.asarray(obs_values)
             clean_np = np.asarray(obs_values_clean)
@@ -829,6 +858,9 @@ def test_entirely_missing_rows_without_unroll_produces_shorter_output():
             jr.PRNGKey(0), obs_times=obs_times, obs_values=obs_values_with_gap
         )
 
-    assert result_filtered["states"].shape[1] == 7
-    assert result_unrolled["states"].shape[1] == 10
-    assert jnp.isnan(result_unrolled["observations"].squeeze(0)[4, 0])
+    filtered_states = _single_trajectory(result_filtered, "states")
+    unrolled_states = _single_trajectory(result_unrolled, "states")
+    unrolled_observations = _single_trajectory(result_unrolled, "observations")
+    assert filtered_states.shape[0] == 7
+    assert unrolled_states.shape[0] == 10
+    assert jnp.isnan(unrolled_observations[4, 0])

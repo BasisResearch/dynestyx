@@ -9,12 +9,14 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import SGLDConfig
 from dynestyx.simulators import DiscreteTimeSimulator
+from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
 
 
 @pytest.mark.parametrize("num_samples", [160])
 def test_sgmcmc_inference(num_samples):
-    obs_times = jnp.arange(start=0.0, stop=60.0, step=1.0)
+    predict_times = jnp.arange(start=0.0, stop=60.0, step=1.0)
+    obs_times = predict_times
     true_params = {"alpha": jnp.array(0.35)}
     predictive = Predictive(
         discrete_time_lti_simplified_model,
@@ -23,8 +25,8 @@ def test_sgmcmc_inference(num_samples):
         exclude_deterministic=False,
     )
     with DiscreteTimeSimulator():
-        synthetic = predictive(jr.PRNGKey(0), obs_times=obs_times)
-    obs_values = synthetic["observations"].squeeze(0)
+        synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    obs_values = _squeeze_sim_dims(synthetic["f_observations"])
 
     with Filter():
         inference = MCMCInference(

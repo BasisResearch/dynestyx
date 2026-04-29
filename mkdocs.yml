@@ -27,6 +27,7 @@ nav:
       - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
       - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
       - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
+      - Hierarchical inference: tutorials/gentle_intro/08_hierarchical_inference.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -34,9 +35,11 @@ nav:
       - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
     - Deep Dives:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
+      - Associative Cuthbert KF scaling: deep_dives/discrete_time_kf_associative_scaling.ipynb
       - Comparing MCMC algorithms with MCMCInference: deep_dives/mcmc_inference_algorithm_comparison.ipynb
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
+      - Continuous-time LTI profile likelihood: deep_dives/continuous_time_lti_profile_likelihood.ipynb
       - GP prior on drift (FitzHugh-Nagumo): deep_dives/gp_drift.ipynb
   - API Reference: 
     - api_reference/index.md
@@ -54,6 +57,7 @@ nav:
           - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
           - GaussianObservation: api_reference/public/models/specialized/gaussian_observation.md
           - LinearGaussianStateEvolution: api_reference/public/models/specialized/linear_gaussian_state_evolution.md
+          - GaussianStateEvolution: api_reference/public/models/specialized/gaussian_state_evolution.md
           - AffineDrift: api_reference/public/models/specialized/affine_drift.md
           - LTI_continuous: api_reference/public/models/specialized/lti_continuous.md
           - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
@@ -65,7 +69,7 @@ nav:
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
       - Handlers:
-        - Sample: api_reference/public/handlers.md
+        - Sample & Plate: api_reference/public/handlers.md
       - Simulators:
         - Simulator Classes:
           - Overview: api_reference/public/simulators/overview.md
@@ -81,8 +85,10 @@ nav:
       - Models:
         - Core Models: api_reference/developer/models/core_models.md
         - Specialized Models: api_reference/developer/models/specialized_models.md
+        - Checkers: api_reference/developer/models/checkers.md
       - Inference:
         - Filters: api_reference/developer/inference/filters.md
+        - Checkers: api_reference/developer/inference/checkers.md
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
         - MCMC: api_reference/developer/inference/mcmc.md
         - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
@@ -92,6 +98,7 @@ nav:
       - Simulators:
         - Simulators: api_reference/developer/simulators.md
       - Handlers: api_reference/developer/handlers.md
+      - Utils: api_reference/developer/utils.md
       - Diagnostics:
         - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
   - FAQ: faq.md
@@ -350,6 +357,11 @@ extra_javascript:
 # |                                                                                                        |
 # +--------------------------------------------------------------------------------------------------------+
 extra:
+  # Version selector (Material + mike). Deployed per version/alias by CI — see docs/versioning.md
+  version:
+    provider: mike
+    default: latest
+
   # +------------------------------------------------------------------------------------------------------+
   # |                                                                                                      |
   # | The social section allows you to set a list of entries which would be displayed in the footer of the |
@@ -469,3 +481,4 @@ plugins:
 
   - mkdocs-jupyter:
       execute: false
+      ignore_h1_warnings: true

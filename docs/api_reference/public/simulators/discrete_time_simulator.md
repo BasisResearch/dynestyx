@@ -43,10 +43,10 @@
     with DiscreteTimeSimulator():
         prior_pred = Predictive(model, num_samples=5)(
             jr.PRNGKey(0),
-            obs_times=obs_times,
+            predict_times=obs_times,
         )
-    print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f', 'observations', 'phi', 'states', 'times', ...]
-    print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # e.g. first axis is num_samples=5
+    print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f_observations', 'f_states', 'f_times', 'phi', ...]
+    print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1
     ```
 
 ??? example "NUTS with DiscreteTimeSimulator"
@@ -66,11 +66,11 @@
     print("Posterior sample keys:", sorted(posterior.keys()))  # stochastic sites (often includes latent x_* and parameters like 'phi')
     print("Posterior sample shapes:", {k: v.shape for k, v in posterior.items()})
 
-    # Deterministic trajectory keys like 'states'/'observations' are in posterior predictive output.
+    # Deterministic trajectory keys like 'f_states'/'f_observations' are in posterior predictive output.
     with DiscreteTimeSimulator():
         post_pred = Predictive(model, posterior_samples=posterior)(
-            jr.PRNGKey(2), obs_times=obs_times
+            jr.PRNGKey(2), predict_times=obs_times
         )
-    print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'states', 'observations', 'times'
+    print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'f_states', 'f_observations', 'f_times'
     print("Posterior predictive shapes:", {k: v.shape for k, v in post_pred.items()})
     ```

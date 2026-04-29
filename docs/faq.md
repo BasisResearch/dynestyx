@@ -24,13 +24,13 @@ with Filter(filter_config=HMMConfig()):
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (pseudo-marginal MCMC—parameters only). Note: the usage of discrete-time filters is currently under active development (likely incorrect implementations).
+- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
 For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), use the simulator approach (currently working reliably), do:
 ```python
 with DiscreteTimeSimulator():
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
-For filter-based marginalization (currently not working reliably), do:
+For filter-based marginalization with the default EnKF, do:
 ```python
 with Filter():
     return model(obs_times=obs_times, obs_values=obs_values)
@@ -71,11 +71,29 @@ with Filter(filter_config=ContinuousTimeEnKFConfig()):
 
 ## What about multiple trajectories?
 
-Feature coming soon.
+All three simulators support generating multiple independent trajectories in a single call via the `n_simulations` parameter:
+
+```python
+from dynestyx import SDESimulator, flatten_draws
+from numpyro.infer import Predictive
+
+with SDESimulator(n_simulations=100):
+    samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), predict_times=times)
+
+# f_states shape: (num_samples=1, n_sim=100, T, state_dim)
+# flatten_draws merges the (num_samples, n_sim) prefix into one axis:
+states = flatten_draws(samples["f_states"])  # (100, T, state_dim)
+```
+
+The `n_simulations` parameter is available on `DiscreteTimeSimulator`, `SDESimulator`, and `ODESimulator`.
+
+**Shape contract:** all trajectory outputs have shape `(num_samples, n_sim, T, dim)` — a leading `num_samples` axis from `Predictive`, a `n_sim` axis from the simulator, the time axis `T`, and then the state/observation dimension. Use `dynestyx.flatten_draws` to collapse the first two axes into a single draws axis for plotting or analysis.
+
+**Note:** conditioning on observations (`obs_values != None`) is only supported with `n_simulations=1`. For filter-based rollouts from a posterior (Filter + predict_times), `n_simulations > 1` is fully supported.
 
 ## What about hierarchical models?
 
-Feature coming soon.
+Hierarchical models are supported by the [`dsx.plate`](./api_reference/public/handlers.md) primitive! This allows for multiple levels of hierarchy (e.g., modelling populations, treatment arms, and individuals within each treatment arm), or simple multi-trajectory inference. You can see an example [here](./tutorials/gentle_intro/08_hierarchical_inference.ipynb).
 
 ## What about neural nets?
 

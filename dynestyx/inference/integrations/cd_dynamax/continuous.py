@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -24,12 +25,9 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import (
-    _should_record_field,
-    _validate_control_dim,
-    _validate_controls,
-)
+from dynestyx.utils import _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -51,6 +49,13 @@ def _config_to_cd_dynamax_filter_kwargs(
     key,
 ) -> dict:
     """Build the filter_kwargs dict passed to cd_dynamax_model.filter()."""
+
+    # cd-dynamax uses the legacy PRNG key interface, but newer numpyro uses typed keys.
+    # We should convert accordingly.
+    # https://docs.jax.dev/en/latest/jax.random.html#module-jax.random
+    if jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
+        key = jax.random.key_data(key)
+
     base = {
         "params": params,
         "emissions": obs_values,
@@ -143,7 +148,6 @@ def _add_filter_sites(
 
 
 def _run_linear_kf(
-    name: str,
     dynamics: DynamicalModel,
     obs_times,
     obs_values,
@@ -167,8 +171,7 @@ def _run_linear_kf(
     return filtered
 
 
-def run_continuous_filter(
-    name: str,
+def compute_continuous_filter(
     dynamics: DynamicalModel,
     filter_config: ContinuousTimeFilterConfig,
     key: jax.Array | None = None,
@@ -177,26 +180,16 @@ def run_continuous_filter(
     obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
-    **kwargs,
-) -> None:
-    """Run continuous-time filter via CD-Dynamax.
+):
+    """Pure-JAX continuous-time filter computation (no numpyro side-effects).
 
-    Args:
-        name: Name of the factor.
-        dynamics: Dynamical model to filter.
-        filter_config: ContinuousTimeKFConfig, ContinuousTimeEnKFConfig,
-            ContinuousTimeDPFConfig, ContinuousTimeEKFConfig, or ContinuousTimeUKFConfig.
-        key: Random key (optional).
-        obs_times: Observation times.
-        obs_values: Observed values.
-        ctrl_times: Control times (optional).
-        ctrl_values: Control values (optional).
+    Returns:
+        The cd-dynamax filtered posterior object (contains marginal_loglik,
+        filtered_means, filtered_covariances, and for DPF: particles, log_weights).
     """
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
         obs_times_arr = obs_times_arr[:, None]
-    _validate_controls(jnp.ravel(obs_times_arr), ctrl_times, ctrl_values)
-    _validate_control_dim(dynamics, ctrl_values)
 
     control_dim = dynamics.control_dim
     ctrl_vals = (
@@ -207,7 +200,7 @@ def run_continuous_filter(
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
         filtered = _run_linear_kf(
-            name, dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
+            dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
         )
     else:
         if isinstance(
@@ -239,4 +232,63 @@ def run_continuous_filter(
 
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
 
+    return filtered
+
+
+def run_continuous_filter(
+    name: str,
+    dynamics: DynamicalModel,
+    filter_config: ContinuousTimeFilterConfig,
+    key: jax.Array | None = None,
+    *,
+    obs_times: jax.Array,
+    obs_values: jax.Array,
+    ctrl_times=None,
+    ctrl_values=None,
+    **kwargs,
+) -> list[numpyro.distributions.Distribution]:
+    """Run continuous-time filter via CD-Dynamax.
+
+    Args:
+        name: Name of the factor.
+        dynamics: Dynamical model to filter.
+        filter_config: ContinuousTimeKFConfig, ContinuousTimeEnKFConfig,
+            ContinuousTimeDPFConfig, ContinuousTimeEKFConfig, or ContinuousTimeUKFConfig.
+        key: Random key (optional).
+        obs_times: Observation times.
+        obs_values: Observed values.
+        ctrl_times: Control times (optional).
+        ctrl_values: Control values (optional).
+
+    Returns:
+        list[numpyro.distributions.Distribution]: A list of distributions for the filtered states.
+    """
+    filtered = compute_continuous_filter(
+        dynamics,
+        filter_config,
+        key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
     _add_filter_sites(name, filter_config, filtered)
+
+    if not isinstance(filter_config, ContinuousTimeDPFConfig):
+        means = filtered.filtered_means
+        covs = filtered.filtered_covariances
+        if means is None or covs is None:
+            raise ValueError(
+                "Filtered means/covariances unexpectedly None for non-DPF config"
+            )
+        return [
+            dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])
+        ]
+    else:
+        # PF: filtered has particles and log_weights (DPF-specific, not in base type)
+        particles = filtered.particles  # type: ignore[attr-defined]
+        log_weights = filtered.log_weights  # type: ignore[attr-defined]
+        if particles.ndim == 2:
+            particles = particles[..., None]
+        return particles_to_delta_mixtures(particles, log_weights)

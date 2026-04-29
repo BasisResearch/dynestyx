@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.0.1"
+version = "0.0.6"
 description = "NumPyro integration for dynamical systems"
 readme = "README.md"
 license = "Apache-2.0"
@@ -25,14 +25,15 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "effectful",
-    "cuthbert @ git+https://github.com/state-space-models/cuthbert.git#subdirectory=pkg/cuthbert",
-    "cuthbertlib @ git+https://github.com/state-space-models/cuthbert.git#subdirectory=pkg/cuthbertlib",
-    "cd-dynamax @ git+https://github.com/DanWaxman/cd_dynamax.git@dw-dpf",
+    "cuthbert>=0.0.10",
+    "cuthbertlib>=0.0.10",
+    "cd-dynamax",
     "matplotlib>=3.10.7",
     "numpyro>=0.19.0",
     "pytest>=9.0.1",
@@ -43,8 +44,12 @@ dependencies = [
     "jupyter>=1.1.1",
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
-    "jax>=0.6.2",
-    "jaxlib>=0.6.2",
+    # NumPyro 0.20.1 currently fails to import with JAX 0.10.0
+    # (removed xla_pmap_p); cap until upstream compatibility lands.
+    "jax>=0.6.2,<0.10",
+    "jaxlib>=0.6.2,<0.10",
+    "tfp-nightly>=0.26.0dev20250530",
+    "orbax-checkpoint<0.11.3; sys_platform == 'win32'"
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -53,21 +58,20 @@ packages = ["dynestyx"]
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.uv.sources]
-cuthbert = { git = "https://github.com/state-space-models/cuthbert.git", subdirectory = "pkg/cuthbert"}
-cd-dynamax = { git = "https://github.com/DanWaxman/cd_dynamax.git", rev = "dw-dpf" }
-
 [dependency-groups]
 dev = [
+    "mike>=2.1.0",
     "mkdocs-material>=9.7.1",
     "mkdocs>=1.6.1",
     "mypy>=1.19.1",
     "pytest>=9.0.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.11",
-    "mkdocs-jupyter>=0.25.1",
+    "mkdocs-jupyter>=0.25.1,<0.26.0",
+    "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
+    "nbconvert>=7"
 ]
 
 [tool.ruff.lint]

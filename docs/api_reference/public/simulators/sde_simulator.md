@@ -44,9 +44,9 @@
 
     obs_times = jnp.linspace(0.0, 5.0, 51)
     with SDESimulator():
-        prior_pred = Predictive(model, num_samples=5)(jr.PRNGKey(0), obs_times=obs_times)
-    print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f', 'observations', 'sigma_x', 'sigma_y', 'states', 'theta', 'times', ...]
-    print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # e.g. first axis is num_samples=5
+        prior_pred = Predictive(model, num_samples=5)(jr.PRNGKey(0), predict_times=obs_times)
+    print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f_observations', 'f_states', 'f_times', 'sigma_x', 'sigma_y', 'theta', ...]
+    print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1
     ```
 
 ??? example "NUTS with SDESimulator (small demonstration)"
@@ -67,11 +67,11 @@
     print("Posterior sample keys:", sorted(posterior.keys()))  # stochastic sites (typically parameters and x_0)
     print("Posterior sample shapes:", {k: v.shape for k, v in posterior.items()})
 
-    # Deterministic trajectories are exposed as 'states'/'observations' in posterior predictive output.
+    # Deterministic trajectories are exposed as 'f_states'/'f_observations' in posterior predictive output.
     with SDESimulator():
         post_pred = Predictive(model, posterior_samples=posterior)(
-            jr.PRNGKey(2), obs_times=obs_times
+            jr.PRNGKey(2), predict_times=obs_times
         )
-    print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'states', 'observations', 'times'
+    print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'f_states', 'f_observations', 'f_times'
     print("Posterior predictive shapes:", {k: v.shape for k, v in post_pred.items()})
     ```

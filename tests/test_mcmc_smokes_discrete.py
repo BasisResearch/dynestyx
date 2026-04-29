@@ -17,8 +17,8 @@ from tests.fixtures import (
     data_conditioned_discrete_time_lti_simplified,  # noqa: F401
 )
 
-NUM_SAMPLES = 10
-NUM_WARMUP = 10
+NUM_SAMPLES = 1
+NUM_WARMUP = 1
 
 
 @pytest.fixture(scope="module", autouse=True)

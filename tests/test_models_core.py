@@ -1,10 +1,12 @@
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 import numpyro.handlers as nhandlers
 import pytest
 
 import dynestyx as dsx
+from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
 from dynestyx.models.core import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.simulators import DiscreteTimeSimulator
 
@@ -62,6 +64,46 @@ def test_discrete_state_evolution_receives_probe_inputs() -> None:
     assert seen["u_shape"] == (2,)
     assert seen["t_now"] == 0.0
     assert seen["t_next"] == 1.0
+
+
+def test_gaussian_state_evolution_supports_callable_cov() -> None:
+    def F(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return x
+
+    def cov_fn(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return (1.0 + jnp.square(x[0])) * jnp.eye(2)
+
+    evo = dsx.GaussianStateEvolution(F=F, cov=cov_fn)
+    x = jnp.array([2.0, -1.0])
+    d = evo(x=x, u=None, t_now=jnp.array(0.0), t_next=jnp.array(1.0))
+    assert jnp.allclose(d.covariance_matrix, 5.0 * jnp.eye(2))
+
+
+def test_gaussian_to_nlgssm_params_rejects_callable_cov() -> None:
+    def F(x, u, t_now, t_next):
+        del u, t_now, t_next
+        return x
+
+    def h(x, u, t):
+        del u, t
+        return x
+
+    def cov_fn(x, u, t_now, t_next):
+        del x, u, t_now, t_next
+        return jnp.eye(2)
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
+        ),
+        state_evolution=dsx.GaussianStateEvolution(F=F, cov=cov_fn),
+        observation_model=dsx.GaussianObservation(h=h, R=jnp.eye(2)),
+    )
+
+    with pytest.raises(TypeError, match="array-valued process covariance"):
+        gaussian_to_nlgssm_params(dynamics)
 
 
 def test_continuous_state_evolution_rejects_scalar_drift_for_1d_state() -> None:
@@ -369,11 +411,18 @@ def test_t0_defaults_to_none() -> None:
 
 def test_t0_stored_when_provided() -> None:
     model = _simple_discrete_model(t0=2.5)
+    assert isinstance(model.t0, jax.Array)
+    assert model.t0.shape == ()
     assert model.t0 == 2.5
 
 
 def _run_model_with_simulator(
-    dynamics, obs_times=None, ctrl_times=None, ctrl_values=None
+    dynamics,
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    predict_times=None,
 ):
     """Run a dynamics model inside DiscreteTimeSimulator and return the trace."""
 
@@ -382,8 +431,10 @@ def _run_model_with_simulator(
             "f",
             dynamics,
             obs_times=obs_times,
+            obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            predict_times=predict_times,
         )
 
     with DiscreteTimeSimulator():
@@ -392,36 +443,43 @@ def _run_model_with_simulator(
 
 
 def test_t0_no_error_when_matching_obs_times() -> None:
-    obs_times = jnp.array([3.0, 4.0, 5.0])
+    predict_times = jnp.array([3.0, 4.0, 5.0])
     dynamics = _simple_discrete_model(t0=3.0)
     # Should not raise
-    _run_model_with_simulator(dynamics, obs_times=obs_times)
+    _run_model_with_simulator(dynamics, predict_times=predict_times)
 
 
 def test_t0_mismatch_raises_informative_error() -> None:
-    obs_times = jnp.array([3.0, 4.0, 5.0])
+    predict_times = jnp.array([3.0, 4.0, 5.0])
     dynamics = _simple_discrete_model(t0=0.0)
 
     with pytest.raises(
         (ValueError, eqx.EquinoxRuntimeError),
-        match=r"dynamics\.t0=0\.0 does not match obs_times\[0\]",
+        match=r"dynamics\.t0=0\.0 does not match .*\[0\]",
     ):
-        _run_model_with_simulator(dynamics, obs_times=obs_times)
+        _run_model_with_simulator(dynamics, predict_times=predict_times)
 
 
 def test_obs_times_strictly_increasing_validation() -> None:
-    obs_times = jnp.array([3.0, 2.0, 5.0])
+    predict_times = jnp.array([3.0, 2.0, 5.0])
     with pytest.raises(
         (ValueError, eqx.EquinoxRuntimeError),
-        match="obs_times must be strictly increasing",
+        match=".*must be strictly increasing",
     ):
-        _run_model_with_simulator(_simple_discrete_model(), obs_times=obs_times)
+        _run_model_with_simulator(_simple_discrete_model(), predict_times=predict_times)
 
 
 def test_ctrl_times_strictly_increasing_validation() -> None:
     ctrl_times = jnp.array([3.0, 2.0, 5.0])
+    ctrl_values = jnp.zeros((3, 1))
+    predict_times = jnp.array([3.0, 4.0, 5.0])
     with pytest.raises(
         (ValueError, eqx.EquinoxRuntimeError),
         match="ctrl_times must be strictly increasing",
     ):
-        _run_model_with_simulator(_simple_discrete_model(), ctrl_times=ctrl_times)
+        _run_model_with_simulator(
+            _simple_discrete_model(),
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+        )
