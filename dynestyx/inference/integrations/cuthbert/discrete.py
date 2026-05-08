@@ -480,9 +480,7 @@ def _cuthbert_filter_kalman(
     m0 = jnp.reshape(
         jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1)), (state_dim,)
     )
-    chol_P0 = jnp.linalg.cholesky(
-        squeeze_leading_singletons(ic.covariance_matrix, 2)
-    )
+    chol_P0 = jnp.linalg.cholesky(squeeze_leading_singletons(ic.covariance_matrix, 2))
 
     A = jnp.asarray(evo.A)
     chol_Q = jnp.linalg.cholesky(jnp.asarray(evo.cov))

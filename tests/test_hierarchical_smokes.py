@@ -109,9 +109,7 @@ def vector_hierarchical_lti_model(
 ):
     """2D hierarchy with vector trajectory effects and batched initial means."""
     state_dim = 2
-    A = 0.75 * jnp.eye(state_dim) + 0.08 * jnp.array(
-        [[0.0, 1.0], [-1.0, 0.0]]
-    )
+    A = 0.75 * jnp.eye(state_dim) + 0.08 * jnp.array([[0.0, 1.0], [-1.0, 0.0]])
     Q = 0.05 * jnp.eye(state_dim)
     H = jnp.eye(state_dim)
     R = 0.10 * jnp.eye(state_dim)
@@ -126,9 +124,7 @@ def vector_hierarchical_lti_model(
     with dsx.plate("trajectories", M):
         mu_i = numpyro.sample("mu_i", dist.Normal(mu_global, sigma).to_event(1))
         if independent_x0_mean:
-            x0_mean_i = numpyro.sample(
-                "x0_mean_i", dist.Normal(mu_i, 0.1).to_event(1)
-            )
+            x0_mean_i = numpyro.sample("x0_mean_i", dist.Normal(mu_i, 0.1).to_event(1))
         else:
             x0_mean_i = mu_i
 
@@ -159,9 +155,7 @@ def vector_hierarchical_lti_model(
         )
 
 
-def shared_lti_matching_plate_dim_model(
-    obs_times=None, obs_values=None, M=2, **kwargs
-):
+def shared_lti_matching_plate_dim_model(obs_times=None, obs_values=None, M=2, **kwargs):
     """Shared 2D LTI whose vector fields happen to start with plate size."""
     state_dim = 2
     shared_bias = jnp.array([0.1, -0.2])

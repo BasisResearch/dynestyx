@@ -57,9 +57,7 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
         )
         params, _ = model.initialize(
             initial_mean=squeeze_leading_singletons(ic.loc, 1),
-            initial_covariance=squeeze_leading_singletons(
-                ic.covariance_matrix, 2
-            ),
+            initial_covariance=squeeze_leading_singletons(ic.covariance_matrix, 2),
             dynamics_weights=evo.A,
             dynamics_bias=evo.bias,
             dynamics_input_weights=evo.B,
