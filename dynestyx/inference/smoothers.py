@@ -1,8 +1,10 @@
 import dataclasses
 import math
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -67,6 +69,31 @@ def _valid_smoother_config_names(*, continuous_time: bool) -> list[str]:
     if continuous_time:
         return [c.__name__ for c in ContinuousTimeSmootherConfigs]
     return [c.__name__ for c in DiscreteTimeSmootherConfigs]
+
+
+def _validate_future_only_predict_times(
+    predict_times: jax.Array | None,
+    obs_times: jax.Array | None,
+) -> jax.Array | None:
+    """Validate the current smoother prediction contract."""
+    if predict_times is None or obs_times is None:
+        return predict_times
+    obs_end = obs_times[..., -1:]
+    _ = eqx.error_if(
+        predict_times,
+        jnp.any(predict_times < obs_end),
+        "Smoother prediction only supports predict_times >= max(obs_times); in-window smoothing predictions are not implemented yet.",
+    )
+    return predict_times
+
+
+def _final_obs_times_for_rollout(obs_times: jax.Array) -> jax.Array:
+    """Return the final observation time while keeping simulator segmentation host-safe."""
+    try:
+        obs_times_host = np.asarray(jax.device_get(obs_times))
+        return jnp.asarray(obs_times_host[..., -1:], dtype=obs_times.dtype)
+    except Exception:
+        return obs_times[..., -1:]
 
 
 def _smoothed_posterior_to_dists(
@@ -144,6 +171,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
         obs_values=None,
         ctrl_times=None,
         ctrl_values=None,
+        predict_times=None,
         **kwargs,
     ) -> FunctionOfTime:
         smoothed_dists = None
@@ -159,6 +187,18 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
                 **kwargs,
             )
 
+        predict_times = _validate_future_only_predict_times(predict_times, obs_times)
+        filtered_times = None
+        filtered_dists = None
+        posterior_rollout_final_only = False
+        smoothed_times = obs_times
+        if predict_times is not None and smoothed_dists:
+            filtered_times = _final_obs_times_for_rollout(obs_times)
+            filtered_dists = [smoothed_dists[-1]]
+            posterior_rollout_final_only = True
+            smoothed_times = None
+            smoothed_dists = None
+
         return fwd(
             name,
             dynamics,
@@ -167,8 +207,12 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
             obs_values=None,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
-            smoothed_times=obs_times,
+            predict_times=predict_times,
+            filtered_times=filtered_times,
+            filtered_dists=filtered_dists,
+            smoothed_times=smoothed_times,
             smoothed_dists=smoothed_dists,
+            _posterior_rollout_final_only=posterior_rollout_final_only,
             **kwargs,
         )
 

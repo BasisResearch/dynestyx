@@ -1,3 +1,4 @@
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
@@ -34,7 +35,7 @@ from tests.models import (
 def _gen_obs_discrete():
     rng = jr.PRNGKey(42)
     obs_times = jnp.arange(0.0, 6.0, 1.0)
-    predict_times = jnp.arange(0.0, 9.0, 1.0)
+    predict_times = jnp.arange(obs_times[-1], 9.0, 1.0)
     with DiscreteTimeSimulator(n_simulations=1):
         pred = Predictive(
             discrete_time_lti_simplified_model,
@@ -50,9 +51,9 @@ def _gen_obs_discrete():
 def _gen_obs_ode():
     rng = jr.PRNGKey(42)
     obs_times = jnp.linspace(0.0, 0.5, 11)
-    predict_times = jnp.linspace(0.0, 1.0, 21)
-    ctrl_times = predict_times
-    ctrl_values = jnp.ones((len(predict_times),)) * 100
+    predict_times = jnp.linspace(obs_times[-1], 1.0, 11)
+    ctrl_times = jnp.linspace(0.0, 1.0, 21)
+    ctrl_values = jnp.ones((len(ctrl_times),)) * 100
     for i in range(1, len(ctrl_values), 2):
         ctrl_values = ctrl_values.at[i].set(-ctrl_values[i])
     with ODESimulator(n_simulations=1):
@@ -143,6 +144,9 @@ def test_predictive_smoother_discretetimesimulator_shapes():
     assert samples["f_predicted_times"].shape == (2, 2, len(predict_times))
     assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 2)
     assert samples["f_smoothed_states_cov_diag"].shape == (2, len(obs_times), 2)
+    x0_keys = [k for k in samples if k.endswith("_x_0")]
+    assert "f_1_x_0" in x0_keys
+    assert "f_6_x_0" not in x0_keys
 
 
 def test_predictive_smoother_odesimulator_shapes():
@@ -172,6 +176,77 @@ def test_predictive_smoother_odesimulator_shapes():
     assert samples["f_predicted_states"].shape == (2, 2, len(predict_times), 1)
     assert samples["f_predicted_times"].shape == (2, 2, len(predict_times))
     assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 1)
+
+
+@pytest.mark.parametrize(
+    "bad_predict_times",
+    [
+        jnp.arange(0.0, 6.0, 1.0),
+        jnp.arange(4.0, 8.0, 1.0),
+    ],
+)
+def test_predictive_smoother_discrete_rejects_in_window_predict_times(
+    bad_predict_times,
+):
+    obs_times, obs_values, _ = _gen_obs_discrete()
+
+    predictive = Predictive(
+        discrete_time_lti_simplified_model,
+        params={"alpha": jnp.array(0.35)},
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match="Smoother prediction only supports predict_times >= max\\(obs_times\\)",
+    ):
+        with DiscreteTimeSimulator(n_simulations=1):
+            with Smoother(smoother_config=KFSmootherConfig(filter_source="cd_dynamax")):
+                predictive(
+                    jr.PRNGKey(0),
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=bad_predict_times,
+                )
+
+
+@pytest.mark.parametrize(
+    "bad_predict_times",
+    [
+        jnp.linspace(0.0, 0.5, 11),
+        jnp.linspace(0.45, 1.0, 12),
+    ],
+)
+def test_predictive_smoother_continuous_rejects_in_window_predict_times(
+    bad_predict_times,
+):
+    obs_times, obs_values, _, ctrl_times, ctrl_values = _gen_obs_ode()
+
+    predictive = Predictive(
+        jumpy_controls_model_ode,
+        params={},
+        num_samples=1,
+        exclude_deterministic=False,
+    )
+    total_times = jnp.union1d(obs_times, bad_predict_times)
+    bad_ctrl_values = jnp.ones((len(total_times),)) * 100
+    for i in range(1, len(bad_ctrl_values), 2):
+        bad_ctrl_values = bad_ctrl_values.at[i].set(-bad_ctrl_values[i])
+
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match="Smoother prediction only supports predict_times >= max\\(obs_times\\)",
+    ):
+        with ODESimulator(n_simulations=1):
+            with Smoother(smoother_config=ContinuousTimeEKFSmootherConfig()):
+                predictive(
+                    jr.PRNGKey(0),
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=bad_predict_times,
+                    ctrl_times=total_times,
+                    ctrl_values=bad_ctrl_values,
+                )
 
 
 @pytest.mark.parametrize("backward_method", ["tracing", "exact"])
@@ -323,7 +398,7 @@ def test_smoother_plate_batched_loglik_shape():
             _plate_discrete_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
-                predict_times=obs_times,
+                predict_times=jnp.arange(obs_times[-1], obs_times[-1] + 2.0, 1.0),
                 m=m,
             )
 

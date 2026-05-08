@@ -247,6 +247,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_dists=None,
         smoothed_times=None,
         smoothed_dists=None,
+        _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator logic for one unbatched member and return trajectories."""
@@ -277,13 +278,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if posterior_rollout:
             _validate_site_sorting(rollout_times, name=f"{rollout_label}_times")
-            n_pred = len(predict_times)
-
-            # Build segment ids on host once.
-            # seg_id == -1 means "before first posterior time" (use model prior).
-            pt_host = np.asarray(jax.device_get(predict_times))
-            ft_host = np.asarray(jax.device_get(rollout_times))
-            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
 
             def _ctrl_for_segment(sub_times):
                 if ctrl_times is None or ctrl_values is None:
@@ -310,6 +304,34 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     is_leaf=lambda x: x is None,
                 )
                 return dynamics_seg, f"{name}_{seg_id + 1}"
+
+            if _posterior_rollout_final_only:
+                dynamics_seg, seg_name = _dynamics_for_segment(0)
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(predict_times)
+                seg_result = self._simulate(
+                    seg_name,
+                    dynamics_seg,
+                    obs_times=None,
+                    obs_values=None,
+                    ctrl_times=ctrl_t_seg,
+                    ctrl_values=ctrl_v_seg,
+                    predict_times=predict_times,
+                )
+                results = {
+                    "predicted_states": seg_result["states"],
+                    "predicted_observations": seg_result["observations"],
+                }
+                n_sim_out = results["predicted_states"].shape[0]
+                results["predicted_times"] = _tile_times(predict_times, n_sim_out)
+                return results
+
+            n_pred = len(predict_times)
+
+            # Build segment ids on host once.
+            # seg_id == -1 means "before first posterior time" (use model prior).
+            pt_host = np.asarray(jax.device_get(predict_times))
+            ft_host = np.asarray(jax.device_get(rollout_times))
+            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
 
             seg_results = []
             seg_masks = []
@@ -386,6 +408,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_dists=None,
         smoothed_times=None,
         smoothed_dists=None,
+        _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator over all plate members and stack outputs.
@@ -489,6 +512,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     filtered_dists=member_filtered_dists,
                     smoothed_times=member_smoothed_times,
                     smoothed_dists=member_smoothed_dists,
+                    _posterior_rollout_final_only=_posterior_rollout_final_only,
                     **kwargs,
                 )
 
@@ -530,6 +554,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         smoothed_dists=None,
         **kwargs,
     ) -> FunctionOfTime:
+        posterior_rollout_final_only = kwargs.pop(
+            "_posterior_rollout_final_only", False
+        )
         if plate_shapes:
             results = self._run_plated_simulation(
                 name,
@@ -544,6 +571,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 filtered_dists=filtered_dists,
                 smoothed_times=smoothed_times,
                 smoothed_dists=smoothed_dists,
+                _posterior_rollout_final_only=posterior_rollout_final_only,
                 **kwargs,
             )
         else:
@@ -559,6 +587,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 filtered_dists=filtered_dists,
                 smoothed_times=smoothed_times,
                 smoothed_dists=smoothed_dists,
+                _posterior_rollout_final_only=posterior_rollout_final_only,
                 **kwargs,
             )
 

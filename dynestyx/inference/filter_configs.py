@@ -47,6 +47,20 @@ class BaseFilterConfig:
             at each step (particle-based filters only).
         record_filtered_log_weights (bool | None): Save the log importance
             weights at each step (particle-based filters only).
+        record_smoothed_states_mean (bool | None): Save the posterior smoothing
+            mean \(\mathbb{E}[x_t \mid y_{1:T}]\) at each time step when using
+            `Smoother`.
+        record_smoothed_states_cov (bool | None): Save the full smoothing
+            covariance at each time step. Can be large; prefer
+            `record_smoothed_states_cov_diag` for high-dimensional states.
+        record_smoothed_states_cov_diag (bool | None): Save only the marginal
+            smoothing variances at each time step.
+        record_smoothed_particles (bool | None): Save smoothed particles for
+            particle smoothers.
+        record_smoothed_log_weights (bool | None): Save smoothed particle log
+            weights for particle smoothers.
+        record_smoothed_states_chol_cov (bool | None): Save the Cholesky factor
+            of the smoothing covariance when exposed by the backend.
         record_max_elems (int): Hard cap on total scalar elements saved across
             all `record_*` sites. Prevents accidentally filling device memory
             for long sequences or large state spaces. Defaults to `100_000`.
