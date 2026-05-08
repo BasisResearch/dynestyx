@@ -13,6 +13,7 @@ from cd_dynamax import (
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
 
+from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
     ContinuousTimeStateEvolution,
@@ -234,8 +235,8 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     )
     return _initialize_model_params(
         cd_model,
-        initial_mean=jnp.asarray(ic.loc),
-        initial_cov=jnp.asarray(ic.covariance_matrix),
+        initial_mean=squeeze_leading_singletons(ic.loc, 1),
+        initial_cov=squeeze_leading_singletons(ic.covariance_matrix, 2),
         dynamics_weights=drift.A,
         dynamics_input_weights=B,
         dynamics_bias=b,
@@ -298,11 +299,11 @@ def dsx_to_cd_dynamax(
         )
     else:
         if isinstance(ic, dist.MultivariateNormal):
-            initial_mean = ic.loc  # type: ignore
-            initial_cov = ic.covariance_matrix
+            initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
+            initial_cov = squeeze_leading_singletons(ic.covariance_matrix, 2)
         elif isinstance(ic, dist.Normal):
-            initial_mean = ic.loc  # type: ignore
-            initial_cov = jnp.square(ic.scale)
+            initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
+            initial_cov = squeeze_leading_singletons(jnp.square(ic.scale), 2)
         else:
             raise NotImplementedError(
                 f"Initial condition of type {type(ic)} is not supported yet."
@@ -416,12 +417,14 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         )
 
     if isinstance(ic, dist.MultivariateNormal):
-        initial_mean = jnp.asarray(ic.loc)
-        initial_covariance = jnp.asarray(ic.covariance_matrix)
+        initial_mean = squeeze_leading_singletons(ic.loc, 1)
+        initial_covariance = squeeze_leading_singletons(ic.covariance_matrix, 2)
     elif isinstance(ic, dist.Normal):
         # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
-        initial_mean = jnp.atleast_1d(jnp.asarray(ic.loc))
-        initial_covariance = jnp.atleast_2d(jnp.square(jnp.asarray(ic.scale)))
+        initial_mean = jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1))
+        initial_covariance = jnp.atleast_2d(
+            squeeze_leading_singletons(jnp.square(ic.scale), 2)
+        )
     else:
         raise TypeError(
             "KF, EKF, and UKF require a Gaussian initial condition "

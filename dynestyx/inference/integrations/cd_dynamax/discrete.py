@@ -25,6 +25,7 @@ from dynestyx.inference.filter_configs import (
     _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
@@ -55,8 +56,10 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
             has_emissions_bias=obs.bias is not None,
         )
         params, _ = model.initialize(
-            initial_mean=jnp.asarray(ic.loc),
-            initial_covariance=jnp.asarray(ic.covariance_matrix),
+            initial_mean=squeeze_leading_singletons(ic.loc, 1),
+            initial_covariance=squeeze_leading_singletons(
+                ic.covariance_matrix, 2
+            ),
             dynamics_weights=evo.A,
             dynamics_bias=evo.bias,
             dynamics_input_weights=evo.B,

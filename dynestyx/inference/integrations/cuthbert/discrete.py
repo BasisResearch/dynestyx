@@ -28,6 +28,7 @@ from dynestyx.inference.filter_configs import (
 from dynestyx.inference.integrations.utils import (
     covariance_from_cholesky,
     particles_to_delta_mixtures,
+    squeeze_leading_singletons,
 )
 from dynestyx.models import (
     DynamicalModel,
@@ -476,8 +477,12 @@ def _cuthbert_filter_kalman(
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
-    m0 = jnp.reshape(jnp.atleast_1d(jnp.asarray(ic.loc)), (state_dim,))
-    chol_P0 = jnp.linalg.cholesky(jnp.asarray(ic.covariance_matrix))
+    m0 = jnp.reshape(
+        jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1)), (state_dim,)
+    )
+    chol_P0 = jnp.linalg.cholesky(
+        squeeze_leading_singletons(ic.covariance_matrix, 2)
+    )
 
     A = jnp.asarray(evo.A)
     chol_Q = jnp.linalg.cholesky(jnp.asarray(evo.cov))
