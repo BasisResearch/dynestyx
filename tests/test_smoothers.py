@@ -14,10 +14,12 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     _pf_backward_sampling_fn,
+    compute_cuthbert_smoother,
 )
 from dynestyx.inference.smoother_configs import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
+    EKFSmootherConfig,
     KFSmootherConfig,
     PFBackwardSamplingMethod,
     PFSmootherConfig,
@@ -68,6 +70,49 @@ def _gen_obs_ode():
         )
     obs_values = sim["f_observations"][0, 0]
     return obs_times, obs_values, predict_times, ctrl_times, ctrl_values
+
+
+def _make_discrete_lti_dynamics(alpha=0.35):
+    state_dim = 2
+    return dsx.LTI_discrete(
+        A=jnp.array([[alpha, 0.1], [0.1, 0.8]]),
+        Q=0.1 * jnp.eye(state_dim),
+        H=jnp.array([[1.0, 0.0]]),
+        R=jnp.array([[0.5**2]]),
+        B=jnp.array([[0.1], [0.0]]),
+        D=jnp.array([[0.01]]),
+    )
+
+
+@pytest.mark.parametrize(
+    "smoother_config",
+    [
+        KFSmootherConfig(filter_source="cuthbert"),
+        EKFSmootherConfig(filter_source="cuthbert"),
+        PFSmootherConfig(n_particles=16, filter_source="cuthbert"),
+    ],
+)
+def test_compute_cuthbert_smoother_returns_observation_aligned_states(
+    smoother_config,
+):
+    obs_times, obs_values, _ = _gen_obs_discrete()
+    dynamics = _make_discrete_lti_dynamics()
+
+    marginal_loglik, states = compute_cuthbert_smoother(
+        dynamics,
+        smoother_config,
+        key=jr.PRNGKey(2),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    assert jnp.ndim(marginal_loglik) == 0
+    if isinstance(smoother_config, PFSmootherConfig):
+        assert states.particles.shape[0] == len(obs_times)
+        assert states.log_weights.shape[0] == len(obs_times)
+    else:
+        assert states.mean.shape[0] == len(obs_times)
+        assert states.chol_cov.shape[0] == len(obs_times)
 
 
 def test_predictive_smoother_discretetimesimulator_shapes():

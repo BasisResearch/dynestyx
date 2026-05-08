@@ -107,7 +107,7 @@ Other JAX-based libraries for dynamical systems:
 - **[dynamax](https://github.com/probml/dynamax)** — Discrete-time state space models with linear/non-linear Kalman filters and Bayesian parameter estimation
 - **[cd-dynamax](https://github.com/hd-UQ/cd_dynamax)** — Continuous-discrete state space models with EnKF, EKF, UKF, PF and Bayesian parameter estimation
 - **[PFJax](https://pfjax.readthedocs.io/en/latest/)** — Nonlinear and non-Gaussian discrete-time models with particle filters and particle MCMC
-- **[Cuthbert](https://state-space-models.github.io/cuthbert/)** — Discrete-time state space models with linear/non-linear Kalman (and Particle Filters) filters, options for associative scans.
+- **[Cuthbert](https://state-space-models.github.io/cuthbert/)** — Discrete-time state space models with linear/non-linear Kalman, ensemble Kalman, and particle filters, plus options for associative scans.
 - **[diffrax](https://docs.kidger.site/diffrax/)** - Numerical differential equation solvers.
 
 Other probabilistic programming languages with support for dynamical systems:

@@ -18,9 +18,13 @@ from dynestyx.inference.filter_configs import _config_to_smoother_record_kwargs
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
+    _drop_cuthbert_dummy_step,
     compute_cuthbert_filter,
 )
-from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
+from dynestyx.inference.integrations.utils import (
+    covariance_from_cholesky,
+    particles_to_delta_mixtures,
+)
 from dynestyx.inference.smoother_configs import (
     EKFSmootherConfig,
     KFSmootherConfig,
@@ -179,6 +183,7 @@ def compute_cuthbert_smoother(
     ctrl_values=None,
 ):
     """Pure-JAX cuthbert smoother computation (no numpyro side-effects)."""
+    obs_len = int(obs_values.shape[0])
     marginal_loglik, filtered_states = compute_cuthbert_filter(
         dynamics,
         smoother_config,
@@ -187,6 +192,7 @@ def compute_cuthbert_smoother(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        align_to_observations=False,
     )
 
     filter_kwargs = _config_to_filter_kwargs(smoother_config)
@@ -237,12 +243,13 @@ def compute_cuthbert_smoother(
             "Expected KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig."
         )
 
+    smoothed_states = _drop_cuthbert_dummy_step(smoothed_states, obs_len=obs_len)
     return marginal_loglik, smoothed_states
 
 
 def _add_sites_pf(name: str, states, record_kwargs: dict):
-    log_weights = states.log_weights[1:]
-    particles = states.particles[1:]
+    log_weights = states.log_weights
+    particles = states.particles
     if particles.ndim == 2:
         particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
@@ -294,8 +301,8 @@ def _add_sites_pf(name: str, states, record_kwargs: dict):
 
 def _add_sites_taylor_kf(name: str, states, record_kwargs: dict):
     max_elems = record_kwargs["record_max_elems"]
-    mean = states.mean[1:]
-    chol_cov = states.chol_cov[1:]
+    mean = states.mean
+    chol_cov = states.chol_cov
     t1, state_dim, _ = chol_cov.shape
 
     add_mean = _should_record_field(
@@ -321,8 +328,7 @@ def _add_sites_taylor_kf(name: str, states, record_kwargs: dict):
         numpyro.deterministic(f"{name}_smoothed_states_chol_cov", chol_cov)
 
     if add_smoothed_states_cov or add_smoothed_states_cov_diag:
-        chol_t = jnp.transpose(chol_cov, (0, 2, 1))
-        smoothed_cov = jnp.matmul(chol_cov, chol_t)
+        smoothed_cov = covariance_from_cholesky(chol_cov)
 
     if add_smoothed_states_cov:
         numpyro.deterministic(f"{name}_smoothed_states_cov", smoothed_cov)
@@ -364,17 +370,16 @@ def run_discrete_smoother(
 
     if isinstance(smoother_config, PFSmootherConfig):
         _add_sites_pf(name, states, record_kwargs)
-        particles = states.particles[1:]
-        log_weights = states.log_weights[1:]
+        particles = states.particles
+        log_weights = states.log_weights
         if particles.ndim == 2:
             particles = particles[..., None]
         return particles_to_delta_mixtures(particles, log_weights)
 
     _add_sites_taylor_kf(name, states, record_kwargs)
-    mean = states.mean[1:]
-    chol_cov = states.chol_cov[1:]
-    chol_t = jnp.transpose(chol_cov, (0, 2, 1))
-    cov = jnp.matmul(chol_cov, chol_t)
+    mean = states.mean
+    chol_cov = states.chol_cov
+    cov = covariance_from_cholesky(chol_cov)
     return [
         dist.MultivariateNormal(mean[i], covariance_matrix=cov[i])
         for i in range(mean.shape[0])

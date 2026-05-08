@@ -9,6 +9,7 @@ Uses Predictive (not trace/substitute). Covers:
 """
 
 import re
+from typing import Literal
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -33,12 +34,12 @@ from tests.models import (
 )
 
 
-def _gen_obs_sde():
+def _gen_obs_sde(source: Literal["diffrax", "em_scan"]):
     """Generate obs_times, obs_values for L63 SDE."""
     rng = jr.PRNGKey(42)
     obs_times = jnp.linspace(0.0, 1.0, 6)
     predict_times = jnp.linspace(0.0, 1.5, 10)
-    with SDESimulator(n_simulations=1):
+    with SDESimulator(n_simulations=1, source=source):
         pred = Predictive(
             continuous_time_stochastic_l63_model,
             params={"rho": jnp.array(28.0)},
@@ -95,9 +96,10 @@ def _gen_obs_ode():
 
 @pytest.mark.parametrize("num_samples", [1, 2])
 @pytest.mark.parametrize("n_sim", [1, 2])
-def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim):
+@pytest.mark.parametrize("source", ["diffrax", "em_scan"])
+def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim, source):
     """Predictive + Filter + SDESimulator: expected shapes for num_samples and n_simulations."""
-    obs_times, obs_values, predict_times, state_dim = _gen_obs_sde()
+    obs_times, obs_values, predict_times, state_dim = _gen_obs_sde(source=source)
 
     predictive = Predictive(
         continuous_time_stochastic_l63_model,
@@ -105,7 +107,7 @@ def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim):
         num_samples=num_samples,
         exclude_deterministic=False,
     )
-    with SDESimulator(n_simulations=n_sim):
+    with SDESimulator(n_simulations=n_sim, source=source):
         with Filter(
             filter_config=ContinuousTimeEnKFConfig(
                 n_particles=8, record_filtered_states_mean=True

@@ -111,22 +111,14 @@ def _cuthbert_smoothed_states_to_dists(
     if isinstance(config, PFSmootherConfig):
         particles = states.particles
         log_weights = states.log_weights
-        particles = particles[
-            (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
-        ]
-        log_weights = log_weights[
-            (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
-        ]
         return _particle_to_batched_dists(
             particles,
             log_weights,
             plate_shapes=plate_shapes,
         )
 
-    mean = states.mean[(slice(None),) * len(plate_shapes) + (slice(1, None), ...)]
-    chol_cov = states.chol_cov[
-        (slice(None),) * len(plate_shapes) + (slice(1, None), ...)
-    ]
+    mean = states.mean
+    chol_cov = states.chol_cov
     cov = jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
     t_len = _time_len_from_array(mean, plate_shapes)
     return [
