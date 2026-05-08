@@ -227,7 +227,7 @@ def test_pf_smoother_mcmc_config_exposes_step_count():
 @pytest.mark.parametrize(
     "invalid_config",
     [
-        EnKFConfig(filter_source="cd_dynamax"),
+        EnKFConfig(filter_source="cd_dynamax"),  # type: ignore[arg-type]
         ContinuousTimeEnKFConfig(n_particles=8),
         HMMConfig(),
     ],
