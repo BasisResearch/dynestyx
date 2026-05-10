@@ -5426,7 +5426,10 @@ such slicing for:
 
     <div class="doc doc-contents ">
 
-        <p>Slice all plate-batched array leaves in a pytree for one plate member.</p>
+        <p>Slice plate-batched dynamics leaves for one simulator plate member.</p>
+<p>Shared leaves pass through unchanged; plate-batched leaves are selected by
+<code>plate_idx</code>. Distribution parameters, including initial conditions, are
+sliced separately by <code>_slice_dist_for_plate_member</code>.</p>
 
 
     </div>

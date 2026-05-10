@@ -3550,10 +3550,32 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.utils._is_known_vector_field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _is_known_vector_field
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.utils._leaf_is_plate_batched" class="md-nav__link">
     <span class="md-ellipsis">
       
         _leaf_is_plate_batched
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.utils._path_field_names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _path_field_names
       
     </span>
   </a>
@@ -3775,7 +3797,7 @@
 
 
 <h1 id="utils">Utils<a class="headerlink" href="#utils" title="Permanent link">&para;</a></h1>
-<p>Shared helpers for simulators, filtering, and model validation. The public entry point <a href="../../public/simulators/overview.md"><code>flatten_draws</code></a> is re-exported from the top-level <code>dynestyx</code> package.</p>
+<p>Shared helpers for simulators, filtering, and model validation.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -3816,7 +3838,10 @@
 
     <div class="doc doc-contents ">
 
-        <p>Return True if arr has leading dims exactly matching plate_shapes.</p>
+        <p>Return True when <code>arr</code> has <code>plate_shapes</code> as a leading prefix.</p>
+<p><code>min_suffix_ndim</code> requires that many non-plate axes after the prefix, so
+callers can distinguish scalar per-member values from vector or matrix
+event values.</p>
 
 
     </div>
@@ -3855,7 +3880,7 @@ at the boundary).</p>
 
     <div class="doc doc-contents ">
 
-        <p>Return True when a distribution has plate-shaped leading batch dims.</p>
+        <p>Return True when a distribution's leading <code>batch_shape</code> matches plates.</p>
 
 
     </div>
@@ -4000,7 +4025,25 @@ from <code>obs_times[0]</code> or <code>predict_times[0]</code> (kept as a JAX s
 
     <div class="doc doc-contents ">
 
-        <p>Return True if any source (dynamics leaves, arrays, or dists) is plate-batched.</p>
+        <p>Return True if dynamics, arrays, or distributions carry plate axes.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.utils._is_known_vector_field" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_is_known_vector_field</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+<a href="#dynestyx.utils._is_known_vector_field" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return True for built-in leaves whose final axis is a vector event axis.</p>
 
 
     </div>
@@ -4011,21 +4054,39 @@ from <code>obs_times[0]</code> or <code>predict_times[0]</code> (kept as a JAX s
 
 
 <h2 id="dynestyx.utils._leaf_is_plate_batched" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_leaf_is_plate_batched</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+            <code class=" language-python"><span class="n">_leaf_is_plate_batched</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">path</span><span class="o">=</span><span class="p">())</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
 
 <a href="#dynestyx.utils._leaf_is_plate_batched" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Return True if a pytree leaf is plate-batched according to the suffix_ndim heuristic.</p>
-<p>A JAX array leaf is considered plate-batched when its leading dimensions
-match <code>plate_shapes</code> and:
-- <code>suffix_ndim == 0</code>: per-member scalar parameter (e.g. <code>beta[M]</code>), or
-- <code>suffix_ndim &gt;= 2</code>: canonical batched tensor (e.g. <code>A[M, d, d]</code>).</p>
-<p><code>suffix_ndim == 1</code> is intentionally skipped to avoid ambiguous false
-positives where unbatched vectors happen to start with a plate-sized
-dimension (e.g. HMM state dim == plate size).</p>
+        <p>Return True if a pytree leaf should be sliced or vmapped over plates.</p>
+<p>Scalars with shape <code>plate_shapes</code> and tensors with explicit event axes are
+accepted. Rank-1 suffixes are accepted only for known vector-valued model
+fields, which protects shared vectors whose length equals a plate size.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.utils._path_field_names" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_path_field_names</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span></code>
+
+<a href="#dynestyx.utils._path_field_names" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract attribute names from a JAX pytree path.</p>
+<p>Only <code>GetAttrKey</code> entries (eqx <code>Module</code> field accesses) carry a
+meaningful <code>.name</code> here. <code>DictKey</code>/<code>SequenceKey</code>/<code>FlattenedIndexKey</code>
+are intentionally dropped: built-in dynestyx model classes are eqx Modules,
+so the whitelist in <code>_is_known_vector_field</code> only needs attribute names.</p>
 
 
     </div>

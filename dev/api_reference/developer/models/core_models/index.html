@@ -4351,6 +4351,14 @@ Gets set automatically from the concrete type of <code>state_evolution</code>.</
 </ul>
 </details>
 
+<details class="plate-note" open>
+  <summary>Plate note</summary>
+  <p>Inside <code>dsx.plate</code>, state and observation dimensions are inferred from
+distribution <code>event_shape</code> rather than leading plate batch axes. This
+allows batched initial-condition parameters such as
+<code>initial_mean.shape == (N, state_dim)</code>.</p>
+</details>
+
 
 
 

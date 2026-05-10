@@ -3852,14 +3852,19 @@ by inspecting only the trailing two dimensions (..., state_dim, bm_dim).</p>
 
 
 <h2 id="dynestyx.models.checkers._infer_vector_dim_from_distribution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_infer_vector_dim_from_distribution</span><span class="p">(</span><span class="n">distribution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
+            <code class=" language-python"><span class="n">_infer_vector_dim_from_distribution</span><span class="p">(</span><span class="n">distribution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">allow_batch_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
 
 <a href="#dynestyx.models.checkers._infer_vector_dim_from_distribution" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Infer scalar/vector dimension from a NumPyro-compatible distribution.</p>
+        <p>Infer scalar/vector event dimension from a NumPyro-compatible distribution.</p>
+<p>When <code>allow_batch_shape</code> is true, leading batch dimensions are ignored and
+only the distribution event shape is used. This is needed inside
+<code>dsx.plate</code> where a vector-valued state distribution can have shape
+<code>(plate_size, state_dim)</code> but still represents a <code>state_dim</code> event.</p>
+<p>Note: Name is used only for error messages.</p>
 
 
     </div>

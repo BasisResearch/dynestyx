@@ -3794,13 +3794,117 @@ keeping IDE-friendly docstrings.</p>
 
 
 
-        <p>Hierarchical plate for batched trajectories. Allows for multiple levels of hierarchy.</p>
-<p>Wraps <code>numpyro.plate</code> for parameter sampling semantics and intercepts
-<code>dsx.sample</code> to inject <code>plate_shapes</code> into the handler chain via <code>fwd()</code>.
-Nested plate handlers run from inner to outer under <code>effectful</code> dispatch,
-so each handler appends its size to preserve NumPyro's effective batch order
-(inner plate is the leftmost data batch dim).</p>
+        <p>Hierarchical plate for batched trajectories.</p>
+<p><code>dsx.plate</code> wraps <code>numpyro.plate</code> for parameter sampling semantics and
+intercepts <code>dsx.sample</code> to pass plate sizes to simulator and filter
+handlers. Use it when a dynamical system has conditionally independent
+members, such as multiple trajectories, patients, groups, or treatment
+arms.</p>
 
+
+<details class="shape-semantics" open>
+  <summary>Shape semantics</summary>
+  <p>Dynestyx treats plate axes as leading data-batch axes. Time axes come
+after plate axes in observation arrays, and state/observation event axes
+remain trailing axes.</p>
+<p>For one plate of size <code>N</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">obs_values</span>          <span class="c1"># (N, T, obs_dim), or (N, T) for scalar observations</span>
+<span class="n">mu_i</span>                <span class="c1"># (N, state_dim), a vector parameter per trajectory</span>
+<span class="n">initial_mean</span>        <span class="c1"># (N, state_dim), or shared as (state_dim,)</span>
+<span class="n">initial_cov</span>         <span class="c1"># (N, state_dim, state_dim), or shared as (state_dim, state_dim)</span>
+<span class="n">prior</span><span class="p">[</span><span class="s2">&quot;f_states&quot;</span><span class="p">]</span>   <span class="c1"># (num_samples, N, n_sim, T, state_dim)</span>
+</code></pre></div>
+<p>Distribution-valued model components use their NumPyro
+<code>batch_shape</code>/<code>event_shape</code> split: leading plate dimensions are
+batch dimensions, while state and observation sizes are inferred from
+<code>event_shape</code>. Thus a batched initial condition may have
+<code>loc.shape == (N, state_dim)</code> with either shared or batched covariance.</p>
+<p>Built-in LTI vector fields, including transition/drift and observation
+biases, may be shared or plate-batched:</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">plate</span><span class="p">(</span><span class="s2">&quot;trajectories&quot;</span><span class="p">,</span> <span class="n">N</span><span class="p">):</span>
+    <span class="n">mu_i</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
+        <span class="s2">&quot;mu_i&quot;</span><span class="p">,</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">mu_global</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span><span class="o">.</span><span class="n">to_event</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>  <span class="c1"># (N, state_dim)</span>
+
+    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">LTI_discrete</span><span class="p">(</span>
+        <span class="n">A</span><span class="o">=</span><span class="n">A</span><span class="p">,</span>
+        <span class="n">Q</span><span class="o">=</span><span class="n">Q</span><span class="p">,</span>
+        <span class="n">H</span><span class="o">=</span><span class="n">H</span><span class="p">,</span>
+        <span class="n">R</span><span class="o">=</span><span class="n">R</span><span class="p">,</span>
+        <span class="n">b</span><span class="o">=</span><span class="n">mu_i</span><span class="p">,</span>              <span class="c1"># plate-batched vector bias</span>
+        <span class="n">initial_mean</span><span class="o">=</span><span class="n">mu_i</span><span class="p">,</span>   <span class="c1"># plate-batched initial mean</span>
+    <span class="p">)</span>
+</code></pre></div>
+<p>Ambiguous arrays are kept shared rather than sliced. In particular, a
+shared vector whose length happens to equal <code>N</code> is not treated as
+plate-batched unless it is a known vector-valued model field with an
+explicit event axis, such as <code>(N, state_dim)</code>. For one-dimensional
+vector fields, prefer explicit singleton event axes like <code>(N, 1)</code>.
+Nested plates follow the same rule with multiple leading plate axes.</p>
+</details>
+
+<details class="why-event-shapes-drive-sizing" open>
+  <summary>Why event shapes drive sizing</summary>
+  <p>Inside a plate, <code>state_dim</code> and <code>observation_dim</code> are inferred from
+a distribution's NumPyro <code>event_shape</code>, not from the full sample
+shape. The full sample shape includes leading plate batch axes, which
+are independent-member dimensions, not event dimensions; using it
+would misread <code>(N, d)</code> as <code>state_dim == N</code>. Sticking to
+<code>event_shape</code> keeps the per-member event size unambiguous.</p>
+<p>The contract for a single plate of size <code>N</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Sampled shape</th>
+<th>event_shape</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>(d,)</code></td>
+<td><code>(d,)</code></td>
+<td>Shared vector event, broadcast.</td>
+</tr>
+<tr>
+<td><code>(N, d)</code></td>
+<td><code>(d,)</code></td>
+<td>Per-member vector event of dim d.</td>
+</tr>
+<tr>
+<td><code>(N,)</code></td>
+<td><code>()</code></td>
+<td>Per-member <strong>scalar</strong> event.</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is the subtle one: <code>dist.Normal(mu, sigma)</code> with
+<code>mu.shape == (N,)</code> produces <code>event_shape == ()</code>, which we treat as
+<code>state_dim == 1</code>. If the intent is a 1-D <em>vector</em> state with one
+entry per member, wrap with <code>.to_event(1)</code> or use a vector-valued
+distribution (<code>dist.MultivariateNormal</code>) so the rank-1 axis is an
+event axis. This is the same ambiguity rule as the shared-vector case
+above, applied at the distribution level.</p>
+<p>Nested plates extend this with multiple leading batch axes; the inner
+plate is the leftmost data batch axis, matching NumPyro's convention.</p>
+</details>
+
+<details class="output-axis-ordering" open>
+  <summary>Output axis ordering</summary>
+  <p>Predictive draws and filter outputs preserve a consistent axis order:</p>
+<p><code>(num_samples, *plate_axes_inner_to_outer, n_sim, T, *event_shape)</code></p>
+<p>For example, with one plate of size <code>N</code> and a vector state:</p>
+<div class="highlight"><pre><span></span><code><span class="n">prior</span><span class="p">[</span><span class="s2">&quot;f_states&quot;</span><span class="p">]</span>        <span class="c1"># (num_samples, N, n_sim, T, state_dim)</span>
+<span class="n">prior</span><span class="p">[</span><span class="s2">&quot;f_observations&quot;</span><span class="p">]</span>  <span class="c1"># (num_samples, N, n_sim, T, obs_dim)</span>
+</code></pre></div>
+<p><code>num_samples</code> comes first (NumPyro <code>Predictive</code>), then plate axes
+from inner to outer (the inner plate is the leftmost data batch axis,
+so it appears immediately after <code>num_samples</code>), then <code>n_sim</code> from
+the simulator, then time, then the event axes. <code>flatten_draws</code> is
+the standard helper for collapsing <code>(num_samples, n_sim)</code> for
+plotting/credible intervals.</p>
+</details>
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="codehilite"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">plate</span><span class="p">(</span><span class="s2">&quot;trajectories&quot;</span><span class="p">,</span> <span class="n">M</span><span class="p">):</span>
@@ -3985,6 +4089,14 @@ but using a <code>DynamicalModel</code> instead of a <code>Distribution</code>.<
 <p>The <code>sample</code> method calls <code>_sample_intp</code>, which is defined as a <code>defop</code> in <code>effectful</code>.
 This is where any real "work" is done, after input validation.</p>
 
+
+<details class="shape-note" open>
+  <summary>Shape note</summary>
+  <p>Inside <code>dsx.plate</code>, observation arrays use leading plate axes followed
+by time and event axes, e.g. <code>(N, T, obs_dim)</code>. Model parameters follow
+the same leading-plate, trailing-event convention. See :class:<code>plate</code>
+for the full plated-shape contract.</p>
+</details>
 
 <p><span class="doc-section-title">Parameters:</span></p>
     <table>

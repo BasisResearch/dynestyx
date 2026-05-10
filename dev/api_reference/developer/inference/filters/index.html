@@ -6271,12 +6271,31 @@ recover the predicted mean and covariance.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Build in_axes for a pytree based on whether leaves have plate batch dims.
-i.e., decide whether or not to vmap over a particular leaf.</p>
-<p>A leaf is considered batched if it is a JAX array whose leading dimensions
-match the plate_shapes tuple. Batched leaves get in_axes=0; others get None.
-The same in_axes can be reused for each nested vmap call since each vmap
-peels off one leading dimension.</p>
+        <p>Build <code>in_axes</code> for a pytree based on which leaves carry plate batch dims.</p>
+<p>Returns a pytree shaped like <code>tree</code> whose leaves are either <code>0</code> (the
+leading axis is a plate batch axis to <code>vmap</code> over) or <code>None</code> (leaf is
+shared across plate members and should be broadcast). Distributions are
+handled in two cases:</p>
+<ul>
+<li><strong>Unbatched distributions</strong> are stopped at as opaque leaves (via
+  <code>is_leaf</code>) and assigned <code>None</code> — they're shared across plate members
+  and <code>vmap</code> would error if asked to map over a non-existent axis.</li>
+<li><strong>Batched distributions</strong> are descended into so their parameter arrays
+  (loc, scale_tril, …) can each be marked individually. This matters
+  because, e.g., a <code>MultivariateNormal</code> initial condition may have a
+  plate-batched <code>loc.shape == (N, d)</code> paired with a shared
+  <code>scale_tril.shape == (d, d)</code>.</li>
+</ul>
+<p>Initial-condition arrays use a stricter rule (<code>min_suffix_ndim=1</code>): a
+rank-1 suffix is required for the leaf to count as plate-batched. This
+encodes the formal version of the ambiguity rule from <code>dsx.plate</code>: an IC
+<code>loc</code> of shape <code>(N,)</code> could be either a per-member scalar IC or a
+shared length-<code>N</code> vector IC, so we conservatively treat it as shared.
+Users should add an explicit event axis (<code>(N, 1)</code> or <code>.to_event(1)</code>).</p>
+<p>The same <code>in_axes</code> tree is reusable across nested <code>vmap</code> calls: each
+<code>vmap</code> peels exactly one leading axis, and a leaf marked <code>0</code> here means
+"has <em>some</em> plate prefix" — which stays correct as plate axes are consumed
+one at a time from the outside in.</p>
 
 
     </div>
