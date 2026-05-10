@@ -10,6 +10,30 @@ def covariance_from_cholesky(chol_cov: jax.Array) -> jax.Array:
     return jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
 
 
+def squeeze_leading_singletons(arr: Any, event_ndim: int) -> jax.Array:
+    """Remove leading broadcast singleton axes while preserving event dimensions.
+
+    Used at integration boundaries (cd_dynamax / cuthbert) where per-member
+    parameters may arrive with broadcast ``(1, ..., 1, *event)`` prefixes from
+    NumPyro plate machinery. Strips those leading 1s without touching the
+    trailing ``event_ndim`` axes.
+
+    Raises:
+        ValueError: if ``arr`` has fewer than ``event_ndim`` axes — the caller
+            asked us to preserve more axes than exist.
+    """
+    arr = jnp.asarray(arr)
+    if arr.ndim < event_ndim:
+        raise ValueError(
+            f"squeeze_leading_singletons: arr has ndim={arr.ndim} but "
+            f"event_ndim={event_ndim}; cannot preserve more event axes than "
+            f"the array has."
+        )
+    while arr.ndim > event_ndim and arr.shape[0] == 1:
+        arr = arr[0]
+    return arr
+
+
 class WeightedParticles(dist.Distribution):
     """A distribution over a finite set of weighted particles.
 

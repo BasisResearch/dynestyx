@@ -38,11 +38,32 @@ def _is_categorical_distribution(distribution: Any) -> bool:
     return name.startswith("Categorical") and "OneHot" not in name
 
 
-def _infer_vector_dim_from_distribution(distribution: Any, name: str) -> int:
-    """Infer scalar/vector dimension from a NumPyro-compatible distribution."""
+def _infer_vector_dim_from_distribution(
+    distribution: Any, name: str, *, allow_batch_shape: bool = False
+) -> int:
+    """Infer scalar/vector event dimension from a NumPyro-compatible distribution.
+
+    When ``allow_batch_shape`` is true, leading batch dimensions are ignored and
+    only the distribution event shape is used. This is needed inside
+    ``dsx.plate`` where a vector-valued state distribution can have shape
+    ``(plate_size, state_dim)`` but still represents a ``state_dim`` event.
+
+    Note: Name is used only for error messages.
+    """
     if _is_categorical_distribution(distribution):
         base = _unwrap_base_distribution(distribution)
         return int(jnp.asarray(base.probs).shape[-1])
+
+    if allow_batch_shape and hasattr(distribution, "event_shape"):
+        event_shape = tuple(int(d) for d in distribution.event_shape)
+        if len(event_shape) == 0:
+            return 1
+        if len(event_shape) == 1:
+            return int(event_shape[0])
+        raise ValueError(
+            f"{name} must have scalar or vector event shape; got event_shape "
+            f"{event_shape}."
+        )
 
     shape: tuple[int, ...] | None = None
 
@@ -189,7 +210,11 @@ def _infer_observation_dim_in_plate_context(
     try:
         obs_dist = observation_model(x_probe, u_probe, t_probe)
         return int(
-            _infer_vector_dim_from_distribution(obs_dist, "observation_model(x, u, t)")
+            _infer_vector_dim_from_distribution(
+                obs_dist,
+                "observation_model(x, u, t)",
+                allow_batch_shape=True,
+            )
         )
     except Exception:
         return 0

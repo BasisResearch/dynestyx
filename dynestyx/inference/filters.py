@@ -54,29 +54,69 @@ from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _array_has_plate_dims,
+    _dist_has_plate_batch_dims,
     _leaf_is_plate_batched,
+    _path_field_names,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
-    """Build in_axes for a pytree based on whether leaves have plate batch dims.
-    i.e., decide whether or not to vmap over a particular leaf.
+    """Build ``in_axes`` for a pytree based on which leaves carry plate batch dims.
 
-    A leaf is considered batched if it is a JAX array whose leading dimensions
-    match the plate_shapes tuple. Batched leaves get in_axes=0; others get None.
-    The same in_axes can be reused for each nested vmap call since each vmap
-    peels off one leading dimension.
+    Returns a pytree shaped like ``tree`` whose leaves are either ``0`` (the
+    leading axis is a plate batch axis to ``vmap`` over) or ``None`` (leaf is
+    shared across plate members and should be broadcast). Distributions are
+    handled in two cases:
+
+    - **Unbatched distributions** are stopped at as opaque leaves (via
+      ``is_leaf``) and assigned ``None`` — they're shared across plate members
+      and ``vmap`` would error if asked to map over a non-existent axis.
+    - **Batched distributions** are descended into so their parameter arrays
+      (loc, scale_tril, …) can each be marked individually. This matters
+      because, e.g., a ``MultivariateNormal`` initial condition may have a
+      plate-batched ``loc.shape == (N, d)`` paired with a shared
+      ``scale_tril.shape == (d, d)``.
+
+    Initial-condition arrays use a stricter rule (``min_suffix_ndim=1``): a
+    rank-1 suffix is required for the leaf to count as plate-batched. This
+    encodes the formal version of the ambiguity rule from ``dsx.plate``: an IC
+    ``loc`` of shape ``(N,)`` could be either a per-member scalar IC or a
+    shared length-``N`` vector IC, so we conservatively treat it as shared.
+    Users should add an explicit event axis (``(N, 1)`` or ``.to_event(1)``).
+
+    The same ``in_axes`` tree is reusable across nested ``vmap`` calls: each
+    ``vmap`` peels exactly one leading axis, and a leaf marked ``0`` here means
+    "has *some* plate prefix" — which stays correct as plate axes are consumed
+    one at a time from the outside in.
     """
 
-    def _is_distribution_leaf(node) -> bool:
-        return isinstance(node, numpyro.distributions.Distribution)
+    def _is_unbatched_distribution_leaf(node) -> bool:
+        return isinstance(
+            node, numpyro.distributions.Distribution
+        ) and not _dist_has_plate_batch_dims(node, plate_shapes)
 
-    def _axis(leaf):
-        return 0 if _leaf_is_plate_batched(leaf, plate_shapes) else None
+    def _axis(path, leaf):
+        if isinstance(leaf, numpyro.distributions.Distribution):
+            # Reached only for shared (unbatched) distributions: see is_leaf.
+            return None
+        if "initial_condition" in _path_field_names(path):
+            # IC params have a vector event (loc) or matrix event (cov).
+            # Require min_suffix_ndim=1 so a bare (N,) loc is treated as
+            # shared rather than as a per-member scalar IC.
+            return (
+                0
+                if _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=1)
+                else None
+            )
+        return 0 if _leaf_is_plate_batched(leaf, plate_shapes, path=path) else None
 
-    return jax.tree.map(_axis, tree, is_leaf=_is_distribution_leaf)
+    return jax.tree_util.tree_map_with_path(
+        _axis,
+        tree,
+        is_leaf=_is_unbatched_distribution_leaf,
+    )
 
 
 def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):

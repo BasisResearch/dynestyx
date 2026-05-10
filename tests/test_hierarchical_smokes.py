@@ -5,9 +5,10 @@ import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 import pytest
-from numpyro.infer import init_to_value
+from numpyro.infer import Predictive, init_to_value
 
 import dynestyx as dsx
+from dynestyx import DiscreteTimeSimulator
 from dynestyx.inference.filter_configs import EKFConfig, KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
@@ -95,6 +96,185 @@ def hierarchical_lti_model_fixed_noise(obs_times=None, obs_values=None, M=3, **k
             obs_times=obs_times,
             obs_values=obs_values,
         )
+
+
+def vector_hierarchical_lti_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=3,
+    batched_initial_cov=False,
+    independent_x0_mean=False,
+    **kwargs,
+):
+    """2D hierarchy with vector trajectory effects and batched initial means."""
+    state_dim = 2
+    A = 0.75 * jnp.eye(state_dim) + 0.08 * jnp.array([[0.0, 1.0], [-1.0, 0.0]])
+    Q = 0.05 * jnp.eye(state_dim)
+    H = jnp.eye(state_dim)
+    R = 0.10 * jnp.eye(state_dim)
+
+    mu_global = numpyro.sample(
+        "mu_global", dist.Normal(jnp.zeros(state_dim), 0.5).to_event(1)
+    )
+    sigma = numpyro.sample(
+        "sigma", dist.HalfNormal(0.3 * jnp.ones(state_dim)).to_event(1)
+    )
+
+    with dsx.plate("trajectories", M):
+        mu_i = numpyro.sample("mu_i", dist.Normal(mu_global, sigma).to_event(1))
+        if independent_x0_mean:
+            x0_mean_i = numpyro.sample("x0_mean_i", dist.Normal(mu_i, 0.1).to_event(1))
+        else:
+            x0_mean_i = mu_i
+
+        if batched_initial_cov:
+            x0_scale = numpyro.sample("x0_scale", dist.HalfNormal(0.2))
+            initial_cov = (0.05 + x0_scale[..., None, None]) * jnp.broadcast_to(
+                jnp.eye(state_dim), (M, state_dim, state_dim)
+            )
+        else:
+            initial_cov = 0.2 * jnp.eye(state_dim)
+
+        dynamics = LTI_discrete(
+            A=A,
+            Q=Q,
+            H=H,
+            R=R,
+            b=mu_i,
+            initial_mean=x0_mean_i,
+            initial_cov=initial_cov,
+        )
+
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
+def shared_lti_matching_plate_dim_model(obs_times=None, obs_values=None, M=2, **kwargs):
+    """Shared 2D LTI whose vector fields happen to start with plate size."""
+    state_dim = 2
+    shared_bias = jnp.array([0.1, -0.2])
+    dynamics = LTI_discrete(
+        A=jnp.array([[0.8, 0.1], [-0.1, 0.7]]),
+        Q=0.05 * jnp.eye(state_dim),
+        H=jnp.eye(state_dim),
+        R=0.10 * jnp.eye(state_dim),
+        b=shared_bias,
+        initial_mean=shared_bias,
+    )
+
+    with dsx.plate("trajectories", M):
+        dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+
+
+def _make_vector_hierarchical_lti_data(M=3, T=8, **model_kwargs):
+    obs_times = jnp.arange(T, dtype=jnp.float32)
+    predictive = Predictive(vector_hierarchical_lti_model, num_samples=1)
+    with DiscreteTimeSimulator():
+        synthetic = predictive(
+            jr.PRNGKey(0),
+            predict_times=obs_times,
+            M=M,
+            **model_kwargs,
+        )
+    obs_values = synthetic["f_observations"][0, :, 0]
+    return obs_times, obs_values, synthetic
+
+
+def test_vector_hierarchical_lti_simulator_batched_initial_mean_shared_cov():
+    """Simulator slices plate-batched vector bias and initial mean."""
+    M = 3
+    obs_times, _, synthetic = _make_vector_hierarchical_lti_data(M=M)
+
+    assert synthetic["mu_i"].shape == (1, M, 2)
+    assert synthetic["f_states"].shape == (1, M, 1, len(obs_times), 2)
+    assert synthetic["f_observations"].shape == (1, M, 1, len(obs_times), 2)
+
+
+def test_vector_hierarchical_lti_filter_loglik_and_batched_initial_cov():
+    """Filter handles plate-batched initial means and batched covariance."""
+    M = 3
+    obs_times, obs_values, synthetic = _make_vector_hierarchical_lti_data(
+        M=M,
+        batched_initial_cov=True,
+    )
+
+    assert synthetic["x0_scale"].shape == (1, M)
+
+    with Filter(filter_config=KFConfig(filter_source="cd_dynamax")):
+        tr = numpyro.handlers.trace(
+            numpyro.handlers.seed(vector_hierarchical_lti_model, jr.PRNGKey(1))
+        ).get_trace(
+            obs_times=obs_times,
+            obs_values=obs_values,
+            M=M,
+            batched_initial_cov=True,
+        )
+
+    loglik = tr["f_marginal_loglik"]["value"]
+    assert loglik.shape == (M,)
+    assert jnp.isfinite(loglik).all()
+
+
+def test_vector_hierarchical_lti_tiny_nuts_shapes_with_independent_initial_mean():
+    """Tiny NUTS run returns vector plate parameters with event axis preserved."""
+    M = 3
+    obs_times, obs_values, _ = _make_vector_hierarchical_lti_data(
+        M=M,
+        independent_x0_mean=True,
+    )
+
+    init_values = {
+        "mu_global": jnp.zeros(2),
+        "sigma": 0.2 * jnp.ones(2),
+        "mu_i": jnp.zeros((M, 2)),
+        "x0_mean_i": jnp.zeros((M, 2)),
+    }
+
+    with Filter(filter_config=KFConfig(filter_source="cd_dynamax")):
+        inference = MCMCInference(
+            mcmc_config=NUTSConfig(
+                num_samples=1,
+                num_warmup=1,
+                num_chains=1,
+                mcmc_source="numpyro",
+                init_strategy=init_to_value(values=init_values),
+            ),
+            model=vector_hierarchical_lti_model,
+        )
+        posterior = inference.run(
+            jr.PRNGKey(42),
+            obs_times,
+            obs_values,
+            M=M,
+            independent_x0_mean=True,
+        )
+
+    assert posterior["mu_global"].shape[-1] == 2
+    assert posterior["sigma"].shape[-1] == 2
+    assert posterior["mu_i"].shape[-2:] == (M, 2)
+    assert posterior["x0_mean_i"].shape[-2:] == (M, 2)
+
+
+def test_unbatched_vector_fields_matching_plate_size_remain_shared():
+    """Unbatched vector and matrix LTI fields are not sliced as plate axes."""
+    M = 2
+    obs_times = jnp.arange(6, dtype=jnp.float32)
+    obs_values = jnp.zeros((M, len(obs_times), 2))
+
+    with Filter(filter_config=KFConfig(filter_source="cd_dynamax")):
+        tr = numpyro.handlers.trace(
+            numpyro.handlers.seed(shared_lti_matching_plate_dim_model, jr.PRNGKey(0))
+        ).get_trace(obs_times=obs_times, obs_values=obs_values, M=M)
+
+    loglik = tr["f_marginal_loglik"]["value"]
+    assert loglik.shape == (M,)
+    assert jnp.isfinite(loglik).all()
 
 
 def test_hierarchical_lti_cuthbert_ekf_smoke():
