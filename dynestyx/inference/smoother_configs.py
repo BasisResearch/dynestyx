@@ -18,25 +18,58 @@ CDKFSmootherType = Literal["cd_smoother_1", "cd_smoother_2"]
 
 
 @dataclasses.dataclass
-class SmootherConfig(abc.ABC):
-    """Shared base class for all smoother configs.
+class BaseSmootherConfig(abc.ABC):
+    r"""Shared base class for all smoother configs.
 
     You do not instantiate this class directly; use one of the concrete
     subclasses (e.g. `KFSmootherConfig`, `PFSmootherConfig`).
 
     Concrete smoother configs inherit from their corresponding filter configs,
     so backend selection, filter tuning, continuous-time solver options, and
-    `record_smoothed_*` fields follow the same conventions as
+    filter recording fields follow the same conventions as
     `dynestyx.inference.filter_configs`.
+
+    The `record_smoothed_*` fields let you save intermediate smoothing outputs
+    into the NumPyro trace as `numpyro.deterministic` sites, making them
+    accessible after inference (e.g. for plotting smoothed trajectories).
+    `None` defers to the backend's default for that quantity.
+
+    Attributes:
+        record_smoothed_states_mean (bool | None): Save the posterior smoothing
+            mean \(\mathbb{E}[x_t \mid y_{1:T}]\) at each time step.
+        record_smoothed_states_cov (bool | None): Save the full smoothing
+            covariance at each time step. Can be large; prefer
+            `record_smoothed_states_cov_diag` for high-dimensional states.
+        record_smoothed_states_cov_diag (bool | None): Save only the marginal
+            smoothing variances at each time step.
+        record_smoothed_particles (bool | None): Save smoothed particles for
+            particle smoothers.
+        record_smoothed_log_weights (bool | None): Save smoothed particle log
+            weights for particle smoothers.
+        record_smoothed_states_chol_cov (bool | None): Save the Cholesky factor
+            of the smoothing covariance when exposed by the backend.
+        record_max_elems (int): Hard cap on total scalar elements saved across
+            all `record_*` sites. Prevents accidentally filling device memory
+            for long sequences or large state spaces. Defaults to `100_000`.
     """
 
+    record_smoothed_states_mean: bool | None = None
+    record_smoothed_states_cov: bool | None = None
+    record_smoothed_states_cov_diag: bool | None = None
+    record_smoothed_particles: bool | None = None
+    record_smoothed_log_weights: bool | None = None
+    record_smoothed_states_chol_cov: bool | None = None
+    record_max_elems: int = 100_000
+
     def __post_init__(self):
-        if type(self) is SmootherConfig:
-            raise TypeError("SmootherConfig is abstract and cannot be instantiated.")
+        if type(self) is BaseSmootherConfig:
+            raise TypeError(
+                "BaseSmootherConfig is abstract and cannot be instantiated."
+            )
 
 
 @dataclasses.dataclass
-class KFSmootherConfig(KFConfig, SmootherConfig):
+class KFSmootherConfig(KFConfig, BaseSmootherConfig):
     r"""Rauch-Tung-Striebel Kalman Smoother (RTS) for discrete-time models.
 
     The exact Bayesian smoother for discrete-time linear-Gaussian state-space
@@ -89,7 +122,7 @@ class KFSmootherConfig(KFConfig, SmootherConfig):
 
 
 @dataclasses.dataclass
-class EKFSmootherConfig(EKFConfig, SmootherConfig):
+class EKFSmootherConfig(EKFConfig, BaseSmootherConfig):
     r"""Extended Kalman Smoother (EKS) for discrete-time models.
 
     The Gaussian smoother corresponding to `EKFConfig`. Use this for
@@ -126,7 +159,7 @@ class EKFSmootherConfig(EKFConfig, SmootherConfig):
 
 
 @dataclasses.dataclass
-class UKFSmootherConfig(UKFConfig, SmootherConfig):
+class UKFSmootherConfig(UKFConfig, BaseSmootherConfig):
     r"""Unscented Kalman Smoother (UKS) for discrete-time models.
 
     A derivative-free Gaussian smoother that handles nonlinearities by
@@ -171,7 +204,7 @@ class UKFSmootherConfig(UKFConfig, SmootherConfig):
 
 
 @dataclasses.dataclass
-class PFSmootherConfig(PFConfig, SmootherConfig):
+class PFSmootherConfig(PFConfig, BaseSmootherConfig):
     r"""Particle smoother for discrete-time models.
 
     Use this for nonlinear or non-Gaussian discrete-time models. Particle
@@ -229,7 +262,7 @@ class PFSmootherConfig(PFConfig, SmootherConfig):
 
 
 @dataclasses.dataclass
-class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, SmootherConfig):
+class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, BaseSmootherConfig):
     r"""Continuous-discrete Kalman Smoother (CD-KS).
 
     The exact Bayesian smoother for continuous-time linear-Gaussian models with
@@ -273,7 +306,7 @@ class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, SmootherConfig):
 
 
 @dataclasses.dataclass
-class ContinuousTimeEKFSmootherConfig(ContinuousTimeEKFConfig, SmootherConfig):
+class ContinuousTimeEKFSmootherConfig(ContinuousTimeEKFConfig, BaseSmootherConfig):
     r"""Continuous-discrete Extended Kalman Smoother (CD-EKS).
 
     Gaussian smoother for mildly nonlinear continuous-time dynamics with
@@ -321,7 +354,22 @@ ContinuousTimeSmootherConfigs: tuple[type, ...] = (
     ContinuousTimeEKFSmootherConfig,
 )
 
+
+def _config_to_smoother_record_kwargs(config: BaseSmootherConfig) -> dict:
+    """Build smoother record kwargs dict from config."""
+    return {
+        "record_smoothed_states_mean": config.record_smoothed_states_mean,
+        "record_smoothed_states_cov": config.record_smoothed_states_cov,
+        "record_smoothed_states_cov_diag": config.record_smoothed_states_cov_diag,
+        "record_smoothed_particles": config.record_smoothed_particles,
+        "record_smoothed_log_weights": config.record_smoothed_log_weights,
+        "record_smoothed_states_chol_cov": config.record_smoothed_states_chol_cov,
+        "record_max_elems": config.record_max_elems,
+    }
+
+
 __all__ = [
+    "BaseSmootherConfig",
     "CDKFSmootherType",
     "ContinuousTimeEKFSmootherConfig",
     "ContinuousTimeKFSmootherConfig",
@@ -331,6 +379,8 @@ __all__ = [
     "KFSmootherConfig",
     "PFBackwardSamplingMethod",
     "PFSmootherConfig",
-    "SmootherConfig",
     "UKFSmootherConfig",
 ]
+
+
+SmootherConfig = BaseSmootherConfig

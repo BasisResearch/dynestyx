@@ -14,24 +14,26 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
 )
 
 from dynestyx.inference.filter_configs import (
-    BaseFilterConfig,
     EKFConfig,
     KFConfig,
     UKFConfig,
-    _config_to_smoother_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
     _prepare_inputs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.smoother_configs import (
+    BaseSmootherConfig,
+    _config_to_smoother_record_kwargs,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
 
 
 def compute_cd_dynamax_discrete_smoother(
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
+    filter_config: BaseSmootherConfig,
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
@@ -96,7 +98,7 @@ def _add_smoother_sites(name: str, posterior, record_kwargs: dict) -> None:
 def run_discrete_smoother(
     name: str,
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
+    filter_config: BaseSmootherConfig,
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,

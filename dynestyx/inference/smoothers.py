@@ -35,6 +35,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
 from dynestyx.inference.smoother_configs import (
+    BaseSmootherConfig,
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
     ContinuousTimeSmootherConfigs,
@@ -42,7 +43,6 @@ from dynestyx.inference.smoother_configs import (
     EKFSmootherConfig,
     KFSmootherConfig,
     PFSmootherConfig,
-    SmootherConfig,
     UKFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
@@ -130,7 +130,7 @@ def _smoothed_posterior_to_dists(
 
 def _cuthbert_smoothed_states_to_dists(
     states,
-    config: SmootherConfig,
+    config: BaseSmootherConfig,
     *,
     plate_shapes: tuple[int, ...],
 ):
@@ -259,7 +259,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             if self.smoother_config is not None
             else _default_smoother_config(dynamics)
         )
-        if not isinstance(config, SmootherConfig):
+        if not isinstance(config, BaseSmootherConfig):
             valid = _valid_smoother_config_names(
                 continuous_time=dynamics.continuous_time
             )
@@ -583,6 +583,6 @@ __all__ = [
     "KFSmootherConfig",
     "PFSmootherConfig",
     "Smoother",
-    "SmootherConfig",
+    "BaseSmootherConfig",
     "UKFSmootherConfig",
 ]

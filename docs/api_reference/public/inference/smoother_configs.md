@@ -1,6 +1,6 @@
 # Smoother Configurations
 
-`Smoother` is configured using explicit `SmootherConfig` classes.
+`Smoother` is configured using explicit `*SmootherConfig` classes.
 
 Use smoother configs instead of filter configs when entering a `Smoother`
 handler. The classes inherit the familiar filtering options, plus smoother

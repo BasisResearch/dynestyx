@@ -14,7 +14,6 @@ from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
 
-from dynestyx.inference.filter_configs import _config_to_smoother_record_kwargs
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
@@ -29,6 +28,7 @@ from dynestyx.inference.smoother_configs import (
     EKFSmootherConfig,
     KFSmootherConfig,
     PFSmootherConfig,
+    _config_to_smoother_record_kwargs,
 )
 from dynestyx.models import (
     DynamicalModel,

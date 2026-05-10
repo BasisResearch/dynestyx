@@ -12,7 +12,6 @@ from cd_dynamax import (
     cdnlgssm_smoother,
 )
 
-from dynestyx.inference.filter_configs import _config_to_smoother_record_kwargs
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
@@ -20,6 +19,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
 from dynestyx.inference.smoother_configs import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
+    _config_to_smoother_record_kwargs,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
