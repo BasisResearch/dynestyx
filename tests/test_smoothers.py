@@ -426,8 +426,8 @@ def _explicit_rollout_metadata_model(predict_times=None):
     )
 
 
-def test_simulator_prioritizes_smoothed_rollout_metadata_when_both_present():
-    with pytest.raises(ValueError, match="smoothed_times"):
+def test_simulator_rejects_smoothed_and_filtered_rollout_metadata_together():
+    with pytest.raises(ValueError, match="filtered_times and filtered_dists"):
         with seed(rng_seed=jr.PRNGKey(0)):
             with DiscreteTimeSimulator(n_simulations=1):
                 _explicit_rollout_metadata_model(

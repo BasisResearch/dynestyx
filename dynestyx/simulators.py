@@ -254,6 +254,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         dynamics = _ensure_continuous_bm_dim(dynamics)
 
         use_smoothed_rollout = smoothed_times is not None or smoothed_dists is not None
+        if use_smoothed_rollout and (
+            filtered_times is not None or filtered_dists is not None
+        ):
+            raise ValueError(
+                "Smoothed rollout metadata was provided alongside filtered rollout "
+                "metadata. When smoothed_times or smoothed_dists is provided, "
+                "filtered_times and filtered_dists must be None."
+            )
         rollout_times = smoothed_times if use_smoothed_rollout else filtered_times
         rollout_dists = smoothed_dists if use_smoothed_rollout else filtered_dists
         rollout_label = "smoothed" if use_smoothed_rollout else "filtered"
