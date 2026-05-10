@@ -82,7 +82,7 @@ def _validate_future_only_predict_times(
     _ = eqx.error_if(
         predict_times,
         jnp.any(predict_times < obs_end),
-        "Smoother prediction only supports predict_times >= max(obs_times); in-window smoothing predictions are not implemented yet.",
+        "Smoother prediction only supports predict_times >= max(obs_times); in-window smoothing predictions are not implemented yet. Please use `Filter` for in-window predictions for now.",
     )
     return predict_times
 
