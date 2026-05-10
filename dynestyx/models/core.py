@@ -73,6 +73,12 @@ class DynamicalModel(eqx.Module):
         - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
         - Logic for control_model is not implemented yet.
         - `t0` different from `obs_times[0]` is not supported yet.
+
+    Plate note:
+        Inside ``dsx.plate``, state and observation dimensions are inferred from
+        distribution ``event_shape`` rather than leading plate batch axes. This
+        allows batched initial-condition parameters such as
+        ``initial_mean.shape == (N, state_dim)``.
     
     """
 
@@ -115,8 +121,27 @@ class DynamicalModel(eqx.Module):
         self.control_model = control_model
         self.t0 = None if t0 is None else as_scalar_time_array(t0, name="t0")
 
+        # State-dim inference depends on whether we're inside a plate.
+        #
+        # Outside plates, ``_infer_vector_dim_from_distribution`` reads the
+        # distribution's full sample shape: a rank-1 sample is treated as a
+        # vector event of that length. This is the historical convention and
+        # matches typical single-trajectory usage.
+        #
+        # Inside a plate, that convention is wrong. A sample of shape ``(N,
+        # d)`` is plate-batched (``N`` independent members, each with a
+        # ``d``-dim state); reading the full sample shape would misinterpret
+        # ``N`` as the state dim. We switch to ``event_shape``-based inference
+        # via ``allow_batch_shape=True`` so leading plate axes are ignored.
+        #
+        # See ``dsx.plate`` in dynestyx/handlers.py for the user-facing shape
+        # contract this enforces.
+        _inside_plate = _inside_numpyro_plate_context()
+
         inferred_state_dim = _infer_vector_dim_from_distribution(
-            initial_condition, "initial_condition"
+            initial_condition,
+            "initial_condition",
+            allow_batch_shape=_inside_plate,
         )
         _validate_state_dim(state_dim, inferred_state_dim)
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
@@ -126,8 +151,6 @@ class DynamicalModel(eqx.Module):
 
         # Skip shape validation when inside a numpyro plate context, since
         # batched parameters produce shapes that don't match unbatched expectations.
-        _inside_plate = _inside_numpyro_plate_context()
-
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.

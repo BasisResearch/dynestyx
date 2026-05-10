@@ -42,6 +42,12 @@ def sample(
     The `sample` method calls `_sample_intp`, which is defined as a `defop` in `effectful`.
     This is where any real "work" is done, after input validation.
 
+    Shape note:
+        Inside ``dsx.plate``, observation arrays use leading plate axes followed
+        by time and event axes, e.g. ``(N, T, obs_dim)``. Model parameters follow
+        the same leading-plate, trailing-event convention. See :class:`plate`
+        for the full plated-shape contract.
+
     Parameters:
         name: Name of the sample site.
         dynamics: Dynamical model to sample from.
@@ -172,13 +178,107 @@ class HandlesSelf:
 
 
 class plate(ObjectInterpretation):
-    """Hierarchical plate for batched trajectories. Allows for multiple levels of hierarchy.
+    """Hierarchical plate for batched trajectories.
 
-    Wraps ``numpyro.plate`` for parameter sampling semantics and intercepts
-    ``dsx.sample`` to inject ``plate_shapes`` into the handler chain via ``fwd()``.
-    Nested plate handlers run from inner to outer under ``effectful`` dispatch,
-    so each handler appends its size to preserve NumPyro's effective batch order
-    (inner plate is the leftmost data batch dim).
+    ``dsx.plate`` wraps ``numpyro.plate`` for parameter sampling semantics and
+    intercepts ``dsx.sample`` to pass plate sizes to simulator and filter
+    handlers. Use it when a dynamical system has conditionally independent
+    members, such as multiple trajectories, patients, groups, or treatment
+    arms.
+
+    Shape semantics:
+        Dynestyx treats plate axes as leading data-batch axes. Time axes come
+        after plate axes in observation arrays, and state/observation event axes
+        remain trailing axes.
+
+        For one plate of size ``N``:
+
+        ```python
+        obs_values          # (N, T, obs_dim), or (N, T) for scalar observations
+        mu_i                # (N, state_dim), a vector parameter per trajectory
+        initial_mean        # (N, state_dim), or shared as (state_dim,)
+        initial_cov         # (N, state_dim, state_dim), or shared as (state_dim, state_dim)
+        prior["f_states"]   # (num_samples, N, n_sim, T, state_dim)
+        ```
+
+        Distribution-valued model components use their NumPyro
+        ``batch_shape``/``event_shape`` split: leading plate dimensions are
+        batch dimensions, while state and observation sizes are inferred from
+        ``event_shape``. Thus a batched initial condition may have
+        ``loc.shape == (N, state_dim)`` with either shared or batched covariance.
+
+        Built-in LTI vector fields, including transition/drift and observation
+        biases, may be shared or plate-batched:
+
+        ```python
+        with dsx.plate("trajectories", N):
+            mu_i = numpyro.sample(
+                "mu_i",
+                dist.Normal(mu_global, sigma).to_event(1),
+            )  # (N, state_dim)
+
+            dynamics = LTI_discrete(
+                A=A,
+                Q=Q,
+                H=H,
+                R=R,
+                b=mu_i,              # plate-batched vector bias
+                initial_mean=mu_i,   # plate-batched initial mean
+            )
+        ```
+
+        Ambiguous arrays are kept shared rather than sliced. In particular, a
+        shared vector whose length happens to equal ``N`` is not treated as
+        plate-batched unless it is a known vector-valued model field with an
+        explicit event axis, such as ``(N, state_dim)``. For one-dimensional
+        vector fields, prefer explicit singleton event axes like ``(N, 1)``.
+        Nested plates follow the same rule with multiple leading plate axes.
+
+    Why event shapes drive sizing:
+        Inside a plate, ``state_dim`` and ``observation_dim`` are inferred from
+        a distribution's NumPyro ``event_shape``, not from the full sample
+        shape. The full sample shape includes leading plate batch axes, which
+        are independent-member dimensions, not event dimensions; using it
+        would misread ``(N, d)`` as ``state_dim == N``. Sticking to
+        ``event_shape`` keeps the per-member event size unambiguous.
+
+        The contract for a single plate of size ``N``:
+
+        | Sampled shape   | event_shape   | Interpretation                   |
+        | --------------- | ------------- | -------------------------------- |
+        | ``(d,)``        | ``(d,)``      | Shared vector event, broadcast.  |
+        | ``(N, d)``      | ``(d,)``      | Per-member vector event of dim d.|
+        | ``(N,)``        | ``()``        | Per-member **scalar** event.     |
+
+        The third row is the subtle one: ``dist.Normal(mu, sigma)`` with
+        ``mu.shape == (N,)`` produces ``event_shape == ()``, which we treat as
+        ``state_dim == 1``. If the intent is a 1-D *vector* state with one
+        entry per member, wrap with ``.to_event(1)`` or use a vector-valued
+        distribution (``dist.MultivariateNormal``) so the rank-1 axis is an
+        event axis. This is the same ambiguity rule as the shared-vector case
+        above, applied at the distribution level.
+
+        Nested plates extend this with multiple leading batch axes; the inner
+        plate is the leftmost data batch axis, matching NumPyro's convention.
+
+    Output axis ordering:
+        Predictive draws and filter outputs preserve a consistent axis order:
+
+        ``(num_samples, *plate_axes_inner_to_outer, n_sim, T, *event_shape)``
+
+        For example, with one plate of size ``N`` and a vector state:
+
+        ```python
+        prior["f_states"]        # (num_samples, N, n_sim, T, state_dim)
+        prior["f_observations"]  # (num_samples, N, n_sim, T, obs_dim)
+        ```
+
+        ``num_samples`` comes first (NumPyro ``Predictive``), then plate axes
+        from inner to outer (the inner plate is the leftmost data batch axis,
+        so it appears immediately after ``num_samples``), then ``n_sim`` from
+        the simulator, then time, then the event axes. ``flatten_draws`` is
+        the standard helper for collapsing ``(num_samples, n_sim)`` for
+        plotting/credible intervals.
 
     Examples:
         >>> with dsx.plate("trajectories", M):
