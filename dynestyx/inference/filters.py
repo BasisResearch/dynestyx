@@ -54,7 +54,6 @@ from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _array_has_plate_dims,
-    _ensure_continuous_bm_dim,
     _leaf_is_plate_batched,
 )
 
@@ -374,8 +373,6 @@ class Filter(BaseLogFactorAdder):
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
 
-        dynamics = _ensure_continuous_bm_dim(dynamics)
-
         config = (
             self.filter_config
             if self.filter_config is not None
@@ -401,8 +398,10 @@ class Filter(BaseLogFactorAdder):
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
                 raise ValueError(
-                    f"Invalid filter config: {type(config).__name__}. "
-                    f"Valid config types: {valid}"
+                    "Continuous-time models require a continuous-time filter config. "
+                    "If you want to use a discrete-time filter, nest `Discretizer()` "
+                    "inside `Filter()`. "
+                    f"Got {type(config).__name__}; valid continuous-time config types: {valid}."
                 )
             return _filter_continuous_time(
                 name,

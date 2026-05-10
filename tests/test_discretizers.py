@@ -17,9 +17,12 @@ from dynestyx.inference.filter_configs import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiagonalDiffusion,
     DiracIdentityObservation,
     DynamicalModel,
+    FullDiffusion,
     GaussianStateEvolution,
+    ScalarDiffusion,
 )
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.solvers import euler_maruyama_loc_cov
@@ -27,57 +30,68 @@ from tests.models import continuous_time_stochastic_l63_model_dirac_obs
 
 
 def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
-    return ContinuousTimeStateEvolution(
+    cte = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: jnp.zeros_like(x),
-        diffusion_coefficient=lambda x, u, t: jnp.ones((1, 1)),
-        bm_dim=1,
+        diffusion=FullDiffusion(lambda x, u, t: jnp.ones((1, 1)), bm_dim=1),
     )
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=cte,
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]),
+            R=jnp.array([[1.0]]),
+        ),
+        control_dim=0,
+    )
+    assert isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution)
+    return dynamics.state_evolution
 
 
 def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
     if diffusion_form == "full":
-        return ContinuousTimeStateEvolution(
+        cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros_like(x),
-            diffusion_coefficient=jnp.eye(2),
-            diffusion_type="full",
-            bm_dim=2,
+            diffusion=FullDiffusion(jnp.eye(2), bm_dim=2),
         )
-    if diffusion_form == "diag":
-        return ContinuousTimeStateEvolution(
+    elif diffusion_form == "diag":
+        cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros_like(x),
-            diffusion_coefficient=jnp.ones((2,)),
-            diffusion_type="diag",
-            bm_dim=2,
+            diffusion=DiagonalDiffusion(jnp.ones((2,)), bm_dim=2),
         )
-    if diffusion_form == "scalar":
-        return ContinuousTimeStateEvolution(
+    elif diffusion_form == "scalar":
+        cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros_like(x),
-            diffusion_coefficient=jnp.array(1.0),
-            diffusion_type="scalar",
-            bm_dim=2,
+            diffusion=ScalarDiffusion(jnp.array(1.0), bm_dim=2),
         )
-    if diffusion_form == "callable_full":
-        return ContinuousTimeStateEvolution(
+    elif diffusion_form == "callable_full":
+        cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros_like(x),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(2),
-            diffusion_type="full",
-            bm_dim=2,
+            diffusion=FullDiffusion(lambda x, u, t: jnp.eye(2), bm_dim=2),
         )
-    if diffusion_form == "callable_diag":
-        return ContinuousTimeStateEvolution(
+    elif diffusion_form == "callable_diag":
+        cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros((2,)),
-            diffusion_coefficient=lambda x, u, t: jnp.ones((2,)),
-            diffusion_type="diag",
-            bm_dim=2,
+            diffusion=DiagonalDiffusion(lambda x, u, t: jnp.ones((2,)), bm_dim=2),
         )
-    if diffusion_form == "callable_scalar":
-        return ContinuousTimeStateEvolution(
+    elif diffusion_form == "callable_scalar":
+        cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros_like(x),
-            diffusion_coefficient=lambda x, u, t: jnp.array(1.0),
-            diffusion_type="scalar",
-            bm_dim=2,
+            diffusion=ScalarDiffusion(lambda x, u, t: jnp.array(1.0), bm_dim=2),
         )
-    raise ValueError(f"Unknown diffusion form: {diffusion_form}")
+    else:
+        raise ValueError(f"Unknown diffusion form: {diffusion_form}")
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(2), jnp.eye(2)),
+        state_evolution=cte,
+        observation_model=LinearGaussianObservation(
+            H=jnp.eye(2),
+            R=jnp.eye(2),
+        ),
+        control_dim=0,
+    )
+    assert isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution)
+    return dynamics.state_evolution
 
 
 def test_euler_maruyama_returns_gaussian_state_evolution_with_callable_cov():

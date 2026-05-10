@@ -5,7 +5,13 @@ import numpyro
 import numpyro.distributions as dist
 import pytest
 
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models import (
+    ContinuousTimeStateEvolution,
+    DiagonalDiffusion,
+    DynamicalModel,
+    FullDiffusion,
+    ScalarDiffusion,
+)
 
 
 def _make_diffusion_spec(
@@ -15,34 +21,30 @@ def _make_diffusion_spec(
     sigma=None,
 ):
     if diffusion_form == "full":
-        return jnp.ones((state_dim, 1)), None, None
+        return FullDiffusion(jnp.ones((state_dim, 1)))
     if diffusion_form == "diag":
-        return jnp.ones((state_dim,)), "diag", state_dim
+        return DiagonalDiffusion(jnp.ones((state_dim,)), bm_dim=state_dim)
     if diffusion_form == "scalar":
-        return jnp.array(1.0), "scalar", state_dim
+        return ScalarDiffusion(jnp.array(1.0), bm_dim=state_dim)
     if diffusion_form == "callable_full":
-        return (
+        return FullDiffusion(
             (lambda x, u, t: sigma[..., None, None] * jnp.ones((state_dim, 1)))
             if sigma is not None
-            else (lambda x, u, t: jnp.ones((state_dim, 1))),
-            None,
-            None,
+            else (lambda x, u, t: jnp.ones((state_dim, 1)))
         )
     if diffusion_form == "callable_diag":
-        return (
+        return DiagonalDiffusion(
             (lambda x, u, t: sigma[..., None] * jnp.ones((state_dim,)))
             if sigma is not None
             else (lambda x, u, t: jnp.ones((state_dim,))),
-            "diag",
-            state_dim,
+            bm_dim=state_dim,
         )
     if diffusion_form == "callable_scalar":
-        return (
+        return ScalarDiffusion(
             (lambda x, u, t: sigma[..., None])
             if sigma is not None
             else (lambda x, u, t: jnp.array([1.0])),
-            "scalar",
-            state_dim,
+            bm_dim=state_dim,
         )
     raise ValueError(f"Unknown diffusion form: {diffusion_form}")
 
@@ -56,16 +58,14 @@ def test_bm_dim_resolved_outside_plate(diffusion_form):
     state_dim = 2
     expected_bm_dim = 1 if "full" in diffusion_form else state_dim
 
-    diffusion_coefficient, diffusion_type, bm_dim = _make_diffusion_spec(
+    diffusion = _make_diffusion_spec(
         diffusion_form,
         state_dim=state_dim,
     )
 
     state_evo = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: -x,
-        diffusion_coefficient=diffusion_coefficient,
-        diffusion_type=diffusion_type,
-        bm_dim=bm_dim,
+        diffusion=diffusion,
     )
     dynamics = DynamicalModel(
         initial_condition=dist.MultivariateNormal(
@@ -76,8 +76,9 @@ def test_bm_dim_resolved_outside_plate(diffusion_form):
             x, 0.1 * jnp.eye(state_dim)
         ),
     )
-    assert dynamics.state_evolution.bm_dim == expected_bm_dim, (
-        f"Expected bm_dim={expected_bm_dim}, got {dynamics.state_evolution.bm_dim}"
+    assert dynamics.state_evolution.diffusion is not None
+    assert dynamics.state_evolution.diffusion.bm_dim == expected_bm_dim, (
+        f"Expected bm_dim={expected_bm_dim}, got {dynamics.state_evolution.diffusion.bm_dim}"
     )
 
 
@@ -94,7 +95,7 @@ def test_bm_dim_resolved_inside_plate(diffusion_form):
     def model():
         with numpyro.plate("trajectories", M):
             sigma = numpyro.sample("sigma", dist.HalfNormal(1.0))
-            diffusion_coefficient, diffusion_type, bm_dim = _make_diffusion_spec(
+            diffusion = _make_diffusion_spec(
                 diffusion_form,
                 state_dim=state_dim,
                 sigma=sigma,
@@ -102,9 +103,7 @@ def test_bm_dim_resolved_inside_plate(diffusion_form):
 
             state_evo = ContinuousTimeStateEvolution(
                 drift=lambda x, u, t: -x,
-                diffusion_coefficient=diffusion_coefficient,
-                diffusion_type=diffusion_type,
-                bm_dim=bm_dim,
+                diffusion=diffusion,
             )
             dynamics = DynamicalModel(
                 initial_condition=dist.MultivariateNormal(
@@ -115,11 +114,11 @@ def test_bm_dim_resolved_inside_plate(diffusion_form):
                     x, 0.1 * jnp.eye(state_dim)
                 ),
             )
-            assert dynamics.state_evolution.bm_dim is not None, (
+            assert dynamics.state_evolution.diffusion is not None, (
                 "bm_dim should not be None after DynamicalModel construction in plate"
             )
-            assert dynamics.state_evolution.bm_dim == expected_bm_dim, (
-                f"Expected bm_dim={expected_bm_dim}, got {dynamics.state_evolution.bm_dim}"
+            assert dynamics.state_evolution.diffusion.bm_dim == expected_bm_dim, (
+                f"Expected bm_dim={expected_bm_dim}, got {dynamics.state_evolution.diffusion.bm_dim}"
             )
 
     with numpyro.handlers.seed(rng_seed=0):

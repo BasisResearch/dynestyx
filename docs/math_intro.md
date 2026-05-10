@@ -44,7 +44,7 @@ dynamics = DynamicalModel(
     initial_condition=dist.MultivariateNormal(...),
     state_evolution=ContinuousTimeStateEvolution(
         drift=lambda x, u, t: ...,
-        diffusion_coefficient=lambda x, u, t: ...,
+        diffusion=dsx.FullDiffusion(...),
     ),
     observation_model=lambda x, u, t: ...,
 )

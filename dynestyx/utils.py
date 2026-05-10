@@ -9,8 +9,7 @@ from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
 
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.models.checkers import _infer_bm_dim
+from dynestyx.models import DynamicalModel
 
 
 def flatten_draws(arr: Array) -> Array:
@@ -119,28 +118,6 @@ def _has_any_batched_plate_source(
         return True
 
     return False
-
-
-def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
-    """Infer and set bm_dim when continuous dynamics were constructed in plates."""
-    if not dynamics.continuous_time:
-        return dynamics
-
-    state_evolution = dynamics.state_evolution
-    if (
-        not isinstance(state_evolution, ContinuousTimeStateEvolution)
-        or state_evolution.diffusion_coefficient is None
-        or state_evolution.bm_dim is not None
-    ):
-        return dynamics
-
-    x0 = jnp.zeros((dynamics.state_dim,))
-    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    inferred_bm_dim = _infer_bm_dim(state_evolution, dynamics.state_dim, x0, u0, t0)
-    if inferred_bm_dim is not None:
-        object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
-    return dynamics
 
 
 def _should_record_field(

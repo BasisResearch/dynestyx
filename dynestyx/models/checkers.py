@@ -8,11 +8,6 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 import numpyro.primitives
 
-from dynestyx.models.diffusions import (
-    DiffusionType,
-    evaluate_diffusion_value,
-    resolve_diffusion_metadata,
-)
 from dynestyx.types import Control, State, Time
 
 
@@ -85,119 +80,46 @@ def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
     return jnp.zeros((state_dim,))
 
 
-def _resolve_ctse_diffusion_metadata(
-    state_evolution: Any,
-    state_dim: int,
-    x0: State,
-    u0: Control | None,
-    t0: Time,
-) -> tuple[DiffusionType, int] | None:
-    """Resolve diffusion metadata from one probe evaluation.
-
-    Tolerates leading batch dimensions (e.g. from plate-batched parameters)
-    by inspecting only the trailing two dimensions (..., state_dim, bm_dim).
-
-    Returns the resolved diffusion type and bm_dim, or None if there is no
-    diffusion coefficient.
-    """
-    if state_evolution.diffusion_coefficient is None:
-        if (
-            state_evolution.bm_dim is not None
-            or state_evolution.diffusion_type is not None
-        ):
-            raise ValueError(
-                "diffusion_type and bm_dim cannot be set when "
-                "diffusion_coefficient is None."
-            )
-        return None
-
-    diffusion_shape = jax.eval_shape(
-        lambda: evaluate_diffusion_value(
-            state_evolution.diffusion_coefficient, x0, u0, t0
-        )
-    ).shape
-    return resolve_diffusion_metadata(
-        diffusion_shape,
-        state_dim=state_dim,
-        diffusion_type=state_evolution.diffusion_type,
-        bm_dim=state_evolution.bm_dim,
-    )
-
-
-def _infer_bm_dim(
-    state_evolution: Any,
-    state_dim: int,
-    x0: State,
-    u0: Control | None,
-    t0: Time,
-) -> int | None:
-    """Compatibility wrapper returning only the resolved bm_dim."""
-    resolved = _resolve_ctse_diffusion_metadata(state_evolution, state_dim, x0, u0, t0)
-    return None if resolved is None else resolved[1]
-
-
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
-    x0: State,
-    u0: Control | None,
-    t0: Time,
-) -> tuple[DiffusionType, int] | None:
-    """Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim.
-
-    Returns the resolved diffusion metadata (or None if no diffusion coefficient).
-    """
-    drift_shape = jax.eval_shape(lambda: state_evolution.total_drift(x0, u0, t0)).shape
+    x_probe: State,
+    u_probe: Control | None,
+    t_probe: Time,
+) -> None:
+    """Validate the drift shape of a continuous-time state evolution."""
+    drift_shape = jax.eval_shape(
+        lambda: state_evolution.total_drift(x_probe, u_probe, t_probe)
+    ).shape
     if drift_shape != (state_dim,):
         raise ValueError(
             "State drift shape is inconsistent with state_dim. "
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
 
-    return _resolve_ctse_diffusion_metadata(state_evolution, state_dim, x0, u0, t0)
 
-
-def _validate_state_evolution_output_shape(
+def _validate_discrete_state_evolution_output_shape(
     state_evolution: Callable[[State, Control, Time], State]
     | Callable[[State, Control, Time, Time], State],
     state_dim: int,
-    x0: State,
-    u0: Control | None,
-    t0: Time,
-    *,
-    continuous_time: bool,
-) -> int | None:
-    """Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models).
-
-    Returns the resolved bm_dim for continuous-time models, or None otherwise.
-    """
-    if continuous_time:
-        resolved_diffusion = _validate_continuous_state_evolution(
-            state_evolution=state_evolution,
-            state_dim=state_dim,
-            x0=x0,
-            u0=u0,
-            t0=t0,
+    x_probe: State,
+    u_probe: Control | None,
+    t_probe: Time,
+) -> None:
+    """Validate a discrete-time state evolution against the inferred state dimension."""
+    if getattr(state_evolution, "diffusion", None) is not None:
+        raise ValueError("diffusion can only be set for continuous-time models.")
+    t_now = t_probe
+    t_next = t_probe + 1.0
+    transition_dist = state_evolution(x=x_probe, u=u_probe, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]
+    inferred_state_dim = _infer_vector_dim_from_distribution(
+        transition_dist, "state_evolution(x, u, t_now, t_next)"
+    )
+    if inferred_state_dim != state_dim:
+        raise ValueError(
+            "State transition shape is inconsistent with state_dim. "
+            f"state_dim={state_dim}, inferred={inferred_state_dim}."
         )
-        return None if resolved_diffusion is None else resolved_diffusion[1]
-    else:
-        if getattr(state_evolution, "bm_dim", None) is not None:
-            raise ValueError(
-                "bm_dim can only be set for continuous-time models with "
-                "diffusion_coefficient."
-            )
-        t_now = t0
-        t_next = t0 + 1.0
-        transition_dist = state_evolution(x=x0, u=u0, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]
-        inferred_state_dim = _infer_vector_dim_from_distribution(
-            transition_dist, "state_evolution(x, u, t_now, t_next)"
-        )
-        if inferred_state_dim != state_dim:
-            raise ValueError(
-                "State transition shape is inconsistent with state_dim. "
-                f"state_dim={state_dim}, inferred={inferred_state_dim}."
-            )
-        return None
 
 
 def _validate_continuous_time_flag(
@@ -251,21 +173,21 @@ def _infer_observation_dim_in_plate_context(
     observation_model: Callable[[State, Control | None, Time], Any],
     inferred_state_dim: int,
     control_dim: int,
-    t0: Time | None,
+    t_probe: Time | None,
     observation_dim: int | None,
 ) -> int:
     """Infer observation dimension in plate context, falling back to explicit value."""
     if observation_dim is not None:
         return int(observation_dim)
 
-    x0 = _make_probe_state(
+    x_probe = _make_probe_state(
         initial_condition=initial_condition,
         state_dim=inferred_state_dim,
     )
-    u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-    dummy_t0 = jnp.array(0.0) if t0 is None else t0
+    u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
+    t_probe = jnp.array(0.0) if t_probe is None else t_probe
     try:
-        obs_dist = observation_model(x0, u0, dummy_t0)
+        obs_dist = observation_model(x_probe, u_probe, t_probe)
         return int(
             _infer_vector_dim_from_distribution(obs_dist, "observation_model(x, u, t)")
         )

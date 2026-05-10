@@ -1,205 +1,332 @@
-"""Helpers for evaluating and normalizing continuous-time diffusion specs."""
+"""Diffusion objects for continuous-time state evolution."""
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
-from typing import Literal, NamedTuple
+from typing import NamedTuple, cast
 
+import equinox as eqx
+import jax
 import jax.numpy as jnp
 from jax import Array
 
 from dynestyx.types import Control, State, Time
 
-DiffusionType = Literal["full", "diag", "scalar"]
 DiffusionValue = Array | float | int
 DiffusionSpec = Callable[[State, Control | None, Time], DiffusionValue] | DiffusionValue
 
 
 class EvaluatedDiffusion(NamedTuple):
-    diffusion_type: DiffusionType
+    """A diffusion object evaluated at a specific `(x, u, t)`."""
+
+    diffusion: Diffusion
     value: Array
-    bm_dim: int
+
+    def as_matrix(self, *, state_dim: int) -> Array:
+        return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
+
+    def covariance(self, *, state_dim: int) -> Array:
+        return self.diffusion._value_covariance(self.value, state_dim=state_dim)
+
+    def apply(self, dw: Array, *, state_dim: int) -> Array:
+        return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)
 
 
-def evaluate_diffusion_value(
-    diffusion_coefficient: DiffusionSpec,
-    x: State,
-    u: Control | None,
-    t: Time,
-) -> Array:
-    """Evaluate a diffusion spec and return it as a JAX array."""
-    value = (
-        diffusion_coefficient(x, u, t)
-        if callable(diffusion_coefficient)
-        else diffusion_coefficient
-    )
-    return jnp.asarray(value)
+class Diffusion(eqx.Module):
+    """Base class for diffusion coefficients in SDEs.
+
+    A diffusion encapsulates both the numeric coefficient `L(x, u, t)` and the
+    structural interpretation of that coefficient inside the SDE
+
+    `dx_t = f(x_t, u_t, t) dt + L(x_t, u_t, t) dW_t`.
+    """
+
+    coefficient: DiffusionSpec
+    bm_dim: int | None = eqx.field(static=True, default=None)
+
+    def __init__(
+        self,
+        coefficient: DiffusionSpec,
+        bm_dim: int | None = None,
+    ):
+        object.__setattr__(
+            self,
+            "coefficient",
+            coefficient if callable(coefficient) else jnp.asarray(coefficient),
+        )
+        object.__setattr__(self, "bm_dim", None if bm_dim is None else int(bm_dim))
+        self._validate_init()
+
+    def evaluate_value(
+        self,
+        *,
+        x: State,
+        u: Control | None,
+        t: Time,
+    ) -> Array:
+        if callable(self.coefficient):
+            return jnp.asarray(self.coefficient(x, u, t))
+        return cast(Array, self.coefficient)
+
+    def resolve_metadata(
+        self,
+        *,
+        state_dim: int,
+        x_probe: State,
+        u_probe: Control | None,
+        t_probe: Time,
+    ) -> Diffusion:
+        raise NotImplementedError
+
+    def evaluate(
+        self,
+        *,
+        x: State,
+        u: Control | None,
+        t: Time,
+    ) -> EvaluatedDiffusion:
+        return EvaluatedDiffusion(self, self.evaluate_value(x=x, u=u, t=t))
+
+    def as_matrix(
+        self,
+        *,
+        x: State,
+        u: Control | None,
+        t: Time,
+        state_dim: int,
+    ) -> Array:
+        return self.evaluate(x=x, u=u, t=t).as_matrix(state_dim=state_dim)
+
+    def covariance(
+        self,
+        *,
+        x: State,
+        u: Control | None,
+        t: Time,
+        state_dim: int,
+    ) -> Array:
+        return self.evaluate(x=x, u=u, t=t).covariance(state_dim=state_dim)
+
+    def apply(
+        self,
+        dw: Array,
+        *,
+        x: State,
+        u: Control | None,
+        t: Time,
+        state_dim: int,
+    ) -> Array:
+        return self.evaluate(x=x, u=u, t=t).apply(dw, state_dim=state_dim)
+
+    def _with_bm_dim(self, bm_dim: int) -> Diffusion:
+        new_self = copy.copy(self)
+        object.__setattr__(new_self, "bm_dim", int(bm_dim))
+        return new_self
+
+    def _constant_shape(self) -> tuple[int, ...] | None:
+        if callable(self.coefficient):
+            return None
+        return tuple(int(d) for d in jnp.shape(self.coefficient))
+
+    def _validate_init(self) -> None:
+        if self.bm_dim is not None and int(self.bm_dim) <= 0:
+            raise ValueError(f"bm_dim must be positive. Got bm_dim={self.bm_dim}.")
+
+    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+        raise NotImplementedError
+
+    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+        raise NotImplementedError
+
+    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+        raise NotImplementedError
 
 
-def resolve_diffusion_metadata(
-    shape: tuple[int, ...],
-    *,
-    state_dim: int,
-    diffusion_type: DiffusionType | None,
-    bm_dim: int | None,
-) -> tuple[DiffusionType, int]:
-    """Resolve diffusion semantics from trailing shape and user annotations."""
-    resolved_type = (
-        diffusion_type
-        if diffusion_type is not None
-        else _infer_diffusion_type(shape, state_dim=state_dim)
-    )
+class FullDiffusion(Diffusion):
+    """General matrix-valued diffusion coefficient `L(x, u, t)`."""
 
-    if resolved_type == "full":
+    def _validate_init(self) -> None:
+        super()._validate_init()
+        shape = self._constant_shape()
+        if shape is not None and len(shape) < 2:
+            raise ValueError(
+                "Full diffusion requires a matrix-valued constant coefficient with "
+                "trailing shape (..., state_dim, bm_dim). "
+                f"Got shape {shape}."
+            )
+        if shape is not None and self.bm_dim is None:
+            object.__setattr__(self, "bm_dim", int(shape[-1]))
+
+    def resolve_metadata(
+        self,
+        *,
+        state_dim: int,
+        x_probe: State,
+        u_probe: Control | None,
+        t_probe: Time,
+    ) -> FullDiffusion:
+        shape = jax.eval_shape(
+            lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
+        ).shape
         if len(shape) < 2 or int(shape[-2]) != state_dim:
             raise ValueError(
                 "Full diffusion must have trailing shape (..., state_dim, bm_dim). "
                 f"Got shape {shape} with state_dim={state_dim}."
             )
         inferred_bm_dim = int(shape[-1])
-        if bm_dim is not None and int(bm_dim) != inferred_bm_dim:
+        if self.bm_dim is not None and int(self.bm_dim) != inferred_bm_dim:
             raise ValueError(
-                "bm_dim does not match inferred diffusion_coefficient output shape. "
-                f"Got bm_dim={bm_dim}, inferred={inferred_bm_dim} from shape {shape}."
+                "bm_dim does not match inferred diffusion output shape. "
+                f"Got bm_dim={self.bm_dim}, inferred={inferred_bm_dim} from shape {shape}."
             )
-        return resolved_type, inferred_bm_dim
+        return (
+            self
+            if self.bm_dim == inferred_bm_dim
+            else cast(FullDiffusion, self._with_bm_dim(inferred_bm_dim))
+        )
 
-    if resolved_type == "diag":
+    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+        return value
+
+    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+        return value @ jnp.swapaxes(value, -1, -2)
+
+    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+        return value @ dw
+
+
+class DiagonalDiffusion(Diffusion):
+    """Vector-valued diffusion with diagonal or shared-driver interpretation."""
+
+    def _validate_init(self) -> None:
+        super()._validate_init()
+        if self.bm_dim is None:
+            raise ValueError(
+                "Diagonal diffusion requires explicit bm_dim. "
+                "For diagonal diffusion, bm_dim must be either 1 or state_dim."
+            )
+        shape = self._constant_shape()
+        if shape is not None and len(shape) == 0:
+            raise ValueError(
+                "Diagonal diffusion requires a vector-valued constant coefficient "
+                "with trailing shape (..., state_dim). "
+                f"Got shape {shape}."
+            )
+
+    def resolve_metadata(
+        self,
+        *,
+        state_dim: int,
+        x_probe: State,
+        u_probe: Control | None,
+        t_probe: Time,
+    ) -> DiagonalDiffusion:
+        shape = jax.eval_shape(
+            lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
+        ).shape
         if len(shape) == 0 or int(shape[-1]) != state_dim:
             raise ValueError(
                 "Diagonal diffusion must have trailing shape (..., state_dim). "
                 f"Got shape {shape} with state_dim={state_dim}."
             )
-    else:
+        bm_dim = self.bm_dim
+        assert bm_dim is not None
+        if bm_dim not in (1, state_dim):
+            raise ValueError(
+                "Diagonal diffusion requires bm_dim to be either 1 or state_dim. "
+                f"Got bm_dim={bm_dim}, state_dim={state_dim}."
+            )
+        return self
+
+    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+        assert self.bm_dim is not None
+        if self.bm_dim == 1:
+            return value[..., :, None]
+        return value[..., :, None] * jnp.eye(state_dim, dtype=value.dtype)
+
+    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+        assert self.bm_dim is not None
+        if self.bm_dim == 1:
+            return value[..., :, None] * value[..., None, :]
+        return jnp.square(value)[..., :, None] * jnp.eye(state_dim, dtype=value.dtype)
+
+    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+        assert self.bm_dim is not None
+        if self.bm_dim == 1:
+            return value * dw[..., 0]
+        return value * dw
+
+
+class ScalarDiffusion(Diffusion):
+    """Scalar-valued diffusion with isotropic or shared-driver interpretation."""
+
+    def _validate_init(self) -> None:
+        super()._validate_init()
+        if self.bm_dim is None:
+            raise ValueError(
+                "Scalar diffusion requires explicit bm_dim. "
+                "For scalar diffusion, bm_dim must be either 1 or state_dim."
+            )
+        shape = self._constant_shape()
+        if shape is not None and len(shape) != 0 and int(shape[-1]) != 1:
+            raise ValueError(
+                "Scalar diffusion requires a scalar constant coefficient or trailing "
+                "shape (..., 1). "
+                f"Got shape {shape}."
+            )
+
+    def resolve_metadata(
+        self,
+        *,
+        state_dim: int,
+        x_probe: State,
+        u_probe: Control | None,
+        t_probe: Time,
+    ) -> ScalarDiffusion:
+        shape = jax.eval_shape(
+            lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
+        ).shape
         if len(shape) != 0 and int(shape[-1]) != 1:
             raise ValueError(
                 "Scalar diffusion must have shape () or trailing shape (..., 1). "
                 f"Got shape {shape}."
             )
+        bm_dim = self.bm_dim
+        assert bm_dim is not None
+        if bm_dim not in (1, state_dim):
+            raise ValueError(
+                "Scalar diffusion requires bm_dim to be either 1 or state_dim. "
+                f"Got bm_dim={bm_dim}, state_dim={state_dim}."
+            )
+        return self
 
-    if bm_dim is None:
-        raise ValueError(
-            f"{resolved_type} diffusion requires explicit bm_dim. "
-            "For scalar or diagonal diffusion, bm_dim must be either 1 or state_dim."
-        )
-    resolved_bm_dim = int(bm_dim)
-    if resolved_bm_dim not in (1, state_dim):
-        raise ValueError(
-            f"{resolved_type} diffusion requires bm_dim to be either 1 or state_dim. "
-            f"Got bm_dim={resolved_bm_dim}, state_dim={state_dim}."
-        )
-    return resolved_type, resolved_bm_dim
+    def _scalar_value(self, value: Array) -> Array:
+        return value if value.ndim == 0 else jnp.squeeze(value, axis=-1)
 
+    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+        scalar = self._scalar_value(value)
+        assert self.bm_dim is not None
+        if self.bm_dim == 1:
+            return jnp.broadcast_to(
+                scalar[..., None, None], scalar.shape + (state_dim, 1)
+            )
+        return scalar[..., None, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-def evaluate_diffusion(
-    diffusion_coefficient: DiffusionSpec,
-    *,
-    diffusion_type: DiffusionType | None,
-    bm_dim: int | None,
-    x: State,
-    u: Control | None,
-    t: Time,
-    state_dim: int,
-) -> EvaluatedDiffusion:
-    """Evaluate a diffusion spec using already-resolved metadata."""
-    value = evaluate_diffusion_value(diffusion_coefficient, x, u, t)
-    if diffusion_type is None or bm_dim is None:
-        raise ValueError(
-            "Diffusion metadata must be resolved at model initialization before "
-            "runtime evaluation."
-        )
-    return EvaluatedDiffusion(
-        diffusion_type=diffusion_type,
-        value=value,
-        bm_dim=int(bm_dim),
-    )
+    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+        sigma_sq = jnp.square(self._scalar_value(value))
+        assert self.bm_dim is not None
+        if self.bm_dim == 1:
+            return sigma_sq[..., None, None] * jnp.ones(
+                (state_dim, state_dim), dtype=value.dtype
+            )
+        return sigma_sq[..., None, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-
-def diffusion_as_matrix(
-    diffusion: EvaluatedDiffusion,
-    *,
-    state_dim: int,
-) -> Array:
-    """Convert a structured diffusion into dense (..., state_dim, bm_dim) form."""
-    value = diffusion.value
-    if diffusion.diffusion_type == "full":
-        return value
-
-    eye = jnp.eye(state_dim, dtype=value.dtype)
-    if diffusion.diffusion_type == "diag":
-        if diffusion.bm_dim == 1:
-            return value[..., :, None]
-        return value[..., :, None] * eye
-
-    scalar = value if value.ndim == 0 else jnp.squeeze(value, axis=-1)
-    if diffusion.bm_dim == 1:
-        return jnp.broadcast_to(scalar[..., None, None], scalar.shape + (state_dim, 1))
-    return scalar[..., None, None] * eye
-
-
-def diffusion_covariance(
-    diffusion: EvaluatedDiffusion,
-    *,
-    state_dim: int,
-) -> Array:
-    """Return L L^T while preserving scalar/diagonal structure when possible."""
-    value = diffusion.value
-    if diffusion.diffusion_type == "full":
-        return value @ jnp.swapaxes(value, -1, -2)
-
-    eye = jnp.eye(state_dim, dtype=value.dtype)
-    if diffusion.diffusion_type == "diag":
-        if diffusion.bm_dim == 1:
-            return value[..., :, None] * value[..., None, :]
-        return jnp.square(value)[..., :, None] * eye
-
-    sigma_sq = jnp.square(value if value.ndim == 0 else jnp.squeeze(value, axis=-1))
-    if diffusion.bm_dim == 1:
-        return sigma_sq[..., None, None] * jnp.ones(
-            (state_dim, state_dim), dtype=value.dtype
-        )
-    return sigma_sq[..., None, None] * eye
-
-
-def apply_diffusion(
-    diffusion: EvaluatedDiffusion,
-    dw: Array,
-    *,
-    state_dim: int,
-) -> Array:
-    """Apply a structured diffusion to a Brownian increment vector."""
-    value = diffusion.value
-    if diffusion.diffusion_type == "full":
-        return value @ dw
-
-    if diffusion.diffusion_type == "diag":
-        if diffusion.bm_dim == 1:
-            return value * dw[0]
-        return value * dw
-
-    scalar = value if value.ndim == 0 else jnp.squeeze(value, axis=-1)
-    if diffusion.bm_dim == 1:
-        return jnp.broadcast_to(
-            (scalar * dw[0])[..., None], scalar.shape + (state_dim,)
-        )
-    return scalar[..., None] * dw
-
-
-def _infer_diffusion_type(
-    shape: tuple[int, ...],
-    *,
-    state_dim: int,
-) -> DiffusionType:
-    """Infer legacy diffusion semantics from shape when diffusion_type is omitted."""
-    if len(shape) >= 2 and int(shape[-2]) == state_dim:
-        return "full"
-    if len(shape) == 0 or int(shape[-1]) == 1:
-        return "scalar"
-    if int(shape[-1]) == state_dim:
-        return "diag"
-    trailing_dim = int(shape[-1])
-    raise ValueError(
-        f"1D diffusion output with trailing dimension {trailing_dim} is treated as "
-        f"scalar/diagonal shorthand, so it must end in 1 or state_dim={state_dim}. "
-        "Use shape (..., state_dim, bm_dim) for full diffusion."
-    )
+    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+        scalar = self._scalar_value(value)
+        assert self.bm_dim is not None
+        if self.bm_dim == 1:
+            return jnp.broadcast_to(
+                (scalar * dw[..., 0])[..., None], scalar.shape + (state_dim,)
+            )
+        return scalar[..., None] * dw

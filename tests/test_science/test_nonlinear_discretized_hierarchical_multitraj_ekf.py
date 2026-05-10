@@ -16,7 +16,7 @@ import dynestyx as dsx
 from dynestyx.discretizers import Discretizer
 from dynestyx.inference.filter_configs import EKFConfig
 from dynestyx.inference.filters import Filter
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.simulators import DiscreteTimeSimulator
 from tests.test_utils import get_output_dir
@@ -43,7 +43,7 @@ def _make_ct_nonlinear_dynamics(beta: jnp.ndarray) -> DynamicalModel:
         initial_condition=dist.MultivariateNormal(jnp.zeros(1), 0.35 * jnp.eye(1)),
         state_evolution=ContinuousTimeStateEvolution(
             drift=_PlateNonlinearDrift(beta=beta),
-            diffusion_coefficient=lambda x, u, t: jnp.sqrt(0.06) * jnp.eye(1),
+            diffusion=FullDiffusion(lambda x, u, t: jnp.sqrt(0.06) * jnp.eye(1)),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0]]),

@@ -30,6 +30,7 @@ from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
     DynamicalModel,
+    FullDiffusion,
     GaussianStateEvolution,
     LinearGaussianObservation,
 )
@@ -132,9 +133,7 @@ def _plate_continuous_ode_model(
             initial_condition=dist.MultivariateNormal(
                 loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
             ),
-            state_evolution=ContinuousTimeStateEvolution(
-                drift=drift, diffusion_coefficient=None
-            ),
+            state_evolution=ContinuousTimeStateEvolution(drift=drift),
             observation_model=LinearGaussianObservation(
                 H=jnp.array([[1.0, 0.0]]), R=jnp.array([[0.25]])
             ),
@@ -558,7 +557,7 @@ def _plate_continuous_dirac_for_discretizer_model(
                 loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
             ),
             state_evolution=ContinuousTimeStateEvolution(
-                drift=AffineDrift(A=A), diffusion_coefficient=lambda x, u, t: L
+                drift=AffineDrift(A=A), diffusion=FullDiffusion(lambda x, u, t: L)
             ),
             observation_model=DiracIdentityObservation(),
         )
@@ -593,7 +592,7 @@ def _nested_plate_continuous_dirac_for_discretizer_model(
                     loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
                 ),
                 state_evolution=ContinuousTimeStateEvolution(
-                    drift=AffineDrift(A=A), diffusion_coefficient=lambda x, u, t: L
+                    drift=AffineDrift(A=A), diffusion=FullDiffusion(lambda x, u, t: L)
                 ),
                 observation_model=DiracIdentityObservation(),
             )

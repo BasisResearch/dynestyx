@@ -40,19 +40,22 @@ def test_mcmc_inference(
     if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
+        states = synthetic["states"]
+        observations = synthetic["observations"]
+
         plt.plot(
             obs_times,
-            synthetic["states"][:, 0],
+            states[:, 0],
             label="x[0]",
         )
         plt.plot(
             obs_times,
-            synthetic["states"][:, 1],
+            states[:, 1],
             label="x[1]",
         )
         plt.plot(
             obs_times,
-            synthetic["observations"][:, 0],
+            observations if observations.ndim == 1 else observations[:, 0],
             label="observations",
             linestyle="--",
         )

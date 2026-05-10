@@ -21,10 +21,11 @@ from numpyro.contrib.control_flow import scan as nscan
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
-    ContinuousTimeStateEvolution,
+    DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, State, Time, TimeLike, as_scalar_time_array
@@ -32,7 +33,6 @@ from dynestyx.utils import (
     _array_has_plate_dims,
     _build_control_path,
     _dist_has_plate_batch_dims,
-    _ensure_continuous_bm_dim,
     _get_val_or_None,
     _has_any_batched_plate_source,
     _leaf_is_plate_batched,
@@ -248,8 +248,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator logic for one unbatched member and return trajectories."""
-        dynamics = _ensure_continuous_bm_dim(dynamics)
-
         if (
             filtered_times is not None
             and filtered_dists is None
@@ -759,7 +757,7 @@ class SDESimulator(BaseSimulator):
 
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
-                `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
+                `ContinuousTimeStateEvolution` with a non-None diffusion
                 and inferred `bm_dim` (set during `DynamicalModel` construction).
             obs_times: Times at which to save the latent state and emit observations.
                 Required.
@@ -778,16 +776,12 @@ class SDESimulator(BaseSimulator):
             parameter inference for SDEs, because it introduces an explicit, high-
             dimensional latent path. Prefer filtering (`Filter`) or particle methods.
         """
-        if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+        if not isinstance(
+            dynamics.state_evolution, StochasticContinuousTimeStateEvolution
+        ):
             raise NotImplementedError(
-                f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
-            )
-
-        if dynamics.state_evolution.diffusion_coefficient is None:
-            raise ValueError(
-                "SDESimulator requires diffusion_coefficient to be defined "
-                f"(got coeff={dynamics.state_evolution.diffusion_coefficient}). "
-                "Use ODESimulator for deterministic dynamics."
+                "SDESimulator only works with StochasticContinuousTimeStateEvolution, got "
+                f"{type(dynamics.state_evolution)}"
             )
 
         if obs_times is not None:
@@ -1182,7 +1176,7 @@ class ODESimulator(BaseSimulator):
 
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
-                `ContinuousTimeStateEvolution` with deterministic dynamics.
+                `DeterministicContinuousTimeStateEvolution`.
             obs_times: Times at which to save the latent state and emit observations.
             obs_values: Optional observation array. If provided, observation sites are
                 conditioned via `obs=obs_values[i]`.
@@ -1306,11 +1300,14 @@ class Simulator(BaseSimulator):
         **kwargs,
     ) -> dict[str, State]:
         if self.simulator is None:
-            if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-                if dynamics.state_evolution.diffusion_coefficient is None:
-                    self.simulator = ODESimulator(*self.args, **self.kwargs)
-                else:
-                    self.simulator = SDESimulator(*self.args, **self.kwargs)
+            if isinstance(
+                dynamics.state_evolution, StochasticContinuousTimeStateEvolution
+            ):
+                self.simulator = SDESimulator(*self.args, **self.kwargs)
+            elif isinstance(
+                dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
+            ):
+                self.simulator = ODESimulator(*self.args, **self.kwargs)
             elif isinstance(dynamics.state_evolution, DiscreteTimeStateEvolution):
                 self.simulator = DiscreteTimeSimulator(*self.args, **self.kwargs)
             else:

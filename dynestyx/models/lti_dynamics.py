@@ -6,6 +6,7 @@ from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
 )
+from dynestyx.models.diffusions import FullDiffusion
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.models.state_evolution import AffineDrift, LinearGaussianStateEvolution
 
@@ -175,8 +176,7 @@ def LTI_continuous(
 
     state_evolution = ContinuousTimeStateEvolution(
         drift=drift,
-        diffusion_coefficient=L,
-        diffusion_type="full",
+        diffusion=FullDiffusion(L),
     )
 
     observation_model = LinearGaussianObservation(H=H, R=R, D=D, bias=d)
