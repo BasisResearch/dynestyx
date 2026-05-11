@@ -13,6 +13,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     unscented_kalman_smoother,
 )
 
+from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.filter_configs import (
     EKFConfig,
     KFConfig,
@@ -122,11 +123,13 @@ def run_discrete_smoother(
         name, posterior, _config_to_smoother_record_kwargs(filter_config)
     )
 
-    means = posterior.smoothed_means
-    covs = posterior.smoothed_covariances
-    if means is None or covs is None:
-        return []
-    return [dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])]
+    return _posterior_sequence_to_dists(
+        posterior,
+        means_attr="smoothed_means",
+        covariances_attr="smoothed_covariances",
+        particle_mode=False,
+        missing="empty",
+    )
 
 
 __all__ = ["compute_cd_dynamax_discrete_smoother", "run_discrete_smoother"]

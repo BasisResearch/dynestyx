@@ -10,6 +10,11 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import _validate_batched_plate_alignment
+from dynestyx.inference.distribution_utils import (
+    _categorical_log_probs_to_dists,
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
@@ -45,62 +50,12 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.integrations.utils import (
-    WeightedParticles,
-    covariance_from_cholesky,
-    particles_to_delta_mixtures,
-)
+from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
-from dynestyx.utils import (
-    _array_has_plate_dims,
-    _ensure_continuous_bm_dim,
-    _leaf_is_plate_batched,
-)
+from dynestyx.utils import _ensure_continuous_bm_dim
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
-
-
-def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
-    """Build in_axes for a pytree based on whether leaves have plate batch dims.
-    i.e., decide whether or not to vmap over a particular leaf.
-
-    A leaf is considered batched if it is a JAX array whose leading dimensions
-    match the plate_shapes tuple. Batched leaves get in_axes=0; others get None.
-    The same in_axes can be reused for each nested vmap call since each vmap
-    peels off one leading dimension.
-    """
-
-    def _is_distribution_leaf(node) -> bool:
-        return isinstance(node, numpyro.distributions.Distribution)
-
-    def _axis(leaf):
-        return 0 if _leaf_is_plate_batched(leaf, plate_shapes) else None
-
-    return jax.tree.map(_axis, tree, is_leaf=_is_distribution_leaf)
-
-
-def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
-    """Return 0 if arr has leading dims matching plate_shapes, else None."""
-    return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
-
-
-def _get_time_axis(plate_shapes: tuple[int, ...]) -> int:
-    """Return the axis index corresponding to time after plate dimensions."""
-    return len(plate_shapes)
-
-
-def _time_len_from_array(arr: jax.Array, plate_shapes: tuple[int, ...]) -> int:
-    """Infer sequence length from an array with plate dims followed by time."""
-    return int(arr.shape[_get_time_axis(plate_shapes)])
-
-
-def _slice_time_axis(
-    arr: jax.Array, t: int, plate_shapes: tuple[int, ...]
-) -> jax.Array:
-    """Slice an array at time index t where time axis follows plate dims."""
-    time_axis = _get_time_axis(plate_shapes)
-    return arr[(slice(None),) * time_axis + (t, ...)]
 
 
 def _cuthbert_states_to_dists(
@@ -110,26 +65,11 @@ def _cuthbert_states_to_dists(
     plate_shapes: tuple[int, ...],
 ) -> list[numpyro.distributions.Distribution]:
     """Convert vmapped cuthbert outputs to per-time filtered distributions."""
-    if isinstance(config, PFConfig):
-        particles = states.particles
-        log_weights = states.log_weights
-        return _particle_to_batched_dists(
-            particles,
-            log_weights,
-            plate_shapes=plate_shapes,
-        )
-
-    mean = states.mean
-    chol_cov = states.chol_cov
-    cov = covariance_from_cholesky(chol_cov)
-    t_len = _time_len_from_array(mean, plate_shapes)
-    return [
-        numpyro.distributions.MultivariateNormal(
-            _slice_time_axis(mean, t, plate_shapes),
-            covariance_matrix=_slice_time_axis(cov, t, plate_shapes),
-        )
-        for t in range(t_len)
-    ]
+    return _cholesky_state_sequence_to_dists(
+        states,
+        particle_mode=isinstance(config, PFConfig),
+        plate_shapes=plate_shapes,
+    )
 
 
 def _posterior_to_dists(
@@ -139,29 +79,16 @@ def _posterior_to_dists(
     particle_mode: bool,
 ) -> list[numpyro.distributions.Distribution]:
     """Convert vmapped cd-dynamax posterior objects to per-time distributions."""
-    if particle_mode:
-        particles = posterior.particles
-        log_weights = posterior.log_weights
-        return _particle_to_batched_dists(
-            particles,
-            log_weights,
-            plate_shapes=plate_shapes,
-        )
-
-    means = posterior.filtered_means
-    covs = posterior.filtered_covariances
-    if means is None or covs is None:
-        raise ValueError(
+    return _posterior_sequence_to_dists(
+        posterior,
+        means_attr="filtered_means",
+        covariances_attr="filtered_covariances",
+        particle_mode=particle_mode,
+        plate_shapes=plate_shapes,
+        missing_message=(
             "Filtered means/covariances were unavailable for a Gaussian rollout path."
-        )
-    t_len = _time_len_from_array(means, plate_shapes)
-    return [
-        numpyro.distributions.MultivariateNormal(
-            _slice_time_axis(means, t, plate_shapes),
-            covariance_matrix=_slice_time_axis(covs, t, plate_shapes),
-        )
-        for t in range(t_len)
-    ]
+        ),
+    )
 
 
 def _hmm_to_dists(
@@ -170,58 +97,7 @@ def _hmm_to_dists(
     plate_shapes: tuple[int, ...],
 ) -> list[numpyro.distributions.Distribution]:
     """Convert vmapped HMM filtered log-probs to Categorical distributions."""
-    t_len = _time_len_from_array(log_filt_seq, plate_shapes)
-    return [
-        numpyro.distributions.Categorical(
-            probs=jnp.exp(_slice_time_axis(log_filt_seq, t, plate_shapes))
-        )
-        for t in range(t_len)
-    ]
-
-
-def _particle_to_batched_dists(
-    particles: jax.Array,
-    log_weights: jax.Array,
-    *,
-    plate_shapes: tuple[int, ...],
-) -> list[numpyro.distributions.Distribution]:
-    """Build per-time plate-batched WeightedParticles from canonical PF outputs."""
-    if particles.ndim == len(plate_shapes) + 2:
-        particles = particles[..., None]
-
-    # Flatten plate members -> use the canonical per-member helper from
-    # dynestyx.inference.integrations.utils.
-    n_members = math.prod(plate_shapes) if plate_shapes else 1
-    t_len = _time_len_from_array(log_weights, plate_shapes)
-    part_tail = particles.shape[len(plate_shapes) :]
-    w_tail = log_weights.shape[len(plate_shapes) :]
-    flat_particles = particles.reshape((n_members, *part_tail))
-    flat_log_weights = log_weights.reshape((n_members, *w_tail))
-    per_member = [
-        particles_to_delta_mixtures(flat_particles[i], flat_log_weights[i])
-        for i in range(n_members)
-    ]
-
-    if not plate_shapes:
-        return per_member[0]
-
-    result: list[numpyro.distributions.Distribution] = []
-    for t in range(t_len):
-        logits_t = jnp.stack(
-            [per_member[i][t].log_weights for i in range(n_members)],  # type: ignore[attr-defined]
-            axis=0,
-        ).reshape(*plate_shapes, -1)
-        values_t = jnp.stack(
-            [per_member[i][t].particles for i in range(n_members)],  # type: ignore[attr-defined]
-            axis=0,
-        ).reshape(*plate_shapes, *per_member[0][t].particles.shape)  # type: ignore[attr-defined]
-        result.append(
-            WeightedParticles(
-                particles=values_t,
-                log_weights=logits_t,
-            )
-        )
-    return result
+    return _categorical_log_probs_to_dists(log_filt_seq, plate_shapes=plate_shapes)
 
 
 class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):

@@ -11,12 +11,9 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import _validate_batched_plate_alignment
-from dynestyx.inference.filters import (
-    _array_plate_axis,
-    _make_plate_in_axes,
-    _particle_to_batched_dists,
-    _slice_time_axis,
-    _time_len_from_array,
+from dynestyx.inference.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
 )
 from dynestyx.inference.integrations.cd_dynamax.continuous_smoother import (
     compute_continuous_smoother,
@@ -34,6 +31,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
+from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
 from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
     ContinuousTimeEKFSmootherConfig,
@@ -103,29 +101,16 @@ def _smoothed_posterior_to_dists(
     particle_mode: bool,
 ):
     """Convert vmapped smoother posterior objects to per-time distributions."""
-    if particle_mode:
-        particles = posterior.particles
-        log_weights = posterior.log_weights
-        return _particle_to_batched_dists(
-            particles,
-            log_weights,
-            plate_shapes=plate_shapes,
-        )
-
-    means = posterior.smoothed_means
-    covs = posterior.smoothed_covariances
-    if means is None or covs is None:
-        raise ValueError(
+    return _posterior_sequence_to_dists(
+        posterior,
+        means_attr="smoothed_means",
+        covariances_attr="smoothed_covariances",
+        particle_mode=particle_mode,
+        plate_shapes=plate_shapes,
+        missing_message=(
             "Smoothed means/covariances were unavailable for a Gaussian rollout path."
-        )
-    t_len = _time_len_from_array(means, plate_shapes)
-    return [
-        numpyro.distributions.MultivariateNormal(
-            _slice_time_axis(means, t, plate_shapes),
-            covariance_matrix=_slice_time_axis(covs, t, plate_shapes),
-        )
-        for t in range(t_len)
-    ]
+        ),
+    )
 
 
 def _cuthbert_smoothed_states_to_dists(
@@ -135,26 +120,11 @@ def _cuthbert_smoothed_states_to_dists(
     plate_shapes: tuple[int, ...],
 ):
     """Convert vmapped cuthbert smoother outputs to per-time smoothed distributions."""
-    if isinstance(config, PFSmootherConfig):
-        particles = states.particles
-        log_weights = states.log_weights
-        return _particle_to_batched_dists(
-            particles,
-            log_weights,
-            plate_shapes=plate_shapes,
-        )
-
-    mean = states.mean
-    chol_cov = states.chol_cov
-    cov = jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
-    t_len = _time_len_from_array(mean, plate_shapes)
-    return [
-        numpyro.distributions.MultivariateNormal(
-            _slice_time_axis(mean, t, plate_shapes),
-            covariance_matrix=_slice_time_axis(cov, t, plate_shapes),
-        )
-        for t in range(t_len)
-    ]
+    return _cholesky_state_sequence_to_dists(
+        states,
+        particle_mode=isinstance(config, PFSmootherConfig),
+        plate_shapes=plate_shapes,
+    )
 
 
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):

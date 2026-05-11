@@ -3,7 +3,6 @@
 import jax
 import jax.numpy as jnp
 import numpyro
-import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -13,6 +12,7 @@ from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
 
+from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -25,7 +25,6 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
-from dynestyx.inference.integrations.utils import particles_to_delta_mixtures
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
 
@@ -255,22 +254,13 @@ def run_continuous_filter(
 
     _add_filter_sites(name, filter_config, filtered)
 
-    if not isinstance(filter_config, ContinuousTimeDPFConfig):
-        means = filtered.filtered_means
-        covs = filtered.filtered_covariances
-        if means is None or covs is None:
-            raise ValueError(
-                "Filtered means/covariances unexpectedly None for non-DPF config"
-            )
-        return [
-            dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])
-        ]
-
-    particles = filtered.particles  # type: ignore[attr-defined]
-    log_weights = filtered.log_weights  # type: ignore[attr-defined]
-    if particles.ndim == 2:
-        particles = particles[..., None]
-    return particles_to_delta_mixtures(particles, log_weights)
+    return _posterior_sequence_to_dists(
+        filtered,
+        means_attr="filtered_means",
+        covariances_attr="filtered_covariances",
+        particle_mode=isinstance(filter_config, ContinuousTimeDPFConfig),
+        missing_message="Filtered means/covariances unexpectedly None for non-DPF config",
+    )
 
 
 __all__ = [

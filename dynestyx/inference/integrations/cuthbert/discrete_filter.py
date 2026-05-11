@@ -17,6 +17,7 @@ from cuthbertlib.resampling import (
 )
 from numpyro.distributions import Distribution
 
+from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
@@ -27,7 +28,6 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.integrations.utils import (
     covariance_from_cholesky,
-    particles_to_delta_mixtures,
 )
 from dynestyx.models import (
     DynamicalModel,
@@ -283,17 +283,12 @@ def run_discrete_filter(
 
     if isinstance(filter_config, PFConfig):
         _add_sites_pf(name, states, record_kwargs)
-        particles = states.particles
-        if particles.ndim == 2:
-            particles = particles[..., None]
-        return particles_to_delta_mixtures(particles, states.log_weights)
     else:
         _add_sites_gaussian_filter(name, states, record_kwargs)
-        cov = covariance_from_cholesky(states.chol_cov)
-        return [
-            dist.MultivariateNormal(states.mean[i], covariance_matrix=cov[i])
-            for i in range(states.mean.shape[0])
-        ]
+    return _cholesky_state_sequence_to_dists(
+        states,
+        particle_mode=isinstance(filter_config, PFConfig),
+    )
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):

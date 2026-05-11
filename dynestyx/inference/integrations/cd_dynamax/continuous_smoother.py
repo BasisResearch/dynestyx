@@ -3,7 +3,6 @@
 import jax
 import jax.numpy as jnp
 import numpyro
-import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteNonlinearGaussianSSM,
     EKFHyperParams,
@@ -12,6 +11,7 @@ from cd_dynamax import (
     cdnlgssm_smoother,
 )
 
+from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
@@ -175,9 +175,13 @@ def run_continuous_smoother(
     )
 
     _add_smoother_sites(name, smoother_config, smoothed)
-    means = smoothed.smoothed_means
-    covs = smoothed.smoothed_covariances
-    return [dist.MultivariateNormal(means[i], covs[i]) for i in range(means.shape[0])]
+    return _posterior_sequence_to_dists(
+        smoothed,
+        means_attr="smoothed_means",
+        covariances_attr="smoothed_covariances",
+        particle_mode=False,
+        missing_message="Smoothed means/covariances unexpectedly None.",
+    )
 
 
 __all__ = ["compute_continuous_smoother", "run_continuous_smoother"]

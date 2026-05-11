@@ -14,6 +14,7 @@ from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
 
+from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
@@ -22,7 +23,6 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 )
 from dynestyx.inference.integrations.utils import (
     covariance_from_cholesky,
-    particles_to_delta_mixtures,
 )
 from dynestyx.inference.smoother_configs import (
     EKFSmootherConfig,
@@ -370,20 +370,12 @@ def run_discrete_smoother(
 
     if isinstance(smoother_config, PFSmootherConfig):
         _add_sites_pf(name, states, record_kwargs)
-        particles = states.particles
-        log_weights = states.log_weights
-        if particles.ndim == 2:
-            particles = particles[..., None]
-        return particles_to_delta_mixtures(particles, log_weights)
-
-    _add_sites_taylor_kf(name, states, record_kwargs)
-    mean = states.mean
-    chol_cov = states.chol_cov
-    cov = covariance_from_cholesky(chol_cov)
-    return [
-        dist.MultivariateNormal(mean[i], covariance_matrix=cov[i])
-        for i in range(mean.shape[0])
-    ]
+    else:
+        _add_sites_taylor_kf(name, states, record_kwargs)
+    return _cholesky_state_sequence_to_dists(
+        states,
+        particle_mode=isinstance(smoother_config, PFSmootherConfig),
+    )
 
 
 __all__ = ["compute_cuthbert_smoother", "run_discrete_smoother"]

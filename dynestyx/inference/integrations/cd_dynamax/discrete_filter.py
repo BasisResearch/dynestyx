@@ -17,6 +17,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     unscented_kalman_filter,
 )
 
+from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     EKFConfig,
@@ -182,14 +183,13 @@ def run_discrete_filter(
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
     _add_kf_sites(name, posterior, record_kwargs)
 
-    if posterior.filtered_means is None or posterior.filtered_covariances is None:
-        return []
-    return [
-        dist.MultivariateNormal(
-            posterior.filtered_means[i], posterior.filtered_covariances[i]
-        )
-        for i in range(posterior.filtered_means.shape[0])
-    ]
+    return _posterior_sequence_to_dists(
+        posterior,
+        means_attr="filtered_means",
+        covariances_attr="filtered_covariances",
+        particle_mode=False,
+        missing="empty",
+    )
 
 
 __all__ = [
