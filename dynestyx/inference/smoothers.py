@@ -280,20 +280,18 @@ class Smoother(BaseSmootherLogFactorAdder):
                 **kwargs,
             )
 
-        if not isinstance(
-            typed_config,
-            (KFSmootherConfig, EKFSmootherConfig, UKFSmootherConfig, PFSmootherConfig),
-        ):
+        if not isinstance(typed_config, DiscreteTimeSmootherConfigs):
             valid = _valid_smoother_config_names(continuous_time=False)
             raise ValueError(
                 f"Invalid smoother config: {type(typed_config).__name__}. "
                 f"Valid discrete-time config types: {valid}"
             )
+        discrete_config = cast(DiscreteSmootherConfig, typed_config)
 
         return _smooth_discrete_time(
             name,
             dynamics,
-            typed_config,
+            discrete_config,
             key=key,
             obs_times=obs_times,
             obs_values=obs_values,
@@ -338,17 +336,15 @@ class Smoother(BaseSmootherLogFactorAdder):
                     ctrl_values=cv,
                 )
 
-        elif isinstance(
-            config,
-            (KFSmootherConfig, EKFSmootherConfig, UKFSmootherConfig, PFSmootherConfig),
-        ):
-            if config.filter_source == "cuthbert":
+        elif isinstance(config, DiscreteTimeSmootherConfigs):
+            discrete_config = cast(DiscreteSmootherConfig, config)
+            if discrete_config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
                 def compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cuthbert_smoother(
                         dyn,
-                        config,
+                        discrete_config,
                         k,
                         obs_times=ot,
                         obs_values=ov,
@@ -356,13 +352,13 @@ class Smoother(BaseSmootherLogFactorAdder):
                         ctrl_values=cv,
                     )
 
-            elif config.filter_source == "cd_dynamax":
+            elif discrete_config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
                 def compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cd_dynamax_discrete_smoother(
                         dyn,
-                        config,
+                        discrete_config,
                         obs_times=ot,
                         obs_values=ov,
                         ctrl_times=ct,
@@ -370,7 +366,9 @@ class Smoother(BaseSmootherLogFactorAdder):
                     )
 
             else:
-                raise ValueError(f"Unknown filter source: {config.filter_source}")
+                raise ValueError(
+                    f"Unknown filter source: {discrete_config.filter_source}"
+                )
         else:
             raise ValueError(
                 f"Unsupported smoother config for plate: {type(config).__name__}"
