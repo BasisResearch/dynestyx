@@ -1,5 +1,6 @@
 import dataclasses
 import math
+from typing import cast
 
 import equinox as eqx
 import jax
@@ -260,19 +261,17 @@ class Smoother(BaseSmootherLogFactorAdder):
             )
 
         if dynamics.continuous_time:
-            if not isinstance(
-                typed_config,
-                (ContinuousTimeKFSmootherConfig, ContinuousTimeEKFSmootherConfig),
-            ):
+            if not isinstance(typed_config, ContinuousTimeSmootherConfigs):
                 valid = _valid_smoother_config_names(continuous_time=True)
                 raise ValueError(
                     f"Invalid smoother config: {type(typed_config).__name__}. "
                     f"Valid continuous-time config types: {valid}"
                 )
+            continuous_config = cast(ContinuousSmootherConfig, typed_config)
             return _smooth_continuous_time(
                 name,
                 dynamics,
-                typed_config,
+                continuous_config,
                 key=key,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -319,21 +318,19 @@ class Smoother(BaseSmootherLogFactorAdder):
         """Compute batched marginal log-likelihoods via vmap for plate contexts."""
         output_kind: str
         if dynamics.continuous_time:
-            if not isinstance(
-                config,
-                (ContinuousTimeKFSmootherConfig, ContinuousTimeEKFSmootherConfig),
-            ):
+            if not isinstance(config, ContinuousTimeSmootherConfigs):
                 valid = _valid_smoother_config_names(continuous_time=True)
                 raise ValueError(
                     f"Invalid smoother config: {type(config).__name__}. "
                     f"Valid config types: {valid}"
                 )
+            continuous_config = cast(ContinuousSmootherConfig, config)
             output_kind = "continuous"
 
             def compute_output(dyn, ot, ov, ct, cv, k):
                 return compute_continuous_smoother(
                     dyn,
-                    config,
+                    continuous_config,
                     k,
                     obs_times=ot,
                     obs_values=ov,
