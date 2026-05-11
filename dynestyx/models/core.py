@@ -1,7 +1,7 @@
 """Core interfaces and base classes for dynamical models."""
 
 from collections.abc import Callable
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import equinox as eqx
 import jax
@@ -428,7 +428,7 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
 class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
     """Refined continuous-time state evolution with resolved diffusion."""
 
-    diffusion: Diffusion = eqx.field(static=True, default=cast(Diffusion, None))
+    diffusion: Diffusion = eqx.field(static=True, kw_only=True)
 
     def __init__(
         self,
@@ -450,7 +450,9 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
 
     @property
     def bm_dim(self) -> int:
-        return cast(int, self.diffusion.bm_dim)
+        bm_dim = self.diffusion.bm_dim
+        assert bm_dim is not None
+        return bm_dim
 
 
 class DiscreteTimeStateEvolution(eqx.Module):
