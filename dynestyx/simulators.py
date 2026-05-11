@@ -107,17 +107,26 @@ def _slice_array_for_plate_member(
 
 
 def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
-    """Slice all plate-batched array leaves in a pytree for one plate member."""
+    """Slice plate-batched dynamics leaves for one simulator plate member.
+
+    Shared leaves pass through unchanged; plate-batched leaves are selected by
+    ``plate_idx``. Distribution parameters, including initial conditions, are
+    sliced separately by ``_slice_dist_for_plate_member``.
+    """
 
     def _is_distribution_leaf(node) -> bool:
         return isinstance(node, numpyro.distributions.Distribution)
 
-    def _slice_leaf(leaf):
-        if _leaf_is_plate_batched(leaf, plate_shapes):
+    def _slice_leaf(path, leaf):
+        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
             return leaf[plate_idx]
         return leaf
 
-    return jax.tree.map(_slice_leaf, tree, is_leaf=_is_distribution_leaf)
+    return jax.tree_util.tree_map_with_path(
+        _slice_leaf,
+        tree,
+        is_leaf=_is_distribution_leaf,
+    )
 
 
 def _slice_dist_for_plate_member(

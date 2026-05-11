@@ -23,6 +23,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 )
 from dynestyx.inference.integrations.utils import (
     covariance_from_cholesky,
+    squeeze_leading_singletons,
 )
 from dynestyx.inference.smoother_configs import (
     EKFSmootherConfig,
@@ -56,7 +57,9 @@ def _kalman_get_dynamics_params(dynamics: DynamicalModel):
     ic = dynamics.initial_condition
     state_dim = dynamics.state_dim
 
-    m0 = jnp.reshape(jnp.atleast_1d(jnp.asarray(ic.loc)), (state_dim,))
+    m0 = jnp.reshape(
+        jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1)), (state_dim,)
+    )
 
     A = jnp.asarray(evo.A)
     chol_Q = jnp.linalg.cholesky(jnp.asarray(evo.cov))
