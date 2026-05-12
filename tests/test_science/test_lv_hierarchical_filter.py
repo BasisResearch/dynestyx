@@ -1,4 +1,4 @@
-"""Minimal reproduction of GitHub issue #XXX.
+"""Minimal reproduction of the Lotka-Volterra hierarchical filter issue.
 
 Lotka-Volterra second-order model in a one-level hierarchy produces
 "Warning: matrix is not positive definite" (via ``jax.debug.print``) on every
@@ -165,7 +165,7 @@ def _count_pos_def_warnings(model_fn, filter_config, rng_key, params=None, **mod
     Parameters
     ----------
     model_fn:
-        The NumpPyro model to run.
+        The NumPyro model to run.
     filter_config:
         A filter configuration (e.g. ``ContinuousTimeEnKFConfig``).
     rng_key:
