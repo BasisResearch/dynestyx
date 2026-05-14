@@ -177,6 +177,24 @@ def test_compute_cuthbert_filter_returns_observation_aligned_states(filter_confi
         assert states.chol_cov.shape[0] == len(obs_times)
 
 
+def test_compute_cuthbert_filter_can_return_raw_cuthbert_states():
+    obs_times, obs_values = _make_discrete_lti_data()
+    dynamics = _make_discrete_lti_dynamics()
+
+    _, states = compute_cuthbert_filter(
+        dynamics,
+        KFConfig(filter_source="cuthbert"),
+        obs_times=obs_times,
+        obs_values=obs_values,
+        align_to_observations=False,
+    )
+
+    assert states.log_normalizing_constant.shape[0] == len(obs_times) + 1
+    assert states.model_inputs.y.shape[0] == len(obs_times) + 1
+    assert states.mean.shape[0] == len(obs_times) + 1
+    assert states.chol_cov.shape[0] == len(obs_times) + 1
+
+
 @pytest.mark.parametrize(
     "filter_config",
     [

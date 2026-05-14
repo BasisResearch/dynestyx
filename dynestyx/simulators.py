@@ -254,36 +254,44 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         predict_times=None,
         filtered_times=None,
         filtered_dists=None,
+        smoothed_times=None,
+        smoothed_dists=None,
+        _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator logic for one unbatched member and return trajectories."""
+        use_smoothed_rollout = smoothed_times is not None or smoothed_dists is not None
+        if use_smoothed_rollout and (
+            filtered_times is not None or filtered_dists is not None
+        ):
+            raise ValueError(
+                "Smoothed rollout metadata was provided alongside filtered rollout "
+                "metadata. When smoothed_times or smoothed_dists is provided, "
+                "filtered_times and filtered_dists must be None."
+            )
+        rollout_times = smoothed_times if use_smoothed_rollout else filtered_times
+        rollout_dists = smoothed_dists if use_smoothed_rollout else filtered_dists
+        rollout_label = "smoothed" if use_smoothed_rollout else "filtered"
         if (
-            filtered_times is not None
-            and filtered_dists is None
+            rollout_times is not None
+            and rollout_dists is None
             and predict_times is not None
         ):
             raise ValueError(
-                "Rollout requested with filtered_times but missing filtered_dists. "
-                "Plate-aware rollout requires filtered distributions from the filter."
+                f"Rollout requested with {rollout_label}_times but missing {rollout_label}_dists. "
+                "Plate-aware rollout requires posterior distributions from Filter/Smoother."
             )
 
         # Need times to simulate: predict_times or obs_times
-        # For filter rollout, need predict_times
+        # For posterior rollout, need predict_times
         if predict_times is None:
-            if obs_times is None or filtered_times is not None:
+            if obs_times is None or rollout_times is not None:
                 return None
 
-        filter_rollout = filtered_times is not None and filtered_dists is not None
+        posterior_rollout = rollout_times is not None and rollout_dists is not None
 
-        if filter_rollout:
-            _validate_site_sorting(filtered_times, name="filtered_times")
-            n_pred = len(predict_times)
-
-            # Build segment ids on host once.
-            # seg_id == -1 means "before first filtered time" (use model prior).
-            pt_host = np.asarray(jax.device_get(predict_times))
-            ft_host = np.asarray(jax.device_get(filtered_times))
-            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
+        if posterior_rollout:
+            _validate_site_sorting(rollout_times, name=f"{rollout_label}_times")
 
             def _ctrl_for_segment(sub_times):
                 if ctrl_times is None or ctrl_values is None:
@@ -295,21 +303,49 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 if seg_id < 0:
                     return dynamics, f"{name}_0"
 
-                filtered_time = filtered_times[seg_id]
-                filtered_dist = filtered_dists[seg_id]
-                dynamics_with_filtered_time = eqx.tree_at(
+                posterior_time = rollout_times[seg_id]
+                posterior_dist = rollout_dists[seg_id]
+                dynamics_with_posterior_time = eqx.tree_at(
                     lambda m: m.t0,
                     dynamics,
-                    filtered_time,
+                    posterior_time,
                     is_leaf=lambda x: x is None,
                 )
                 dynamics_seg = eqx.tree_at(
                     lambda m: m.initial_condition,
-                    dynamics_with_filtered_time,
-                    filtered_dist,
+                    dynamics_with_posterior_time,
+                    posterior_dist,
                     is_leaf=lambda x: x is None,
                 )
                 return dynamics_seg, f"{name}_{seg_id + 1}"
+
+            if _posterior_rollout_final_only:
+                dynamics_seg, seg_name = _dynamics_for_segment(0)
+                ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(predict_times)
+                seg_result = self._simulate(
+                    seg_name,
+                    dynamics_seg,
+                    obs_times=None,
+                    obs_values=None,
+                    ctrl_times=ctrl_t_seg,
+                    ctrl_values=ctrl_v_seg,
+                    predict_times=predict_times,
+                )
+                results = {
+                    "predicted_states": seg_result["states"],
+                    "predicted_observations": seg_result["observations"],
+                }
+                n_sim_out = results["predicted_states"].shape[0]
+                results["predicted_times"] = _tile_times(predict_times, n_sim_out)
+                return results
+
+            n_pred = len(predict_times)
+
+            # Build segment ids on host once.
+            # seg_id == -1 means "before first posterior time" (use model prior).
+            pt_host = np.asarray(jax.device_get(predict_times))
+            ft_host = np.asarray(jax.device_get(rollout_times))
+            seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
 
             seg_results = []
             seg_masks = []
@@ -384,6 +420,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         predict_times=None,
         filtered_times=None,
         filtered_dists=None,
+        smoothed_times=None,
+        smoothed_dists=None,
+        _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator over all plate members and stack outputs.
@@ -401,8 +440,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ctrl_values,
                 predict_times,
                 filtered_times,
+                smoothed_times,
             ),
-            dists=filtered_dists,
+            dists=smoothed_dists if smoothed_dists is not None else filtered_dists,
         ):
             raise ValueError(
                 "Plate simulator received plate_shapes but no plate-batched dynamics/data "
@@ -452,6 +492,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             member_filtered_times = _slice_array_for_plate_member(
                 filtered_times, plate_shapes, plate_idx
             )
+            member_smoothed_times = _slice_array_for_plate_member(
+                smoothed_times, plate_shapes, plate_idx
+            )
 
             # Same distribution slicing logic as above, but for prediction.
             member_filtered_dists = None
@@ -459,6 +502,12 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 member_filtered_dists = [
                     _slice_dist_for_plate_member(d, plate_shapes, plate_idx)
                     for d in filtered_dists
+                ]
+            member_smoothed_dists = None
+            if smoothed_dists is not None:
+                member_smoothed_dists = [
+                    _slice_dist_for_plate_member(d, plate_shapes, plate_idx)
+                    for d in smoothed_dists
                 ]
 
             # To perform inference, we need to suspend the active numpyro.plate frames
@@ -475,6 +524,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     predict_times=member_predict_times,
                     filtered_times=member_filtered_times,
                     filtered_dists=member_filtered_dists,
+                    smoothed_times=member_smoothed_times,
+                    smoothed_dists=member_smoothed_dists,
+                    _posterior_rollout_final_only=_posterior_rollout_final_only,
                     **kwargs,
                 )
 
@@ -512,8 +564,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         predict_times=None,
         filtered_times=None,
         filtered_dists=None,
+        smoothed_times=None,
+        smoothed_dists=None,
         **kwargs,
     ) -> FunctionOfTime:
+        posterior_rollout_final_only = kwargs.pop(
+            "_posterior_rollout_final_only", False
+        )
         if plate_shapes:
             results = self._run_plated_simulation(
                 name,
@@ -526,6 +583,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 predict_times=predict_times,
                 filtered_times=filtered_times,
                 filtered_dists=filtered_dists,
+                smoothed_times=smoothed_times,
+                smoothed_dists=smoothed_dists,
+                _posterior_rollout_final_only=posterior_rollout_final_only,
                 **kwargs,
             )
         else:
@@ -539,6 +599,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 predict_times=predict_times,
                 filtered_times=filtered_times,
                 filtered_dists=filtered_dists,
+                smoothed_times=smoothed_times,
+                smoothed_dists=smoothed_dists,
+                _posterior_rollout_final_only=posterior_rollout_final_only,
                 **kwargs,
             )
 
