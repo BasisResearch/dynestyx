@@ -39,12 +39,16 @@ ContinuousTimeFilterConfig = (
 )
 
 
-def _inexact_tree_dtype(tree, fallback) -> jax.typing.DTypeLike:
-    """Return a representative inexact dtype from a pytree of parameters."""
-    for leaf in jax.tree.leaves(tree):
+def _coerce_to_param_dtype(params, *arrays):
+    """Cast arrays to the first inexact dtype found in a parameter pytree."""
+    dtype = None
+    for leaf in jax.tree.leaves(params):
         if isinstance(leaf, jax.Array) and jnp.issubdtype(leaf.dtype, jnp.inexact):
-            return leaf.dtype
-    return fallback
+            dtype = leaf.dtype
+            break
+    if dtype is None:
+        return arrays
+    return tuple(jnp.asarray(arr, dtype=dtype) for arr in arrays)
 
 
 def _config_to_cd_dynamax_filter_kwargs(
@@ -163,10 +167,9 @@ def _run_linear_kf(
 ) -> PosteriorGSSMFiltered:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
-    dtype = _inexact_tree_dtype(params, obs_values.dtype)
-    obs_times = jnp.asarray(obs_times, dtype=dtype)
-    obs_values = jnp.asarray(obs_values, dtype=dtype)
-    ctrl_values = jnp.asarray(ctrl_values, dtype=dtype)
+    obs_times, obs_values, ctrl_values = _coerce_to_param_dtype(
+        params, obs_times, obs_values, ctrl_values
+    )
     cd_model = ContDiscreteLinearGaussianSSM(
         state_dim=dynamics.state_dim,
         emission_dim=dynamics.observation_dim,
@@ -232,10 +235,9 @@ def compute_continuous_filter(
             )
 
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-        dtype = _inexact_tree_dtype(params, obs_values.dtype)
-        obs_values = jnp.asarray(obs_values, dtype=dtype)
-        obs_times_arr = jnp.asarray(obs_times_arr, dtype=dtype)
-        ctrl_vals = jnp.asarray(ctrl_vals, dtype=dtype)
+        obs_values, obs_times_arr, ctrl_vals = _coerce_to_param_dtype(
+            params, obs_values, obs_times_arr, ctrl_vals
+        )
         filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
             filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
         )

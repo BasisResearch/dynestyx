@@ -35,12 +35,16 @@ from dynestyx.models import (
 from dynestyx.utils import _should_record_field
 
 
-def _inexact_tree_dtype(tree, fallback) -> jax.typing.DTypeLike:
-    """Return a representative inexact dtype from a pytree of parameters."""
-    for leaf in jax.tree.leaves(tree):
+def _coerce_to_param_dtype(params, *arrays):
+    """Cast arrays to the first inexact dtype found in a parameter pytree."""
+    dtype = None
+    for leaf in jax.tree.leaves(params):
         if isinstance(leaf, jax.Array) and jnp.issubdtype(leaf.dtype, jnp.inexact):
-            return leaf.dtype
-    return fallback
+            dtype = leaf.dtype
+            break
+    if dtype is None:
+        return arrays
+    return tuple(jnp.asarray(arr, dtype=dtype) for arr in arrays)
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
@@ -113,16 +117,12 @@ def compute_cd_dynamax_discrete_filter(
 
     if isinstance(filter_config, KFConfig):
         params = _lti_to_lgssm_params(dynamics)
-        dtype = _inexact_tree_dtype(params, emissions.dtype)
-        emissions = jnp.asarray(emissions, dtype=dtype)
-        inputs = jnp.asarray(inputs, dtype=dtype)
+        emissions, inputs = _coerce_to_param_dtype(params, emissions, inputs)
         return lgssm_filter(params, emissions, inputs=inputs)
 
     # EKF and UKF share the same nonlinear params representation.
     params_nl = gaussian_to_nlgssm_params(dynamics)
-    dtype = _inexact_tree_dtype(params_nl, emissions.dtype)
-    emissions = jnp.asarray(emissions, dtype=dtype)
-    inputs = jnp.asarray(inputs, dtype=dtype)
+    emissions, inputs = _coerce_to_param_dtype(params_nl, emissions, inputs)
 
     if isinstance(filter_config, EKFConfig):
         return extended_kalman_filter(params_nl, emissions, inputs=inputs)
