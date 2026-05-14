@@ -58,48 +58,6 @@ from dynestyx.utils import _ensure_continuous_bm_dim
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
-def _cuthbert_states_to_dists(
-    states,
-    config: BaseFilterConfig,
-    *,
-    plate_shapes: tuple[int, ...],
-) -> list[numpyro.distributions.Distribution]:
-    """Convert vmapped cuthbert outputs to per-time filtered distributions."""
-    return _cholesky_state_sequence_to_dists(
-        states,
-        particle_mode=isinstance(config, PFConfig),
-        plate_shapes=plate_shapes,
-    )
-
-
-def _posterior_to_dists(
-    posterior,
-    *,
-    plate_shapes: tuple[int, ...],
-    particle_mode: bool,
-) -> list[numpyro.distributions.Distribution]:
-    """Convert vmapped cd-dynamax posterior objects to per-time distributions."""
-    return _posterior_sequence_to_dists(
-        posterior,
-        means_attr="filtered_means",
-        covariances_attr="filtered_covariances",
-        particle_mode=particle_mode,
-        plate_shapes=plate_shapes,
-        missing_message=(
-            "Filtered means/covariances were unavailable for a Gaussian rollout path."
-        ),
-    )
-
-
-def _hmm_to_dists(
-    log_filt_seq: jax.Array,
-    *,
-    plate_shapes: tuple[int, ...],
-) -> list[numpyro.distributions.Distribution]:
-    """Convert vmapped HMM filtered log-probs to Categorical distributions."""
-    return _categorical_log_probs_to_dists(log_filt_seq, plate_shapes=plate_shapes)
-
-
 class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
     """Base for filter handlers."""
 
@@ -469,26 +427,36 @@ class Filter(BaseLogFactorAdder):
 
         if output_kind == "continuous":
             particle_mode = isinstance(config, ContinuousTimeDPFConfig)
-            return _posterior_to_dists(
+            return _posterior_sequence_to_dists(
                 outputs,
+                means_attr="filtered_means",
+                covariances_attr="filtered_covariances",
                 plate_shapes=plate_shapes,
                 particle_mode=particle_mode,
+                missing_message=(
+                    "Filtered means/covariances were unavailable for a Gaussian rollout path."
+                ),
             )
         if output_kind == "cd_dynamax_discrete":
-            return _posterior_to_dists(
+            return _posterior_sequence_to_dists(
                 outputs,
+                means_attr="filtered_means",
+                covariances_attr="filtered_covariances",
                 plate_shapes=plate_shapes,
                 particle_mode=False,
+                missing_message=(
+                    "Filtered means/covariances were unavailable for a Gaussian rollout path."
+                ),
             )
         if output_kind == "hmm":
-            return _hmm_to_dists(
+            return _categorical_log_probs_to_dists(
                 log_filt_seq,
                 plate_shapes=plate_shapes,
             )
         if output_kind == "cuthbert":
-            return _cuthbert_states_to_dists(
+            return _cholesky_state_sequence_to_dists(
                 states,
-                config,
+                particle_mode=isinstance(config, PFConfig),
                 plate_shapes=plate_shapes,
             )
 

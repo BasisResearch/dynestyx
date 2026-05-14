@@ -95,39 +95,6 @@ def _final_obs_times_for_rollout(obs_times: jax.Array) -> jax.Array:
         return obs_times[..., -1:]
 
 
-def _smoothed_posterior_to_dists(
-    posterior,
-    *,
-    plate_shapes: tuple[int, ...],
-    particle_mode: bool,
-):
-    """Convert vmapped smoother posterior objects to per-time distributions."""
-    return _posterior_sequence_to_dists(
-        posterior,
-        means_attr="smoothed_means",
-        covariances_attr="smoothed_covariances",
-        particle_mode=particle_mode,
-        plate_shapes=plate_shapes,
-        missing_message=(
-            "Smoothed means/covariances were unavailable for a Gaussian rollout path."
-        ),
-    )
-
-
-def _cuthbert_smoothed_states_to_dists(
-    states,
-    config: BaseSmootherConfig,
-    *,
-    plate_shapes: tuple[int, ...],
-):
-    """Convert vmapped cuthbert smoother outputs to per-time smoothed distributions."""
-    return _cholesky_state_sequence_to_dists(
-        states,
-        particle_mode=isinstance(config, PFSmootherConfig),
-        plate_shapes=plate_shapes,
-    )
-
-
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
     """Base class for smoother handlers."""
 
@@ -425,21 +392,31 @@ class Smoother(BaseSmootherLogFactorAdder):
         numpyro.deterministic(f"{name}_marginal_loglik", marginal_logliks)
 
         if output_kind == "continuous":
-            return _smoothed_posterior_to_dists(
+            return _posterior_sequence_to_dists(
                 outputs,
+                means_attr="smoothed_means",
+                covariances_attr="smoothed_covariances",
                 plate_shapes=plate_shapes,
                 particle_mode=False,
+                missing_message=(
+                    "Smoothed means/covariances were unavailable for a Gaussian rollout path."
+                ),
             )
         if output_kind == "cd_dynamax_discrete":
-            return _smoothed_posterior_to_dists(
+            return _posterior_sequence_to_dists(
                 outputs,
+                means_attr="smoothed_means",
+                covariances_attr="smoothed_covariances",
                 plate_shapes=plate_shapes,
                 particle_mode=False,
+                missing_message=(
+                    "Smoothed means/covariances were unavailable for a Gaussian rollout path."
+                ),
             )
         if output_kind == "cuthbert":
-            return _cuthbert_smoothed_states_to_dists(
+            return _cholesky_state_sequence_to_dists(
                 states,
-                config,
+                particle_mode=isinstance(config, PFSmootherConfig),
                 plate_shapes=plate_shapes,
             )
 
