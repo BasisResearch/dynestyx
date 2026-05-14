@@ -1,5 +1,6 @@
 """Filter configuration dataclasses. Shared by dispatchers and integration backends."""
 
+import abc
 import dataclasses
 import math
 from typing import Literal
@@ -22,7 +23,7 @@ CuthbertOrCDDynamaxFilterSource = CuthbertOnlyFilterSource | CDDynamaxOnlyFilter
 
 
 @dataclasses.dataclass
-class BaseFilterConfig:
+class BaseFilterConfig(abc.ABC):
     r"""Shared configuration options inherited by all filter configs.
 
     You do not instantiate this class directly; use one of the concrete
