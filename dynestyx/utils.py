@@ -169,8 +169,6 @@ def _has_any_batched_plate_source(
     return False
 
 
-
-
 def _should_record_field(
     record_val: bool | None, shape: tuple[int, ...], max_elems: int
 ) -> bool:
