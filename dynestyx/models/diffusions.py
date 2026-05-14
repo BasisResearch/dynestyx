@@ -18,29 +18,52 @@ DiffusionSpec = Callable[[State, Control | None, Time], DiffusionValue] | Diffus
 
 
 class EvaluatedDiffusion(NamedTuple):
-    """A diffusion object evaluated at a specific `(x, u, t)`."""
+    """A diffusion coefficient evaluated at a specific ``(x, u, t)``.
+
+    This is primarily a developer-facing helper used by solvers and backend
+    integrations. It pairs a structured ``Diffusion`` object with the concrete
+    value of its coefficient at one state, control, and time.
+    """
 
     diffusion: Diffusion
     value: Array
 
     def as_matrix(self, *, state_dim: int) -> Array:
+        """Return the evaluated diffusion coefficient as a matrix ``L``."""
         return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
 
     def gram_matrix(self, *, state_dim: int) -> Array:
-        """Return the diffusion Gram matrix ``L L^T`` at the evaluated point."""
+        """L L^T."""
         return self.diffusion._value_gram_matrix(self.value, state_dim=state_dim)
 
     def apply(self, dw: Array, *, state_dim: int) -> Array:
+        """Return ``L @ dw`` using the structured diffusion representation."""
         return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)
 
 
 class Diffusion(eqx.Module):
     """Base class for diffusion coefficients in SDEs.
 
-    A diffusion encapsulates both the numeric coefficient `L(x, u, t)` and the
+    A diffusion encapsulates both the numeric coefficient ``L(x, u, t)`` and the
     structural interpretation of that coefficient inside the SDE
 
-    `dx_t = f(x_t, u_t, t) dt + L(x_t, u_t, t) dW_t`.
+    ``dx_t = f(x_t, u_t, t) dt + L(x_t, u_t, t) dW_t``.
+
+    Most users should instantiate one of the concrete subclasses:
+
+    - ``FullDiffusion`` for an arbitrary matrix-valued coefficient.
+    - ``DiagonalDiffusion`` for axis-aligned loadings.
+    - ``ScalarDiffusion`` for isotropic or shared-driver noise.
+
+    The ``coefficient`` may be either:
+
+    - a constant array or scalar, for time-homogeneous diffusion, or
+    - a callable ``(x, u, t) -> value`` for state-, control-, or time-dependent diffusion.
+
+    ``bm_dim`` is the Brownian dimension ``d_w``. For ``FullDiffusion`` it can be
+    inferred from the matrix shape. For ``DiagonalDiffusion`` and
+    ``ScalarDiffusion`` it must be specified explicitly and must be either ``1`` or
+    ``state_dim``.
     """
 
     coefficient: DiffusionSpec
@@ -66,6 +89,7 @@ class Diffusion(eqx.Module):
         u: Control | None,
         t: Time,
     ) -> Array:
+        """Return the raw coefficient value at ``(x, u, t)``."""
         if callable(self.coefficient):
             return jnp.asarray(self.coefficient(x, u, t))
         return cast(Array, self.coefficient)
@@ -78,6 +102,7 @@ class Diffusion(eqx.Module):
         u_probe: Control | None,
         t_probe: Time,
     ) -> Diffusion:
+        """Validate coefficient shape information and resolve diffusion metadata."""
         raise NotImplementedError
 
     def evaluate(
@@ -87,6 +112,7 @@ class Diffusion(eqx.Module):
         u: Control | None,
         t: Time,
     ) -> EvaluatedDiffusion:
+        """Evaluate the diffusion at ``(x, u, t)``."""
         return EvaluatedDiffusion(self, self.evaluate_value(x=x, u=u, t=t))
 
     def as_matrix(
@@ -97,6 +123,7 @@ class Diffusion(eqx.Module):
         t: Time,
         state_dim: int,
     ) -> Array:
+        """Return the matrix-valued diffusion coefficient ``L(x, u, t)``."""
         return self.evaluate(x=x, u=u, t=t).as_matrix(state_dim=state_dim)
 
     def gram_matrix(
@@ -119,6 +146,7 @@ class Diffusion(eqx.Module):
         t: Time,
         state_dim: int,
     ) -> Array:
+        """Apply the diffusion coefficient to a Brownian increment ``dw``."""
         return self.evaluate(x=x, u=u, t=t).apply(dw, state_dim=state_dim)
 
     def _with_bm_dim(self, bm_dim: int) -> Diffusion:
@@ -146,7 +174,21 @@ class Diffusion(eqx.Module):
 
 
 class FullDiffusion(Diffusion):
-    """General matrix-valued diffusion coefficient `L(x, u, t)`."""
+    """General matrix-valued diffusion coefficient.
+
+    Use ``FullDiffusion`` when you want to specify the diffusion matrix
+    ``L(x, u, t)`` directly.
+
+    Args:
+        coefficient: Either a constant array with trailing shape
+            ``(..., state_dim, bm_dim)`` or a callable ``(x, u, t) -> array``
+            with that trailing shape.
+        bm_dim: Optional Brownian dimension. If omitted for a constant
+            coefficient, it is inferred from the trailing matrix dimension.
+
+    This is the most general public diffusion class. Prefer it when your model
+    genuinely needs a dense or otherwise unstructured loading matrix.
+    """
 
     def _validate_init(self) -> None:
         super()._validate_init()
@@ -199,7 +241,25 @@ class FullDiffusion(Diffusion):
 
 
 class DiagonalDiffusion(Diffusion):
-    """Vector-valued diffusion with diagonal or shared-driver interpretation."""
+    """Vector-valued diffusion with diagonal or shared-driver interpretation.
+
+    Use ``DiagonalDiffusion(v, bm_dim=...)`` when the diffusion is naturally
+    parameterized by a vector ``v`` of length ``state_dim``.
+
+    Args:
+        coefficient: Either a constant vector with trailing shape
+            ``(..., state_dim)`` or a callable ``(x, u, t) -> array`` with that
+            trailing shape.
+        bm_dim: Brownian dimension. Must be either ``1`` or ``state_dim``.
+
+    - If ``bm_dim = state_dim``, the vector is interpreted as the diagonal of
+      ``L = diag(v)``.
+    - If ``bm_dim = 1``, the vector is interpreted as a column loading vector,
+      so all state coordinates share one Brownian driver.
+
+    This is often the right public API choice when each state coordinate has its
+    own scale but you do not want to write out a full matrix.
+    """
 
     def _validate_init(self) -> None:
         super()._validate_init()
@@ -261,7 +321,25 @@ class DiagonalDiffusion(Diffusion):
 
 
 class ScalarDiffusion(Diffusion):
-    """Scalar-valued diffusion with isotropic or shared-driver interpretation."""
+    """Scalar-valued diffusion with isotropic or shared-driver interpretation.
+
+    Use ``ScalarDiffusion(sigma, bm_dim=...)`` when the diffusion is controlled
+    by a single scalar scale ``sigma``.
+
+    Args:
+        coefficient: Either a scalar, a constant array with trailing shape
+            ``(..., 1)``, or a callable ``(x, u, t) -> scalar_or_length_1_array``.
+        bm_dim: Brownian dimension. Must be either ``1`` or ``state_dim``.
+
+    - If ``bm_dim = state_dim``, this represents isotropic diffusion
+      ``L = sigma I``.
+    - If ``bm_dim = 1``, this represents a shared scalar driver applied equally
+      to every state coordinate.
+
+    This is typically the simplest public API choice for constant isotropic
+    diffusion, and is usually preferable to writing ``sigma * eye(state_dim)``
+    by hand.
+    """
 
     def _validate_init(self) -> None:
         super()._validate_init()

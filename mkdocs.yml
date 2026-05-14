@@ -89,6 +89,7 @@ nav:
       - Overview: api_reference/developer/index.md
       - Models:
         - Core Models: api_reference/developer/models/core_models.md
+        - Diffusions: api_reference/developer/models/diffusions.md
         - Specialized Models: api_reference/developer/models/specialized_models.md
         - Checkers: api_reference/developer/models/checkers.md
       - Inference:
