@@ -816,6 +816,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 9: Discrete-Time Smoothing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 10: Continuous-Time Smoothing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2117,6 +2173,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../../public/inference/smoothers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoothers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../public/inference/smoother_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SmootherOptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../public/inference/mcmc/" class="md-nav__link">
         
   
@@ -3106,6 +3218,90 @@
   
   
     <li class="md-nav__item">
+      <a href="../inference/smoothers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoothers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inference/smoother_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SmootherOptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../smoothing_handoff.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoothing Handoff
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../inference/mcmc/" class="md-nav__link">
         
   
@@ -4050,7 +4246,7 @@ sites (conventionally <code>"times"</code>, <code>"states"</code>, and <code>"ob
 
 
 <h3 id="dynestyx.simulators.BaseSimulator._run_plated_simulation" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_run_plated_simulation</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_run_plated_simulation</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">smoothed_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">smoothed_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_posterior_rollout_final_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.simulators.BaseSimulator._run_plated_simulation" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4071,7 +4267,7 @@ but maintains full compatibility with NumPyro's sample semantics.</p>
 
 
 <h3 id="dynestyx.simulators.BaseSimulator._run_single_member_simulation" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_run_single_member_simulation</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_run_single_member_simulation</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">filtered_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">smoothed_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">smoothed_dists</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_posterior_rollout_final_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.simulators.BaseSimulator._run_single_member_simulation" class="headerlink" title="Permanent link">&para;</a></h3>
 

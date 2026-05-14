@@ -12,29 +12,31 @@
         <meta name="author" content="Basis Research Institute">
       
       
-        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/">
+        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/smoother_configs/">
       
       
+        <link rel="prev" href="../smoothers/">
       
-        <link rel="next" href="tutorials/quickstart/">
+      
+        <link rel="next" href="../mcmc/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>dynestyx documentation</title>
+        <title>SmootherOptions - dynestyx documentation</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#dynestyx-in-a-nutshell" class="md-skip">
+        <a href="#smoother-configurations" class="md-skip">
           Skip to content
         </a>
       
@@ -96,7 +98,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -116,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Welcome
+              SmootherOptions
             
           </span>
         </div>
@@ -204,11 +206,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="." class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../../../.." class="md-tabs__link">
         
   
   
@@ -229,7 +229,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="tutorials/quickstart/" class="md-tabs__link">
+        <a href="../../../../tutorials/quickstart/" class="md-tabs__link">
           
   
   
@@ -249,7 +249,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="tutorials/" class="md-tabs__link">
+        <a href="../../../../tutorials/" class="md-tabs__link">
           
   
   
@@ -265,11 +265,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="api_reference/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../../" class="md-tabs__link">
           
   
   
@@ -287,7 +289,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="faq/" class="md-tabs__link">
+      <a href="../../../../faq/" class="md-tabs__link">
         
   
   
@@ -324,7 +326,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -351,37 +353,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Welcome
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../.." class="md-nav__link">
         
   
   
@@ -397,103 +372,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#installation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Installation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-example-simulation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Example: Simulation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-example-inference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Example: Inference
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#citation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Citation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#see-also" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        See also
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -557,7 +435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/quickstart/" class="md-nav__link">
+      <a href="../../../../tutorials/quickstart/" class="md-nav__link">
         
   
   
@@ -585,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="math_intro/" class="md-nav__link">
+      <a href="../../../../math_intro/" class="md-nav__link">
         
   
   
@@ -665,7 +543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/00_index/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
         
   
   
@@ -693,7 +571,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
         
   
   
@@ -721,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
         
   
   
@@ -749,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
         
   
   
@@ -777,7 +655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
         
   
   
@@ -805,7 +683,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/05_svi/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
         
   
   
@@ -833,7 +711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
         
   
   
@@ -861,7 +739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/06b_odes/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
         
   
   
@@ -889,7 +767,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/07_hmm/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
         
   
   
@@ -917,7 +795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
         
   
   
@@ -945,7 +823,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
         
   
   
@@ -973,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
         
   
   
@@ -1068,7 +946,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/" class="md-nav__link">
+      <a href="../../../../tutorials/" class="md-nav__link">
         
   
   
@@ -1148,7 +1026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="quick_example/" class="md-nav__link">
+      <a href="../../../../quick_example/" class="md-nav__link">
         
   
   
@@ -1176,7 +1054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/sde_non_gaussian_observations/" class="md-nav__link">
+      <a href="../../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
         
   
   
@@ -1264,7 +1142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
+      <a href="../../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
         
   
   
@@ -1292,7 +1170,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
+      <a href="../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
         
   
   
@@ -1320,7 +1198,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
+      <a href="../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
         
   
   
@@ -1348,7 +1226,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/fhn_sparse_id/" class="md-nav__link">
+      <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
   
@@ -1376,7 +1254,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -1404,7 +1282,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -1432,7 +1310,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deep_dives/gp_drift/" class="md-nav__link">
+      <a href="../../../../deep_dives/gp_drift/" class="md-nav__link">
         
   
   
@@ -1472,26 +1350,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
@@ -1509,7 +1392,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1527,7 +1410,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/" class="md-nav__link">
+      <a href="../../../" class="md-nav__link">
         
   
   
@@ -1561,17 +1444,20 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
         
           
-          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="">
             
   
   
@@ -1607,7 +1493,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/" class="md-nav__link">
+      <a href="../../../public/" class="md-nav__link">
         
   
   
@@ -1739,7 +1625,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/core/dynamical_model/" class="md-nav__link">
+      <a href="../../../public/models/core/dynamical_model/" class="md-nav__link">
         
   
   
@@ -1767,7 +1653,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/core/continuous_time_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/core/continuous_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -1795,7 +1681,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -1823,7 +1709,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/core/observation_model/" class="md-nav__link">
+      <a href="../../../public/models/core/observation_model/" class="md-nav__link">
         
   
   
@@ -1851,7 +1737,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/core/drift/" class="md-nav__link">
+      <a href="../../../public/models/core/drift/" class="md-nav__link">
         
   
   
@@ -1879,7 +1765,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/core/potential/" class="md-nav__link">
+      <a href="../../../public/models/core/potential/" class="md-nav__link">
         
   
   
@@ -1967,7 +1853,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/linear_gaussian_observation/" class="md-nav__link">
+      <a href="../../../public/models/specialized/linear_gaussian_observation/" class="md-nav__link">
         
   
   
@@ -1995,7 +1881,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/gaussian_observation/" class="md-nav__link">
+      <a href="../../../public/models/specialized/gaussian_observation/" class="md-nav__link">
         
   
   
@@ -2023,7 +1909,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/linear_gaussian_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/specialized/linear_gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2051,7 +1937,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/gaussian_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/specialized/gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2079,7 +1965,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/affine_drift/" class="md-nav__link">
+      <a href="../../../public/models/specialized/affine_drift/" class="md-nav__link">
         
   
   
@@ -2107,7 +1993,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/lti_continuous/" class="md-nav__link">
+      <a href="../../../public/models/specialized/lti_continuous/" class="md-nav__link">
         
   
   
@@ -2135,7 +2021,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/models/specialized/lti_discrete/" class="md-nav__link">
+      <a href="../../../public/models/specialized/lti_discrete/" class="md-nav__link">
         
   
   
@@ -2231,7 +2117,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/inference/filters/" class="md-nav__link">
+      <a href="../../../public/inference/filters/" class="md-nav__link">
         
   
   
@@ -2259,7 +2145,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/inference/filter_configs/" class="md-nav__link">
+      <a href="../../../public/inference/filter_configs/" class="md-nav__link">
         
   
   
@@ -2287,7 +2173,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/inference/smoothers/" class="md-nav__link">
+      <a href="../../../public/inference/smoothers/" class="md-nav__link">
         
   
   
@@ -2315,7 +2201,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/inference/smoother_configs/" class="md-nav__link">
+      <a href="../../../public/inference/smoother_configs/" class="md-nav__link">
         
   
   
@@ -2343,7 +2229,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/inference/mcmc/" class="md-nav__link">
+      <a href="../../../public/inference/mcmc/" class="md-nav__link">
         
   
   
@@ -2371,7 +2257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/inference/mcmc_configs/" class="md-nav__link">
+      <a href="../../../public/inference/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -2459,7 +2345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/discretizers/discretizer/" class="md-nav__link">
+      <a href="../../../public/discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -2547,7 +2433,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/handlers/" class="md-nav__link">
+      <a href="../../../public/handlers/" class="md-nav__link">
         
   
   
@@ -2687,7 +2573,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/simulators/overview/" class="md-nav__link">
+      <a href="../../../public/simulators/overview/" class="md-nav__link">
         
   
   
@@ -2715,7 +2601,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/simulators/overview/#basesimulator" class="md-nav__link">
+      <a href="../../../public/simulators/overview/#basesimulator" class="md-nav__link">
         
   
   
@@ -2743,7 +2629,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/simulators/simulator_wrapper/" class="md-nav__link">
+      <a href="../../../public/simulators/simulator_wrapper/" class="md-nav__link">
         
   
   
@@ -2771,7 +2657,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/simulators/discrete_time_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/discrete_time_simulator/" class="md-nav__link">
         
   
   
@@ -2799,7 +2685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/simulators/ode_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/ode_simulator/" class="md-nav__link">
         
   
   
@@ -2827,7 +2713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/simulators/sde_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/sde_simulator/" class="md-nav__link">
         
   
   
@@ -2923,7 +2809,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../public/diagnostics/plotting_utils/" class="md-nav__link">
         
   
   
@@ -2964,26 +2850,31 @@
                 
   
   
+    
   
   
+  
     
     
     
     
       
       
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
         
           
-          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="">
             
   
   
@@ -3001,7 +2892,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3019,7 +2910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -3099,7 +2990,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/models/core_models/" class="md-nav__link">
+      <a href="../../models/core_models/" class="md-nav__link">
         
   
   
@@ -3127,7 +3018,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/models/specialized_models/" class="md-nav__link">
+      <a href="../../models/specialized_models/" class="md-nav__link">
         
   
   
@@ -3155,7 +3046,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/models/checkers/" class="md-nav__link">
+      <a href="../../models/checkers/" class="md-nav__link">
         
   
   
@@ -3188,8 +3079,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -3200,11 +3093,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_3" checked>
         
           
           <label class="md-nav__link" for="__nav_4_3_3" id="__nav_4_3_3_label" tabindex="0">
@@ -3225,7 +3118,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_3_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3243,7 +3136,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/filters/" class="md-nav__link">
+      <a href="../filters/" class="md-nav__link">
         
   
   
@@ -3271,7 +3164,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/checkers/" class="md-nav__link">
+      <a href="../checkers/" class="md-nav__link">
         
   
   
@@ -3299,7 +3192,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/filter_configs/" class="md-nav__link">
+      <a href="../filter_configs/" class="md-nav__link">
         
   
   
@@ -3327,7 +3220,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/smoothers/" class="md-nav__link">
+      <a href="../smoothers/" class="md-nav__link">
         
   
   
@@ -3352,10 +3245,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="api_reference/developer/inference/smoother_configs/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SmootherOptions
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -3371,6 +3291,125 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        smoother_configs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.BaseSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BaseSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.ContinuousTimeEKFSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ContinuousTimeEKFSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.ContinuousTimeKFSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ContinuousTimeKFSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.EKFSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EKFSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.KFSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        KFSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.PFSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PFSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs.UKFSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UKFSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.smoother_configs._config_to_smoother_record_kwargs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _config_to_smoother_record_kwargs
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -3383,7 +3422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="smoothing_handoff.md" class="md-nav__link">
+      <a href="../../../../smoothing_handoff.md" class="md-nav__link">
         
   
   
@@ -3411,7 +3450,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/mcmc/" class="md-nav__link">
+      <a href="../mcmc/" class="md-nav__link">
         
   
   
@@ -3439,7 +3478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/mcmc_configs/" class="md-nav__link">
+      <a href="../mcmc_configs/" class="md-nav__link">
         
   
   
@@ -3467,7 +3506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/inference/blackjax_integration/" class="md-nav__link">
+      <a href="../blackjax_integration/" class="md-nav__link">
         
   
   
@@ -3555,7 +3594,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/discretizers/discretizer/" class="md-nav__link">
+      <a href="../../discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -3643,7 +3682,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/simulators/" class="md-nav__link">
+      <a href="../../simulators/" class="md-nav__link">
         
   
   
@@ -3679,7 +3718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/handlers/" class="md-nav__link">
+      <a href="../../handlers/" class="md-nav__link">
         
   
   
@@ -3707,7 +3746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/utils/" class="md-nav__link">
+      <a href="../../utils/" class="md-nav__link">
         
   
   
@@ -3787,7 +3826,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
         
   
   
@@ -3838,7 +3877,7 @@
   
   
     <li class="md-nav__item">
-      <a href="faq/" class="md-nav__link">
+      <a href="../../../../faq/" class="md-nav__link">
         
   
   
@@ -3878,116 +3917,1044 @@
   
 
 
-<h1 id="dynestyx-in-a-nutshell">Dynestyx in a Nutshell<a class="headerlink" href="#dynestyx-in-a-nutshell" title="Permanent link">&para;</a></h1>
-<p><img alt="dynestyx logo" src="logo/dynestyx.gif" /></p>
-<p><code>dynestyx</code> is a library for Bayesian modeling and inference of dynamical systems. It extends <a href="https://num.pyro.ai/en/stable/">NumPyro</a> to provide state-of-the-art inference methods for state space models—with a clear separation between <em>what</em> the model is and <em>how</em> you simulate or infer it.</p>
-<p>Why <code>dynestyx</code>? It seamlessly wraps our favorite ways to learn dynamics from messy time-series data (and there are many!) in a principled NumPyro Bayesian workflow. The engines under-the-hood address noise, partial observations, irregular samples, uncertainties, and just about any model class you want to try out! Support for multiple trajectories and hierarchical inference coming soon! Don't see your favorite methods? Tell us about it---or better, contribute by submitting a Pull Request!</p>
-<h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
+<h1 id="smoother-configurations">Smoother Configurations<a class="headerlink" href="#smoother-configurations" title="Permanent link">&para;</a></h1>
+<p>Developer-facing API reference for smoother config classes and dispatch types.</p>
+<p>Concrete smoother configs intentionally mirror the filter config hierarchy while
+requiring users to opt into smoothing-specific classes. Backend support is
+validated by <code>Smoother</code> before dispatch:</p>
 <ul>
-<li><strong>Unified API</strong> — Discrete-time and continuous-time dynamical systems (SDEs, ODEs, HMMs) in one interface</li>
-<li><strong>Rich model class</strong> - Define custom initial conditions, state evolution processes, and observation models</li>
-<li><strong>Decoupled model and inference</strong> — Write your model once; choose simulators, filters, or MCMC/Variational inference independently</li>
-<li><strong>Multiple inference methods</strong> — joint state-and-parameter inference (via NUTS or stochastic variational inference), filters for marginalization (KF, EnKF, EKF, UKF, Particle Filter), pseudo-marginal MCMC (particle filter or EnKF within NUTS), gradient-matching.</li>
-<li><strong>NumPyro integration</strong> — Builds on NumPyro’s probabilistic programming primitives, handlers, and inference stack</li>
-<li><strong>JAX-based</strong> — Fully JIT-compilable and GPU-compatible</li>
+<li>discrete <code>KFSmootherConfig</code> and <code>EKFSmootherConfig</code>: <code>cuthbert</code> or <code>cd_dynamax</code></li>
+<li>discrete <code>UKFSmootherConfig</code>: <code>cd_dynamax</code></li>
+<li>discrete <code>PFSmootherConfig</code>: <code>cuthbert</code></li>
+<li>continuous <code>ContinuousTimeKFSmootherConfig</code> and
+  <code>ContinuousTimeEKFSmootherConfig</code>: <code>cd_dynamax</code></li>
 </ul>
-<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
-<p>We recommend <a href="https://docs.astral.sh/uv/"><code>uv</code></a>:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>dynestyx
-</code></pre></div>
-<p>Or with <code>pip</code>:</p>
-<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>dynestyx
-</code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">Documentation versions</p>
-<p>Published docs use <strong>versioned builds</strong>: <strong><code>stable</code></strong> matches the latest <strong>git tag</strong> (e.g. <code>v0.0.1</code>); <strong><code>latest</code></strong> matches the <strong><code>main</code></strong> branch. Use the version menu in the site header to switch. See <a href="versioning.md">Versioned documentation</a> for install commands and how this relates to notebooks.</p>
+<p>Smoother-specific fields live on the concrete classes rather than a nested
+options object, which keeps handler dispatch and API docs aligned.</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="dynestyx.inference.smoother_configs"></a>
+    <div class="doc doc-contents first">
+
+        <p>Smoother configuration dataclasses. Shared by dispatchers and integration backends.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.smoother_configs.BaseSmootherConfig" class="doc doc-heading">
+            <code>BaseSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.BaseSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>Shared base class for all smoother configs.</p>
+<p>You do not instantiate this class directly; use one of the concrete
+subclasses (e.g. <code>KFSmootherConfig</code>, <code>PFSmootherConfig</code>).</p>
+<p>Concrete smoother configs inherit from their corresponding filter configs,
+so backend selection, filter tuning, continuous-time solver options, and
+filter recording fields follow the same conventions as
+<code>dynestyx.inference.filter_configs</code>.</p>
+<p>The <code>record_smoothed_*</code> fields let you save intermediate smoothing outputs
+into the NumPyro trace as <code>numpyro.deterministic</code> sites, making them
+accessible after inference (e.g. for plotting smoothed trajectories).
+<code>None</code> defers to the backend's default for that quantity.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_smoothed_states_mean">record_smoothed_states_mean</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the posterior smoothing
+mean <span class="arithmatex">\(\mathbb{E}[x_t \mid y_{1:T}]\)</span> at each time step.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_smoothed_states_cov">record_smoothed_states_cov</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the full smoothing
+covariance at each time step. Can be large; prefer
+<code>record_smoothed_states_cov_diag</code> for high-dimensional states.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_smoothed_states_cov_diag">record_smoothed_states_cov_diag</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save only the marginal
+smoothing variances at each time step.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_smoothed_particles">record_smoothed_particles</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save smoothed particles for
+particle smoothers.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_smoothed_log_weights">record_smoothed_log_weights</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save smoothed particle log
+weights for particle smoothers.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_smoothed_states_chol_cov">record_smoothed_states_chol_cov</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the Cholesky factor
+of the smoothing covariance when exposed by the backend.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.BaseSmootherConfig.record_max_elems">record_max_elems</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Hard cap on total scalar elements saved across
+all <code>record_*</code> sites. Prevents accidentally filling device memory
+for long sequences or large state spaces. Defaults to <code>100_000</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
 </div>
-<h2 id="quick-example-simulation">Quick Example: Simulation<a class="headerlink" href="#quick-example-simulation" title="Permanent link">&para;</a></h2>
-<p>Define a dynamical model, wrap it with a simulator, and generate synthetic trajectories by passing observation times (and optionally controls) as kwargs:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">jax.random</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jr</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpyro</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">DiscreteTimeSimulator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Predictive</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">model</span><span class="p">(</span><span class="n">phi</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="n">phi</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;phi&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">obs</span><span class="o">=</span><span class="n">phi</span><span class="p">)</span>
-    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span>
-        <span class="n">control_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-        <span class="n">initial_condition</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-        <span class="n">state_evolution</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t_n</span><span class="p">,</span> <span class="n">t_next</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">phi</span> <span class="o">*</span> <span class="n">x</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
-        <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)),</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
+<div class="doc doc-object doc-class">
 
-<span class="n">obs_times</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
-<span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">():</span>
-    <span class="n">samples</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">phi</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="quick-example-inference">Quick Example: Inference<a class="headerlink" href="#quick-example-inference" title="Permanent link">&para;</a></h2>
-<p>Using the simulated <code>samples</code> and <code>obs_times</code> from above, condition on the data and infer parameters with a filter plus NUTS (no explicit state sampling):</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">Filter</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.inference.filters</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeEnKFConfig</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCMC</span><span class="p">,</span> <span class="n">NUTS</span>
 
-<span class="n">obs_values</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;f_observations&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">inference_model</span><span class="p">():</span>
-    <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">ContinuousTimeEnKFConfig</span><span class="p">(</span><span class="n">n_particles</span><span class="o">=</span><span class="mi">25</span><span class="p">)):</span>
-        <span class="k">return</span> <span class="n">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
+<h2 id="dynestyx.inference.smoother_configs.ContinuousTimeEKFSmootherConfig" class="doc doc-heading">
+            <code>ContinuousTimeEKFSmootherConfig</code>
 
-<span class="n">mcmc</span> <span class="o">=</span> <span class="n">MCMC</span><span class="p">(</span><span class="n">NUTS</span><span class="p">(</span><span class="n">inference_model</span><span class="p">),</span> <span class="n">num_warmup</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
-<span class="n">mcmc</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
-<span class="n">posterior</span> <span class="o">=</span> <span class="n">mcmc</span><span class="o">.</span><span class="n">get_samples</span><span class="p">()</span>
-</code></pre></div>
-<p>See the <a href="quick_example/">Lorenz 63 notebook</a> for a full SDE example with partial noisy observations.</p>
-<h2 id="citation">Citation<a class="headerlink" href="#citation" title="Permanent link">&para;</a></h2>
-<p>If you use dynestyx in your research, please cite:</p>
-<div class="highlight"><pre><span></span><code><span class="nc">@software</span><span class="p">{</span><span class="nl">dynestyx</span><span class="p">,</span>
-<span class="w">  </span><span class="na">author</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">{{Basis Research Institute}}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">title</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">{dynestyx: Bayesian inference for dynamical systems}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">year</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">{2025}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">url</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">{https://github.com/BasisResearch/dynestyx}</span><span class="p">,</span>
-<span class="p">}</span>
-</code></pre></div>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.ContinuousTimeEKFSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="ContinuousTimeEKFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.ContinuousTimeEKFConfig)" href="../filter_configs/#dynestyx.inference.filter_configs.ContinuousTimeEKFConfig">ContinuousTimeEKFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.smoother_configs.BaseSmootherConfig)" href="#dynestyx.inference.smoother_configs.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Continuous-discrete Extended Kalman Smoother (CD-EKS).</p>
+<p>Gaussian smoother for mildly nonlinear continuous-time dynamics with
+discrete observations. Requires differentiable dynamics; JAX autodiff is
+used to construct the local linearizations.</p>
+<p>This smoother is currently implemented through the <code>cd_dynamax</code> backend.
+See <code>ContinuousTimeEKFConfig</code> for linearisation and solver options.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.ContinuousTimeEKFSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"cd_dynamax"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>The CD-EKS combines a continuous-discrete EKF filtering pass with a
+backward smoothing pass through the locally linear Gaussian
+approximations. It is the continuous-discrete analogue of
+<code>EKFSmootherConfig</code>.</p>
+<p>The inherited <code>filter_state_order</code> and <code>filter_emission_order</code> options
+control the Taylor approximation used during the continuous-time
+filtering and smoothing computation.</p>
+<p>References:</p>
 <ul>
-<li><strong><a href="math_intro/">A mathematical introduction</a></strong> — Clearly defines the mathematical and statistical problems that <code>dynestyx</code> allows you to address. It maps concepts/algorithms to relevant pieces of code.</li>
-<li><strong><a href="tutorials/gentle_intro/00_index/">Tutorials</a></strong> — Multi-part tutorial from NumPyro and Bayesian workflow → discrete-time dynestyx → filtering and MLL → pseudomarginal inference → SVI → continuous-time (SDEs) → HMMs</li>
-<li><strong><a href="tutorials/">Examples</a></strong> — Quickstart, discrete-time inference, SDE inference, HMM inference, ODE inference, and more</li>
+<li>For continuous-discrete smoothing equations, see: Särkkä, S. (2006).
+    Recursive Bayesian Inference on Stochastic Differential Equations.</li>
+<li>For a modern textbook reference, see Chapter 10.9 of:
+    Särkkä, S., &amp; Solin, A. (2019). Applied Stochastic Differential Equations.
+    Cambridge University Press. <a href="https://users.aalto.fi/~asolin/sde-book/sde-book.pdf">Available Online</a>.</li>
+<li>For general Gaussian smoothing background, see: Särkkä, S., &amp; Svensson, L. (2023).
+    Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
+    <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
 </ul>
-<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
-<p>Other JAX-based libraries for dynamical systems:</p>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.smoother_configs.ContinuousTimeKFSmootherConfig" class="doc doc-heading">
+            <code>ContinuousTimeKFSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.ContinuousTimeKFSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="ContinuousTimeKFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.ContinuousTimeKFConfig)" href="../filter_configs/#dynestyx.inference.filter_configs.ContinuousTimeKFConfig">ContinuousTimeKFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.smoother_configs.BaseSmootherConfig)" href="#dynestyx.inference.smoother_configs.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Continuous-discrete Kalman Smoother (CD-KS).</p>
+<p>The exact Bayesian smoother for continuous-time linear-Gaussian models with
+discrete observations. Use this when your model was built with
+<code>LTI_continuous</code>.</p>
+<p>This smoother is currently implemented through the <code>cd_dynamax</code> backend.
+Inherited differential-equation solver options control the continuous-time
+filtering pass, and inherited <code>record_smoothed_*</code> fields control trace
+recording.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.ContinuousTimeKFSmootherConfig.cdlgssm_smoother_type">cdlgssm_smoother_type</span></code></td>
+            <td>
+                  <code><span title="dynestyx.inference.smoother_configs.CDKFSmootherType">CDKFSmootherType</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>CD-Dynamax smoother variant.
+<code>"cd_smoother_1"</code> is the default; <code>"cd_smoother_2"</code> exposes the
+backend's alternate continuous-discrete RTS implementation.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.ContinuousTimeKFSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"cd_dynamax"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>Continuous-discrete Kalman smoothing runs a continuous-time Kalman
+filtering pass between observations, applies discrete Kalman updates at
+observation times, and then integrates the corresponding backward
+smoothing equations through the filtered trajectory.</p>
+<p>The result is the continuous-discrete analogue of the RTS smoother:
+each state is conditioned on all observations <span class="arithmatex">\(y_{1:T}\)</span>, not just the
+observations available up to that time.</p>
+<p>References:</p>
 <ul>
-<li><strong><a href="https://github.com/probml/dynamax">dynamax</a></strong> — Discrete-time state space models with linear/non-linear Kalman filters and Bayesian parameter estimation</li>
-<li><strong><a href="https://github.com/hd-UQ/cd_dynamax">cd-dynamax</a></strong> — Continuous-discrete state space models with EnKF, EKF, UKF, PF and Bayesian parameter estimation</li>
-<li><strong><a href="https://pfjax.readthedocs.io/en/latest/">PFJax</a></strong> — Nonlinear and non-Gaussian discrete-time models with particle filters and particle MCMC</li>
-<li><strong><a href="https://state-space-models.github.io/cuthbert/">Cuthbert</a></strong> — Discrete-time state space models with linear/non-linear Kalman, ensemble Kalman, and particle filters, plus options for associative scans.</li>
-<li><strong><a href="https://docs.kidger.site/diffrax/">diffrax</a></strong> - Numerical differential equation solvers.</li>
+<li>For continuous-discrete smoothing equations, see: Särkkä, S. (2006).
+    Recursive Bayesian Inference on Stochastic Differential Equations.</li>
+<li>For a modern textbook reference, see Chapter 10.6 of:
+    Särkkä, S., &amp; Solin, A. (2019). Applied Stochastic Differential Equations.
+    Cambridge University Press. <a href="https://users.aalto.fi/~asolin/sde-book/sde-book.pdf">Available Online</a>.</li>
+<li>For general Gaussian smoothing background, see: Särkkä, S., &amp; Svensson, L. (2023).
+    Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
+    <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
 </ul>
-<p>Other probabilistic programming languages with support for dynamical systems:</p>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.smoother_configs.EKFSmootherConfig" class="doc doc-heading">
+            <code>EKFSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.EKFSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="EKFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.EKFConfig)" href="../filter_configs/#dynestyx.inference.filter_configs.EKFConfig">EKFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.smoother_configs.BaseSmootherConfig)" href="#dynestyx.inference.smoother_configs.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Extended Kalman Smoother (EKS) for discrete-time models.</p>
+<p>The Gaussian smoother corresponding to <code>EKFConfig</code>. Use this for
+differentiable nonlinear dynamics when local linearization is a reasonable
+approximation to the filtering and smoothing distributions.</p>
+<p>This is exact (but wasteful) for linear-Gaussian models. For those models,
+prefer <code>KFSmootherConfig</code>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.EKFSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"cuthbert"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>The EKS applies the RTS backward recursion to the linear-Gaussian
+approximations produced by an EKF filtering pass. The transition matrix
+in the smoothing gain is the Jacobian of the transition function at the
+filtered mean:</p>
+<div class="arithmatex">\[
+    G_t = P_{t|t} F_t^\top P_{t+1|t}^{-1}.
+\]</div>
+<p>Smoothed means and covariances are then computed with the same
+backward recursion as <code>KFSmootherConfig</code>.</p>
+<p>References:</p>
 <ul>
-<li><strong><a href="https://mc-stan.org">Stan</a></strong> — Probabilistic programming with Hamiltonian Monte Carlo<ul>
-<li><a href="https://mc-stan.org/docs/stan-users-guide/odes.html">ODEs in Stan</a> — ODEs are a special transformation requiring little extra treatment from the user</li>
+<li>For a classical textbook treatment, see: Jazwinski, A. H. (1970).
+    Stochastic Processes and Filtering Theory. Academic Press.</li>
+<li>For a modern textbook reference, see: Särkkä, S., &amp; Svensson, L. (2023).
+    Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
+    <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
 </ul>
-</li>
-<li><strong><a href="https://num.pyro.ai/en/stable/">NumPyro</a></strong> — JAX-based probabilistic programming<ul>
-<li><a href="https://num.pyro.ai/en/stable/tutorials/lotka_volterra_multiple.html">ODEs in NumPyro</a> — ODE solver must be defined inside the model (violates separation of concerns)</li>
-<li><a href="https://num.pyro.ai/en/stable/distributions.html#eulermaruyama">SDEs in NumPyro</a> — <code>dist.EulerMaruyama</code> infers every Gaussian increment from an Euler–Maruyama solver</li>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.smoother_configs.KFSmootherConfig" class="doc doc-heading">
+            <code>KFSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.KFSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="KFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.KFConfig)" href="../filter_configs/#dynestyx.inference.filter_configs.KFConfig">KFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.smoother_configs.BaseSmootherConfig)" href="#dynestyx.inference.smoother_configs.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Rauch-Tung-Striebel Kalman Smoother (RTS) for discrete-time models.</p>
+<p>The exact Bayesian smoother for discrete-time linear-Gaussian state-space
+models. Use this when your model was built with <code>LTI_discrete</code> or with
+<code>LinearGaussianStateEvolution</code> + <code>LinearGaussianObservation</code>.</p>
+<p>The smoother computes <span class="arithmatex">\(p(x_t \mid y_{1:T})\)</span>, while <code>KFConfig</code> computes
+<span class="arithmatex">\(p(x_t \mid y_{1:t})\)</span>. Use the inherited <code>record_smoothed_*</code> fields to
+save smoothed means, covariances, or covariance diagonals in the NumPyro
+trace.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.KFSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"cd_dynamax"</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.KFSmootherConfig.associative">associative</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to enable cuthbert's associative
+parallel-in-time scan. This is only supported when
+<code>filter_source="cuthbert"</code>. Defaults to <code>None</code>, which selects
+an associative scan if <code>filter_source="cuthbert"</code>, and a
+sequential scan otherwise.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>After a forward Kalman filtering pass, the RTS smoother runs a backward
+recursion over the filtered and one-step-ahead predicted Gaussian
+states. For a linear transition matrix <span class="arithmatex">\(A_t\)</span>, the smoothing gain is</p>
+<div class="arithmatex">\[
+    G_t = P_{t|t} A_t^\top P_{t+1|t}^{-1}.
+\]</div>
+<p>The smoothed mean and covariance are then</p>
+<div class="arithmatex">\[
+    m_{t|T} = m_{t|t} + G_t (m_{t+1|T} - m_{t+1|t}),
+\]</div>
+<p>and</p>
+<div class="arithmatex">\[
+    P_{t|T} = P_{t|t}
+        + G_t (P_{t+1|T} - P_{t+1|t}) G_t^\top.
+\]</div>
+<p>References:</p>
+<ul>
+<li>For the original smoother, see: Rauch, H. E., Tung, F., &amp; Striebel, C. T. (1965).
+    Maximum likelihood estimates of linear dynamic systems. AIAA Journal, 3(8), 1445-1450.</li>
+<li>For a modern textbook reference, see: Särkkä, S., &amp; Svensson, L. (2023).
+    Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
+    <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
 </ul>
-</li>
-<li><strong><a href="https://basisresearch.github.io/chirho/">ChiRho</a></strong> — Probabilistic programming with causal tooling<ul>
-<li><a href="https://basisresearch.github.io/chirho/dynamical_multi.html">ODEs in ChiRho</a> — Hierarchical parameter inference in ODEs</li>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.smoother_configs.PFSmootherConfig" class="doc doc-heading">
+            <code>PFSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.PFSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="PFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.PFConfig)" href="../filter_configs/#dynestyx.inference.filter_configs.PFConfig">PFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.smoother_configs.BaseSmootherConfig)" href="#dynestyx.inference.smoother_configs.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Particle smoother for discrete-time models.</p>
+<p>Use this for nonlinear or non-Gaussian discrete-time models. Particle
+smoothing is more flexible than Gaussian smoothing, but accuracy scales
+with the number of particles and backward-sampled smoother trajectories.</p>
+<p>This smoother is currently supported with <code>filter_source="cuthbert"</code> only.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.PFSmootherConfig.n_particles">n_particles</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of particles in the forward particle filter.
+More particles give a lower-variance log-likelihood and smoothing
+approximation at linear compute cost. Defaults to <code>1_000</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.PFSmootherConfig.pf_backward_sampling_method">pf_backward_sampling_method</span></code></td>
+            <td>
+                  <code><span title="dynestyx.inference.smoother_configs.PFBackwardSamplingMethod">PFBackwardSamplingMethod</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backward
+simulation method. <code>"tracing"</code> is the default, <code>"exact"</code> performs
+exact backward sampling where available, and <code>"mcmc"</code> uses an MCMC
+backward kernel.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.PFSmootherConfig.pf_mcmc_n_steps">pf_mcmc_n_steps</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of MCMC steps used when
+<code>pf_backward_sampling_method="mcmc"</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.PFSmootherConfig.pf_n_smoother_particles">pf_n_smoother_particles</span></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of backward-sampled
+smoother particles. <code>None</code> inherits <code>n_particles</code> from <code>PFConfig</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.PFSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"cuthbert"</code>, which
+is currently the only available implementation.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>Particle smoothers augment a forward particle filter with a backward
+pass that reconstructs trajectories from the particle approximation to
+the filtering distributions.</p>
+<p>In backward simulation, a sampled state <span class="arithmatex">\(x_{t+1}^{(j)}\)</span> chooses an
+ancestor at time <span class="arithmatex">\(t\)</span> with probabilities proportional to</p>
+<div class="arithmatex">\[
+    w_t^{(i)} p(x_{t+1}^{(j)} \mid x_t^{(i)}).
+\]</div>
+<p>The <code>"tracing"</code> method follows stored particle ancestors. The <code>"exact"</code>
+and <code>"mcmc"</code> methods use backward kernels that can better approximate
+the full smoothing distribution at higher compute cost.</p>
+<p>References:</p>
+<ul>
+<li>For backward simulation particle smoothing, see: Godsill, S. J., Doucet, A., &amp; West, M. (2004).
+    Monte Carlo smoothing for nonlinear time series. Journal of the American Statistical Association, 99(465), 156-168.</li>
+<li>For a general SMC/particle filtering reference, see: Doucet, A., De Freitas, N., &amp; Gordon, N. (2001).
+    An Introduction to Sequential Monte Carlo Methods. In Sequential Monte Carlo Methods in Practice (pp. 3-14).
+    New York, NY: Springer New York.</li>
+<li>For a modern textbook reference, see: Särkkä, S., &amp; Svensson, L. (2023).
+    Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
+    <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
 </ul>
-</li>
-<li><strong><a href="https://www.pymc.io/welcome.html">PyMC</a></strong> - Probabilistic programming in Python<ul>
-<li><a href="https://www.pymc.io/projects/extras/en/latest/statespace/generated/pymc_extras.statespace.core.PyMCStateSpace.html">SSMs in PyMC</a> - doc page in <code>pymc_extras</code>.</li>
-<li><a href="https://www.pymc.io/projects/examples/en/latest/case_studies/ssm_hurricane_tracking.html">Hurricane forecasting example in PyMC</a> - Requires manual discretization of continuous-time systems, and limited support for non-linear systems. They write "Hopefully, someday the <code>StateSpace</code> module in <code>pymc-extras</code> may support non-linear state space specifications with either the Extended Kalman Filter or with the Unscented Kalman Filter."</li>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.smoother_configs.UKFSmootherConfig" class="doc doc-heading">
+            <code>UKFSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.smoother_configs.UKFSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="UKFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.filter_configs.UKFConfig)" href="../filter_configs/#dynestyx.inference.filter_configs.UKFConfig">UKFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.smoother_configs.BaseSmootherConfig)" href="#dynestyx.inference.smoother_configs.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Unscented Kalman Smoother (UKS) for discrete-time models.</p>
+<p>A derivative-free Gaussian smoother that handles nonlinearities by
+propagating deterministic sigma points rather than Jacobians. Use this when
+sigma-point propagation is a better local approximation than EKF
+linearization.</p>
+<p>This smoother is currently supported with <code>filter_source="cd_dynamax"</code> only.
+Cuthbert UKF smoothing is not implemented.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.UKFSmootherConfig.alpha">alpha</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Spread of sigma points around the current mean.
+Smaller → tighter cluster; larger → sigma points reach further.
+Defaults to <span class="arithmatex">\(\sqrt{3}\)</span>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.UKFSmootherConfig.beta">beta</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Encodes prior knowledge about the distribution shape.
+<code>2</code> is optimal for Gaussians. Defaults to <code>2</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.UKFSmootherConfig.kappa">kappa</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Secondary scaling parameter. Defaults to <code>1</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.smoother_configs.UKFSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Defaults to <code>"cd_dynamax"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>The UKS uses a forward UKF pass followed by an RTS-style backward pass.
+Instead of using a Jacobian in the smoothing gain, it estimates the
+lag-one cross-covariance <span class="arithmatex">\(P_{t,t+1|t}\)</span> by propagating sigma points:</p>
+<div class="arithmatex">\[
+    G_t = P_{t,t+1|t} P_{t+1|t}^{-1}.
+\]</div>
+<p>The smoothed mean and covariance then follow the same correction form
+as the Kalman and extended Kalman smoothers.</p>
+<p>References:</p>
+<ul>
+<li>For the original unscented Kalman filter paper, see: Julier, S. J., &amp; Uhlmann, J. K. (1997).
+    New extension of the Kalman filter to nonlinear systems. SPIE Proceedings, 3068.</li>
+<li>For the unscented RTS smoother, see: Särkkä, S. (2008).
+    Unscented Rauch-Tung-Striebel smoother. IEEE Transactions on Automatic Control, 53(3), 845-849.</li>
+<li>For a modern textbook reference, see: Särkkä, S., &amp; Svensson, L. (2023).
+    Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
+    <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
 </ul>
-</li>
-</ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.smoother_configs._config_to_smoother_record_kwargs" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_config_to_smoother_record_kwargs</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">BaseSmootherConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span></code>
+
+<a href="#dynestyx.inference.smoother_configs._config_to_smoother_record_kwargs" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build smoother record kwargs dict from config.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 
@@ -4064,12 +5031,12 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="javascripts/mathjax.js"></script>
+        <script src="../../../../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
