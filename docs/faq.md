@@ -60,15 +60,10 @@ with ODESimulator():
 ```
 Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
 ```python
-from dynestyx import FullDiffusion
 from dynestyx.inference.filters import Filter, ContinuousTimeEnKFConfig
 
 with Filter(filter_config=ContinuousTimeEnKFConfig()):
-    return model(
-        obs_times=obs_times,
-        obs_values=obs_values,
-        diffusion=FullDiffusion(0.01 * jnp.eye(state_dim)),
-    )
+    return model(obs_times=obs_times, obs_values=obs_values, diffusion_coefficient=0.01)
 ```
 
 
