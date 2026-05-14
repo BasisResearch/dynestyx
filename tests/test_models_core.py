@@ -414,7 +414,7 @@ def test_diffusion_helpers_preserve_shorthand_semantics(
         expected_matrix,
     )
     assert jnp.allclose(
-        evaluated.covariance(state_dim=2),
+        evaluated.gram_matrix(state_dim=2),
         expected_cov,
     )
 

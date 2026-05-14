@@ -66,7 +66,7 @@ def _em_moments_from_terms(
         Tuple `(loc, cov)` for the EM Gaussian approximation.
     """
     loc = x + drift * dt
-    cov = diffusion.covariance(state_dim=x.shape[-1]) * dt
+    cov = diffusion.gram_matrix(state_dim=x.shape[-1]) * dt
     return loc, cov
 
 

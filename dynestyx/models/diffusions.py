@@ -26,8 +26,9 @@ class EvaluatedDiffusion(NamedTuple):
     def as_matrix(self, *, state_dim: int) -> Array:
         return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
 
-    def covariance(self, *, state_dim: int) -> Array:
-        return self.diffusion._value_covariance(self.value, state_dim=state_dim)
+    def gram_matrix(self, *, state_dim: int) -> Array:
+        """Return the diffusion Gram matrix ``L L^T`` at the evaluated point."""
+        return self.diffusion._value_gram_matrix(self.value, state_dim=state_dim)
 
     def apply(self, dw: Array, *, state_dim: int) -> Array:
         return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)
@@ -98,7 +99,7 @@ class Diffusion(eqx.Module):
     ) -> Array:
         return self.evaluate(x=x, u=u, t=t).as_matrix(state_dim=state_dim)
 
-    def covariance(
+    def gram_matrix(
         self,
         *,
         x: State,
@@ -106,7 +107,8 @@ class Diffusion(eqx.Module):
         t: Time,
         state_dim: int,
     ) -> Array:
-        return self.evaluate(x=x, u=u, t=t).covariance(state_dim=state_dim)
+        """Return the diffusion Gram matrix ``L(x,u,t) L(x,u,t)^T``."""
+        return self.evaluate(x=x, u=u, t=t).gram_matrix(state_dim=state_dim)
 
     def apply(
         self,
@@ -136,7 +138,7 @@ class Diffusion(eqx.Module):
     def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
         raise NotImplementedError
 
-    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
         raise NotImplementedError
 
     def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
@@ -189,7 +191,7 @@ class FullDiffusion(Diffusion):
     def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
         return value
 
-    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
         return value @ jnp.swapaxes(value, -1, -2)
 
     def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
@@ -245,7 +247,7 @@ class DiagonalDiffusion(Diffusion):
             return value[..., :, None]
         return value[..., :, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
         assert self.bm_dim is not None
         if self.bm_dim == 1:
             return value[..., :, None] * value[..., None, :]
@@ -313,7 +315,7 @@ class ScalarDiffusion(Diffusion):
             )
         return scalar[..., None, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-    def _value_covariance(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
         sigma_sq = jnp.square(self._scalar_value(value))
         assert self.bm_dim is not None
         if self.bm_dim == 1:
