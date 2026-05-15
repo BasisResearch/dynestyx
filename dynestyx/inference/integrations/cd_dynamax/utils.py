@@ -219,7 +219,7 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
         x=jnp.zeros(dsx_model.state_dim),
         u=None if dsx_model.control_dim == 0 else jnp.zeros((dsx_model.control_dim,)),
         t=jnp.array(0.0),
-        state_dim=dsx_model.state_dim
+        state_dim=dsx_model.state_dim,
     )
     Q = jnp.eye(dsx_model.state_dim, state_evo.diffusion.bm_dim)
 
