@@ -158,8 +158,7 @@ def _map_transition_outputs(
         u_arr = jnp.asarray(u)
         if u_arr.ndim == 1 or u_arr.shape[:-1] != batch_shape:
             raise ValueError(
-                "For batched x, u must be None or have leading dimensions "
-                "matching x."
+                "For batched x, u must be None or have leading dimensions matching x."
             )
 
     t_now_arr = jnp.asarray(t_now)
