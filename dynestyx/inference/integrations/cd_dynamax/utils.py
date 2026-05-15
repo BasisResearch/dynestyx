@@ -28,16 +28,18 @@ from dynestyx.models import (
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
-def _normalize_cd_dynamax_diffusion(
+def _as_cd_dynamax_diffusion_coefficient(
     state_evolution: StochasticContinuousTimeStateEvolution,
     state_dim: int,
 ):
-    """Return a diffusion coeff compatible with cd-dynamax's EnKF SDE solve.
+    """Return a full-matrix diffusion coefficient for cd-dynamax.
 
-    cd-dynamax's internal diffrax wrapper builds Brownian controls with shape
-    equal to `y0.shape` (state_dim). For diffusion with `bm_dim < state_dim`,
-    pad trailing Brownian columns with zeros to match `(state_dim, state_dim)`.
-    Diffusion with `bm_dim > state_dim` is rejected.
+    This adapts any Dynestyx diffusion shorthand (scalar/diagonal/full, constant
+    or callable) into a function ``(x, u, t) -> L(x, u, t)`` returning a full
+    matrix. cd-dynamax's continuous solver paths assume Brownian controls have
+    dimension ``state_dim``, so rectangular diffusions with ``bm_dim <
+    state_dim`` are padded with trailing zero columns. ``bm_dim > state_dim`` is
+    rejected.
     """
     if state_evolution.bm_dim > state_dim:
         raise ValueError(
@@ -185,8 +187,7 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
 
     Requires:
     - drift is AffineDrift (A, B, b)
-    - diffusion_coefficient is constant (callable returning same value for any x, u, t)
-      returning same value for any x, u, t)
+    - diffusion_coefficient is constant (array/scalar-valued Dynestyx diffusion)
     - observation_model is LinearGaussianObservation
     - initial_condition is MultivariateNormal
     """
@@ -201,15 +202,26 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
             f"dsx_to_cdlgssm_params requires AffineDrift, got {type(drift).__name__}."
         )
 
+    if callable(state_evo.diffusion.coefficient):
+        raise TypeError(
+            "Callable diffusion is not supported by the continuous-time exact "
+            "Kalman filter path. If you need callable diffusion, use a "
+            "continuous-time nonlinear filter config such as "
+            "ContinuousTimeEKFConfig instead of ContinuousTimeKFConfig. "
+            "When the goal is exact filtering, CT-EKF is the appropriate "
+            "fallback here because in the linear-Gaussian case it emulates "
+            "the KF via auto-diff and cd_dynamax supports callable diffusion "
+            "in the nonlinear case (not directly in the linear-Gaussian case)."
+        )
+
     # Extract constant L and use resolved Brownian dimension.
-    x0 = jnp.zeros(dsx_model.state_dim)
     L = state_evo.diffusion.as_matrix(
-        x=x0,
-        u=None,
+        x=jnp.zeros(dsx_model.state_dim),
+        u=None if dsx_model.control_dim == 0 else jnp.zeros((dsx_model.control_dim,)),
         t=jnp.array(0.0),
-        state_dim=dsx_model.state_dim,
+        state_dim=dsx_model.state_dim
     )
-    Q = jnp.eye(state_evo.bm_dim)
+    Q = jnp.eye(dsx_model.state_dim, state_evo.diffusion.bm_dim)
 
     ic = dsx_model.initial_condition
     if not isinstance(ic, dist.MultivariateNormal):
@@ -280,7 +292,7 @@ def dsx_to_cd_dynamax(
             }
         )
     if isinstance(state_evo, StochasticContinuousTimeStateEvolution):
-        diffusion_coeff = _normalize_cd_dynamax_diffusion(
+        diffusion_coeff = _as_cd_dynamax_diffusion_coefficient(
             state_evo,
             dsx_model.state_dim,
         )

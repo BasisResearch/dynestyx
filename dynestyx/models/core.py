@@ -225,11 +225,16 @@ class DynamicalModel(eqx.Module):
 
             # In a plate, parameter callables often expect batched parameters, so
             # we resolve diffusion metadata using synthetic per-trajectory probes.
+            x_probe = _make_probe_state(
+                initial_condition=initial_condition, state_dim=inferred_state_dim
+            )
+            u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
+            t_probe = jnp.array(0.0) if self.t0 is None else self.t0
             resolved_state_evolution = _refine_continuous_state_evolution(
                 resolved_state_evolution,
-                x_probe=jnp.zeros((inferred_state_dim,)),
-                u_probe=None if control_dim == 0 else jnp.zeros((control_dim,)),
-                t_probe=jnp.array(0.0) if self.t0 is None else self.t0,
+                x_probe=x_probe,
+                u_probe=u_probe,
+                t_probe=t_probe,
             )
             self.state_evolution = resolved_state_evolution
             return

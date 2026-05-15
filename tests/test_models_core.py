@@ -7,7 +7,7 @@ import pytest
 
 import dynestyx as dsx
 from dynestyx.inference.integrations.cd_dynamax.utils import (
-    _normalize_cd_dynamax_diffusion,
+    _as_cd_dynamax_diffusion_coefficient,
     dsx_to_cd_dynamax,
     gaussian_to_nlgssm_params,
 )
@@ -452,7 +452,7 @@ def test_cd_dynamax_rejects_diffusion_with_bm_dim_exceeds_state_dim() -> None:
         diffusion=FullDiffusion(jnp.ones((1, 2)), bm_dim=2),
     )
     with pytest.raises(ValueError, match="bm_dim <= state_dim"):
-        _normalize_cd_dynamax_diffusion(state_evolution, state_dim=1)(
+        _as_cd_dynamax_diffusion_coefficient(state_evolution, state_dim=1)(
             jnp.zeros(1),
             None,
             jnp.array(0.0),
