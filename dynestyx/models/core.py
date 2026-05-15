@@ -164,15 +164,27 @@ class DynamicalModel(eqx.Module):
         # Skip shape validation when inside a numpyro plate context, since
         # batched parameters produce shapes that don't match unbatched expectations.
 
-        def _refine_continuous_state_evolution(
+        def _make_probes() -> tuple[State, Control | None, Time]:
+            """Build synthetic inputs for validation/metadata resolution."""
+            x_probe = _make_probe_state(
+                initial_condition=initial_condition,
+                state_dim=inferred_state_dim,
+            )
+            u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
+            t_probe = jnp.array(0.0) if self.t0 is None else self.t0
+            return x_probe, u_probe, t_probe
+
+        x_probe, u_probe, t_probe = _make_probes()
+
+        def _resolve_continuous_state_evolution(
             current_state_evolution: ContinuousTimeStateEvolution,
-            *,
-            x_probe: State,
-            u_probe: Control | None,
-            t_probe: Time,
-        ) -> ContinuousTimeStateEvolution:
-            if not inferred_continuous_time:
-                return current_state_evolution
+        ) -> (
+            DeterministicContinuousTimeStateEvolution
+            | StochasticContinuousTimeStateEvolution
+        ):
+            """Return either a DeterministicContinuousTimeStateEvolution or a StochasticContinuousTimeStateEvolution.
+            If diffusion is present, lazily build probes to resolve its metadata (e.g., bm_dim).
+            """
             diffusion = current_state_evolution.diffusion
             if diffusion is None:
                 if isinstance(
@@ -191,13 +203,6 @@ class DynamicalModel(eqx.Module):
                 u_probe=u_probe,
                 t_probe=t_probe,
             )
-            if (
-                isinstance(
-                    current_state_evolution, StochasticContinuousTimeStateEvolution
-                )
-                and current_state_evolution.diffusion is resolved_diffusion
-            ):
-                return current_state_evolution
             return StochasticContinuousTimeStateEvolution(
                 drift=current_state_evolution.drift,
                 potential=current_state_evolution.potential,
@@ -205,79 +210,47 @@ class DynamicalModel(eqx.Module):
                 diffusion=resolved_diffusion,
             )
 
-        resolved_state_evolution = state_evolution
-
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.
             inferred_obs_dim = _infer_observation_dim_in_plate_context(
-                initial_condition=initial_condition,
                 observation_model=observation_model,
-                inferred_state_dim=inferred_state_dim,
-                control_dim=control_dim,
-                t_probe=self.t0,
+                x_probe=x_probe,
+                u_probe=u_probe,
+                t_probe=t_probe,
                 observation_dim=observation_dim,
             )
-            self.state_dim = int(inferred_state_dim)
-            self.observation_dim = inferred_obs_dim
-            self.control_dim = int(control_dim)
-            self.categorical_state = bool(inferred_categorical_state)
+        else:
+            if self.continuous_time:
+                _validate_continuous_state_evolution(
+                    state_evolution=state_evolution,
+                    state_dim=inferred_state_dim,
+                    x_probe=x_probe,
+                    u_probe=u_probe,
+                    t_probe=t_probe,
+                )
+            else:
+                _validate_discrete_state_evolution_output_shape(
+                    state_evolution=state_evolution,
+                    state_dim=inferred_state_dim,
+                    x_probe=x_probe,
+                    u_probe=u_probe,
+                    t_probe=t_probe,
+                )
 
-            # In a plate, parameter callables often expect batched parameters, so
-            # we resolve diffusion metadata using synthetic per-trajectory probes.
-            x_probe = _make_probe_state(
-                initial_condition=initial_condition, state_dim=inferred_state_dim
+            obs_dist = observation_model(x_probe, u_probe, t_probe)
+            inferred_obs_dim = _infer_vector_dim_from_distribution(
+                obs_dist, "observation_model(x, u, t)"
             )
-            u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
-            t_probe = jnp.array(0.0) if self.t0 is None else self.t0
-            resolved_state_evolution = _refine_continuous_state_evolution(
-                resolved_state_evolution,
-                x_probe=x_probe,
-                u_probe=u_probe,
-                t_probe=t_probe,
-            )
-            self.state_evolution = resolved_state_evolution
-            return
-
-        x_probe = _make_probe_state(
-            initial_condition=initial_condition, state_dim=inferred_state_dim
-        )
-        u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
-        t_probe = jnp.array(0.0) if self.t0 is None else self.t0
+            _validate_observation_dim(observation_dim, inferred_obs_dim)
 
         if self.continuous_time:
-            _validate_continuous_state_evolution(
-                state_evolution=state_evolution,
-                state_dim=inferred_state_dim,
-                x_probe=x_probe,
-                u_probe=u_probe,
-                t_probe=t_probe,
+            self.state_evolution = _resolve_continuous_state_evolution(
+                state_evolution,
             )
-            resolved_state_evolution = _refine_continuous_state_evolution(
-                resolved_state_evolution,
-                x_probe=x_probe,
-                u_probe=u_probe,
-                t_probe=t_probe,
-            )
-        else:
-            _validate_discrete_state_evolution_output_shape(
-                state_evolution=state_evolution,
-                state_dim=inferred_state_dim,
-                x_probe=x_probe,
-                u_probe=u_probe,
-                t_probe=t_probe,
-            )
-
-        self.state_evolution = resolved_state_evolution
-
-        obs_dist = observation_model(x_probe, u_probe, t_probe)
-        inferred_observation_dim = _infer_vector_dim_from_distribution(
-            obs_dist, "observation_model(x, u, t)"
-        )
-        _validate_observation_dim(observation_dim, inferred_observation_dim)
 
         self.state_dim = int(inferred_state_dim)
-        self.observation_dim = int(inferred_observation_dim)
+        self.observation_dim = int(inferred_obs_dim)
         self.control_dim = int(control_dim)
         self.categorical_state = bool(inferred_categorical_state)
 
@@ -415,7 +388,15 @@ class ContinuousTimeStateEvolution(eqx.Module):
 
 
 class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
-    """Refined continuous-time state evolution with no diffusion, i.e., describing an ODE."""
+    """Continuous-time state evolution with no diffusion term, i.e., describing an ODE.
+
+    This is a refined form of :class:`ContinuousTimeStateEvolution` used when a
+    model has deterministic continuous-time dynamics, i.e. an ODE rather than an
+    SDE. In most user code you should construct
+    :class:`ContinuousTimeStateEvolution` directly and let
+    :class:`DynamicalModel` refine it into this subclass when ``diffusion=None``.
+    Its main semantic guarantee is that ``diffusion`` is always ``None``.
+    """
 
     diffusion: None = eqx.field(static=True, default=None)
 
@@ -437,7 +418,14 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
 
 
 class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
-    """Refined continuous-time state evolution with resolved diffusion."""
+    """Continuous-time state evolution with resolved stochastic diffusion.
+
+    This is a refined form of :class:`ContinuousTimeStateEvolution` used for SDE
+    models after the diffusion metadata has been resolved. In practice that means
+    the attached :class:`~dynestyx.models.diffusions.Diffusion` has a known
+    ``bm_dim`` and can therefore be used safely by downstream SDE solvers,
+    discretizers, and inference backends.
+    """
 
     diffusion: Diffusion = eqx.field(static=True, kw_only=True)
 

@@ -190,23 +190,16 @@ def _inside_numpyro_plate_context() -> bool:
 
 def _infer_observation_dim_in_plate_context(
     *,
-    initial_condition: Any,
     observation_model: Callable[[State, Control | None, Time], Any],
-    inferred_state_dim: int,
-    control_dim: int,
-    t_probe: Time | None,
+    x_probe: State,
+    u_probe: Control | None,
+    t_probe: Time,
     observation_dim: int | None,
 ) -> int:
     """Infer observation dimension in plate context, falling back to explicit value."""
     if observation_dim is not None:
         return int(observation_dim)
 
-    x_probe = _make_probe_state(
-        initial_condition=initial_condition,
-        state_dim=inferred_state_dim,
-    )
-    u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
-    t_probe = jnp.array(0.0) if t_probe is None else t_probe
     try:
         obs_dist = observation_model(x_probe, u_probe, t_probe)
         return int(
