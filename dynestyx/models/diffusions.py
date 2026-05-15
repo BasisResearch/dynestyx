@@ -99,7 +99,7 @@ class Diffusion(eqx.Module):
         u_probe: Control | None,
         t_probe: Time,
     ) -> Diffusion:
-        """Validate coefficient shape information and resolve diffusion metadata."""
+        """Check coefficient shape and resolve ``bm_dim`` if needed."""
         raise NotImplementedError
 
     def evaluate(
@@ -159,7 +159,9 @@ class Diffusion(eqx.Module):
             raise ValueError(f"bm_dim must be positive. Got bm_dim={self.bm_dim}.")
 
     def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
-        raise NotImplementedError("Please don't construct `Diffusion` directly; instead instantiate one of its subclasses (e.g., `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion`)")
+        raise NotImplementedError(
+            "Please don't construct `Diffusion` directly; instead instantiate one of its subclasses (e.g., `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion`)"
+        )
 
     def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
         raise NotImplementedError
@@ -205,6 +207,7 @@ class FullDiffusion(Diffusion):
         u_probe: Control | None,
         t_probe: Time,
     ) -> FullDiffusion:
+        """Check matrix shape and infer ``bm_dim`` from the trailing dimension if needed."""
         shape = jax.eval_shape(
             lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
         ).shape
@@ -279,6 +282,7 @@ class DiagonalDiffusion(Diffusion):
         u_probe: Control | None,
         t_probe: Time,
     ) -> DiagonalDiffusion:
+        """Check vector shape and verify that ``bm_dim`` is either 1 or ``state_dim``."""
         shape = jax.eval_shape(
             lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
         ).shape
@@ -359,6 +363,7 @@ class ScalarDiffusion(Diffusion):
         u_probe: Control | None,
         t_probe: Time,
     ) -> ScalarDiffusion:
+        """Check scalar shape and verify that ``bm_dim`` is either 1 or ``state_dim``."""
         shape = jax.eval_shape(
             lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
         ).shape
