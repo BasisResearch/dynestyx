@@ -372,11 +372,8 @@ def _solve_sde_diffrax(
         shape=(state_evolution.bm_dim,),
         key=k_bm,
     )
-    terms = dfx.MultiTerm(  # type: ignore[arg-type]
-        dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-    )
     sol = dfx.diffeqsolve(
-        terms,
+        dfx.MultiTerm(dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)),
         t0=t0,
         t1=saveat_times[-1],
         y0=x0,

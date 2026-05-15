@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Callable
 from typing import NamedTuple, cast
 
@@ -74,12 +73,10 @@ class Diffusion(eqx.Module):
         coefficient: DiffusionSpec,
         bm_dim: int | None = None,
     ):
-        object.__setattr__(
-            self,
-            "coefficient",
-            coefficient if callable(coefficient) else jnp.asarray(coefficient),
+        self.coefficient = (
+            coefficient if callable(coefficient) else jnp.asarray(coefficient)
         )
-        object.__setattr__(self, "bm_dim", None if bm_dim is None else int(bm_dim))
+        self.bm_dim = None if bm_dim is None else int(bm_dim)
         self._validate_init()
 
     def evaluate_value(
@@ -150,9 +147,7 @@ class Diffusion(eqx.Module):
         return self.evaluate(x=x, u=u, t=t).apply(dw, state_dim=state_dim)
 
     def _with_bm_dim(self, bm_dim: int) -> Diffusion:
-        new_self = copy.copy(self)
-        object.__setattr__(new_self, "bm_dim", int(bm_dim))
-        return new_self
+        return type(self)(self.coefficient, bm_dim=int(bm_dim))
 
     def _constant_shape(self) -> tuple[int, ...] | None:
         if callable(self.coefficient):
@@ -200,7 +195,7 @@ class FullDiffusion(Diffusion):
                 f"Got shape {shape}."
             )
         if shape is not None and self.bm_dim is None:
-            object.__setattr__(self, "bm_dim", int(shape[-1]))
+            self.bm_dim = int(shape[-1])
 
     def resolve_metadata(
         self,

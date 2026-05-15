@@ -1,5 +1,7 @@
 """Core interfaces and base classes for dynamical models."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -92,7 +94,9 @@ class DynamicalModel(eqx.Module):
 
     initial_condition: Distribution
     state_evolution: (
-        Callable[[State, Control, Time], State]
+        ContinuousTimeStateEvolution
+        | DiscreteTimeStateEvolution
+        | Callable[[State, Control, Time], State]
         | Callable[[State, Control, Time, Time], State]
     )
     observation_model: Callable[[State, Control, Time], Distribution]
@@ -160,29 +164,26 @@ class DynamicalModel(eqx.Module):
         # Skip shape validation when inside a numpyro plate context, since
         # batched parameters produce shapes that don't match unbatched expectations.
 
-        def _canonicalize_continuous_state_evolution(
+        def _refine_continuous_state_evolution(
+            current_state_evolution: ContinuousTimeStateEvolution,
             *,
             x_probe: State,
             u_probe: Control | None,
             t_probe: Time,
-        ) -> None:
+        ) -> ContinuousTimeStateEvolution:
             if not inferred_continuous_time:
-                return
-            diffusion = state_evolution.diffusion
+                return current_state_evolution
+            diffusion = current_state_evolution.diffusion
             if diffusion is None:
-                if not isinstance(
-                    state_evolution, DeterministicContinuousTimeStateEvolution
+                if isinstance(
+                    current_state_evolution, DeterministicContinuousTimeStateEvolution
                 ):
-                    object.__setattr__(
-                        self,
-                        "state_evolution",
-                        DeterministicContinuousTimeStateEvolution(
-                            drift=state_evolution.drift,
-                            potential=state_evolution.potential,
-                            use_negative_gradient=state_evolution.use_negative_gradient,
-                        ),
-                    )
-                return
+                    return current_state_evolution
+                return DeterministicContinuousTimeStateEvolution(
+                    drift=current_state_evolution.drift,
+                    potential=current_state_evolution.potential,
+                    use_negative_gradient=current_state_evolution.use_negative_gradient,
+                )
 
             resolved_diffusion = diffusion.resolve_metadata(
                 state_dim=inferred_state_dim,
@@ -191,20 +192,20 @@ class DynamicalModel(eqx.Module):
                 t_probe=t_probe,
             )
             if (
-                isinstance(state_evolution, StochasticContinuousTimeStateEvolution)
-                and state_evolution.diffusion is resolved_diffusion
+                isinstance(
+                    current_state_evolution, StochasticContinuousTimeStateEvolution
+                )
+                and current_state_evolution.diffusion is resolved_diffusion
             ):
-                return
-            object.__setattr__(
-                self,
-                "state_evolution",
-                StochasticContinuousTimeStateEvolution(
-                    drift=state_evolution.drift,
-                    potential=state_evolution.potential,
-                    use_negative_gradient=state_evolution.use_negative_gradient,
-                    diffusion=resolved_diffusion,
-                ),
+                return current_state_evolution
+            return StochasticContinuousTimeStateEvolution(
+                drift=current_state_evolution.drift,
+                potential=current_state_evolution.potential,
+                use_negative_gradient=current_state_evolution.use_negative_gradient,
+                diffusion=resolved_diffusion,
             )
+
+        resolved_state_evolution = state_evolution
 
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
@@ -222,13 +223,15 @@ class DynamicalModel(eqx.Module):
             self.control_dim = int(control_dim)
             self.categorical_state = bool(inferred_categorical_state)
 
-            # Plate-batched parameters prevent reliable unbatched shape probes, so
-            # we resolve continuous-time diffusion metadata from synthetic vectors.
-            _canonicalize_continuous_state_evolution(
+            # In a plate, parameter callables often expect batched parameters, so
+            # we resolve diffusion metadata using synthetic per-trajectory probes.
+            resolved_state_evolution = _refine_continuous_state_evolution(
+                resolved_state_evolution,
                 x_probe=jnp.zeros((inferred_state_dim,)),
                 u_probe=None if control_dim == 0 else jnp.zeros((control_dim,)),
                 t_probe=jnp.array(0.0) if self.t0 is None else self.t0,
             )
+            self.state_evolution = resolved_state_evolution
             return
 
         x_probe = _make_probe_state(
@@ -245,7 +248,8 @@ class DynamicalModel(eqx.Module):
                 u_probe=u_probe,
                 t_probe=t_probe,
             )
-            _canonicalize_continuous_state_evolution(
+            resolved_state_evolution = _refine_continuous_state_evolution(
+                resolved_state_evolution,
                 x_probe=x_probe,
                 u_probe=u_probe,
                 t_probe=t_probe,
@@ -258,6 +262,8 @@ class DynamicalModel(eqx.Module):
                 u_probe=u_probe,
                 t_probe=t_probe,
             )
+
+        self.state_evolution = resolved_state_evolution
 
         obs_dist = observation_model(x_probe, u_probe, t_probe)
         inferred_observation_dim = _infer_vector_dim_from_distribution(
@@ -419,10 +425,10 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
             raise ValueError(
                 "DeterministicContinuousTimeStateEvolution does not accept diffusion."
             )
-        object.__setattr__(self, "drift", drift)
-        object.__setattr__(self, "potential", potential)
-        object.__setattr__(self, "use_negative_gradient", use_negative_gradient)
-        object.__setattr__(self, "diffusion", None)
+        self.drift = drift
+        self.potential = potential
+        self.use_negative_gradient = use_negative_gradient
+        self.diffusion = None
 
 
 class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
@@ -443,10 +449,10 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
                 "StochasticContinuousTimeStateEvolution requires diffusion with "
                 "resolved bm_dim."
             )
-        object.__setattr__(self, "drift", drift)
-        object.__setattr__(self, "potential", potential)
-        object.__setattr__(self, "use_negative_gradient", use_negative_gradient)
-        object.__setattr__(self, "diffusion", diffusion)
+        self.drift = drift
+        self.potential = potential
+        self.use_negative_gradient = use_negative_gradient
+        self.diffusion = diffusion
 
     @property
     def bm_dim(self) -> int:

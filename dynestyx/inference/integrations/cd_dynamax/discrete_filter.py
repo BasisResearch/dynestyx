@@ -35,18 +35,6 @@ from dynestyx.models import (
 from dynestyx.utils import _should_record_field
 
 
-def _coerce_to_param_dtype(params, *arrays):
-    """Cast arrays to the first inexact dtype found in a parameter pytree."""
-    dtype = None
-    for leaf in jax.tree.leaves(params):
-        if isinstance(leaf, jax.Array) and jnp.issubdtype(leaf.dtype, jnp.inexact):
-            dtype = leaf.dtype
-            break
-    if dtype is None:
-        return arrays
-    return tuple(jnp.asarray(arr, dtype=dtype) for arr in arrays)
-
-
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
     """Build dynamax ParamsLGSSM from LinearGaussianSSM.initialize for an LTI model."""
     state_dim = dynamics.state_dim
@@ -117,12 +105,10 @@ def compute_cd_dynamax_discrete_filter(
 
     if isinstance(filter_config, KFConfig):
         params = _lti_to_lgssm_params(dynamics)
-        emissions, inputs = _coerce_to_param_dtype(params, emissions, inputs)
         return lgssm_filter(params, emissions, inputs=inputs)
 
     # EKF and UKF share the same nonlinear params representation.
     params_nl = gaussian_to_nlgssm_params(dynamics)
-    emissions, inputs = _coerce_to_param_dtype(params_nl, emissions, inputs)
 
     if isinstance(filter_config, EKFConfig):
         return extended_kalman_filter(params_nl, emissions, inputs=inputs)

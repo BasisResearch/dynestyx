@@ -5,7 +5,7 @@ state evolution. Most users should instantiate this class directly and pass an o
 `diffusion=` built from [`FullDiffusion`](./diffusion.md),
 [`DiagonalDiffusion`](./diffusion.md), or [`ScalarDiffusion`](./diffusion.md).
 
-Internally, `DynamicalModel` canonicalizes continuous-time dynamics to refined
+Internally, `DynamicalModel` refines continuous-time dynamics to
 deterministic and stochastic subclasses. Those specialized classes are intended for
 developer-facing integrations and are documented in the developer API rather than the
 public tutorials.

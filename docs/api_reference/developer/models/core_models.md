@@ -7,7 +7,7 @@ classes:
 - `StochasticContinuousTimeStateEvolution`
 
 Most users should continue to construct `ContinuousTimeStateEvolution` directly and let
-`DynamicalModel` canonicalize it internally.
+`DynamicalModel` refine it internally.
 
 ::: dynestyx.models.core
     options:

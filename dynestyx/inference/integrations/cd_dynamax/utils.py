@@ -39,6 +39,11 @@ def _normalize_cd_dynamax_diffusion(
     pad trailing Brownian columns with zeros to match `(state_dim, state_dim)`.
     Diffusion with `bm_dim > state_dim` is rejected.
     """
+    if state_evolution.bm_dim > state_dim:
+        raise ValueError(
+            "Continuous cd-dynamax filters require bm_dim <= state_dim. "
+            f"Got state_dim={state_dim}, bm_dim={state_evolution.bm_dim}."
+        )
 
     def _wrapped(x, u, t):
         L = state_evolution.diffusion.as_matrix(x=x, u=u, t=t, state_dim=state_dim)
@@ -54,18 +59,6 @@ def _normalize_cd_dynamax_diffusion(
         return L
 
     return _wrapped
-
-
-def _validate_cd_dynamax_continuous_diffusion(
-    state_evolution: StochasticContinuousTimeStateEvolution,
-    state_dim: int,
-) -> None:
-    """Validate continuous cd-dynamax diffusion compatibility from resolved metadata."""
-    if state_evolution.bm_dim > state_dim:
-        raise ValueError(
-            "Continuous cd-dynamax filters require bm_dim <= state_dim. "
-            f"Got state_dim={state_dim}, bm_dim={state_evolution.bm_dim}."
-        )
 
 
 class _ConstantFunction(eqx.Module):
@@ -287,10 +280,6 @@ def dsx_to_cd_dynamax(
             }
         )
     if isinstance(state_evo, StochasticContinuousTimeStateEvolution):
-        _validate_cd_dynamax_continuous_diffusion(
-            state_evo,
-            dsx_model.state_dim,
-        )
         diffusion_coeff = _normalize_cd_dynamax_diffusion(
             state_evo,
             dsx_model.state_dim,

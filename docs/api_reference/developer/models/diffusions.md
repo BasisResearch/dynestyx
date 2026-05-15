@@ -15,7 +15,7 @@ Developer-facing code sometimes needs the lower-level evaluation layer:
   concrete `(x, u, t)`.
 - `EvaluatedDiffusion.as_matrix(...)` returns the corresponding matrix `L`.
 - `EvaluatedDiffusion.apply(...)` applies that matrix to a Brownian increment.
-- `resolve_metadata(...)` canonicalizes `bm_dim` and validates the coefficient
+- `resolve_metadata(...)` resolves `bm_dim` and validates the coefficient
   shape against `state_dim`.
 
 In other words, the public classes describe the structure of the diffusion,

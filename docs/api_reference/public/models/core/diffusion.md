@@ -16,9 +16,16 @@ where:
 
 Dynestyx exposes three structured diffusion classes:
 
-- `FullDiffusion`: general matrix-valued diffusion \(L \in \mathbb{R}^{d_x \times d_w}\)
-- `DiagonalDiffusion`: vector-valued diffusion \(v \in \mathbb{R}^{d_x}\)
-- `ScalarDiffusion`: scalar-valued diffusion \(\sigma \in \mathbb{R}\)
+- If your diffusion has the form \(L = \sigma I_{d_w}\) with \(d_w = d_x\), use `ScalarDiffusion(sigma, bm_dim=state_dim)`.
+- If your diffusion has the form \(L = \sigma \mathbf{1}_{d_x}\), use `ScalarDiffusion(sigma, bm_dim=1)`.
+- If your diffusion has the form \(L = \mathrm{diag}(v)\), use `DiagonalDiffusion(v, bm_dim=state_dim)`.
+- If your diffusion has the form \(L = v \in \mathbb{R}^{d_x \times 1}\), use `DiagonalDiffusion(v, bm_dim=1)`.
+- If your diffusion is a general matrix \(L \in \mathbb{R}^{d_x \times d_w}\), use `FullDiffusion(L)`.
+
+The same constructors also accept callables `(x, u, t) -> value` instead of
+constants. For example, if \(L(x_t, u_t, t) = \sigma(x_t) I_{d_w}\), use
+`ScalarDiffusion(lambda x, u, t: sigma(x), bm_dim=state_dim)`. The same pattern
+applies across `ScalarDiffusion`, `DiagonalDiffusion`, and `FullDiffusion`.
 
 In practice, many models use a constant diffusion coefficient. In those cases,
 pass the matrix/vector/scalar value directly. Reserve callable diffusion
@@ -42,7 +49,10 @@ Each class accepts either:
 
 ### `FullDiffusion`
 
-Use `FullDiffusion(coefficient, bm_dim=None)` when you want to specify the
+Mathematically, `FullDiffusion` represents
+\(L(x_t, u_t, t) \in \mathbb{R}^{d_x \times d_w}\).
+
+Use `FullDiffusion(coefficient, bm_dim=None)` when you want to specify this
 matrix-valued diffusion coefficient directly.
 
 Accepted `coefficient` forms:
@@ -51,12 +61,6 @@ Accepted `coefficient` forms:
 - a callable `(x, u, t) -> array` with trailing shape `(state_dim, bm_dim)`.
 
 If `coefficient` is constant, `bm_dim` is inferred automatically when omitted.
-
-Mathematically, `FullDiffusion` represents
-
-\[
-L(x_t, u_t, t) \in \mathbb{R}^{d_x \times d_w}.
-\]
 
 Example:
 
@@ -72,6 +76,11 @@ state_evolution = ContinuousTimeStateEvolution(
 
 ### `DiagonalDiffusion`
 
+Mathematically, `DiagonalDiffusion` represents a vector-valued coefficient
+\(v(x_t, u_t, t) \in \mathbb{R}^{d_x}\). If `bm_dim = d_x`, this means
+\(L = \mathrm{diag}(v(x_t, u_t, t))\). If `bm_dim = 1`, this means
+\(L = v(x_t, u_t, t) \in \mathbb{R}^{d_x \times 1}\).
+
 Use `DiagonalDiffusion(coefficient, bm_dim)` when the diffusion is naturally
 parameterized by a vector of state-wise loadings.
 
@@ -81,24 +90,6 @@ Accepted `coefficient` forms:
 - a callable `(x, u, t) -> array` with trailing shape `(state_dim,)`.
 
 `bm_dim` is required and must be either `1` or `state_dim`.
-
-Mathematically, `DiagonalDiffusion` represents a vector-valued coefficient
-
-\[
-v(x_t, u_t, t) \in \mathbb{R}^{d_x}.
-\]
-
-If `bm_dim = d_x`, the vector is interpreted as a diagonal matrix:
-
-\[
-L = \mathrm{diag}(v(x_t, u_t, t)).
-\]
-
-If `bm_dim = 1`, the same vector is interpreted as a column loading vector:
-
-\[
-L = v(x_t, u_t, t) \in \mathbb{R}^{d_x \times 1}.
-\]
 
 Example:
 
@@ -114,6 +105,12 @@ state_evolution = ContinuousTimeStateEvolution(
 
 ### `ScalarDiffusion`
 
+Mathematically, `ScalarDiffusion` represents a scalar-valued coefficient
+\(\sigma(x_t, u_t, t) \in \mathbb{R}\). If `bm_dim = d_x`, this means
+\(L = \sigma(x_t, u_t, t)\,I_{d_w}\) with \(d_w = d_x\). If `bm_dim = 1`, this
+means \(L = \sigma(x_t, u_t, t)\,\mathbf{1}_{d_x}\), viewed as a column vector
+in \(\mathbb{R}^{d_x \times 1}\).
+
 Use `ScalarDiffusion(coefficient, bm_dim)` when one scalar scale is enough.
 This is usually the simplest choice for isotropic diffusion.
 
@@ -124,29 +121,6 @@ Accepted `coefficient` forms:
 - a callable `(x, u, t) -> scalar_or_length_1_array`.
 
 `bm_dim` is required and must be either `1` or `state_dim`.
-
-Mathematically, `ScalarDiffusion` represents a scalar-valued coefficient
-
-\[
-\sigma(x_t, u_t, t) \in \mathbb{R}.
-\]
-
-If `bm_dim = d_x`, it is interpreted as isotropic independent noise:
-
-\[
-L = \sigma(x_t, u_t, t)\,I_{d_w}
-\]
-
-with \(d_w = d_x\).
-
-If `bm_dim = 1`, it is interpreted as a shared scalar driver applied equally to
-every state coordinate:
-
-\[
-L = \sigma(x_t, u_t, t)\,\mathbf{1}_{d_x},
-\]
-
-viewed as a column vector in \(\mathbb{R}^{d_x \times 1}\).
 
 Constant example:
 
