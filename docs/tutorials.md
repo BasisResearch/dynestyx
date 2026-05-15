@@ -15,4 +15,4 @@ Welcome to the `dynestyx` examples page
 - [SINDy (Sparse identification of non-linear dynamics)](deep_dives/fhn_sparse_id.ipynb)
 - [Continuous-time LTI profile likelihood](deep_dives/continuous_time_lti_profile_likelihood.ipynb)
 - [GP prior on drift: learning FitzHugh–Nagumo dynamics](deep_dives/gp_drift.ipynb)
-- Using `Discretizer` to go from continuous-time -> discrete - Coming soon!
+- [Lorenz-63 discretizer EnKF benchmark](deep_dives/l63_discretizer_enkf_benchmark.ipynb) - Compare `Discretizer` methods for continuous-time -> discrete filtering against CD-EnKF.
