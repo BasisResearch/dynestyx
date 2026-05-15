@@ -164,7 +164,7 @@ class Diffusion(eqx.Module):
             raise ValueError(f"bm_dim must be positive. Got bm_dim={self.bm_dim}.")
 
     def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
-        raise NotImplementedError
+        raise NotImplementedError("Please don't construct `Diffusion` directly; instead instantiate one of its subclasses (e.g., `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion`)")
 
     def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
         raise NotImplementedError
