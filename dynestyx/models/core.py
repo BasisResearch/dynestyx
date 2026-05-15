@@ -415,7 +415,7 @@ class ContinuousTimeStateEvolution(eqx.Module):
 
 
 class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
-    """Refined continuous-time state evolution with no diffusion."""
+    """Refined continuous-time state evolution with no diffusion, i.e., describing an ODE."""
 
     diffusion: None = eqx.field(static=True, default=None)
 
