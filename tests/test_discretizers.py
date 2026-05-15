@@ -3,6 +3,7 @@
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
+import pytest
 from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
@@ -16,9 +17,12 @@ from dynestyx.inference.filter_configs import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiagonalDiffusion,
     DiracIdentityObservation,
     DynamicalModel,
+    FullDiffusion,
     GaussianStateEvolution,
+    ScalarDiffusion,
 )
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.solvers import euler_maruyama_loc_cov
@@ -26,11 +30,68 @@ from tests.models import continuous_time_stochastic_l63_model_dirac_obs
 
 
 def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
-    return ContinuousTimeStateEvolution(
+    cte = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: jnp.zeros_like(x),
-        diffusion_coefficient=lambda x, u, t: jnp.ones((1, 1)),
-        bm_dim=1,
+        diffusion=FullDiffusion(lambda x, u, t: jnp.ones((1, 1)), bm_dim=1),
     )
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=cte,
+        observation_model=LinearGaussianObservation(
+            H=jnp.array([[1.0]]),
+            R=jnp.array([[1.0]]),
+        ),
+        control_dim=0,
+    )
+    assert isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution)
+    return dynamics.state_evolution
+
+
+def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
+    if diffusion_form == "full":
+        cte = ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion=FullDiffusion(jnp.eye(2), bm_dim=2),
+        )
+    elif diffusion_form == "diag":
+        cte = ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion=DiagonalDiffusion(jnp.ones((2,)), bm_dim=2),
+        )
+    elif diffusion_form == "scalar":
+        cte = ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion=ScalarDiffusion(jnp.array(1.0), bm_dim=2),
+        )
+    elif diffusion_form == "callable_full":
+        cte = ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion=FullDiffusion(lambda x, u, t: jnp.eye(2), bm_dim=2),
+        )
+    elif diffusion_form == "callable_diag":
+        cte = ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros((2,)),
+            diffusion=DiagonalDiffusion(lambda x, u, t: jnp.ones((2,)), bm_dim=2),
+        )
+    elif diffusion_form == "callable_scalar":
+        cte = ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x),
+            diffusion=ScalarDiffusion(lambda x, u, t: jnp.array(1.0), bm_dim=2),
+        )
+    else:
+        raise ValueError(f"Unknown diffusion form: {diffusion_form}")
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(2), jnp.eye(2)),
+        state_evolution=cte,
+        observation_model=LinearGaussianObservation(
+            H=jnp.eye(2),
+            R=jnp.eye(2),
+        ),
+        control_dim=0,
+    )
+    assert isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution)
+    return dynamics.state_evolution
 
 
 def test_euler_maruyama_returns_gaussian_state_evolution_with_callable_cov():
@@ -76,6 +137,21 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
     d = evo(x, None, t0, t1)
     assert jnp.allclose(d_dict["loc"], d.loc)
     assert jnp.allclose(d_dict["cov"], d.covariance_matrix)
+
+
+@pytest.mark.parametrize(
+    "diffusion_form",
+    ["full", "diag", "scalar", "callable_full", "callable_diag", "callable_scalar"],
+)
+def test_euler_maruyama_structured_diffusions_match_dense_covariance(diffusion_form):
+    cte = _ctse_2d_zero_drift(diffusion_form)
+    x = jnp.array([0.3, -0.1])
+    t0 = jnp.array(1.0)
+    t1 = jnp.array(3.0)
+    out = euler_maruyama_loc_cov(cte, x, None, t0, t1)
+    expected_cov = (t1 - t0) * jnp.eye(2)
+    assert jnp.allclose(out["loc"], x)
+    assert jnp.allclose(out["cov"], expected_cov)
 
 
 def test_discretized_dirac_observations_preserve_state_dimension():

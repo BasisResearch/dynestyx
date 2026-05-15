@@ -21,7 +21,7 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion
 from dynestyx.simulators import DiscreteTimeSimulator
 from tests.fixtures import (
     _squeeze_sim_dims,
@@ -102,7 +102,7 @@ def test_continuous_time_dpf_non_gaussian_observation_smoke():
             initial_condition=dist.LogNormal(loc=jnp.zeros(1), scale=jnp.ones(1)),
             state_evolution=ContinuousTimeStateEvolution(
                 drift=lambda x, u, t: -0.3 * jnp.sin(x),
-                diffusion_coefficient=lambda x, u, t: 0.1 * jnp.eye(1),
+                diffusion=FullDiffusion(lambda x, u, t: 0.1 * jnp.eye(1)),
             ),
             observation_model=lambda x, u, t: dist.Poisson(rate=jnp.exp(x[0] + bias)),
         )

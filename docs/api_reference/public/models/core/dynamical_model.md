@@ -33,6 +33,7 @@
     from dynestyx import (
         DynamicalModel,
         ContinuousTimeStateEvolution,
+        FullDiffusion,
         LinearGaussianObservation,
     )
 
@@ -47,7 +48,7 @@
         ),
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: -x + u,
-            diffusion_coefficient=lambda x, u, t: jnp.eye(state_dim, bm_dim),
+            diffusion=FullDiffusion(jnp.eye(state_dim, bm_dim)),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.eye(observation_dim, state_dim),
@@ -55,4 +56,3 @@
         ),
     )
     ```
-

@@ -51,6 +51,7 @@ nav:
         - Core Models:
           - DynamicalModel: api_reference/public/models/core/dynamical_model.md
           - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
+          - Diffusion: api_reference/public/models/core/diffusion.md
           - DiscreteTimeStateEvolution: api_reference/public/models/core/discrete_time_state_evolution.md
           - ObservationModel: api_reference/public/models/core/observation_model.md
           - Drift: api_reference/public/models/core/drift.md
@@ -88,6 +89,7 @@ nav:
       - Overview: api_reference/developer/index.md
       - Models:
         - Core Models: api_reference/developer/models/core_models.md
+        - Diffusions: api_reference/developer/models/diffusions.md
         - Specialized Models: api_reference/developer/models/specialized_models.md
         - Checkers: api_reference/developer/models/checkers.md
       - Inference:

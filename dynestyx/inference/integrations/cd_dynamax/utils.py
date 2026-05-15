@@ -16,43 +16,49 @@ from cd_dynamax.dynamax.parameters import ParameterProperties
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
-    ContinuousTimeStateEvolution,
+    DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
     GaussianObservation,
     GaussianStateEvolution,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
+    StochasticContinuousTimeStateEvolution,
 )
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
-def _normalize_cd_dynamax_diffusion(
-    diffusion_coefficient,
+def _as_cd_dynamax_diffusion_coefficient(
+    state_evolution: StochasticContinuousTimeStateEvolution,
     state_dim: int,
 ):
-    """Return a diffusion coeff compatible with cd-dynamax's EnKF SDE solve.
+    """Return a full-matrix diffusion coefficient for cd-dynamax.
 
-    cd-dynamax's internal diffrax wrapper builds Brownian controls with shape
-    equal to `y0.shape` (state_dim). For non-square diffusion coefficients
-    (state_dim, bm_dim) with bm_dim != state_dim, pad/truncate columns so the
-    returned matrix is always (state_dim, state_dim).
+    This adapts any Dynestyx diffusion shorthand (scalar/diagonal/full, constant
+    or callable) into a function ``(x, u, t) -> L(x, u, t)`` returning a full
+    matrix. cd-dynamax's continuous solver paths assume Brownian controls have
+    dimension ``state_dim``, so rectangular diffusions with ``bm_dim <
+    state_dim`` are padded with trailing zero columns. ``bm_dim > state_dim`` is
+    rejected.
     """
+    if state_evolution.bm_dim > state_dim:
+        raise ValueError(
+            "Continuous cd-dynamax filters require bm_dim <= state_dim. "
+            f"Got state_dim={state_dim}, bm_dim={state_evolution.bm_dim}."
+        )
 
     def _wrapped(x, u, t):
-        L = diffusion_coefficient(x, u, t)
-        if L.ndim == 1:
-            L = jnp.diag(L)
-        if L.ndim != 2:
-            raise ValueError(
-                "diffusion_coefficient must return a vector or matrix for cd-dynamax."
-            )
+        L = state_evolution.diffusion.as_matrix(x=x, u=u, t=t, state_dim=state_dim)
         n_cols = L.shape[-1]
-        if n_cols == state_dim:
-            return L
+        if n_cols > state_dim:
+            raise ValueError(
+                "cd-dynamax continuous diffusion requires bm_dim <= state_dim. "
+                f"Got state_dim={state_dim}, bm_dim={n_cols}."
+            )
         if n_cols < state_dim:
-            return jnp.pad(L, ((0, 0), (0, state_dim - n_cols)))
-        return L[:, :state_dim]
+            pad_width = ((0, 0),) * (L.ndim - 1) + ((0, state_dim - n_cols),)
+            L = jnp.pad(L, pad_width)
+        return L
 
     return _wrapped
 
@@ -181,30 +187,41 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
 
     Requires:
     - drift is AffineDrift (A, B, b)
-    - diffusion_coefficient is constant (callable returning same value for any x, u, t)
-      returning same value for any x, u, t)
+    - diffusion_coefficient is constant (array/scalar-valued Dynestyx diffusion)
     - observation_model is LinearGaussianObservation
     - initial_condition is MultivariateNormal
     """
     state_evo = dsx_model.state_evolution
-    if not isinstance(state_evo, ContinuousTimeStateEvolution):
-        raise TypeError("dsx_to_cdlgssm_params requires ContinuousTimeStateEvolution.")
+    if not isinstance(state_evo, StochasticContinuousTimeStateEvolution):
+        raise TypeError(
+            "dsx_to_cdlgssm_params requires StochasticContinuousTimeStateEvolution. You probably tried to call a continuous-time CD-Dynamax filter with a DeterministicContinuousTimeStateEvolution or DiscreteTimeStateEvolution."
+        )
     drift = state_evo.drift
     if not isinstance(drift, AffineDrift):
         raise TypeError(
             f"dsx_to_cdlgssm_params requires AffineDrift, got {type(drift).__name__}."
         )
-    if state_evo.diffusion_coefficient is None:
-        raise ValueError("dsx_to_cdlgssm_params requires diffusion_coefficient.")
 
-    # Extract constant L and use inferred Brownian dimension.
-    x0 = jnp.zeros(dsx_model.state_dim)
-    L = state_evo.diffusion_coefficient(x0, None, jnp.array(0.0))
-    if state_evo.bm_dim is None:
-        raise ValueError(
-            "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
+    if callable(state_evo.diffusion.coefficient):
+        raise TypeError(
+            "Callable diffusion is not supported by the continuous-time exact "
+            "Kalman filter path. If you need callable diffusion, use a "
+            "continuous-time nonlinear filter config such as "
+            "ContinuousTimeEKFConfig instead of ContinuousTimeKFConfig. "
+            "When the goal is exact filtering, CT-EKF is the appropriate "
+            "fallback here because in the linear-Gaussian case it emulates "
+            "the KF via auto-diff and cd_dynamax supports callable diffusion "
+            "in the nonlinear case (not directly in the linear-Gaussian case)."
         )
-    Q = jnp.eye(state_evo.bm_dim)
+
+    # Extract constant L and use resolved Brownian dimension.
+    L = state_evo.diffusion.as_matrix(
+        x=jnp.zeros(dsx_model.state_dim),
+        u=None if dsx_model.control_dim == 0 else jnp.zeros((dsx_model.control_dim,)),
+        t=jnp.array(0.0),
+        state_dim=dsx_model.state_dim,
+    )
+    Q = jnp.eye(dsx_model.state_dim, state_evo.diffusion.bm_dim)
 
     ic = dsx_model.initial_condition
     if not isinstance(ic, dist.MultivariateNormal):
@@ -260,30 +277,44 @@ def dsx_to_cd_dynamax(
 
     ## Map state evolution ##
     state_evo = dsx_model.state_evolution
-    if isinstance(state_evo, ContinuousTimeStateEvolution):
-        if state_evo.drift is not None or state_evo.potential is not None:
-            shared_params.update(
-                {
-                    "dynamics_drift": state_evo.total_drift,
-                }
-            )
-        else:
+    if isinstance(
+        state_evo,
+        (
+            DeterministicContinuousTimeStateEvolution,
+            StochasticContinuousTimeStateEvolution,
+        ),
+    ):
+        if state_evo.drift is None and state_evo.potential is None:
             raise ValueError("Both drift and potential are None; define at least one.")
-        if state_evo.diffusion_coefficient is not None:
-            if state_evo.bm_dim is None:
-                raise ValueError(
-                    "state_evolution.bm_dim is not set on ContinuousTimeStateEvolution."
-                )
-            diffusion_coeff = _normalize_cd_dynamax_diffusion(
-                state_evo.diffusion_coefficient,
-                dsx_model.state_dim,
-            )
-            shared_params.update(
-                {
-                    "dynamics_diffusion_coefficient": diffusion_coeff,
-                    "dynamics_diffusion_cov": jnp.eye(dsx_model.state_dim),
-                }
-            )
+        shared_params.update(
+            {
+                "dynamics_drift": state_evo.total_drift,
+            }
+        )
+    if isinstance(state_evo, StochasticContinuousTimeStateEvolution):
+        diffusion_coeff = _as_cd_dynamax_diffusion_coefficient(
+            state_evo,
+            dsx_model.state_dim,
+        )
+        shared_params.update(
+            {
+                "dynamics_diffusion_coefficient": diffusion_coeff,
+                "dynamics_diffusion_cov": jnp.eye(dsx_model.state_dim),
+            }
+        )
+    elif isinstance(state_evo, DeterministicContinuousTimeStateEvolution):
+        shared_params.update(
+            {
+                "dynamics_diffusion_coefficient": jnp.zeros(
+                    (dsx_model.state_dim, dsx_model.state_dim)
+                ),
+                "dynamics_diffusion_cov": jnp.eye(dsx_model.state_dim),
+            }
+        )
+    elif isinstance(state_evo, LinearGaussianStateEvolution):
+        raise NotImplementedError(
+            f"State evolution of type {type(state_evo)} is not supported yet."
+        )
     else:
         raise NotImplementedError(
             f"State evolution of type {type(state_evo)} is not supported yet."

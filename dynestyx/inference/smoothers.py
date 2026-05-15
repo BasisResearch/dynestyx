@@ -46,7 +46,6 @@ from dynestyx.inference.smoother_configs import (
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
-from dynestyx.utils import _ensure_continuous_bm_dim
 
 DiscreteSmootherConfig = (
     KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
@@ -189,8 +188,6 @@ class Smoother(BaseSmootherLogFactorAdder):
     ) -> list[numpyro.distributions.Distribution] | None:
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for smoothing.")
-
-        dynamics = _ensure_continuous_bm_dim(dynamics)
 
         config = (
             self.smoother_config

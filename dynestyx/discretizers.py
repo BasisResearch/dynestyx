@@ -1,58 +1,40 @@
-import jax.numpy as jnp
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
-    ContinuousTimeStateEvolution,
     DynamicalModel,
     GaussianStateEvolution,
+    StochasticContinuousTimeStateEvolution,
 )
-from dynestyx.models.checkers import _infer_bm_dim
 from dynestyx.solvers import euler_maruyama_loc_cov
 from dynestyx.types import FunctionOfTime
-
-
-def _ensure_ctse_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
-    """Infer and set bm_dim when CT dynamics are built under active plates."""
-    if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-        return dynamics
-
-    cte = dynamics.state_evolution
-    if cte.diffusion_coefficient is None or cte.bm_dim is not None:
-        return dynamics
-
-    x0 = jnp.zeros((dynamics.state_dim,))
-    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    inferred_bm_dim = _infer_bm_dim(cte, dynamics.state_dim, x0, u0, t0)
-    if inferred_bm_dim is not None:
-        object.__setattr__(cte, "bm_dim", inferred_bm_dim)
-    return dynamics
 
 
 class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
     """`GaussianStateEvolution` backed by Euler-Maruyama moments."""
 
-    cte: ContinuousTimeStateEvolution
+    cte: StochasticContinuousTimeStateEvolution
 
     def __init__(
         self,
-        cte: ContinuousTimeStateEvolution,
+        cte: StochasticContinuousTimeStateEvolution,
         F=None,
         cov=None,
     ):
         # Accept these for reconstruction paths, but derive both from `cte`.
-        del F, cov
         self.cte = cte
+
+        def _loc(x, u, t_now, t_next):
+            return euler_maruyama_loc_cov(cte, x, u, t_now, t_next)["loc"]
+
+        def _cov(x, u, t_now, t_next):
+            return euler_maruyama_loc_cov(cte, x, u, t_now, t_next)["cov"]
+
         super().__init__(
-            F=lambda x, u, t_now, t_next: euler_maruyama_loc_cov(
-                cte, x, u, t_now, t_next
-            )["loc"],
-            cov=lambda x, u, t_now, t_next: euler_maruyama_loc_cov(
-                cte, x, u, t_now, t_next
-            )["cov"],
+            F=_loc,
+            cov=_cov,
         )
 
     def __call__(self, x, u, t_now, t_next):
@@ -63,7 +45,9 @@ class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
         )
 
 
-def euler_maruyama(cte: ContinuousTimeStateEvolution) -> GaussianStateEvolution:
+def euler_maruyama(
+    cte: StochasticContinuousTimeStateEvolution,
+) -> GaussianStateEvolution:
     """Discretize continuous-time state evolution via Euler-Maruyama.
 
     Euler-Maruyama is a first-order discrete approximation of a continuous-time
@@ -73,7 +57,7 @@ def euler_maruyama(cte: ContinuousTimeStateEvolution) -> GaussianStateEvolution:
     (depends on `t_next - t_now`) and passed as a callable `cov`.
 
     Args:
-        cte: `ContinuousTimeStateEvolution` to discretize.
+        cte: `StochasticContinuousTimeStateEvolution` to discretize.
     Returns:
         GaussianStateEvolution: Discrete-time Gaussian transition with the
         same Euler–Maruyama semantics as before this refactor.
@@ -124,6 +108,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
             ContinuousTimeStateEvolution,
             DiscreteTimeStateEvolution,
             DynamicalModel,
+            FullDiffusion,
         )
 
         def model_with_ctse(obs_times=None, obs_values=None):
@@ -135,7 +120,9 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 ),
                 state_evolution=ContinuousTimeStateEvolution(
                     drift=lambda x, u, t: x,
-                    diffusion_coefficient=lambda x, u, t: jnp.eye(state_dim, bm_dim),
+                    diffusion=FullDiffusion(
+                        lambda x, u, t: jnp.eye(state_dim, bm_dim)
+                    ),
                 ),
                 observation_model=lambda x, u, t: dist.MultivariateNormal(
                     x,
@@ -177,8 +164,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
-        if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-            dynamics = _ensure_ctse_bm_dim(dynamics)
+        if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
             discrete_evolution = self.discretize(dynamics.state_evolution)
             dynamics = DynamicalModel(
                 initial_condition=dynamics.initial_condition,

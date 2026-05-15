@@ -123,9 +123,7 @@ def _hierarchical_ode_model(
             initial_condition=dist.MultivariateNormal(
                 loc=jnp.zeros(2), covariance_matrix=jnp.eye(2)
             ),
-            state_evolution=ContinuousTimeStateEvolution(
-                drift=drift, diffusion_coefficient=None
-            ),
+            state_evolution=ContinuousTimeStateEvolution(drift=drift),
             observation_model=LinearGaussianObservation(
                 H=jnp.array([[0.0, 1.0]]), R=jnp.eye(1)
             ),
