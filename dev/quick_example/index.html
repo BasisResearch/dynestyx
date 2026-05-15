@@ -1788,6 +1788,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3100,6 +3128,34 @@
     
   
     Core Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
   
 
     
@@ -4592,7 +4648,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </style>
 <!-- End of mermaid configuration --><div class="jupyter-wrapper">
 <div class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e008738e">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=d5e9a7d5">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4648,7 +4704,7 @@ $$f(x) = \begin{pmatrix} \sigma(x_2 - x_1) \\ x_1(\rho - x_3) - x_2 \\ x_1 x_2 -
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">DynamicalModel</span><span class="p">,</span>
+    <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">FullDiffusion</span><span class="p">,</span>
     <span class="n">LinearGaussianObservation</span><span class="p">,</span> <span class="n">SDESimulator</span><span class="p">,</span> <span class="n">Filter</span><span class="p">,</span>
     <span class="n">sample</span><span class="p">,</span>
 <span class="p">)</span>
@@ -4675,7 +4731,7 @@ $$f(x) = \begin{pmatrix} \sigma(x_2 - x_1) \\ x_1(\rho - x_3) - x_2 \\ x_1 x_2 -
             <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">rho</span> <span class="o">-</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="o">-</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
             <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="p">(</span><span class="mf">8.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
         <span class="p">]),</span>
-        <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">diff_std</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">),</span>
+        <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span><span class="n">diff_std</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">)),</span>
     <span class="p">)</span>
     
     <span class="c1"># define the model</span>
@@ -4693,7 +4749,7 @@ import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 from dynestyx import (
-    ContinuousTimeStateEvolution, DynamicalModel,
+    ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion,
     LinearGaussianObservation, SDESimulator, Filter,
     sample,
 )
@@ -4720,7 +4776,7 @@ def l63_model(rho=None, obs_std=None, diff_std=None, obs_times=None, obs_values=
             x[0] * (rho - x[2]) - x[1],
             x[0] * x[1] - (8.0 / 3.0) * x[2],
         ]),
-        diffusion_coefficient=lambda x, u, t: diff_std * jnp.eye(state_dim),
+        diffusion=FullDiffusion(diff_std * jnp.eye(state_dim)),
     )
     
     # define the model

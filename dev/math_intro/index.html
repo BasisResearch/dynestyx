@@ -1839,6 +1839,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3171,6 +3199,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api_reference/developer/models/specialized_models/" class="md-nav__link">
         
   
@@ -3954,7 +4010,7 @@
     <span class="n">initial_condition</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
     <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
         <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span>
-        <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span>
+        <span class="n">diffusion</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">FullDiffusion</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
     <span class="p">),</span>
     <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span>
 <span class="p">)</span>

@@ -1799,6 +1799,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3111,6 +3139,34 @@
     
   
     Core Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
   
 
     
@@ -4663,7 +4719,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.random</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jr</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">ObservationModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">ObservationModel</span><span class="p">,</span> <span class="n">ScalarDiffusion</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">equinox</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">eqx</span>
 
@@ -4696,7 +4752,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
         <span class="p">),</span>
         <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
             <span class="n">drift</span><span class="o">=</span><span class="n">drift</span><span class="p">,</span>
-            <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">ScalarDiffusion</span><span class="p">(</span><span class="n">sigma</span><span class="p">,</span> <span class="n">bm_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
         <span class="p">),</span>
         <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Poisson</span><span class="p">(</span><span class="n">rate</span><span class="o">=</span><span class="n">dt</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">bias</span><span class="p">)),</span>
     <span class="p">)</span>
@@ -4713,7 +4769,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
-from dynestyx import DynamicalModel, ContinuousTimeStateEvolution, ObservationModel
+from dynestyx import DynamicalModel, ContinuousTimeStateEvolution, ObservationModel, ScalarDiffusion
 import dynestyx as dsx
 import equinox as eqx
 
@@ -4746,7 +4802,7 @@ def ou_poisson_model(bias=None, obs_times=None, obs_values=None, predict_times=N
         ),
         state_evolution=ContinuousTimeStateEvolution(
             drift=drift,
-            diffusion_coefficient=lambda x, u, t: sigma * jnp.eye(1),
+            diffusion=ScalarDiffusion(sigma, bm_dim=1),
         ),
         observation_model=lambda x, u, t: dist.Poisson(rate=dt * jnp.exp(x[0] + bias)),
     )

@@ -12,31 +12,31 @@
         <meta name="author" content="Basis Research Institute">
       
       
-        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/observation_model/">
+        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/developer/models/diffusions/">
       
       
-        <link rel="prev" href="../discrete_time_state_evolution/">
+        <link rel="prev" href="../core_models/">
       
       
-        <link rel="next" href="../drift/">
+        <link rel="next" href="../specialized_models/">
       
       
         
       
       
-      <link rel="icon" href="../../../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>ObservationModel - dynestyx documentation</title>
+        <title>Diffusions - dynestyx documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../../../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="../../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#observationmodel" class="md-skip">
+        <a href="#diffusions" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +98,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              ObservationModel
+              Diffusions
             
           </span>
         </div>
@@ -208,7 +208,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../../.." class="md-tabs__link">
+      <a href="../../../.." class="md-tabs__link">
         
   
   
@@ -229,7 +229,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../../tutorials/quickstart/" class="md-tabs__link">
+        <a href="../../../../tutorials/quickstart/" class="md-tabs__link">
           
   
   
@@ -249,7 +249,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../../tutorials/" class="md-tabs__link">
+        <a href="../../../../tutorials/" class="md-tabs__link">
           
   
   
@@ -271,7 +271,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../../../" class="md-tabs__link">
+        <a href="../../../" class="md-tabs__link">
           
   
   
@@ -289,7 +289,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../../../faq/" class="md-tabs__link">
+      <a href="../../../../faq/" class="md-tabs__link">
         
   
   
@@ -326,7 +326,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -356,7 +356,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../.." class="md-nav__link">
+      <a href="../../../.." class="md-nav__link">
         
   
   
@@ -435,7 +435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/quickstart/" class="md-nav__link">
+      <a href="../../../../tutorials/quickstart/" class="md-nav__link">
         
   
   
@@ -463,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../math_intro/" class="md-nav__link">
+      <a href="../../../../math_intro/" class="md-nav__link">
         
   
   
@@ -543,7 +543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
         
   
   
@@ -571,7 +571,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
         
   
   
@@ -599,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
         
   
   
@@ -627,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
         
   
   
@@ -655,7 +655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
         
   
   
@@ -683,7 +683,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
         
   
   
@@ -711,7 +711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
         
   
   
@@ -739,7 +739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
         
   
   
@@ -767,7 +767,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
         
   
   
@@ -795,7 +795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
         
   
   
@@ -823,7 +823,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
         
   
   
@@ -851,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
         
   
   
@@ -946,7 +946,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/" class="md-nav__link">
+      <a href="../../../../tutorials/" class="md-nav__link">
         
   
   
@@ -1026,7 +1026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../quick_example/" class="md-nav__link">
+      <a href="../../../../quick_example/" class="md-nav__link">
         
   
   
@@ -1054,7 +1054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
+      <a href="../../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
         
   
   
@@ -1142,7 +1142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
+      <a href="../../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
         
   
   
@@ -1170,7 +1170,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
+      <a href="../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
         
   
   
@@ -1198,7 +1198,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
+      <a href="../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
         
   
   
@@ -1226,7 +1226,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
+      <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
   
@@ -1254,7 +1254,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -1282,7 +1282,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -1310,7 +1310,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/gp_drift/" class="md-nav__link">
+      <a href="../../../../deep_dives/gp_drift/" class="md-nav__link">
         
   
   
@@ -1410,7 +1410,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../" class="md-nav__link">
+      <a href="../../../" class="md-nav__link">
         
   
   
@@ -1435,8 +1435,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1452,11 +1450,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
         
           
           <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="">
@@ -1477,7 +1475,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1495,7 +1493,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../" class="md-nav__link">
+      <a href="../../../public/" class="md-nav__link">
         
   
   
@@ -1520,8 +1518,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1534,11 +1530,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2" >
         
           
           <label class="md-nav__link" for="__nav_4_2_2" id="__nav_4_2_2_label" tabindex="0">
@@ -1559,7 +1555,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_2_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1574,8 +1570,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1588,11 +1582,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2_1" >
         
           
           <label class="md-nav__link" for="__nav_4_2_2_1" id="__nav_4_2_2_1_label" tabindex="0">
@@ -1613,7 +1607,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_4_2_2_1_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_4_2_2_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_2_2_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1631,7 +1625,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dynamical_model/" class="md-nav__link">
+      <a href="../../../public/models/core/dynamical_model/" class="md-nav__link">
         
   
   
@@ -1659,7 +1653,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../continuous_time_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/core/continuous_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -1687,7 +1681,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../diffusion/" class="md-nav__link">
+      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
         
   
   
@@ -1715,7 +1709,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discrete_time_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -1740,37 +1734,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ObservationModel
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../public/models/core/observation_model/" class="md-nav__link">
         
   
   
@@ -1786,37 +1753,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1829,7 +1765,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../drift/" class="md-nav__link">
+      <a href="../../../public/models/core/drift/" class="md-nav__link">
         
   
   
@@ -1857,7 +1793,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../potential/" class="md-nav__link">
+      <a href="../../../public/models/core/potential/" class="md-nav__link">
         
   
   
@@ -1945,7 +1881,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/linear_gaussian_observation/" class="md-nav__link">
+      <a href="../../../public/models/specialized/linear_gaussian_observation/" class="md-nav__link">
         
   
   
@@ -1973,7 +1909,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/gaussian_observation/" class="md-nav__link">
+      <a href="../../../public/models/specialized/gaussian_observation/" class="md-nav__link">
         
   
   
@@ -2001,7 +1937,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/linear_gaussian_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/specialized/linear_gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2029,7 +1965,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/gaussian_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/specialized/gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2057,7 +1993,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/affine_drift/" class="md-nav__link">
+      <a href="../../../public/models/specialized/affine_drift/" class="md-nav__link">
         
   
   
@@ -2085,7 +2021,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/lti_continuous/" class="md-nav__link">
+      <a href="../../../public/models/specialized/lti_continuous/" class="md-nav__link">
         
   
   
@@ -2113,7 +2049,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../specialized/lti_discrete/" class="md-nav__link">
+      <a href="../../../public/models/specialized/lti_discrete/" class="md-nav__link">
         
   
   
@@ -2209,7 +2145,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/filters/" class="md-nav__link">
+      <a href="../../../public/inference/filters/" class="md-nav__link">
         
   
   
@@ -2237,7 +2173,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/filter_configs/" class="md-nav__link">
+      <a href="../../../public/inference/filter_configs/" class="md-nav__link">
         
   
   
@@ -2265,7 +2201,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/smoothers/" class="md-nav__link">
+      <a href="../../../public/inference/smoothers/" class="md-nav__link">
         
   
   
@@ -2293,7 +2229,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/smoother_configs/" class="md-nav__link">
+      <a href="../../../public/inference/smoother_configs/" class="md-nav__link">
         
   
   
@@ -2321,7 +2257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/mcmc/" class="md-nav__link">
+      <a href="../../../public/inference/mcmc/" class="md-nav__link">
         
   
   
@@ -2349,7 +2285,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/mcmc_configs/" class="md-nav__link">
+      <a href="../../../public/inference/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -2437,7 +2373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discretizers/discretizer/" class="md-nav__link">
+      <a href="../../../public/discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -2525,7 +2461,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../handlers/" class="md-nav__link">
+      <a href="../../../public/handlers/" class="md-nav__link">
         
   
   
@@ -2665,7 +2601,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/overview/" class="md-nav__link">
+      <a href="../../../public/simulators/overview/" class="md-nav__link">
         
   
   
@@ -2693,7 +2629,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/overview/#basesimulator" class="md-nav__link">
+      <a href="../../../public/simulators/overview/#basesimulator" class="md-nav__link">
         
   
   
@@ -2721,7 +2657,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/simulator_wrapper/" class="md-nav__link">
+      <a href="../../../public/simulators/simulator_wrapper/" class="md-nav__link">
         
   
   
@@ -2749,7 +2685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/discrete_time_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/discrete_time_simulator/" class="md-nav__link">
         
   
   
@@ -2777,7 +2713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/ode_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/ode_simulator/" class="md-nav__link">
         
   
   
@@ -2805,7 +2741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/sde_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/sde_simulator/" class="md-nav__link">
         
   
   
@@ -2901,7 +2837,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../public/diagnostics/plotting_utils/" class="md-nav__link">
         
   
   
@@ -2942,6 +2878,8 @@
                 
   
   
+    
+  
   
   
     
@@ -2957,11 +2895,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" checked>
         
           
           <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="">
@@ -2982,7 +2920,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3000,7 +2938,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -3025,8 +2963,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -3037,11 +2977,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_2" checked>
         
           
           <label class="md-nav__link" for="__nav_4_3_2" id="__nav_4_3_2_label" tabindex="0">
@@ -3062,7 +3002,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_3_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3080,7 +3020,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/core_models/" class="md-nav__link">
+      <a href="../core_models/" class="md-nav__link">
         
   
   
@@ -3105,10 +3045,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../../developer/models/diffusions/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -3124,6 +3091,320 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#evaluateddiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EvaluatedDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.EvaluatedDiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EvaluatedDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.EvaluatedDiffusion.apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        apply
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.EvaluatedDiffusion.as_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        as_matrix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.EvaluatedDiffusion.gram_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gram_matrix
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="gram_matrix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#diffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        apply
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.as_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        as_matrix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.evaluate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.evaluate_value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate_value
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.gram_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gram_matrix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.resolve_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_metadata
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="resolve_metadata">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fulldiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FullDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.FullDiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FullDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.FullDiffusion.resolve_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_metadata
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="resolve_metadata">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#diagonaldiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiagonalDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.DiagonalDiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiagonalDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.DiagonalDiffusion.resolve_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_metadata
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="resolve_metadata">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scalardiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ScalarDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.ScalarDiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ScalarDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.ScalarDiffusion.resolve_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_metadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -3136,7 +3417,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/specialized_models/" class="md-nav__link">
+      <a href="../specialized_models/" class="md-nav__link">
         
   
   
@@ -3164,7 +3445,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/checkers/" class="md-nav__link">
+      <a href="../checkers/" class="md-nav__link">
         
   
   
@@ -3252,7 +3533,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/filters/" class="md-nav__link">
+      <a href="../../inference/filters/" class="md-nav__link">
         
   
   
@@ -3280,7 +3561,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/checkers/" class="md-nav__link">
+      <a href="../../inference/checkers/" class="md-nav__link">
         
   
   
@@ -3308,7 +3589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/filter_configs/" class="md-nav__link">
+      <a href="../../inference/filter_configs/" class="md-nav__link">
         
   
   
@@ -3336,7 +3617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/smoothers/" class="md-nav__link">
+      <a href="../../inference/smoothers/" class="md-nav__link">
         
   
   
@@ -3364,7 +3645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/smoother_configs/" class="md-nav__link">
+      <a href="../../inference/smoother_configs/" class="md-nav__link">
         
   
   
@@ -3392,7 +3673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../smoothing_handoff.md" class="md-nav__link">
+      <a href="../../../../smoothing_handoff.md" class="md-nav__link">
         
   
   
@@ -3420,7 +3701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/mcmc/" class="md-nav__link">
+      <a href="../../inference/mcmc/" class="md-nav__link">
         
   
   
@@ -3448,7 +3729,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/mcmc_configs/" class="md-nav__link">
+      <a href="../../inference/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -3476,7 +3757,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/blackjax_integration/" class="md-nav__link">
+      <a href="../../inference/blackjax_integration/" class="md-nav__link">
         
   
   
@@ -3564,7 +3845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/discretizers/discretizer/" class="md-nav__link">
+      <a href="../../discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -3652,7 +3933,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/simulators/" class="md-nav__link">
+      <a href="../../simulators/" class="md-nav__link">
         
   
   
@@ -3688,7 +3969,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/handlers/" class="md-nav__link">
+      <a href="../../handlers/" class="md-nav__link">
         
   
   
@@ -3716,7 +3997,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/utils/" class="md-nav__link">
+      <a href="../../utils/" class="md-nav__link">
         
   
   
@@ -3796,7 +4077,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
         
   
   
@@ -3847,7 +4128,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../faq/" class="md-nav__link">
+      <a href="../../../../faq/" class="md-nav__link">
         
   
   
@@ -3887,68 +4168,44 @@
   
 
 
-<h1 id="observationmodel">ObservationModel<a class="headerlink" href="#observationmodel" title="Permanent link">&para;</a></h1>
+<h1 id="diffusions">Diffusions<a class="headerlink" href="#diffusions" title="Permanent link">&para;</a></h1>
+<p>This page documents the diffusion internals used by continuous-time solvers,
+discretizers, and backend integrations.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Public model code should usually work with <code>FullDiffusion</code>,
+<code>DiagonalDiffusion</code>, and <code>ScalarDiffusion</code> through
+<code>ContinuousTimeStateEvolution(diffusion=...)</code>.</p>
+<p>Developer-facing code sometimes needs the lower-level evaluation layer:</p>
+<ul>
+<li><code>Diffusion.evaluate(...)</code> evaluates a structured diffusion object at a
+  concrete <code>(x, u, t)</code>.</li>
+<li><code>EvaluatedDiffusion.as_matrix(...)</code> returns the corresponding matrix <code>L</code>.</li>
+<li><code>EvaluatedDiffusion.apply(...)</code> applies that matrix to a Brownian increment.</li>
+<li><code>resolve_metadata(...)</code> resolves <code>bm_dim</code> and validates the coefficient
+  shape against <code>state_dim</code>.</li>
+</ul>
+<p>In other words, the public classes describe the structure of the diffusion,
+while <code>EvaluatedDiffusion</code> is the solver-facing object used after a concrete
+state, control, and time have been chosen.</p>
+<h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h2>
+<h3 id="evaluateddiffusion"><code>EvaluatedDiffusion</code><a class="headerlink" href="#evaluateddiffusion" title="Permanent link">&para;</a></h3>
 
 
 <div class="doc doc-object doc-class">
 
 
 
-
+<a id="dynestyx.models.diffusions.EvaluatedDiffusion"></a>
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="equinox.Module">Module</span></code></p>
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
 
 
-        <p>Observation or emission model for state-space systems.</p>
-<p>Defines the conditional distribution of observations given the latent state,
-control, and time:</p>
-<div class="arithmatex">\[
-y_t \sim p(y_t \mid x_t, u_t, t)
-\]</div>
-<p>Subclasses implement <code>__call__</code> to return a NumPyro-compatible distribution.
-The base class provides <code>log_prob</code> and <code>sample</code> for convenience. Subclasses
-may add parameters (e.g., observation noise scale) as module attributes.</p>
-
-
-<p><span class="doc-section-title">Methods:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-            <tr class="doc-section-item">
-              <td><code><span title="dynestyx.models.core.ObservationModel.__call__">__call__</span></code></td>
-              <td>
-                <div class="doc-md-description">
-                  <p>Return the observation distribution (a NumPyro distribution; see
-the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distributions API</a>) for
-<span class="arithmatex">\(p(y_t \mid x_t, u_t, t)\)</span>.</p>
-                </div>
-              </td>
-            </tr>
-            <tr class="doc-section-item">
-              <td><code><span title="dynestyx.models.core.ObservationModel.log_prob">log_prob</span></code></td>
-              <td>
-                <div class="doc-md-description">
-                  <p>Compute <span class="arithmatex">\(\log p(y_t \mid x_t, u_t, t)\)</span>.</p>
-                </div>
-              </td>
-            </tr>
-            <tr class="doc-section-item">
-              <td><code><span title="dynestyx.models.core.ObservationModel.sample">sample</span></code></td>
-              <td>
-                <div class="doc-md-description">
-                  <p>Sample <span class="arithmatex">\(y_t \sim p(y_t \mid x_t, u_t, t)\)</span>.</p>
-                </div>
-              </td>
-            </tr>
-      </tbody>
-    </table>
+        <p>A diffusion coefficient evaluated at a specific <code>(x, u, t)</code>.</p>
+<p>This is primarily a developer-facing helper used by solvers and backend
+integrations. It pairs a structured <code>Diffusion</code> object with the concrete
+value of its coefficient at one state, control, and time.</p>
 
 
 
@@ -3971,40 +4228,591 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
 
 
 
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.EvaluatedDiffusion.apply" class="doc doc-heading">
+            <code class=" language-python"><span class="n">apply</span><span class="p">(</span><span class="n">dw</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.EvaluatedDiffusion.apply" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>L @ dw</code> using the structured diffusion representation.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.EvaluatedDiffusion.as_matrix" class="doc doc-heading">
+            <code class=" language-python"><span class="n">as_matrix</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.EvaluatedDiffusion.as_matrix" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the evaluated diffusion coefficient as a matrix <code>L</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.EvaluatedDiffusion.gram_matrix" class="doc doc-heading">
+            <code class=" language-python"><span class="n">gram_matrix</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.EvaluatedDiffusion.gram_matrix" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>L L^T.</p>
+
+
+    </div>
+
+</div>
+
 
 
   </div>
 
     </div>
 
-</div><h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
-<details class="example">
-<summary>Negative Binomial observation model</summary>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">dist</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationModel</span>
+</div><h3 id="diffusion"><code>Diffusion</code><a class="headerlink" href="#diffusion" title="Permanent link">&para;</a></h3>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">NegativeBinomialObservation</span><span class="p">(</span><span class="n">ObservationModel</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">W</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="n">W</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># concentration/over-dispersion parameter</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
-        <span class="c1"># log link: mean rate must stay positive</span>
-        <span class="n">mean</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">@</span> <span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">dist</span><span class="o">.</span><span class="n">NegativeBinomial2</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span> <span class="n">concentration</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span>
+<div class="doc doc-object doc-class">
 
 
-<span class="n">obs_model</span> <span class="o">=</span> <span class="n">NegativeBinomialObservation</span><span class="p">(</span>
-    <span class="n">W</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">]]),</span>
-    <span class="n">alpha</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
-<span class="p">)</span>
 
-<span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span><span class="n">observation_model</span><span class="o">=</span><span class="n">obs_model</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-</code></pre></div>
-</details>
+<a id="dynestyx.models.diffusions.Diffusion"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="equinox.Module">Module</span></code></p>
+
+
+
+        <p>Base class for diffusion coefficients in SDEs.</p>
+<p>A diffusion encapsulates both the numeric coefficient <code>L(x, u, t)</code> and the
+structural interpretation of that coefficient inside the SDE</p>
+<p><code>dx_t = f(x_t, u_t, t) dt + L(x_t, u_t, t) dW_t</code>.</p>
+<p>Most users should instantiate one of the concrete subclasses:</p>
+<ul>
+<li><code>FullDiffusion</code> for an arbitrary matrix-valued coefficient.</li>
+<li><code>DiagonalDiffusion</code> for axis-aligned loadings.</li>
+<li><code>ScalarDiffusion</code> for isotropic or shared-driver noise.</li>
+</ul>
+<p>The <code>coefficient</code> may be either:</p>
+<ul>
+<li>a constant array or scalar, for time-homogeneous diffusion, or</li>
+<li>a callable <code>(x, u, t) -&gt; value</code> for state-, control-, or time-dependent diffusion.</li>
+</ul>
+<p><code>bm_dim</code> is the Brownian dimension <code>d_w</code>. For <code>FullDiffusion</code> it can be
+inferred from the matrix shape. For <code>DiagonalDiffusion</code> and
+<code>ScalarDiffusion</code> it must be specified explicitly and must be either <code>1</code> or
+<code>state_dim</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.apply" class="doc doc-heading">
+            <code class=" language-python"><span class="n">apply</span><span class="p">(</span><span class="n">dw</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">Time</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.Diffusion.apply" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply the diffusion coefficient to a Brownian increment <code>dw</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.as_matrix" class="doc doc-heading">
+            <code class=" language-python"><span class="n">as_matrix</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">Time</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.Diffusion.as_matrix" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the matrix-valued diffusion coefficient <code>L(x, u, t)</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.evaluate" class="doc doc-heading">
+            <code class=" language-python"><span class="n">evaluate</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EvaluatedDiffusion</span></code>
+
+<a href="#dynestyx.models.diffusions.Diffusion.evaluate" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate the diffusion at <code>(x, u, t)</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.evaluate_value" class="doc doc-heading">
+            <code class=" language-python"><span class="n">evaluate_value</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.Diffusion.evaluate_value" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the raw coefficient value at <code>(x, u, t)</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.gram_matrix" class="doc doc-heading">
+            <code class=" language-python"><span class="n">gram_matrix</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">Time</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.models.diffusions.Diffusion.gram_matrix" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the diffusion Gram matrix <code>L(x,u,t) L(x,u,t)^T</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.resolve_metadata" class="doc doc-heading">
+            <code class=" language-python"><span class="n">resolve_metadata</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Diffusion</span></code>
+
+<a href="#dynestyx.models.diffusions.Diffusion.resolve_metadata" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check coefficient shape and resolve <code>bm_dim</code> if needed.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="fulldiffusion"><code>FullDiffusion</code><a class="headerlink" href="#fulldiffusion" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynestyx.models.diffusions.FullDiffusion"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="#dynestyx.models.diffusions.Diffusion">Diffusion</a></code></p>
+
+
+
+        <p>General matrix-valued diffusion coefficient.</p>
+<p>Use <code>FullDiffusion</code> when you want to specify the diffusion matrix
+<code>L(x, u, t)</code> directly.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>coefficient</code>
+            </td>
+            <td>
+                  <code><span title="dynestyx.models.diffusions.DiffusionSpec">DiffusionSpec</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Either a constant array with trailing shape
+<code>(..., state_dim, bm_dim)</code> or a callable <code>(x, u, t) -&gt; array</code>
+with that trailing shape.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bm_dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional Brownian dimension. If omitted for a constant
+coefficient, it is inferred from the trailing matrix dimension.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>This is the most general public diffusion class. Prefer it when your model
+genuinely needs a dense or otherwise unstructured loading matrix.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.FullDiffusion.resolve_metadata" class="doc doc-heading">
+            <code class=" language-python"><span class="n">resolve_metadata</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FullDiffusion</span></code>
+
+<a href="#dynestyx.models.diffusions.FullDiffusion.resolve_metadata" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check matrix shape and infer <code>bm_dim</code> from the trailing dimension if needed.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="diagonaldiffusion"><code>DiagonalDiffusion</code><a class="headerlink" href="#diagonaldiffusion" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynestyx.models.diffusions.DiagonalDiffusion"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="#dynestyx.models.diffusions.Diffusion">Diffusion</a></code></p>
+
+
+
+        <p>Vector-valued diffusion with diagonal or shared-driver interpretation.</p>
+<p>Use <code>DiagonalDiffusion(v, bm_dim=...)</code> when the diffusion is naturally
+parameterized by a vector <code>v</code> of length <code>state_dim</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>coefficient</code>
+            </td>
+            <td>
+                  <code><span title="dynestyx.models.diffusions.DiffusionSpec">DiffusionSpec</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Either a constant vector with trailing shape
+<code>(..., state_dim)</code> or a callable <code>(x, u, t) -&gt; array</code> with that
+trailing shape.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bm_dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Brownian dimension. Must be either <code>1</code> or <code>state_dim</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <ul>
+<li>If <code>bm_dim = state_dim</code>, the vector is interpreted as the diagonal of
+  <code>L = diag(v)</code>.</li>
+<li>If <code>bm_dim = 1</code>, the vector is interpreted as a column loading vector,
+  so all state coordinates share one Brownian driver.</li>
+</ul>
+<p>This is often the right public API choice when each state coordinate has its
+own scale but you do not want to write out a full matrix.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.DiagonalDiffusion.resolve_metadata" class="doc doc-heading">
+            <code class=" language-python"><span class="n">resolve_metadata</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiagonalDiffusion</span></code>
+
+<a href="#dynestyx.models.diffusions.DiagonalDiffusion.resolve_metadata" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check vector shape and verify that <code>bm_dim</code> is either 1 or <code>state_dim</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="scalardiffusion"><code>ScalarDiffusion</code><a class="headerlink" href="#scalardiffusion" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynestyx.models.diffusions.ScalarDiffusion"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="#dynestyx.models.diffusions.Diffusion">Diffusion</a></code></p>
+
+
+
+        <p>Scalar-valued diffusion with isotropic or shared-driver interpretation.</p>
+<p>Use <code>ScalarDiffusion(sigma, bm_dim=...)</code> when the diffusion is controlled
+by a single scalar scale <code>sigma</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>coefficient</code>
+            </td>
+            <td>
+                  <code><span title="dynestyx.models.diffusions.DiffusionSpec">DiffusionSpec</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Either a scalar, a constant array with trailing shape
+<code>(..., 1)</code>, or a callable <code>(x, u, t) -&gt; scalar_or_length_1_array</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bm_dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Brownian dimension. Must be either <code>1</code> or <code>state_dim</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <ul>
+<li>If <code>bm_dim = state_dim</code>, this represents isotropic diffusion
+  <code>L = sigma I</code>.</li>
+<li>If <code>bm_dim = 1</code>, this represents a shared scalar driver applied equally
+  to every state coordinate.</li>
+</ul>
+<p>This is typically the simplest public API choice for constant isotropic
+diffusion, and is usually preferable to writing <code>sigma * eye(state_dim)</code>
+by hand.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.diffusions.ScalarDiffusion.resolve_metadata" class="doc doc-heading">
+            <code class=" language-python"><span class="n">resolve_metadata</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScalarDiffusion</span></code>
+
+<a href="#dynestyx.models.diffusions.ScalarDiffusion.resolve_metadata" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check scalar shape and verify that <code>bm_dim</code> is either 1 or <code>state_dim</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 
@@ -4081,12 +4889,12 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../../../../javascripts/mathjax.js"></script>
+        <script src="../../../../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       

@@ -1971,6 +1971,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3283,6 +3311,34 @@
     
   
     Core Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
   
 
     
@@ -4867,6 +4923,7 @@ $$</p>
     <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
     <span class="n">LinearGaussianObservation</span><span class="p">,</span>
     <span class="n">Filter</span><span class="p">,</span>
+    <span class="n">ScalarDiffusion</span><span class="p">,</span>
     <span class="n">SDESimulator</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.diagnostics.plotting_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_drift_field</span>
@@ -4893,6 +4950,7 @@ from dynestyx import (
     ContinuousTimeStateEvolution,
     LinearGaussianObservation,
     Filter,
+    ScalarDiffusion,
     SDESimulator,
 )
 from dynestyx.diagnostics.plotting_utils import plot_drift_field
@@ -5074,7 +5132,7 @@ key, k_data, k_svi, k_nuts, k_filter = jr.split(key, 5)</div>
 <span class="k">def</span><span class="w"> </span><span class="nf">make_state_evolution</span><span class="p">(</span><span class="n">drift_fn</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
         <span class="n">drift</span><span class="o">=</span><span class="n">drift_fn</span><span class="p">,</span>
-        <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">diffusion_coeff</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">),</span>
+        <span class="n">diffusion</span><span class="o">=</span><span class="n">ScalarDiffusion</span><span class="p">(</span><span class="n">diffusion_coeff</span><span class="p">,</span> <span class="n">bm_dim</span><span class="o">=</span><span class="n">state_dim</span><span class="p">),</span>
     <span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-4">H_obs = jnp.eye(observation_dim, state_dim)
@@ -5095,7 +5153,7 @@ dynamics_kwargs = dict(
 def make_state_evolution(drift_fn):
     return ContinuousTimeStateEvolution(
         drift=drift_fn,
-        diffusion_coefficient=lambda x, u, t: diffusion_coeff * jnp.eye(state_dim),
+        diffusion=ScalarDiffusion(diffusion_coeff, bm_dim=state_dim),
     )</div>
 </div>
 </div>

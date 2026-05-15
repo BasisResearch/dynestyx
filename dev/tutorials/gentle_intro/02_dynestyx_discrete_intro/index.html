@@ -1835,6 +1835,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3147,6 +3175,34 @@
     
   
     Core Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
   
 
     
@@ -4814,8 +4870,7 @@ def fake_lti_model(obs_times=None, obs_values=None):
 </li>
 <li><code>ContinuousTimeStateEvolution</code>: has fields<ul>
 <li><code>drift</code>: A callable $(x, u, t) \mapsto \ \mathbb{R}^{d_x}$</li>
-<li><code>diffusion_coefficient</code>: A callable $(x, u, t) \mapsto \ \mathbb{R}^{d_x \times d_x}$</li>
-<li><code>diffusion_covariance</code>: A callable $(x, u, t) \mapsto \ \mathbb{R}^{d_x \times d_x}$</li>
+<li><code>diffusion</code>: a <code>Diffusion</code> object, e.g. <code>ScalarDiffusion</code>, <code>DiagonalDiffusion</code>, or <code>FullDiffusion</code></li>
 </ul>
 </li>
 </ul>

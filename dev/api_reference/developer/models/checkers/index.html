@@ -1681,6 +1681,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3020,6 +3048,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../specialized_models/" class="md-nav__link">
         
   
@@ -3112,17 +3168,6 @@
     <span class="md-ellipsis">
       
         checkers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._infer_bm_dim" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _infer_bm_dim
       
     </span>
   </a>
@@ -3229,6 +3274,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.models.checkers._validate_discrete_state_evolution_output_shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _validate_discrete_state_evolution_output_shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.models.checkers._validate_observation_dim" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3244,17 +3300,6 @@
     <span class="md-ellipsis">
       
         _validate_state_dim
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_state_evolution_output_shape" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_state_evolution_output_shape
       
     </span>
   </a>
@@ -4008,29 +4053,8 @@
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.checkers._infer_bm_dim" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_infer_bm_dim</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x0</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u0</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._infer_bm_dim" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Infer bm_dim from diffusion coefficient output shape.</p>
-<p>Tolerates leading batch dimensions (e.g. from plate-batched parameters)
-by inspecting only the trailing two dimensions (..., state_dim, bm_dim).</p>
-<p>Returns the inferred bm_dim, or None if there is no diffusion coefficient.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h2 id="dynestyx.models.checkers._infer_observation_dim_in_plate_context" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_infer_observation_dim_in_plate_context</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">initial_condition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span> <span class="n">inferred_state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">Time</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
+            <code class=" language-python"><span class="n">_infer_observation_dim_in_plate_context</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
 
 <a href="#dynestyx.models.checkers._infer_observation_dim_in_plate_context" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4166,15 +4190,14 @@ categorical checks we want to reason about the base distribution semantics.</p>
 
 
 <h2 id="dynestyx.models.checkers._validate_continuous_state_evolution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_continuous_state_evolution</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x0</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u0</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_validate_continuous_state_evolution</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.models.checkers._validate_continuous_state_evolution" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim.</p>
-<p>Returns the inferred bm_dim (or None if no diffusion coefficient).</p>
+        <p>Validate the drift shape of a continuous-time state evolution.</p>
 
 
     </div>
@@ -4193,6 +4216,24 @@ categorical checks we want to reason about the base distribution semantics.</p>
     <div class="doc doc-contents ">
 
         <p>Ensure optional continuous_time agrees with inferred model type.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.checkers._validate_discrete_state_evolution_output_shape" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_validate_discrete_state_evolution_output_shape</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">],</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Time</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.models.checkers._validate_discrete_state_evolution_output_shape" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validate a discrete-time state evolution against the inferred state dimension.</p>
 
 
     </div>
@@ -4229,25 +4270,6 @@ categorical checks we want to reason about the base distribution semantics.</p>
     <div class="doc doc-contents ">
 
         <p>Ensure optional state_dim agrees with inferred initial condition shape.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_state_evolution_output_shape" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_state_evolution_output_shape</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">State</span><span class="p">],</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x0</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">u0</span><span class="p">:</span> <span class="n">Control</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">Time</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_state_evolution_output_shape" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models).</p>
-<p>Returns the inferred bm_dim for continuous-time models, or None otherwise.</p>
 
 
     </div>

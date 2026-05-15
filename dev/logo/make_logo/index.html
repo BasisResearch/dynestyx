@@ -1667,6 +1667,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -2979,6 +3007,34 @@
     
   
     Core Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
   
 
     
@@ -4474,7 +4530,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <!-- End of mermaid configuration --><div class="jupyter-wrapper">
 <div class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
 <div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=124d3c0c">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=f1f663e8">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4523,7 +4579,7 @@ with SDESimulator:
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=008a987d">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=4b3866e9">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4552,7 +4608,7 @@ import os</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=4b4a1296">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=0c867d8a">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4570,35 +4626,21 @@ import os</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">imageio.v2</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">imageio</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">imageio.v2</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">imageio</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.random</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jr</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
-    <span class="n">DiracIdentityObservation</span><span class="p">,</span>
-    <span class="n">DynamicalModel</span><span class="p">,</span>
-    <span class="n">SDESimulator</span><span class="p">,</span>
-<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Predictive</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span><span class="p">,</span> <span class="n">ImageDraw</span><span class="p">,</span> <span class="n">ImageFont</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndimage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.ndimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">binary_erosion</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3">import dynestyx as dsx
-import imageio.v2 as imageio
+<div class="clipboard-copy-txt" id="cell-3">import imageio.v2 as imageio
 import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 import numpyro.distributions as dist
-from dynestyx import (
-    ContinuousTimeStateEvolution,
-    DiracIdentityObservation,
-    DynamicalModel,
-    SDESimulator,
-)
 from numpyro.infer import Predictive
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
@@ -4608,8 +4650,49 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=a77dd88b">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=9c1b4660">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
+    <span class="n">DiracIdentityObservation</span><span class="p">,</span>
+    <span class="n">DynamicalModel</span><span class="p">,</span>
+    <span class="n">FullDiffusion</span><span class="p">,</span>
+    <span class="n">SDESimulator</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-4">import dynestyx as dsx
+from dynestyx import (
+    ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
+    DynamicalModel,
+    FullDiffusion,
+    SDESimulator,
+)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ead0d7c7">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4621,7 +4704,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=7fe91564">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=9351a49c">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4629,7 +4712,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -4658,7 +4741,7 @@ from scipy.ndimage import binary_erosion</div>
         <span class="s2">"C:/Windows/Fonts/verdana.ttf"</span><span class="p">,</span>
     <span class="p">]</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-4">def find_font_candidates():
+<div class="clipboard-copy-txt" id="cell-5">def find_font_candidates():
     return [
         "RobotoMono-VariableFont_wght.ttf",
         # macOS common
@@ -4682,7 +4765,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=9f6faf11">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=cff5947b">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4690,7 +4773,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-6">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -4718,7 +4801,7 @@ from scipy.ndimage import binary_erosion</div>
         <span class="s2">"(recommended for deterministic logo rendering)."</span>
     <span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-5">def load_font(font_size: int, font_path: str | None):
+<div class="clipboard-copy-txt" id="cell-6">def load_font(font_size: int, font_path: str | None):
     candidates = []
     if font_path:
         candidates.append(font_path)
@@ -4741,7 +4824,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=87629686">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=1026a17a">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4753,7 +4836,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=f2994205">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=95f57a77">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4761,7 +4844,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-6">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-7">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -4796,7 +4879,7 @@ from scipy.ndimage import binary_erosion</div>
 
     <span class="k">return</span> <span class="n">Ia</span> <span class="o">*</span> <span class="n">wa</span> <span class="o">+</span> <span class="n">Ib</span> <span class="o">*</span> <span class="n">wb</span> <span class="o">+</span> <span class="n">Ic</span> <span class="o">*</span> <span class="n">wc</span> <span class="o">+</span> <span class="n">Id</span> <span class="o">*</span> <span class="n">wd</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6">def bilinear_sample_jax(arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray) -&gt; jnp.ndarray:
+<div class="clipboard-copy-txt" id="cell-7">def bilinear_sample_jax(arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray) -&gt; jnp.ndarray:
     """Bilinear interpolation for arr[y, x], where x/y are pixel coordinates."""
     H, W = arr.shape
     x0 = jnp.floor(x).astype(jnp.int32)
@@ -4826,7 +4909,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=5eb21489">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=6f4cf0cc">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4834,7 +4917,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-7">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-8">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -4868,7 +4951,7 @@ from scipy.ndimage import binary_erosion</div>
     <span class="n">y0</span> <span class="o">=</span> <span class="p">(</span><span class="n">H</span> <span class="o">-</span> <span class="n">bh</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="p">(</span><span class="n">bbox</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">oy</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">x0</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">y0</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-7">def compute_centered_text_origin(
+<div class="clipboard-copy-txt" id="cell-8">def compute_centered_text_origin(
     text: str, font: ImageFont.FreeTypeFont, canvas: tuple[int, int]
 ):
     """
@@ -4897,7 +4980,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=5f8dc36e">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=a614dbdb">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -4905,7 +4988,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-8">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-9">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -4977,7 +5060,7 @@ from scipy.ndimage import binary_erosion</div>
 
     <span class="k">return</span> <span class="n">dist_grid</span><span class="p">,</span> <span class="n">vhatx_grid</span><span class="p">,</span> <span class="n">vhaty_grid</span><span class="p">,</span> <span class="n">letter_id_field</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-8">def build_boundary_fields(
+<div class="clipboard-copy-txt" id="cell-9">def build_boundary_fields(
     text: str, font: ImageFont.FreeTypeFont, canvas: tuple[int, int]
 ):
     """
@@ -5044,7 +5127,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=aa3dfaf5">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=947f8fa7">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -5052,7 +5135,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-9">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-10">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -5091,7 +5174,7 @@ from scipy.ndimage import binary_erosion</div>
         <span class="n">pal</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">char_color</span><span class="p">[</span><span class="n">ch</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">pal</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-9">def palette_by_character(text: str):
+<div class="clipboard-copy-txt" id="cell-10">def palette_by_character(text: str):
     """Curated palette; repeated characters share a color."""
     base = np.array(
         [
@@ -5125,7 +5208,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e065d5b3">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=62867359">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -5137,7 +5220,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=aab3ba65">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=10d55e95">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -5145,7 +5228,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-10">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-11">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -5210,9 +5293,6 @@ from scipy.ndimage import binary_erosion</div>
             <span class="n">dist_to_boundary</span> <span class="o">=</span> <span class="n">bilinear_sample_jax</span><span class="p">(</span><span class="n">dist_grid_j</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
             <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">kappa</span> <span class="o">*</span> <span class="p">(</span><span class="n">dist_to_boundary</span> <span class="o">-</span> <span class="n">ring</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">diffusion_fn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-
         <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span>
             <span class="n">control_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
             <span class="n">initial_condition</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span>
@@ -5223,7 +5303,7 @@ from scipy.ndimage import binary_erosion</div>
                 <span class="n">drift</span><span class="o">=</span><span class="n">drift_fn</span><span class="p">,</span>
                 <span class="n">potential</span><span class="o">=</span><span class="n">potential_fn</span><span class="p">,</span>
                 <span class="n">use_negative_gradient</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="n">diffusion_fn</span><span class="p">,</span>
+                <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span><span class="n">sigma</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)),</span>
             <span class="p">),</span>
             <span class="n">observation_model</span><span class="o">=</span><span class="n">DiracIdentityObservation</span><span class="p">(),</span>
         <span class="p">)</span>
@@ -5280,7 +5360,7 @@ from scipy.ndimage import binary_erosion</div>
     <span class="n">imageio</span><span class="o">.</span><span class="n">mimsave</span><span class="p">(</span><span class="n">out_gif</span><span class="p">,</span> <span class="n">frames_list</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">fps</span><span class="p">)</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Wrote </span><span class="si">{</span><span class="n">out_gif</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">frames</span><span class="si">}</span><span class="s2"> frames @ </span><span class="si">{</span><span class="n">fps</span><span class="si">}</span><span class="s2"> fps)"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-10">def simulate_boundary_orbit_gif(
+<div class="clipboard-copy-txt" id="cell-11">def simulate_boundary_orbit_gif(
     text: str,
     out_gif: str,
     canvas: tuple[int, int],
@@ -5335,9 +5415,6 @@ from scipy.ndimage import binary_erosion</div>
             dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
             return 0.5 * kappa * (dist_to_boundary - ring) ** 2
 
-        def diffusion_fn(x, u, t):
-            return sigma * jnp.eye(2, dtype=jnp.float32)
-
         dynamics = DynamicalModel(
             control_dim=0,
             initial_condition=dist.Uniform(
@@ -5348,7 +5425,7 @@ from scipy.ndimage import binary_erosion</div>
                 drift=drift_fn,
                 potential=potential_fn,
                 use_negative_gradient=True,
-                diffusion_coefficient=diffusion_fn,
+                diffusion=FullDiffusion(sigma * jnp.eye(2, dtype=jnp.float32)),
             ),
             observation_model=DiracIdentityObservation(),
         )
@@ -5410,7 +5487,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=1d0dab9e">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=33d96e5d">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -5422,7 +5499,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=e6351ea7">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=4464675b">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -5430,7 +5507,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-11">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-12">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -5502,7 +5579,7 @@ from scipy.ndimage import binary_erosion</div>
         <span class="n">seed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
     <span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-11">def main():
+<div class="clipboard-copy-txt" id="cell-12">def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--text", type=str, default="dynestyx")
     ap.add_argument("--out", type=str, default="dynestyx.gif")
@@ -5569,7 +5646,7 @@ from scipy.ndimage import binary_erosion</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=aaf04aea">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=f2e6b736">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -5577,7 +5654,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-12">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-13">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -5590,7 +5667,7 @@ from scipy.ndimage import binary_erosion</div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="n">main</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-12">if __name__ == "__main__":
+<div class="clipboard-copy-txt" id="cell-13">if __name__ == "__main__":
     main()</div>
 </div>
 </div>

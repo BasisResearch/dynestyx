@@ -12,13 +12,13 @@
         <meta name="author" content="Basis Research Institute">
       
       
-        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/observation_model/">
+        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/core/diffusion/">
       
       
-        <link rel="prev" href="../discrete_time_state_evolution/">
+        <link rel="prev" href="../continuous_time_state_evolution/">
       
       
-        <link rel="next" href="../drift/">
+        <link rel="next" href="../discrete_time_state_evolution/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>ObservationModel - dynestyx documentation</title>
+        <title>Diffusion - dynestyx documentation</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#observationmodel" class="md-skip">
+        <a href="#diffusion" class="md-skip">
           Skip to content
         </a>
       
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              ObservationModel
+              Diffusion
             
           </span>
         </div>
@@ -1684,10 +1684,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../diffusion/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1703,6 +1730,137 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#diffusion_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diffusion
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Diffusion">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fulldiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FullDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagonaldiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiagonalDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scalardiffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ScalarDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#diffusion_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fulldiffusion_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FullDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagonaldiffusion_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiagonalDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scalardiffusion_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ScalarDiffusion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1740,37 +1898,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ObservationModel
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../observation_model/" class="md-nav__link">
         
   
   
@@ -1786,37 +1917,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -3887,7 +3987,128 @@
   
 
 
-<h1 id="observationmodel">ObservationModel<a class="headerlink" href="#observationmodel" title="Permanent link">&para;</a></h1>
+<h1 id="diffusion">Diffusion<a class="headerlink" href="#diffusion" title="Permanent link">&para;</a></h1>
+<p><code>Diffusion</code> objects define the stochastic term in a continuous-time state evolution</p>
+<div class="arithmatex">\[
+dx_t = f(x_t, u_t, t)\,dt + L(x_t, u_t, t)\,dW_t,
+\]</div>
+<p>where:</p>
+<ul>
+<li><span class="arithmatex">\(x_t \in \mathbb{R}^{d_x}\)</span> is the latent state,</li>
+<li><span class="arithmatex">\(u_t\)</span> is an optional control,</li>
+<li><span class="arithmatex">\(W_t \in \mathbb{R}^{d_w}\)</span> is Brownian motion,</li>
+<li><code>bm_dim = d_w</code>,</li>
+<li>and <span class="arithmatex">\(L(x_t, u_t, t)\)</span> is the diffusion coefficient.</li>
+</ul>
+<p>Dynestyx exposes three structured diffusion classes:</p>
+<ul>
+<li>If your diffusion has the form <span class="arithmatex">\(L = \sigma I_{d_w}\)</span> with <span class="arithmatex">\(d_w = d_x\)</span>, use <code>ScalarDiffusion(sigma, bm_dim=state_dim)</code>.</li>
+<li>If your diffusion has the form <span class="arithmatex">\(L = \sigma \mathbf{1}_{d_x}\)</span>, use <code>ScalarDiffusion(sigma, bm_dim=1)</code>.</li>
+<li>If your diffusion has the form <span class="arithmatex">\(L = \mathrm{diag}(v)\)</span>, use <code>DiagonalDiffusion(v, bm_dim=state_dim)</code>.</li>
+<li>If your diffusion has the form <span class="arithmatex">\(L = v \in \mathbb{R}^{d_x \times 1}\)</span>, use <code>DiagonalDiffusion(v, bm_dim=1)</code>.</li>
+<li>If your diffusion is a general matrix <span class="arithmatex">\(L \in \mathbb{R}^{d_x \times d_w}\)</span>, use <code>FullDiffusion(L)</code>.</li>
+</ul>
+<p>The same constructors also accept callables <code>(x, u, t) -&gt; value</code> instead of
+constants. For example, if <span class="arithmatex">\(L(x_t, u_t, t) = \sigma(x_t) I_{d_w}\)</span>, use
+<code>ScalarDiffusion(lambda x, u, t: sigma(x), bm_dim=state_dim)</code>. The same pattern
+applies across <code>ScalarDiffusion</code>, <code>DiagonalDiffusion</code>, and <code>FullDiffusion</code>.</p>
+<p>In practice, many models use a constant diffusion coefficient. In those cases,
+pass the matrix/vector/scalar value directly. Reserve callable diffusion
+coefficients for cases where the coefficient genuinely depends on state,
+control, or time.</p>
+<h2 id="diffusion_1"><code>Diffusion</code><a class="headerlink" href="#diffusion_1" title="Permanent link">&para;</a></h2>
+<p><code>Diffusion</code> is the common base class for structured diffusion coefficients.
+Most users should instantiate one of its public subclasses instead of using
+<code>Diffusion</code> directly:</p>
+<ul>
+<li>Use <code>ScalarDiffusion</code> when one scalar scale is enough. This is the most common choice for isotropic diffusion.</li>
+<li>Use <code>DiagonalDiffusion</code> when each state coordinate should have its own scale but the loading remains axis-aligned.</li>
+<li>Use <code>FullDiffusion</code> when you need to specify a genuinely matrix-valued loading.</li>
+</ul>
+<p>Each class accepts either:</p>
+<ul>
+<li>a constant coefficient, or</li>
+<li>a callable <code>(x, u, t) -&gt; value</code>.</li>
+</ul>
+<h3 id="fulldiffusion"><code>FullDiffusion</code><a class="headerlink" href="#fulldiffusion" title="Permanent link">&para;</a></h3>
+<p>Mathematically, <code>FullDiffusion</code> represents
+<span class="arithmatex">\(L(x_t, u_t, t) \in \mathbb{R}^{d_x \times d_w}\)</span>.</p>
+<p>Use <code>FullDiffusion(coefficient, bm_dim=None)</code> when you want to specify this
+matrix-valued diffusion coefficient directly.</p>
+<p>Accepted <code>coefficient</code> forms:</p>
+<ul>
+<li>a constant array with trailing shape <code>(state_dim, bm_dim)</code>, or</li>
+<li>a callable <code>(x, u, t) -&gt; array</code> with trailing shape <code>(state_dim, bm_dim)</code>.</li>
+</ul>
+<p>If <code>coefficient</code> is constant, <code>bm_dim</code> is inferred automatically when omitted.</p>
+<p>Example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">FullDiffusion</span>
+
+<span class="n">state_evolution</span> <span class="o">=</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
+    <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">-</span><span class="n">x</span><span class="p">,</span>
+    <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span>
+<span class="p">)</span>
+</code></pre></div>
+<h3 id="diagonaldiffusion"><code>DiagonalDiffusion</code><a class="headerlink" href="#diagonaldiffusion" title="Permanent link">&para;</a></h3>
+<p>Mathematically, <code>DiagonalDiffusion</code> represents a vector-valued coefficient
+<span class="arithmatex">\(v(x_t, u_t, t) \in \mathbb{R}^{d_x}\)</span>. If <code>bm_dim = d_x</code>, this means
+<span class="arithmatex">\(L = \mathrm{diag}(v(x_t, u_t, t))\)</span>. If <code>bm_dim = 1</code>, this means
+<span class="arithmatex">\(L = v(x_t, u_t, t) \in \mathbb{R}^{d_x \times 1}\)</span>.</p>
+<p>Use <code>DiagonalDiffusion(coefficient, bm_dim)</code> when the diffusion is naturally
+parameterized by a vector of state-wise loadings.</p>
+<p>Accepted <code>coefficient</code> forms:</p>
+<ul>
+<li>a constant vector with trailing shape <code>(state_dim,)</code>, or</li>
+<li>a callable <code>(x, u, t) -&gt; array</code> with trailing shape <code>(state_dim,)</code>.</li>
+</ul>
+<p><code>bm_dim</code> is required and must be either <code>1</code> or <code>state_dim</code>.</p>
+<p>Example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">DiagonalDiffusion</span>
+
+<span class="n">state_evolution</span> <span class="o">=</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
+    <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">-</span><span class="n">x</span><span class="p">,</span>
+    <span class="n">diffusion</span><span class="o">=</span><span class="n">DiagonalDiffusion</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">]),</span> <span class="n">bm_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<h3 id="scalardiffusion"><code>ScalarDiffusion</code><a class="headerlink" href="#scalardiffusion" title="Permanent link">&para;</a></h3>
+<p>Mathematically, <code>ScalarDiffusion</code> represents a scalar-valued coefficient
+<span class="arithmatex">\(\sigma(x_t, u_t, t) \in \mathbb{R}\)</span>. If <code>bm_dim = d_x</code>, this means
+<span class="arithmatex">\(L = \sigma(x_t, u_t, t)\,I_{d_w}\)</span> with <span class="arithmatex">\(d_w = d_x\)</span>. If <code>bm_dim = 1</code>, this
+means <span class="arithmatex">\(L = \sigma(x_t, u_t, t)\,\mathbf{1}_{d_x}\)</span>, viewed as a column vector
+in <span class="arithmatex">\(\mathbb{R}^{d_x \times 1}\)</span>.</p>
+<p>Use <code>ScalarDiffusion(coefficient, bm_dim)</code> when one scalar scale is enough.
+This is usually the simplest choice for isotropic diffusion.</p>
+<p>Accepted <code>coefficient</code> forms:</p>
+<ul>
+<li>a scalar,</li>
+<li>a constant array with trailing shape <code>(1,)</code>, or</li>
+<li>a callable <code>(x, u, t) -&gt; scalar_or_length_1_array</code>.</li>
+</ul>
+<p><code>bm_dim</code> is required and must be either <code>1</code> or <code>state_dim</code>.</p>
+<p>Constant example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">ScalarDiffusion</span>
+
+<span class="n">state_evolution</span> <span class="o">=</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
+    <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">-</span><span class="n">x</span><span class="p">,</span>
+    <span class="n">diffusion</span><span class="o">=</span><span class="n">ScalarDiffusion</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">bm_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Callable example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">ScalarDiffusion</span>
+
+<span class="n">state_evolution</span> <span class="o">=</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
+    <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">-</span><span class="n">x</span><span class="p">,</span>
+    <span class="n">diffusion</span><span class="o">=</span><span class="n">ScalarDiffusion</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="mf">0.1</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+        <span class="n">bm_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h2>
+<h3 id="diffusion_2"><code>Diffusion</code><a class="headerlink" href="#diffusion_2" title="Permanent link">&para;</a></h3>
 
 
 <div class="doc doc-object doc-class">
@@ -3901,54 +4122,25 @@
 
 
 
-        <p>Observation or emission model for state-space systems.</p>
-<p>Defines the conditional distribution of observations given the latent state,
-control, and time:</p>
-<div class="arithmatex">\[
-y_t \sim p(y_t \mid x_t, u_t, t)
-\]</div>
-<p>Subclasses implement <code>__call__</code> to return a NumPyro-compatible distribution.
-The base class provides <code>log_prob</code> and <code>sample</code> for convenience. Subclasses
-may add parameters (e.g., observation noise scale) as module attributes.</p>
-
-
-<p><span class="doc-section-title">Methods:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-            <tr class="doc-section-item">
-              <td><code><span title="dynestyx.models.core.ObservationModel.__call__">__call__</span></code></td>
-              <td>
-                <div class="doc-md-description">
-                  <p>Return the observation distribution (a NumPyro distribution; see
-the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distributions API</a>) for
-<span class="arithmatex">\(p(y_t \mid x_t, u_t, t)\)</span>.</p>
-                </div>
-              </td>
-            </tr>
-            <tr class="doc-section-item">
-              <td><code><span title="dynestyx.models.core.ObservationModel.log_prob">log_prob</span></code></td>
-              <td>
-                <div class="doc-md-description">
-                  <p>Compute <span class="arithmatex">\(\log p(y_t \mid x_t, u_t, t)\)</span>.</p>
-                </div>
-              </td>
-            </tr>
-            <tr class="doc-section-item">
-              <td><code><span title="dynestyx.models.core.ObservationModel.sample">sample</span></code></td>
-              <td>
-                <div class="doc-md-description">
-                  <p>Sample <span class="arithmatex">\(y_t \sim p(y_t \mid x_t, u_t, t)\)</span>.</p>
-                </div>
-              </td>
-            </tr>
-      </tbody>
-    </table>
+        <p>Base class for diffusion coefficients in SDEs.</p>
+<p>A diffusion encapsulates both the numeric coefficient <code>L(x, u, t)</code> and the
+structural interpretation of that coefficient inside the SDE</p>
+<p><code>dx_t = f(x_t, u_t, t) dt + L(x_t, u_t, t) dW_t</code>.</p>
+<p>Most users should instantiate one of the concrete subclasses:</p>
+<ul>
+<li><code>FullDiffusion</code> for an arbitrary matrix-valued coefficient.</li>
+<li><code>DiagonalDiffusion</code> for axis-aligned loadings.</li>
+<li><code>ScalarDiffusion</code> for isotropic or shared-driver noise.</li>
+</ul>
+<p>The <code>coefficient</code> may be either:</p>
+<ul>
+<li>a constant array or scalar, for time-homogeneous diffusion, or</li>
+<li>a callable <code>(x, u, t) -&gt; value</code> for state-, control-, or time-dependent diffusion.</li>
+</ul>
+<p><code>bm_dim</code> is the Brownian dimension <code>d_w</code>. For <code>FullDiffusion</code> it can be
+inferred from the matrix shape. For <code>DiagonalDiffusion</code> and
+<code>ScalarDiffusion</code> it must be specified explicitly and must be either <code>1</code> or
+<code>state_dim</code>.</p>
 
 
 
@@ -3977,34 +4169,308 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
 
     </div>
 
-</div><h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
-<details class="example">
-<summary>Negative Binomial observation model</summary>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">dist</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationModel</span>
+</div><h3 id="fulldiffusion_1"><code>FullDiffusion</code><a class="headerlink" href="#fulldiffusion_1" title="Permanent link">&para;</a></h3>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">NegativeBinomialObservation</span><span class="p">(</span><span class="n">ObservationModel</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">W</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="n">W</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># concentration/over-dispersion parameter</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
-        <span class="c1"># log link: mean rate must stay positive</span>
-        <span class="n">mean</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">@</span> <span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">dist</span><span class="o">.</span><span class="n">NegativeBinomial2</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span> <span class="n">concentration</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span>
+<div class="doc doc-object doc-class">
 
 
-<span class="n">obs_model</span> <span class="o">=</span> <span class="n">NegativeBinomialObservation</span><span class="p">(</span>
-    <span class="n">W</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">]]),</span>
-    <span class="n">alpha</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
-<span class="p">)</span>
 
-<span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span><span class="n">observation_model</span><span class="o">=</span><span class="n">obs_model</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-</code></pre></div>
-</details>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="../../../../developer/models/diffusions/#dynestyx.models.diffusions.Diffusion">Diffusion</a></code></p>
+
+
+
+        <p>General matrix-valued diffusion coefficient.</p>
+<p>Use <code>FullDiffusion</code> when you want to specify the diffusion matrix
+<code>L(x, u, t)</code> directly.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>coefficient</code>
+            </td>
+            <td>
+                  <code><span title="dynestyx.models.diffusions.DiffusionSpec">DiffusionSpec</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Either a constant array with trailing shape
+<code>(..., state_dim, bm_dim)</code> or a callable <code>(x, u, t) -&gt; array</code>
+with that trailing shape.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bm_dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional Brownian dimension. If omitted for a constant
+coefficient, it is inferred from the trailing matrix dimension.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>This is the most general public diffusion class. Prefer it when your model
+genuinely needs a dense or otherwise unstructured loading matrix.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="diagonaldiffusion_1"><code>DiagonalDiffusion</code><a class="headerlink" href="#diagonaldiffusion_1" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="../../../../developer/models/diffusions/#dynestyx.models.diffusions.Diffusion">Diffusion</a></code></p>
+
+
+
+        <p>Vector-valued diffusion with diagonal or shared-driver interpretation.</p>
+<p>Use <code>DiagonalDiffusion(v, bm_dim=...)</code> when the diffusion is naturally
+parameterized by a vector <code>v</code> of length <code>state_dim</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>coefficient</code>
+            </td>
+            <td>
+                  <code><span title="dynestyx.models.diffusions.DiffusionSpec">DiffusionSpec</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Either a constant vector with trailing shape
+<code>(..., state_dim)</code> or a callable <code>(x, u, t) -&gt; array</code> with that
+trailing shape.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bm_dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Brownian dimension. Must be either <code>1</code> or <code>state_dim</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <ul>
+<li>If <code>bm_dim = state_dim</code>, the vector is interpreted as the diagonal of
+  <code>L = diag(v)</code>.</li>
+<li>If <code>bm_dim = 1</code>, the vector is interpreted as a column loading vector,
+  so all state coordinates share one Brownian driver.</li>
+</ul>
+<p>This is often the right public API choice when each state coordinate has its
+own scale but you do not want to write out a full matrix.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="scalardiffusion_1"><code>ScalarDiffusion</code><a class="headerlink" href="#scalardiffusion_1" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="../../../../developer/models/diffusions/#dynestyx.models.diffusions.Diffusion">Diffusion</a></code></p>
+
+
+
+        <p>Scalar-valued diffusion with isotropic or shared-driver interpretation.</p>
+<p>Use <code>ScalarDiffusion(sigma, bm_dim=...)</code> when the diffusion is controlled
+by a single scalar scale <code>sigma</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>coefficient</code>
+            </td>
+            <td>
+                  <code><span title="dynestyx.models.diffusions.DiffusionSpec">DiffusionSpec</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Either a scalar, a constant array with trailing shape
+<code>(..., 1)</code>, or a callable <code>(x, u, t) -&gt; scalar_or_length_1_array</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bm_dim</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Brownian dimension. Must be either <code>1</code> or <code>state_dim</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <ul>
+<li>If <code>bm_dim = state_dim</code>, this represents isotropic diffusion
+  <code>L = sigma I</code>.</li>
+<li>If <code>bm_dim = 1</code>, this represents a shared scalar driver applied equally
+  to every state coordinate.</li>
+</ul>
+<p>This is typically the simplest public API choice for constant isotropic
+diffusion, and is usually preferable to writing <code>sigma * eye(state_dim)</code>
+by hand.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 

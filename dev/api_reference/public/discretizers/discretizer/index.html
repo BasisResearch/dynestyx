@@ -1683,6 +1683,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3030,6 +3058,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../developer/models/specialized_models/" class="md-nav__link">
         
   
@@ -3810,6 +3866,7 @@ objects.</p>
     <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
     <span class="n">DiscreteTimeStateEvolution</span><span class="p">,</span>
     <span class="n">DynamicalModel</span><span class="p">,</span>
+    <span class="n">FullDiffusion</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">model_with_ctse</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -3821,7 +3878,9 @@ objects.</p>
         <span class="p">),</span>
         <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
             <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span>
-            <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">),</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">)</span>
+            <span class="p">),</span>
         <span class="p">),</span>
         <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span><span class="p">(</span>
             <span class="n">x</span><span class="p">,</span>
@@ -3929,11 +3988,11 @@ where <code>dt = t_next - t_now</code>. The process covariance is <strong>time-v
                 <code>cte</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.ContinuousTimeStateEvolution)" href="../../models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a></code>
+                  <code><a class="autorefs autorefs-internal" title="StochasticContinuousTimeStateEvolution (dynestyx.models.StochasticContinuousTimeStateEvolution)" href="../../../developer/models/core_models/#dynestyx.models.core.StochasticContinuousTimeStateEvolution">StochasticContinuousTimeStateEvolution</a></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>ContinuousTimeStateEvolution</code> to discretize.</p>
+                <p><code>StochasticContinuousTimeStateEvolution</code> to discretize.</p>
               </div>
             </td>
             <td>

@@ -18,7 +18,7 @@
         <link rel="prev" href="../dynamical_model/">
       
       
-        <link rel="next" href="../discrete_time_state_evolution/">
+        <link rel="next" href="../diffusion/">
       
       
         
@@ -1697,6 +1697,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3032,6 +3060,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../developer/models/specialized_models/" class="md-nav__link">
         
   
@@ -3784,6 +3840,14 @@
 
 
 <h1 id="continuoustimestateevolution">ContinuousTimeStateEvolution<a class="headerlink" href="#continuoustimestateevolution" title="Permanent link">&para;</a></h1>
+<p><code>ContinuousTimeStateEvolution</code> is the public entry point for defining continuous-time
+state evolution. Most users should instantiate this class directly and pass an optional
+<code>diffusion=</code> built from <a href="../diffusion/"><code>FullDiffusion</code></a>,
+<a href="../diffusion/"><code>DiagonalDiffusion</code></a>, or <a href="../diffusion/"><code>ScalarDiffusion</code></a>.</p>
+<p>Internally, <code>DynamicalModel</code> refines continuous-time dynamics to
+deterministic and stochastic subclasses. Those specialized classes are intended for
+developer-facing integrations and are documented in the developer API rather than the
+public tutorials.</p>
 
 
 <div class="doc doc-object doc-class">
@@ -3857,28 +3921,15 @@ otherwise use <span class="arithmatex">\(+\nabla_x V\)</span>. Default is False.
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.diffusion_coefficient">diffusion_coefficient</span></code></td>
+            <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.diffusion">diffusion</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.core.Drift)" href="../../../../developer/models/core_models/#dynestyx.models.core.Drift">Drift</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="../../../../developer/models/diffusions/#dynestyx.models.diffusions.Diffusion">Diffusion</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Diffusion coefficient <span class="arithmatex">\(L(x, u, t)\)</span> mapping to a matrix;
-multiplies the Brownian increment <span class="arithmatex">\(dW_t\)</span>.
-Defaults to zero if None (i.e., deterministic ODE).</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.bm_dim">bm_dim</span></code></td>
-            <td>
-                  <code><span title="int">int</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Dimension of the Brownian motion <span class="arithmatex">\(W_t\)</span>.
-Inferred automatically from the output shape of <code>diffusion_coefficient</code>;
-if passed by the user, it must match diffusion_coefficient(...).shape[1].</p>
+                <p>Diffusion coefficient object.
+Use <code>FullDiffusion</code>, <code>DiagonalDiffusion</code>, or <code>ScalarDiffusion</code> to define
+the stochastic part of the SDE. Pass <code>None</code> for deterministic dynamics.</p>
               </div>
             </td>
           </tr>

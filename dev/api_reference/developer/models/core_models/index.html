@@ -18,7 +18,7 @@
         <link rel="prev" href="../../">
       
       
-        <link rel="next" href="../specialized_models/">
+        <link rel="next" href="../diffusions/">
       
       
         
@@ -1681,6 +1681,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3074,6 +3102,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.models.core.DeterministicContinuousTimeStateEvolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeterministicContinuousTimeStateEvolution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.models.core.DiscreteTimeStateEvolution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3104,6 +3143,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="DynamicalModel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.models.core.DynamicalModel.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3128,10 +3184,49 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#dynestyx.models.core.StochasticContinuousTimeStateEvolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StochasticContinuousTimeStateEvolution
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -3896,6 +3991,14 @@
 
 
 <h1 id="core-models">Core Models<a class="headerlink" href="#core-models" title="Permanent link">&para;</a></h1>
+<p>This page includes the developer-facing refined continuous-time state-evolution
+classes:</p>
+<ul>
+<li><code>DeterministicContinuousTimeStateEvolution</code></li>
+<li><code>StochasticContinuousTimeStateEvolution</code></li>
+</ul>
+<p>Most users should continue to construct <code>ContinuousTimeStateEvolution</code> directly and let
+<code>DynamicalModel</code> refine it internally.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -4003,33 +4106,74 @@ otherwise use <span class="arithmatex">\(+\nabla_x V\)</span>. Default is False.
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.diffusion_coefficient">diffusion_coefficient</span></code></td>
+            <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.diffusion">diffusion</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.core.Drift)" href="#dynestyx.models.core.Drift">Drift</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.models.diffusions.Diffusion" href="../diffusions/#dynestyx.models.diffusions.Diffusion">Diffusion</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Diffusion coefficient <span class="arithmatex">\(L(x, u, t)\)</span> mapping to a matrix;
-multiplies the Brownian increment <span class="arithmatex">\(dW_t\)</span>.
-Defaults to zero if None (i.e., deterministic ODE).</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.bm_dim">bm_dim</span></code></td>
-            <td>
-                  <code><span title="int">int</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Dimension of the Brownian motion <span class="arithmatex">\(W_t\)</span>.
-Inferred automatically from the output shape of <code>diffusion_coefficient</code>;
-if passed by the user, it must match diffusion_coefficient(...).shape[1].</p>
+                <p>Diffusion coefficient object.
+Use <code>FullDiffusion</code>, <code>DiagonalDiffusion</code>, or <code>ScalarDiffusion</code> to define
+the stochastic part of the SDE. Pass <code>None</code> for deterministic dynamics.</p>
               </div>
             </td>
           </tr>
       </tbody>
     </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.models.core.DeterministicContinuousTimeStateEvolution" class="doc doc-heading">
+            <code>DeterministicContinuousTimeStateEvolution</code>
+
+
+<a href="#dynestyx.models.core.DeterministicContinuousTimeStateEvolution" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.core.ContinuousTimeStateEvolution)" href="#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a></code></p>
+
+
+
+        <p>Continuous-time state evolution with no diffusion term, i.e., describing an ODE.</p>
+<p>This is a refined form of :class:<code>ContinuousTimeStateEvolution</code> used when a
+model has deterministic continuous-time dynamics, i.e. an ODE rather than an
+SDE. In most user code you should construct
+:class:<code>ContinuousTimeStateEvolution</code> directly and let
+:class:<code>DynamicalModel</code> refine it into this subclass when <code>diffusion=None</code>.
+Its main semantic guarantee is that <code>diffusion</code> is always <code>None</code>.</p>
 
 
 
@@ -4575,6 +4719,22 @@ allows batched initial-condition parameters such as
 
 
 
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.models.core.DynamicalModel.__init__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#dynestyx.models.core.DynamicalModel.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
 
 
   </div>
@@ -4796,6 +4956,59 @@ We recommend simply using a plain Python function that matches this signature, e
 </code></pre></div>
 or <code>lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2</code></p>
 </details>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.models.core.StochasticContinuousTimeStateEvolution" class="doc doc-heading">
+            <code>StochasticContinuousTimeStateEvolution</code>
+
+
+<a href="#dynestyx.models.core.StochasticContinuousTimeStateEvolution" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.core.ContinuousTimeStateEvolution)" href="#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a></code></p>
+
+
+
+        <p>Continuous-time state evolution with resolved stochastic diffusion.</p>
+<p>This is a refined form of :class:<code>ContinuousTimeStateEvolution</code> used for SDE
+models after the diffusion metadata has been resolved. In practice that means
+the attached :class:<code>~dynestyx.models.diffusions.Diffusion</code> has a known
+<code>bm_dim</code> and can therefore be used safely by downstream SDE solvers,
+discretizers, and inference backends.</p>
+
 
 
 

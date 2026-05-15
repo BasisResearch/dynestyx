@@ -1691,6 +1691,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.models.core.DynamicalModel.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#examples" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1725,6 +1736,34 @@
     
   
     ContinuousTimeStateEvolution
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
   
 
     
@@ -3080,6 +3119,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../developer/models/specialized_models/" class="md-nav__link">
         
   
@@ -4035,6 +4102,22 @@ allows batched initial-condition parameters such as
 
 
 
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.core.DynamicalModel.__init__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#dynestyx.models.core.DynamicalModel.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
 
 
   </div>
@@ -4068,6 +4151,7 @@ allows batched initial-condition parameters such as
 <span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DynamicalModel</span><span class="p">,</span>
     <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
+    <span class="n">FullDiffusion</span><span class="p">,</span>
     <span class="n">LinearGaussianObservation</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -4082,7 +4166,7 @@ allows batched initial-condition parameters such as
     <span class="p">),</span>
     <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
         <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">-</span><span class="n">x</span> <span class="o">+</span> <span class="n">u</span><span class="p">,</span>
-        <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">),</span>
+        <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">)),</span>
     <span class="p">),</span>
     <span class="n">observation_model</span><span class="o">=</span><span class="n">LinearGaussianObservation</span><span class="p">(</span>
         <span class="n">H</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">observation_dim</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">),</span>

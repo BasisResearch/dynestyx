@@ -1783,6 +1783,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api_reference/public/models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api_reference/public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3095,6 +3123,34 @@
     
   
     Core Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api_reference/developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
   
 
     
@@ -4648,7 +4704,7 @@ with unit covariance in the diffusion. Observations $y_t$ will be Gaussian-corru
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpyro</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">LinearGaussianObservation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">LinearGaussianObservation</span><span class="p">,</span> <span class="n">ScalarDiffusion</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">continuous_time_lti_gaussian_model</span><span class="p">(</span><span class="n">rho</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -4664,7 +4720,7 @@ with unit covariance in the diffusion. Observations $y_t$ will be Gaussian-corru
         <span class="p">),</span>
         <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
             <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">A</span> <span class="o">@</span> <span class="n">x</span><span class="p">,</span>
-            <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">ScalarDiffusion</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">bm_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
         <span class="p">),</span>
         <span class="n">observation_model</span><span class="o">=</span><span class="n">LinearGaussianObservation</span><span class="p">(</span>
             <span class="n">H</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]),</span> <span class="n">R</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.15</span><span class="o">**</span><span class="mi">2</span><span class="p">]])</span>
@@ -4677,7 +4733,7 @@ with unit covariance in the diffusion. Observations $y_t$ will be Gaussian-corru
 <div class="clipboard-copy-txt" id="cell-1">import numpyro
 import numpyro.distributions as dist
 import jax.numpy as jnp
-from dynestyx import DynamicalModel, ContinuousTimeStateEvolution, LinearGaussianObservation
+from dynestyx import DynamicalModel, ContinuousTimeStateEvolution, LinearGaussianObservation, ScalarDiffusion
 import dynestyx as dsx
 
 def continuous_time_lti_gaussian_model(rho=None, predict_times=None, obs_times=None, obs_values=None):
@@ -4693,7 +4749,7 @@ def continuous_time_lti_gaussian_model(rho=None, predict_times=None, obs_times=N
         ),
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: A @ x,
-            diffusion_coefficient=lambda x, u, t: jnp.eye(2),
+            diffusion=ScalarDiffusion(1.0, bm_dim=2),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[0.15**2]])

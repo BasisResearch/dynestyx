@@ -1683,6 +1683,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../models/core/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -3102,6 +3130,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../developer/models/diffusions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../developer/models/specialized_models/" class="md-nav__link">
         
   
@@ -4125,7 +4181,12 @@ requested solve times. Default is <code>"em_scan"</code> for speed.</p>
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.random</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jr</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">SDESimulator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
+    <span class="n">DynamicalModel</span><span class="p">,</span>
+    <span class="n">FullDiffusion</span><span class="p">,</span>
+    <span class="n">SDESimulator</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Predictive</span>
 
 <span class="n">state_dim</span> <span class="o">=</span> <span class="mi">1</span>
@@ -4144,7 +4205,7 @@ requested solve times. Default is <code>"em_scan"</code> for speed.</p>
         <span class="p">),</span>
         <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
             <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="o">-</span><span class="n">theta</span> <span class="o">*</span> <span class="n">x</span><span class="p">,</span>
-            <span class="n">diffusion_coefficient</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">sigma_x</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">),</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span><span class="n">sigma_x</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">)),</span>
         <span class="p">),</span>
         <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span><span class="p">(</span>
             <span class="n">x</span><span class="p">,</span>
