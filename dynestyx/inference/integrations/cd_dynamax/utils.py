@@ -193,7 +193,7 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     state_evo = dsx_model.state_evolution
     if not isinstance(state_evo, StochasticContinuousTimeStateEvolution):
         raise TypeError(
-            "dsx_to_cdlgssm_params requires StochasticContinuousTimeStateEvolution."
+            "dsx_to_cdlgssm_params requires StochasticContinuousTimeStateEvolution. You probably tried to call a continuous-time CD-Dynamax filter with a DeterministicContinuousTimeStateEvolution or DiscreteTimeStateEvolution."
         )
     drift = state_evo.drift
     if not isinstance(drift, AffineDrift):
