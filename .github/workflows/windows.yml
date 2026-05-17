@@ -35,7 +35,7 @@ jobs:
 
       - name: Lint
         run: |
-          uv run mypy tests/ dynestyx/
+          uv run ty check tests/ dynestyx/
           uv run ruff check tests/ dynestyx/
           uv run ruff format --diff tests/ dynestyx/
 

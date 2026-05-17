@@ -1,18 +1,22 @@
 """HMM filter: exact forward filtering for discrete-state models."""
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
+from jaxtyping import Array, Float, Int, Real, Shaped
 
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
+from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.utils import _should_record_field
 
 
-def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
+def enumerate_latent_states(dynamics: DynamicalModel) -> Int[Array, " n_states"]:
     """
     Returns all possible latent states.
     """
@@ -22,8 +26,8 @@ def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
 
 def hmm_log_initial_probs(
     dynamics: DynamicalModel,
-    xs: jnp.ndarray,
-) -> jnp.ndarray:
+    xs: Int[Array, " n_states"],
+) -> Float[Array, " n_states"]:
     """
     log p(x_0)
     shape: (K,)
@@ -38,18 +42,19 @@ def hmm_log_initial_probs(
 
 def hmm_log_transition_matrix(
     dynamics: DynamicalModel,
-    xs: jnp.ndarray,
-    t_now,
-    t_next,
+    xs: Int[Array, " n_states"],
+    t_now: float | int | Real[Array, ""],
+    t_next: float | int | Real[Array, ""],
     u=None,
-) -> jnp.ndarray:
+) -> Float[Array, "n_states n_states"]:
     """
     log p(x_{t_next} = j | x_{t_now} = i, u)
     shape: (K, K)
     """
+    state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
     def row(x_prev):
-        dist = dynamics.state_evolution(x=x_prev, u=u, t_now=t_now, t_next=t_next)
+        dist = state_transition(x=x_prev, u=u, t_now=t_now, t_next=t_next)
 
         def col(x_next):
             return dist.log_prob(x_next)
@@ -61,11 +66,11 @@ def hmm_log_transition_matrix(
 
 def hmm_log_emission_probs(
     dynamics: DynamicalModel,
-    xs: jnp.ndarray,
-    y,
-    t,
+    xs: Int[Array, " n_states"],
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    t: float | int | Real[Array, ""],
     u=None,
-) -> jnp.ndarray:
+) -> Float[Array, " n_states"]:
     """
     log p(y_t | x_t, u_t)
     shape: (K,)
@@ -81,10 +86,15 @@ def hmm_log_emission_probs(
 
 def hmm_log_components(
     dynamics: DynamicalModel,
-    obs_times: jnp.ndarray,  # (T,)
-    obs_values: jnp.ndarray,  # (T, ...)
-    ctrl_values=None,  # (T, ...) or None
-):
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+) -> tuple[
+    Float[Array, " n_states"],
+    Float[Array, "*plate time_minus_1 n_states n_states"],
+    Float[Array, "*plate time n_states"],
+]:
     """
     Returns:
       log_pi        : (K,)
@@ -126,10 +136,10 @@ def hmm_log_components(
 
 
 def hmm_filter(
-    log_pi: jnp.ndarray,  # (K,)
-    log_A_seq: jnp.ndarray,  # (T-1, K, K)
-    log_emit_seq: jnp.ndarray,  # (T, K)
-):
+    log_pi: Float[Array, " n_states"],
+    log_A_seq: Float[Array, "*plate time_minus_1 n_states n_states"],
+    log_emit_seq: Float[Array, "*plate time n_states"],
+) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
     """
     Exact HMM filtering.
 
@@ -176,10 +186,11 @@ def hmm_filter(
 def compute_hmm_filter(
     dynamics: DynamicalModel,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
     """Pure-JAX HMM filter computation (no numpyro side-effects).
 
     Returns:
@@ -205,10 +216,11 @@ def _filter_hmm(
     dynamics: DynamicalModel,
     filter_config: HMMConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
     ctrl_times=None,
-    ctrl_values=None,
+    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Exact HMM marginal likelihood via forward filtering.

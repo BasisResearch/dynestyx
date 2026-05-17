@@ -1,5 +1,6 @@
 import dataclasses
 import math
+from typing import cast
 
 import jax
 import jax.numpy as jnp
@@ -7,6 +8,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import _validate_batched_plate_alignment
@@ -35,6 +37,7 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (
+    ContinuousTimeFilterConfig,
     compute_continuous_filter,
     run_continuous_filter,
 )
@@ -69,7 +72,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         plate_shapes=(),
         obs_times=None,
         obs_values=None,
-        ctrl_times=None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values=None,
         **kwargs,
     ) -> FunctionOfTime:
@@ -108,7 +111,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         plate_shapes=(),
         obs_times=None,
         obs_values=None,
-        ctrl_times=None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values=None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
@@ -186,9 +189,11 @@ class Filter(BaseLogFactorAdder):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times: jax.Array | None = None,
-        obs_values: jax.Array | None = None,
-        ctrl_times=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values=None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
@@ -253,7 +258,7 @@ class Filter(BaseLogFactorAdder):
                 return _filter_hmm(
                     name,
                     dynamics,
-                    config,  # type: ignore[arg-type]
+                    cast(HMMConfig, config),
                     obs_times=obs_times,
                     obs_values=obs_values,
                     ctrl_times=ctrl_times,
@@ -285,12 +290,15 @@ class Filter(BaseLogFactorAdder):
         dynamics: DynamicalModel,
         config: BaseFilterConfig,
         *,
-        key: jax.Array | None,
+        key: PRNGKeyArray | None,
         plate_shapes: tuple[int, ...],
-        obs_times: jax.Array,
-        obs_values: jax.Array,
-        ctrl_times=None,
-        ctrl_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"],
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"],
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
@@ -312,7 +320,7 @@ class Filter(BaseLogFactorAdder):
             def compute_output(dyn, ot, ov, ct, cv, k):
                 return compute_continuous_filter(
                     dyn,
-                    config,
+                    cast(ContinuousTimeFilterConfig, config),
                     k,
                     obs_times=ot,
                     obs_values=ov,
@@ -466,12 +474,15 @@ def _filter_discrete_time(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
@@ -520,12 +531,15 @@ def _filter_continuous_time(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.
@@ -544,7 +558,7 @@ def _filter_continuous_time(
     return run_continuous_filter(
         name,
         dynamics,
-        filter_config,  # type: ignore[arg-type]
+        cast(ContinuousTimeFilterConfig, filter_config),
         key=key,
         obs_times=obs_times,
         obs_values=obs_values,

@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
 import pytest
+from jaxtyping import TypeCheckError
 from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
@@ -302,7 +303,7 @@ def test_pf_smoother_mcmc_config_exposes_step_count():
 @pytest.mark.parametrize(
     "invalid_config",
     [
-        EnKFConfig(filter_source="cd_dynamax"),  # type: ignore[arg-type]
+        EnKFConfig(),
         ContinuousTimeEnKFConfig(n_particles=8),
         HMMConfig(),
     ],
@@ -310,16 +311,18 @@ def test_pf_smoother_mcmc_config_exposes_step_count():
 def test_smoother_rejects_filter_configs_as_invalid_input(invalid_config):
     obs_times, obs_values, _ = _gen_obs_discrete()
 
-    with pytest.raises(
-        ValueError,
-        match="Expected a smoother config class from dynestyx.inference.smoother_configs",
-    ):
+    with pytest.raises((ValueError, TypeCheckError)) as exc_info:
         with seed(rng_seed=jr.PRNGKey(0)):
             with Smoother(smoother_config=invalid_config):
                 discrete_time_lti_simplified_model(
                     obs_times=obs_times,
                     obs_values=obs_values,
                 )
+    assert (
+        "Expected a smoother config class from dynestyx.inference.smoother_configs"
+        in str(exc_info.value)
+        or "smoother_config" in str(exc_info.value)
+    )
 
 
 def test_continuous_time_kf_smoother_type_option_smoke():

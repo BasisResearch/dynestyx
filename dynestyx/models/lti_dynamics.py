@@ -1,6 +1,6 @@
-import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
@@ -12,16 +12,16 @@ from dynestyx.models.state_evolution import AffineDrift, LinearGaussianStateEvol
 
 
 def LTI_discrete(
-    A: jax.Array,
-    Q: jax.Array,
-    H: jax.Array,
-    R: jax.Array,
-    B: jax.Array | None = None,
-    b: jax.Array | None = None,
-    D: jax.Array | None = None,
-    d: jax.Array | None = None,
-    initial_mean: jax.Array | None = None,
-    initial_cov: jax.Array | None = None,
+    A: Float[Array, "*a_plate state_dim state_dim"],
+    Q: Float[Array, "*q_plate state_dim state_dim"],
+    H: Float[Array, "*h_plate observation_dim state_dim"],
+    R: Float[Array, "*r_plate observation_dim observation_dim"],
+    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
+    b: Float[Array, "*state_bias_plate state_dim"] | None = None,
+    D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None,
+    d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
+    initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
+    initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
 ) -> DynamicalModel:
     """
     Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
@@ -98,16 +98,16 @@ def LTI_discrete(
 
 
 def LTI_continuous(
-    A: jax.Array,
-    L: jax.Array,
-    H: jax.Array,
-    R: jax.Array,
-    B: jax.Array | None = None,
-    b: jax.Array | None = None,
-    D: jax.Array | None = None,
-    d: jax.Array | None = None,
-    initial_mean: jax.Array | None = None,
-    initial_cov: jax.Array | None = None,
+    A: Float[Array, "*a_plate state_dim state_dim"],
+    L: Real[Array, "*diffusion_plate state_dim bm_dim"],
+    H: Float[Array, "*h_plate observation_dim state_dim"],
+    R: Float[Array, "*r_plate observation_dim observation_dim"],
+    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
+    b: Float[Array, "*state_bias_plate state_dim"] | None = None,
+    D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None,
+    d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
+    initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
+    initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
 ) -> DynamicalModel:
     """
     Build a continuous-time linear time-invariant (LTI) `DynamicalModel`.

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Protocol, cast, runtime_checkable
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+from jax import Array
+from jaxtyping import Real, Shaped
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
@@ -24,14 +25,36 @@ from dynestyx.models.checkers import (
     _validate_state_dim,
 )
 from dynestyx.models.diffusions import Diffusion
-from dynestyx.types import (
-    Control,
-    State,
-    Time,
-    TimeLike,
-    as_scalar_time_array,
-    dState,
+from dynestyx.types import as_scalar_time_array
+
+
+@runtime_checkable
+class DiscreteStateTransition(Protocol):
+    def __call__(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> Distribution:
+        raise NotImplementedError()
+
+
+@runtime_checkable
+class ObservationCallable(Protocol):
+    def __call__(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Distribution:
+        raise NotImplementedError()
+
+
+type StateEvolutionLike = (
+    ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | DiscreteStateTransition
 )
+type ObservationModelLike = ObservationModel | ObservationCallable
 
 
 class DynamicalModel(eqx.Module):
@@ -93,16 +116,11 @@ class DynamicalModel(eqx.Module):
     """
 
     initial_condition: Distribution
-    state_evolution: (
-        ContinuousTimeStateEvolution
-        | DiscreteTimeStateEvolution
-        | Callable[[State, Control, Time], State]
-        | Callable[[State, Control, Time, Time], State]
-    )
-    observation_model: Callable[[State, Control, Time], Distribution]
+    state_evolution: StateEvolutionLike
+    observation_model: ObservationModelLike
     control_dim: int
     control_model: Any
-    t0: Time | None
+    t0: Real[Array, ""] | None
     state_dim: int
     observation_dim: int
     categorical_state: bool
@@ -110,13 +128,13 @@ class DynamicalModel(eqx.Module):
 
     def __init__(
         self,
-        initial_condition,
-        state_evolution,
-        observation_model,
+        initial_condition: Distribution,
+        state_evolution: StateEvolutionLike,
+        observation_model: ObservationModelLike,
         control_dim: int | None = None,
         control_model=None,
         *,
-        t0: TimeLike | None = None,
+        t0: float | int | Array | None = None,
         state_dim: int | None = None,
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
@@ -164,7 +182,11 @@ class DynamicalModel(eqx.Module):
         # Skip shape validation when inside a numpyro plate context, since
         # batched parameters produce shapes that don't match unbatched expectations.
 
-        def _make_probes() -> tuple[State, Control | None, Time]:
+        def _make_probes() -> tuple[
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            Real[Array, ""],
+        ]:
             """Build synthetic inputs for validation/metadata resolution."""
             x_probe = _make_probe_state(
                 initial_condition=initial_condition,
@@ -245,8 +267,11 @@ class DynamicalModel(eqx.Module):
             _validate_observation_dim(observation_dim, inferred_obs_dim)
 
         if self.continuous_time:
+            continuous_state_evolution = cast(
+                ContinuousTimeStateEvolution, state_evolution
+            )
             self.state_evolution = _resolve_continuous_state_evolution(
-                state_evolution,
+                continuous_state_evolution,
             )
 
         self.state_dim = int(inferred_state_dim)
@@ -290,10 +315,10 @@ class Drift(Protocol):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> dState:
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError()
 
 
@@ -327,10 +352,10 @@ class Potential(Protocol):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> jax.Array:
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Shaped[Array, ""]:
         raise NotImplementedError()
 
 
@@ -368,7 +393,12 @@ class ContinuousTimeStateEvolution(eqx.Module):
     use_negative_gradient: bool = eqx.field(static=True, default=False)
     diffusion: Diffusion | None = None
 
-    def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
+    def total_drift(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         base = self.drift(x, u, t) if self.drift is not None else None
 
         potential = self.potential
@@ -481,10 +511,10 @@ class DiscreteTimeStateEvolution(eqx.Module):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t_now: Time,
-        t_next: Time,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
     ) -> Distribution:
         raise NotImplementedError()
 
@@ -512,7 +542,17 @@ class ObservationModel(eqx.Module):
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
 
+    def __call__(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Distribution:
+        raise NotImplementedError()
+
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
+        if x is None or t is None:
+            raise ValueError("x and t are required to evaluate observation log_prob.")
         dist = self(x, u, t)
         return dist.log_prob(y)
 

@@ -181,6 +181,8 @@ def compute_cuthbert_filter(
         control_dim = dynamics.control_dim
         ctrl_values = jnp.zeros((obs_len, control_dim), dtype=ys.dtype)
     elif ctrl_values.shape[0] > obs_len:
+        if ctrl_times is None:
+            raise ValueError("ctrl_times is required when ctrl_values must be aligned.")
         inds = jnp.searchsorted(ctrl_times, times, side="left")
         ctrl_values = ctrl_values[inds]
 
@@ -654,7 +656,9 @@ def _add_sites_pf(
 
 def _add_sites_gaussian_filter(
     name: str,
-    states: taylor.LinearizedKalmanFilterState | ensemble_kalman_filter.EnKFState,
+    states: kalman.KalmanFilterState
+    | taylor.LinearizedKalmanFilterState
+    | ensemble_kalman_filter.EnKFState,
     record_kwargs: dict,
 ):
     max_elems = record_kwargs["record_max_elems"]

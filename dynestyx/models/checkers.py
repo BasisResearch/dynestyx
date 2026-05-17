@@ -7,8 +7,8 @@ import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 import numpyro.primitives
-
-from dynestyx.types import Control, State, Time
+from jax import Array
+from jaxtyping import Real
 
 
 def _unwrap_base_distribution(distribution: Any) -> Any:
@@ -94,7 +94,9 @@ def _infer_vector_dim_from_distribution(
     )
 
 
-def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
+def _make_probe_state(
+    initial_condition: Any, state_dim: int
+) -> Real[Array, " state_dim"] | Real[Array, ""]:
     """Build a synthetic state value used for shape-check probes."""
     if _is_categorical_distribution(initial_condition):
         return jnp.array(0, dtype=jnp.int32)
@@ -104,9 +106,9 @@ def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
-    x_probe: State,
-    u_probe: Control | None,
-    t_probe: Time,
+    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
+    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_probe: Real[Array, ""],
 ) -> None:
     """Validate the drift shape of a continuous-time state evolution."""
     drift_shape = jax.eval_shape(
@@ -120,12 +122,11 @@ def _validate_continuous_state_evolution(
 
 
 def _validate_discrete_state_evolution_output_shape(
-    state_evolution: Callable[[State, Control, Time], State]
-    | Callable[[State, Control, Time, Time], State],
+    state_evolution: Any,
     state_dim: int,
-    x_probe: State,
-    u_probe: Control | None,
-    t_probe: Time,
+    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
+    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_probe: Real[Array, ""],
 ) -> None:
     """Validate a discrete-time state evolution against the inferred state dimension."""
     if getattr(state_evolution, "diffusion", None) is not None:
@@ -190,10 +191,17 @@ def _inside_numpyro_plate_context() -> bool:
 
 def _infer_observation_dim_in_plate_context(
     *,
-    observation_model: Callable[[State, Control | None, Time], Any],
-    x_probe: State,
-    u_probe: Control | None,
-    t_probe: Time,
+    observation_model: Callable[
+        [
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            Real[Array, ""],
+        ],
+        Any,
+    ],
+    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
+    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_probe: Real[Array, ""],
     observation_dim: int | None,
 ) -> int:
     """Infer observation dimension in plate context, falling back to explicit value."""

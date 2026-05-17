@@ -9,6 +9,7 @@ import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import _validate_batched_plate_alignment
@@ -27,6 +28,7 @@ from dynestyx.inference.integrations.cd_dynamax.discrete_smoother import (
     run_discrete_smoother as run_cd_dynamax_discrete_smoother,
 )
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
+    CuthbertSmootherConfig,
     compute_cuthbert_smoother,
 )
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
@@ -70,9 +72,9 @@ def _valid_smoother_config_names(*, continuous_time: bool) -> list[str]:
 
 
 def _validate_future_only_predict_times(
-    predict_times: jax.Array | None,
-    obs_times: jax.Array | None,
-) -> jax.Array | None:
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+) -> Real[Array, "*predict_time_plate predict_time"] | None:
     """Validate the current smoother prediction contract."""
     if predict_times is None or obs_times is None:
         return predict_times
@@ -85,7 +87,9 @@ def _validate_future_only_predict_times(
     return predict_times
 
 
-def _final_obs_times_for_rollout(obs_times: jax.Array) -> jax.Array:
+def _final_obs_times_for_rollout(
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+) -> Real[Array, "*obs_time_plate one"]:
     """Return the final observation time while keeping simulator segmentation host-safe."""
     try:
         obs_times_host = np.asarray(jax.device_get(obs_times))
@@ -104,11 +108,15 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
         **kwargs,
     ) -> FunctionOfTime:
         smoothed_dists = None
@@ -130,6 +138,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
         posterior_rollout_final_only = False
         smoothed_times = obs_times
         if predict_times is not None and smoothed_dists:
+            assert obs_times is not None
             filtered_times = _final_obs_times_for_rollout(obs_times)
             filtered_dists = [smoothed_dists[-1]]
             posterior_rollout_final_only = True
@@ -159,10 +168,14 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
         raise NotImplementedError()
@@ -180,10 +193,14 @@ class Smoother(BaseSmootherLogFactorAdder):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times: jax.Array | None = None,
-        obs_values: jax.Array | None = None,
-        ctrl_times=None,
-        ctrl_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
         if obs_times is None or obs_values is None:
@@ -270,12 +287,15 @@ class Smoother(BaseSmootherLogFactorAdder):
         dynamics: DynamicalModel,
         config: SmootherAnyConfig,
         *,
-        key: jax.Array | None,
+        key: PRNGKeyArray | None,
         plate_shapes: tuple[int, ...],
-        obs_times: jax.Array,
-        obs_values: jax.Array,
-        ctrl_times=None,
-        ctrl_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"],
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"],
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts."""
         output_kind: str
@@ -303,12 +323,18 @@ class Smoother(BaseSmootherLogFactorAdder):
         elif isinstance(config, DiscreteTimeSmootherConfigs):
             discrete_config = cast(DiscreteSmootherConfig, config)
             if discrete_config.filter_source == "cuthbert":
+                if isinstance(discrete_config, UKFSmootherConfig):
+                    raise ValueError(
+                        "UKF smoothing is not available in cuthbert. "
+                        "Use UKFSmootherConfig(filter_source='cd_dynamax')."
+                    )
+                cuthbert_config = cast(CuthbertSmootherConfig, discrete_config)
                 output_kind = "cuthbert"
 
                 def compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cuthbert_smoother(
                         dyn,
-                        discrete_config,
+                        cuthbert_config,
                         k,
                         obs_times=ot,
                         obs_values=ov,
@@ -424,12 +450,15 @@ def _smooth_discrete_time(
     name: str,
     dynamics: DynamicalModel,
     smoother_config: DiscreteSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax smoothers."""
@@ -488,12 +517,15 @@ def _smooth_continuous_time(
     name: str,
     dynamics: DynamicalModel,
     smoother_config: ContinuousSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax smoothers."""
