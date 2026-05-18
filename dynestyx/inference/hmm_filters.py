@@ -219,7 +219,7 @@ def _filter_hmm(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    ctrl_times=None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
