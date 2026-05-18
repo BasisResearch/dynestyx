@@ -23,34 +23,6 @@ DiffusionSpec = (
 )
 
 
-class EvaluatedDiffusion(NamedTuple):
-    """A diffusion coefficient evaluated at a specific ``(x, u, t)``.
-
-    This is primarily a developer-facing helper used by solvers and backend
-    integrations. It pairs a structured ``Diffusion`` object with the concrete
-    value of its coefficient at one state, control, and time.
-    """
-
-    diffusion: "Diffusion"
-    value: Array
-
-    def as_matrix(self, *, state_dim: int) -> Real[Array, "*plate state_dim bm_dim"]:
-        """Return the evaluated diffusion coefficient as a matrix ``L``."""
-        return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
-
-    def gram_matrix(
-        self, *, state_dim: int
-    ) -> Float[Array, "*plate state_dim state_dim"]:
-        """L L^T."""
-        return self.diffusion._value_gram_matrix(self.value, state_dim=state_dim)
-
-    def apply(
-        self, dw: Float[Array, " bm_dim"], *, state_dim: int
-    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
-        """Return ``L @ dw`` using the structured diffusion representation."""
-        return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)
-
-
 class Diffusion(eqx.Module):
     """Base class for diffusion coefficients in SDEs.
 
@@ -130,7 +102,7 @@ class Diffusion(eqx.Module):
         x: Real[Array, " state_dim"] | Real[Array, ""] | None,
         u: Real[Array, " control_dim"] | Real[Array, ""] | None,
         t: float | int | Real[Array, ""],
-    ) -> EvaluatedDiffusion:
+    ) -> "EvaluatedDiffusion":
         """Evaluate the diffusion at ``(x, u, t)``."""
         return EvaluatedDiffusion(self, self.evaluate_value(x=x, u=u, t=t))
 
@@ -456,3 +428,31 @@ class ScalarDiffusion(Diffusion):
                 (scalar * dw[..., 0])[..., None], scalar.shape + (state_dim,)
             )
         return scalar[..., None] * dw
+
+
+class EvaluatedDiffusion(NamedTuple):
+    """A diffusion coefficient evaluated at a specific ``(x, u, t)``.
+
+    This is primarily a developer-facing helper used by solvers and backend
+    integrations. It pairs a structured ``Diffusion`` object with the concrete
+    value of its coefficient at one state, control, and time.
+    """
+
+    diffusion: Diffusion
+    value: Array
+
+    def as_matrix(self, *, state_dim: int) -> Real[Array, "*plate state_dim bm_dim"]:
+        """Return the evaluated diffusion coefficient as a matrix ``L``."""
+        return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
+
+    def gram_matrix(
+        self, *, state_dim: int
+    ) -> Float[Array, "*plate state_dim state_dim"]:
+        """L L^T."""
+        return self.diffusion._value_gram_matrix(self.value, state_dim=state_dim)
+
+    def apply(
+        self, dw: Float[Array, " bm_dim"], *, state_dim: int
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
+        """Return ``L @ dw`` using the structured diffusion representation."""
+        return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)
