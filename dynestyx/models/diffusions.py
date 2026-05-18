@@ -130,7 +130,7 @@ class Diffusion(eqx.Module):
         x: Real[Array, " state_dim"] | Real[Array, ""] | None,
         u: Real[Array, " control_dim"] | Real[Array, ""] | None,
         t: float | int | Real[Array, ""],
-    ):
+    ) -> EvaluatedDiffusion:
         """Evaluate the diffusion at ``(x, u, t)``."""
         return EvaluatedDiffusion(self, self.evaluate_value(x=x, u=u, t=t))
 
