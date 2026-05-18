@@ -1,7 +1,7 @@
 """Diffusion objects for continuous-time state evolution."""
 
 from collections.abc import Callable
-from typing import Any, NamedTuple, Self, cast
+from typing import NamedTuple, Self, cast
 
 import equinox as eqx
 import jax
@@ -31,7 +31,7 @@ class EvaluatedDiffusion(NamedTuple):
     value of its coefficient at one state, control, and time.
     """
 
-    diffusion: Any
+    diffusion: "Diffusion"
     value: Array
 
     def as_matrix(self, *, state_dim: int) -> Real[Array, "*plate state_dim bm_dim"]:
