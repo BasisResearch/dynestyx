@@ -551,9 +551,7 @@ class ObservationModel(eqx.Module):
         raise NotImplementedError()
 
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
-        if x is None or t is None:
-            raise ValueError("x and t are required to evaluate observation log_prob.")
-        dist = self(x, u, t)
+        dist = self(x, u, t)  # type: ignore
         return dist.log_prob(y)
 
     def sample(self, x, u, t, *args, **kwargs):
