@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import numpyro.distributions as dist
-from jaxtyping import Array, Float, Real
+from jaxtyping import Array, Float
 
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
@@ -99,7 +99,7 @@ def LTI_discrete(
 
 def LTI_continuous(
     A: Float[Array, "*a_plate state_dim state_dim"],
-    L: Real[Array, "*diffusion_plate state_dim bm_dim"],
+    L: Float[Array, "*diffusion_plate state_dim bm_dim"],
     H: Float[Array, "*h_plate observation_dim state_dim"],
     R: Float[Array, "*r_plate observation_dim observation_dim"],
     B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
