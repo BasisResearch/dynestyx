@@ -56,26 +56,26 @@ class MCMCInference:
 
         if self.mcmc_config.mcmc_source == "numpyro":
             return _numpyro_mcmc(  # type: ignore
-                self.mcmc_config,
-                rng_key,
-                self.model,
-                obs_times,
-                obs_values,
-                ctrl_times,
-                ctrl_values,
-                *model_args,
+                mcmc_config=self.mcmc_config,
+                rng_key=rng_key,
+                model=self.model,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                *model_args,  # type: ignore
                 **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
             return _blackjax_mcmc(  # type: ignore
-                self.mcmc_config,
-                rng_key,
-                self.model,
-                obs_times,
-                obs_values,
-                ctrl_times,
-                ctrl_values,
-                *model_args,
+                mcmc_config=self.mcmc_config,
+                rng_key=rng_key,
+                model=self.model,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                *model_args,  # type: ignore
                 **model_kwargs,
             )
         else:
@@ -147,13 +147,13 @@ def _blackjax_mcmc(
     ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
     return run_blackjax_mcmc(  # type: ignore
-        mcmc_config,
-        rng_key,
-        model,
-        obs_times,
-        obs_values,
-        ctrl_times,
-        ctrl_values,
-        *model_args,
+        mcmc_config=mcmc_config,
+        rng_key=rng_key,
+        model=model,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        *model_args,  # type: ignore
         **model_kwargs,
     )
