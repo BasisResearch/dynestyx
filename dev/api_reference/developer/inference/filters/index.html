@@ -4779,6 +4779,12 @@ via a first-order Taylor expansion. It is fast and simple, but may
 not work well for strongly nonlinear models. The Taylor series expansion
 is automatically performed via Jax autodiff.</p>
 <p>This is exact (but wasteful) for linear-Gaussian models.</p>
+<p>In the current interface with the <code>cd_dynamax</code> discrete-time backend,
+time-varying models silently ignore absolute time arguments.
+For genuinely time-varying discrete-time models, use a
+backend/configuration that preserves absolute time semantics, such as
+<code>EnKFConfig(filter_source="cuthbert")</code>. Only use
+<code>filter_source="cd_dynamax"</code> for time-invariant models.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5917,6 +5923,12 @@ through the dynamics. No Jacobians are computed. Slightly more expensive
 than the EKF but often more accurate on curved manifolds.</p>
 <p>The default parameters (<code>alpha</code>, <code>beta</code>, <code>kappa</code>) work well for most
 problems; they rarely need to be changed.</p>
+<p>In the current interface with the <code>cd_dynamax</code> discrete-time backend,
+time-varying models silently ignore absolute time arguments.
+For genuinely time-varying discrete-time models, use a
+backend/configuration that preserves absolute time semantics, such as
+<code>EKFConfig(filter_source="cuthbert")</code>. Only use
+<code>filter_source="cd_dynamax"</code> for time-invariant models.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
