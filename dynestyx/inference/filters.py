@@ -70,10 +70,14 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times=None,
-        obs_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-        ctrl_values=None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> FunctionOfTime:
         filtered_dists = None
@@ -109,10 +113,14 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times=None,
-        obs_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-        ctrl_values=None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
         # Inheritors should implement this method.
@@ -194,7 +202,9 @@ class Filter(BaseLogFactorAdder):
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-        ctrl_values=None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
         """
