@@ -2,12 +2,15 @@
 
 import jax
 import numpyro
+from jaxtyping import Array, Real, Shaped
 
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _has_any_batched_plate_source
 
 
-def _leading_dims(arr: jax.Array | None, n_dims: int) -> tuple[int, ...] | None:
+def _leading_dims(
+    arr: Shaped[Array, "..."] | None, n_dims: int
+) -> tuple[int, ...] | None:
     """Return up to n_dims leading dimensions for diagnostics."""
     if arr is None:
         return None
@@ -44,10 +47,14 @@ def _validate_batched_plate_alignment(
     dynamics: DynamicalModel,
     plate_shapes: tuple[int, ...],
     *,
-    obs_times: jax.Array | None,
-    obs_values: jax.Array | None,
-    ctrl_times: jax.Array | None,
-    ctrl_values: jax.Array | None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None,
 ) -> None:
     """Raise early when plate_shapes do not align with any batched input source."""
     if _has_any_batched_plate_source(

@@ -1,6 +1,7 @@
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jaxtyping import Array, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
@@ -158,10 +159,14 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> FunctionOfTime:
         if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):

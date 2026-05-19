@@ -63,7 +63,7 @@ class MCMCInference:
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                *model_args,
+                *model_args,  # type: ignore
                 **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
@@ -75,7 +75,7 @@ class MCMCInference:
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                *model_args,
+                *model_args,  # type: ignore
                 **model_kwargs,
             )
         else:
@@ -154,6 +154,6 @@ def _blackjax_mcmc(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        *model_args,
+        *model_args,  # type: ignore
         **model_kwargs,
     )

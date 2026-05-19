@@ -1,5 +1,6 @@
 import jax
 import numpyro
+from jaxtyping import Array, Shaped
 
 from dynestyx.utils import (
     _array_has_plate_dims,
@@ -53,14 +54,16 @@ def _get_time_axis(plate_shapes: tuple[int, ...]) -> int:
     return len(plate_shapes)
 
 
-def _time_len_from_array(arr: jax.Array, plate_shapes: tuple[int, ...]) -> int:
+def _time_len_from_array(
+    arr: Shaped[Array, "..."], plate_shapes: tuple[int, ...]
+) -> int:
     """Infer sequence length from an array with plate dims followed by time."""
     return int(arr.shape[_get_time_axis(plate_shapes)])
 
 
 def _slice_time_axis(
-    arr: jax.Array, t: int, plate_shapes: tuple[int, ...]
-) -> jax.Array:
+    arr: Shaped[Array, "..."], t: int, plate_shapes: tuple[int, ...]
+) -> Shaped[Array, "..."]:
     """Slice an array at time index t where time axis follows plate dims."""
     time_axis = _get_time_axis(plate_shapes)
     return arr[(slice(None),) * time_axis + (t, ...)]
