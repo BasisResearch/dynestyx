@@ -3999,7 +3999,7 @@ Pass a NumPyro distribution instance (i.e., a <code>numpyro.distributions.Distri
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.DynamicalModel.state_evolution">state_evolution</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.core.ContinuousTimeStateEvolution)" href="../../../../developer/models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a> | <a class="autorefs autorefs-internal" title="DiscreteTimeStateEvolution (dynestyx.models.core.DiscreteTimeStateEvolution)" href="../../../../developer/models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.core.ContinuousTimeStateEvolution)" href="../../../../developer/models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a> | <a class="autorefs autorefs-internal" title="DiscreteTimeStateEvolution (dynestyx.models.core.DiscreteTimeStateEvolution)" href="../../../../developer/models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a> | <span title="Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4014,7 +4014,7 @@ simulator selection).</p>
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.DynamicalModel.observation_model">observation_model</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ObservationModel (dynestyx.models.core.ObservationModel)" href="../../../../developer/models/core_models/#dynestyx.models.core.ObservationModel">ObservationModel</a> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code><a class="autorefs autorefs-internal" title="ObservationModel (dynestyx.models.core.ObservationModel)" href="../../../../developer/models/core_models/#dynestyx.models.core.ObservationModel">ObservationModel</a> | <span title="Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4038,7 +4038,7 @@ distribution, while subclassing <code>ObservationModel</code> is recommended for
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.DynamicalModel.t0">t0</span></code></td>
             <td>
-                  <code><span title="float">float</span> | <span title="Array">Array</span> | None</code>
+                  <code><span title="float">float</span> | <span title="jax.Array">Array</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4106,7 +4106,7 @@ allows batched initial-condition parameters such as
 
 
 <h2 id="dynestyx.models.core.DynamicalModel.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">ObservationModelLike</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#dynestyx.models.core.DynamicalModel.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
 

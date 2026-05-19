@@ -5172,7 +5172,7 @@ is continuous-time or discrete-time.</p>
 
 
 <h3 id="dynestyx.inference.filters.Filter._add_log_factors" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_add_log_factors</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="o">=</span><span class="p">(),</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_add_log_factors</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="o">=</span><span class="p">(),</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.inference.filters.Filter._add_log_factors" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -5245,7 +5245,7 @@ is continuous-time or discrete-time.</p>
                 <code>obs_times</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_time_plate obs_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5261,7 +5261,7 @@ is continuous-time or discrete-time.</p>
                 <code>obs_values</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time observation_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5277,6 +5277,7 @@ is continuous-time or discrete-time.</p>
                 <code>ctrl_times</code>
             </td>
             <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_time_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5292,6 +5293,7 @@ is continuous-time or discrete-time.</p>
                 <code>ctrl_values</code>
             </td>
             <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5314,7 +5316,7 @@ is continuous-time or discrete-time.</p>
 
 
 <h3 id="dynestyx.inference.filters.Filter._add_log_factors_batched" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_add_log_factors_batched</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+            <code class=" language-python"><span class="n">_add_log_factors_batched</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">],</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time&#39;</span><span class="p">],</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
 
 <a href="#dynestyx.inference.filters.Filter._add_log_factors_batched" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -6046,7 +6048,7 @@ recover the predicted mean and covariance.</p>
 
 
 <h2 id="dynestyx.inference.filters._filter_continuous_time" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_filter_continuous_time</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">filter_config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+            <code class=" language-python"><span class="n">_filter_continuous_time</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">filter_config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">],</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time&#39;</span><span class="p">],</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
 
 <a href="#dynestyx.inference.filters._filter_continuous_time" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -6126,7 +6128,7 @@ recover the predicted mean and covariance.</p>
                 <code>obs_times</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_time_plate obs_time&#39;]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6142,7 +6144,7 @@ recover the predicted mean and covariance.</p>
                 <code>obs_values</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time observation_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time&#39;]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6158,6 +6160,7 @@ recover the predicted mean and covariance.</p>
                 <code>ctrl_times</code>
             </td>
             <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_time_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6173,6 +6176,7 @@ recover the predicted mean and covariance.</p>
                 <code>ctrl_values</code>
             </td>
             <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6195,7 +6199,7 @@ recover the predicted mean and covariance.</p>
 
 
 <h2 id="dynestyx.inference.filters._filter_discrete_time" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_filter_discrete_time</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">filter_config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
+            <code class=" language-python"><span class="n">_filter_discrete_time</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">filter_config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">],</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time&#39;</span><span class="p">],</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">numpyro</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]</span></code>
 
 <a href="#dynestyx.inference.filters._filter_discrete_time" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -6276,7 +6280,7 @@ recover the predicted mean and covariance.</p>
                 <code>obs_times</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_time_plate obs_time&#39;]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6292,7 +6296,7 @@ recover the predicted mean and covariance.</p>
                 <code>obs_values</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time observation_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time&#39;]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6308,6 +6312,7 @@ recover the predicted mean and covariance.</p>
                 <code>ctrl_times</code>
             </td>
             <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_time_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6323,6 +6328,7 @@ recover the predicted mean and covariance.</p>
                 <code>ctrl_values</code>
             </td>
             <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">

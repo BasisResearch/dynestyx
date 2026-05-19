@@ -4093,7 +4093,7 @@ event values.</p>
 
 
 <h2 id="dynestyx.utils._build_control_path" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_build_control_path</span><span class="p">(</span><span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dfx</span><span class="o">.</span><span class="n">LinearInterpolation</span></code>
+            <code class=" language-python"><span class="n">_build_control_path</span><span class="p">(</span><span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">],</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">],</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">dfx</span><span class="o">.</span><span class="n">LinearInterpolation</span></code>
 
 <a href="#dynestyx.utils._build_control_path" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4132,7 +4132,7 @@ at the boundary).</p>
 
 
 <h2 id="dynestyx.utils._get_dynamics_with_t0" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_get_dynamics_with_t0</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicalModel</span></code>
+            <code class=" language-python"><span class="n">_get_dynamics_with_t0</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*predict_time_plate predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicalModel</span></code>
 
 <a href="#dynestyx.utils._get_dynamics_with_t0" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4153,7 +4153,7 @@ from <code>obs_times[0]</code> or <code>predict_times[0]</code> (kept as a JAX s
 
 
 <h2 id="dynestyx.utils._get_val_or_None" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_get_val_or_None</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_get_val_or_None</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.utils._get_val_or_None" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4195,7 +4195,7 @@ from <code>obs_times[0]</code> or <code>predict_times[0]</code> (kept as a JAX s
                 <code>t_idx</code>
             </td>
             <td>
-                  <code><span title="int">int</span></code>
+                  <code><span title="int">int</span> | <span title="jax.Array">Array</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4343,7 +4343,7 @@ so the whitelist in <code>_is_known_vector_field</code> only needs attribute nam
 
 
 <h2 id="dynestyx.utils._validate_control_dim" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_control_dim</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_validate_control_dim</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.utils._validate_control_dim" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4385,7 +4385,7 @@ so the whitelist in <code>_is_known_vector_field</code> only needs attribute nam
                 <code>ctrl_values</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4431,7 +4431,7 @@ so the whitelist in <code>_is_known_vector_field</code> only needs attribute nam
 
 
 <h2 id="dynestyx.utils._validate_controls" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_controls</span><span class="p">(</span><span class="n">obs_times</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_validate_controls</span><span class="p">(</span><span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*predict_time_plate predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.utils._validate_controls" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4478,7 +4478,7 @@ so the whitelist in <code>_is_known_vector_field</code> only needs attribute nam
 
 
 <h2 id="dynestyx.utils._validate_site_sorting" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_site_sorting</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_validate_site_sorting</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*time_plate time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.utils._validate_site_sorting" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4496,7 +4496,7 @@ so the whitelist in <code>_is_known_vector_field</code> only needs attribute nam
 
 
 <h2 id="dynestyx.utils.flatten_draws" class="doc doc-heading">
-            <code class=" language-python"><span class="n">flatten_draws</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+            <code class=" language-python"><span class="n">flatten_draws</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">Shaped</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Shaped</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span></code>
 
 <a href="#dynestyx.utils.flatten_draws" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4527,7 +4527,7 @@ computing credible intervals or plotting fans.</p>
                 <code>arr</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jaxtyping.Shaped">Shaped</span>[<span title="jax.Array">Array</span>, ...]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4553,7 +4553,7 @@ computing credible intervals or plotting fans.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jaxtyping.Shaped">Shaped</span>[<span title="jax.Array">Array</span>, ...]</code>
             </td>
             <td>
               <div class="doc-md-description">

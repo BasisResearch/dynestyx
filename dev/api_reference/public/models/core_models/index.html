@@ -3941,7 +3941,7 @@ Pass a NumPyro distribution instance (i.e., a <code>numpyro.distributions.Distri
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.DynamicalModel.state_evolution">state_evolution</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.core.ContinuousTimeStateEvolution)" href="../../../developer/models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a> | <a class="autorefs autorefs-internal" title="DiscreteTimeStateEvolution (dynestyx.models.core.DiscreteTimeStateEvolution)" href="../../../developer/models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code><a class="autorefs autorefs-internal" title="ContinuousTimeStateEvolution (dynestyx.models.core.ContinuousTimeStateEvolution)" href="../../../developer/models/core_models/#dynestyx.models.core.ContinuousTimeStateEvolution">ContinuousTimeStateEvolution</a> | <a class="autorefs autorefs-internal" title="DiscreteTimeStateEvolution (dynestyx.models.core.DiscreteTimeStateEvolution)" href="../../../developer/models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a> | <span title="Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3956,7 +3956,7 @@ simulator selection).</p>
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.DynamicalModel.observation_model">observation_model</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ObservationModel (dynestyx.models.core.ObservationModel)" href="../../../developer/models/core_models/#dynestyx.models.core.ObservationModel">ObservationModel</a> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code><a class="autorefs autorefs-internal" title="ObservationModel (dynestyx.models.core.ObservationModel)" href="../../../developer/models/core_models/#dynestyx.models.core.ObservationModel">ObservationModel</a> | <span title="Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3980,7 +3980,7 @@ distribution, while subclassing <code>ObservationModel</code> is recommended for
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.DynamicalModel.t0">t0</span></code></td>
             <td>
-                  <code><span title="float">float</span> | <span title="Array">Array</span> | None</code>
+                  <code><span title="float">float</span> | <span title="jax.Array">Array</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4048,7 +4048,7 @@ allows batched initial-condition parameters such as
 
 
 <h3 id="dynestyx.models.core.DynamicalModel.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="n">TimeLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">ObservationModelLike</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#dynestyx.models.core.DynamicalModel.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4232,7 +4232,7 @@ x_{t_{k+1}} \sim p\left(x_{t_{k+1}} \mid x_{t_k}, u_{t_k}, t_k, t_{k+1}\right)
                 <code>x</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.State">State</span></code>
+                  <code><span title="State">State</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4248,7 +4248,7 @@ x_{t_{k+1}} \sim p\left(x_{t_{k+1}} \mid x_{t_k}, u_{t_k}, t_k, t_{k+1}\right)
                 <code>u</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Control">Control</span> | None</code>
+                  <code><span title="Control">Control</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4264,7 +4264,7 @@ x_{t_{k+1}} \sim p\left(x_{t_{k+1}} \mid x_{t_k}, u_{t_k}, t_k, t_{k+1}\right)
                 <code>t_now</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Time">Time</span></code>
+                  <code><span title="Time">Time</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4280,7 +4280,7 @@ x_{t_{k+1}} \sim p\left(x_{t_{k+1}} \mid x_{t_k}, u_{t_k}, t_k, t_{k+1}\right)
                 <code>t_next</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Time">Time</span></code>
+                  <code><span title="Time">Time</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4485,7 +4485,7 @@ mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
                 <code>x</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.State">State</span></code>
+                  <code><span title="State">State</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4501,7 +4501,7 @@ mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
                 <code>u</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Control">Control</span> | None</code>
+                  <code><span title="Control">Control</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4517,7 +4517,7 @@ mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
                 <code>t</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Time">Time</span></code>
+                  <code><span title="Time">Time</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4632,7 +4632,7 @@ Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> 
                 <code>x</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.State">State</span></code>
+                  <code><span title="State">State</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4648,7 +4648,7 @@ Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> 
                 <code>u</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Control">Control</span> | None</code>
+                  <code><span title="Control">Control</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4664,7 +4664,7 @@ Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> 
                 <code>t</code>
             </td>
             <td>
-                  <code><span title="dynestyx.types.Time">Time</span></code>
+                  <code><span title="Time">Time</span></code>
             </td>
             <td>
               <div class="doc-md-description">

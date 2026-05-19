@@ -3945,7 +3945,7 @@ observation noise covariance.</p>
 
 
 <h2 id="dynestyx.models.observations.GaussianObservation.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">h</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">State</span><span class="p">,</span> <span class="n">Control</span><span class="p">,</span> <span class="n">Time</span><span class="p">],</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">],</span> <span class="n">R</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">h</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">R</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*plate observation_dim observation_dim&#39;</span><span class="p">])</span></code>
 
 <a href="#dynestyx.models.observations.GaussianObservation.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -3970,7 +3970,7 @@ observation noise covariance.</p>
                 <code>h</code>
             </td>
             <td>
-                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="dynestyx.types.State">State</span>, <span title="dynestyx.types.Control">Control</span>, <span title="dynestyx.types.Time">Time</span>], <span title="jax.Array">Array</span>]</code>
+                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="State">State</span>, <span title="Control">Control</span>, <span title="Time">Time</span>], <span title="jax.Array">Array</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">

@@ -4328,7 +4328,7 @@ plotting/credible intervals.</p>
 
 
 <h2 id="dynestyx.handlers.sample" class="doc doc-heading">
-            <code class=" language-python"><span class="n">sample</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionOfTime</span></code>
+            <code class=" language-python"><span class="n">sample</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_time_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_time_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*ctrl_value_plate ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*predict_time_plate predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionOfTime</span></code>
 
 <a href="#dynestyx.handlers.sample" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4398,7 +4398,7 @@ for the full plated-shape contract.</p>
                 <code>obs_times</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_time_plate obs_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4414,7 +4414,7 @@ for the full plated-shape contract.</p>
                 <code>obs_values</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time observation_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*obs_value_plate obs_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4430,7 +4430,7 @@ for the full plated-shape contract.</p>
                 <code>ctrl_times</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_time_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4446,7 +4446,7 @@ for the full plated-shape contract.</p>
                 <code>ctrl_values</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*ctrl_value_plate ctrl_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4462,7 +4462,7 @@ for the full plated-shape contract.</p>
                 <code>predict_times</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*predict_time_plate predict_time&#39;] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
