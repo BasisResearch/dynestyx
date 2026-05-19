@@ -490,7 +490,7 @@ def test_discrete_state_evolution_diffusion_override_raises() -> None:
         del u, t_now, t_next
         return dist.MultivariateNormal(loc=x, covariance_matrix=jnp.eye(2))
 
-    state_evolution.diffusion = ScalarDiffusion(0.1, bm_dim=2)  # type: ignore[attr-defined]
+    setattr(state_evolution, "diffusion", ScalarDiffusion(0.1, bm_dim=2))
 
     with pytest.raises(
         ValueError, match="diffusion can only be set for continuous-time models"

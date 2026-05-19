@@ -1,43 +1,26 @@
 """Diffusion objects for continuous-time state evolution."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import NamedTuple, Self, cast
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array
-
-from dynestyx.types import Control, State, Time
+from jaxtyping import Float, Real
 
 DiffusionValue = Array | float | int
-DiffusionSpec = Callable[[State, Control | None, Time], DiffusionValue] | DiffusionValue
-
-
-class EvaluatedDiffusion(NamedTuple):
-    """A diffusion coefficient evaluated at a specific ``(x, u, t)``.
-
-    This is primarily a developer-facing helper used by solvers and backend
-    integrations. It pairs a structured ``Diffusion`` object with the concrete
-    value of its coefficient at one state, control, and time.
-    """
-
-    diffusion: Diffusion
-    value: Array
-
-    def as_matrix(self, *, state_dim: int) -> Array:
-        """Return the evaluated diffusion coefficient as a matrix ``L``."""
-        return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
-
-    def gram_matrix(self, *, state_dim: int) -> Array:
-        """L L^T."""
-        return self.diffusion._value_gram_matrix(self.value, state_dim=state_dim)
-
-    def apply(self, dw: Array, *, state_dim: int) -> Array:
-        """Return ``L @ dw`` using the structured diffusion representation."""
-        return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)
+DiffusionSpec = (
+    Callable[
+        [
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            float | int | Real[Array, ""],
+        ],
+        DiffusionValue,
+    ]
+    | DiffusionValue
+)
 
 
 class Diffusion(eqx.Module):
@@ -82,71 +65,82 @@ class Diffusion(eqx.Module):
     def evaluate_value(
         self,
         *,
-        x: State,
-        u: Control | None,
-        t: Time,
+        x: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
     ) -> Array:
         """Return the raw coefficient value at ``(x, u, t)``."""
         if callable(self.coefficient):
-            return jnp.asarray(self.coefficient(x, u, t))
+            coefficient = cast(
+                Callable[
+                    [
+                        Real[Array, " state_dim"] | Real[Array, ""] | None,
+                        Real[Array, " control_dim"] | Real[Array, ""] | None,
+                        float | int | Real[Array, ""],
+                    ],
+                    DiffusionValue,
+                ],
+                self.coefficient,
+            )
+            return jnp.asarray(coefficient(x, u, t))
         return cast(Array, self.coefficient)
 
     def resolve_metadata(
         self,
         *,
         state_dim: int,
-        x_probe: State,
-        u_probe: Control | None,
-        t_probe: Time,
-    ) -> Diffusion:
+        x_probe: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_probe: float | int | Real[Array, ""],
+    ) -> Self:
         """Check coefficient shape and resolve ``bm_dim`` if needed."""
         raise NotImplementedError
 
     def evaluate(
         self,
         *,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> EvaluatedDiffusion:
+        x: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> "EvaluatedDiffusion":
         """Evaluate the diffusion at ``(x, u, t)``."""
         return EvaluatedDiffusion(self, self.evaluate_value(x=x, u=u, t=t))
 
     def as_matrix(
         self,
         *,
-        x: State,
-        u: Control | None,
-        t: Time,
+        x: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
         state_dim: int,
-    ) -> Array:
+    ) -> Real[Array, "*plate state_dim bm_dim"]:
         """Return the matrix-valued diffusion coefficient ``L(x, u, t)``."""
         return self.evaluate(x=x, u=u, t=t).as_matrix(state_dim=state_dim)
 
     def gram_matrix(
         self,
         *,
-        x: State,
-        u: Control | None,
-        t: Time,
+        x: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
         state_dim: int,
-    ) -> Array:
+    ) -> Float[Array, "*plate state_dim state_dim"]:
         """Return the diffusion Gram matrix ``L(x,u,t) L(x,u,t)^T``."""
         return self.evaluate(x=x, u=u, t=t).gram_matrix(state_dim=state_dim)
 
     def apply(
         self,
-        dw: Array,
+        dw: Float[Array, " bm_dim"],
         *,
-        x: State,
-        u: Control | None,
-        t: Time,
+        x: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
         state_dim: int,
-    ) -> Array:
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         """Apply the diffusion coefficient to a Brownian increment ``dw``."""
         return self.evaluate(x=x, u=u, t=t).apply(dw, state_dim=state_dim)
 
-    def _with_bm_dim(self, bm_dim: int) -> Diffusion:
+    def _with_bm_dim(self, bm_dim: int) -> Self:
         return type(self)(self.coefficient, bm_dim=int(bm_dim))
 
     def _constant_shape(self) -> tuple[int, ...] | None:
@@ -158,15 +152,21 @@ class Diffusion(eqx.Module):
         if self.bm_dim is not None and int(self.bm_dim) <= 0:
             raise ValueError(f"bm_dim must be positive. Got bm_dim={self.bm_dim}.")
 
-    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_as_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Real[Array, "*plate state_dim bm_dim"]:
         raise NotImplementedError(
             "Please don't construct `Diffusion` directly; instead instantiate one of its subclasses (e.g., `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion`)"
         )
 
-    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Float[Array, "*plate state_dim state_dim"]:
         raise NotImplementedError
 
-    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+    def _apply_value(
+        self, value: Array, dw: Float[Array, " bm_dim"], *, state_dim: int
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError
 
 
@@ -203,10 +203,10 @@ class FullDiffusion(Diffusion):
         self,
         *,
         state_dim: int,
-        x_probe: State,
-        u_probe: Control | None,
-        t_probe: Time,
-    ) -> FullDiffusion:
+        x_probe: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_probe: float | int | Real[Array, ""],
+    ) -> Self:
         """Check matrix shape and infer ``bm_dim`` from the trailing dimension if needed."""
         shape = jax.eval_shape(
             lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
@@ -225,16 +225,22 @@ class FullDiffusion(Diffusion):
         return (
             self
             if self.bm_dim == inferred_bm_dim
-            else cast(FullDiffusion, self._with_bm_dim(inferred_bm_dim))
+            else self._with_bm_dim(inferred_bm_dim)
         )
 
-    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_as_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Real[Array, "*plate state_dim bm_dim"]:
         return value
 
-    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Float[Array, "*plate state_dim state_dim"]:
         return value @ jnp.swapaxes(value, -1, -2)
 
-    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+    def _apply_value(
+        self, value: Array, dw: Float[Array, " bm_dim"], *, state_dim: int
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         return value @ dw
 
 
@@ -278,10 +284,10 @@ class DiagonalDiffusion(Diffusion):
         self,
         *,
         state_dim: int,
-        x_probe: State,
-        u_probe: Control | None,
-        t_probe: Time,
-    ) -> DiagonalDiffusion:
+        x_probe: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_probe: float | int | Real[Array, ""],
+    ) -> Self:
         """Check vector shape and verify that ``bm_dim`` is either 1 or ``state_dim``."""
         shape = jax.eval_shape(
             lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
@@ -300,19 +306,25 @@ class DiagonalDiffusion(Diffusion):
             )
         return self
 
-    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_as_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Real[Array, "*plate state_dim bm_dim"]:
         assert self.bm_dim is not None
         if self.bm_dim == 1:
             return value[..., :, None]
         return value[..., :, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Float[Array, "*plate state_dim state_dim"]:
         assert self.bm_dim is not None
         if self.bm_dim == 1:
             return value[..., :, None] * value[..., None, :]
         return jnp.square(value)[..., :, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+    def _apply_value(
+        self, value: Array, dw: Float[Array, " bm_dim"], *, state_dim: int
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         assert self.bm_dim is not None
         if self.bm_dim == 1:
             return value * dw[..., 0]
@@ -359,10 +371,10 @@ class ScalarDiffusion(Diffusion):
         self,
         *,
         state_dim: int,
-        x_probe: State,
-        u_probe: Control | None,
-        t_probe: Time,
-    ) -> ScalarDiffusion:
+        x_probe: Real[Array, " state_dim"] | Real[Array, ""] | None,
+        u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_probe: float | int | Real[Array, ""],
+    ) -> Self:
         """Check scalar shape and verify that ``bm_dim`` is either 1 or ``state_dim``."""
         shape = jax.eval_shape(
             lambda: self.evaluate_value(x=x_probe, u=u_probe, t=t_probe)
@@ -384,7 +396,9 @@ class ScalarDiffusion(Diffusion):
     def _scalar_value(self, value: Array) -> Array:
         return value if value.ndim == 0 else jnp.squeeze(value, axis=-1)
 
-    def _value_as_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_as_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Real[Array, "*plate state_dim bm_dim"]:
         scalar = self._scalar_value(value)
         assert self.bm_dim is not None
         if self.bm_dim == 1:
@@ -393,7 +407,9 @@ class ScalarDiffusion(Diffusion):
             )
         return scalar[..., None, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-    def _value_gram_matrix(self, value: Array, *, state_dim: int) -> Array:
+    def _value_gram_matrix(
+        self, value: Array, *, state_dim: int
+    ) -> Float[Array, "*plate state_dim state_dim"]:
         sigma_sq = jnp.square(self._scalar_value(value))
         assert self.bm_dim is not None
         if self.bm_dim == 1:
@@ -402,7 +418,9 @@ class ScalarDiffusion(Diffusion):
             )
         return sigma_sq[..., None, None] * jnp.eye(state_dim, dtype=value.dtype)
 
-    def _apply_value(self, value: Array, dw: Array, *, state_dim: int) -> Array:
+    def _apply_value(
+        self, value: Array, dw: Float[Array, " bm_dim"], *, state_dim: int
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         scalar = self._scalar_value(value)
         assert self.bm_dim is not None
         if self.bm_dim == 1:
@@ -410,3 +428,31 @@ class ScalarDiffusion(Diffusion):
                 (scalar * dw[..., 0])[..., None], scalar.shape + (state_dim,)
             )
         return scalar[..., None] * dw
+
+
+class EvaluatedDiffusion(NamedTuple):
+    """A diffusion coefficient evaluated at a specific ``(x, u, t)``.
+
+    This is primarily a developer-facing helper used by solvers and backend
+    integrations. It pairs a structured ``Diffusion`` object with the concrete
+    value of its coefficient at one state, control, and time.
+    """
+
+    diffusion: Diffusion
+    value: Array
+
+    def as_matrix(self, *, state_dim: int) -> Real[Array, "*plate state_dim bm_dim"]:
+        """Return the evaluated diffusion coefficient as a matrix ``L``."""
+        return self.diffusion._value_as_matrix(self.value, state_dim=state_dim)
+
+    def gram_matrix(
+        self, *, state_dim: int
+    ) -> Float[Array, "*plate state_dim state_dim"]:
+        """L L^T."""
+        return self.diffusion._value_gram_matrix(self.value, state_dim=state_dim)
+
+    def apply(
+        self, dw: Float[Array, " bm_dim"], *, state_dim: int
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
+        """Return ``L @ dw`` using the structured diffusion representation."""
+        return self.diffusion._apply_value(self.value, dw, state_dim=state_dim)

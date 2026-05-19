@@ -11,6 +11,8 @@ import jax.random as jr
 import numpy as np
 from numpyro.infer import Predictive
 
+_OUTPUT_MASTER_DIR: Path | None = None
+
 
 def run_profile_likelihood(
     model: Callable,
@@ -123,12 +125,12 @@ def get_output_dir(test_name: str) -> Path:
     if master_dir_str is not None:
         master_dir = Path(master_dir_str)
     else:
-        if not hasattr(get_output_dir, "_master_dir"):
+        global _OUTPUT_MASTER_DIR
+        if _OUTPUT_MASTER_DIR is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            master_dir = Path(".output") / timestamp
-            master_dir.mkdir(parents=True, exist_ok=True)
-            get_output_dir._master_dir = master_dir  # type: ignore[attr-defined]
-        master_dir = get_output_dir._master_dir  # type: ignore[attr-defined]
+            _OUTPUT_MASTER_DIR = Path(".output") / timestamp
+            _OUTPUT_MASTER_DIR.mkdir(parents=True, exist_ok=True)
+        master_dir = _OUTPUT_MASTER_DIR
 
     output_dir = master_dir / test_name
     output_dir.mkdir(parents=True, exist_ok=True)

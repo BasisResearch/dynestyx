@@ -3,6 +3,7 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Array, Float, Real
 
 from dynestyx.inference.integrations.utils import (
     WeightedParticles,
@@ -28,8 +29,8 @@ def _handle_missing_gaussian_sequence(
 
 
 def _gaussian_sequence_to_dists(
-    means: jax.Array | None,
-    covariances: jax.Array | None,
+    means: Float[Array, "*plate time state_dim"] | None,
+    covariances: Float[Array, "*plate time state_dim state_dim"] | None,
     *,
     plate_shapes: tuple[int, ...] = (),
     missing: MissingPolicy = "raise",
@@ -53,8 +54,9 @@ def _gaussian_sequence_to_dists(
 
 
 def _particle_sequence_to_dists(
-    particles: jax.Array,
-    log_weights: jax.Array,
+    particles: Real[Array, "*plate time n_particles state_dim"]
+    | Real[Array, "*plate time n_particles"],
+    log_weights: Float[Array, "*plate time n_particles"],
     *,
     plate_shapes: tuple[int, ...] = (),
 ) -> list[dist.Distribution]:
@@ -122,7 +124,7 @@ def _cholesky_state_sequence_to_dists(
 
 
 def _categorical_log_probs_to_dists(
-    log_probs: jax.Array,
+    log_probs: Float[Array, "*plate time n_states"],
     *,
     plate_shapes: tuple[int, ...] = (),
 ) -> list[dist.Distribution]:

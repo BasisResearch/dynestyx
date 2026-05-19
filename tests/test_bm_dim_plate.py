@@ -1,5 +1,7 @@
 """Minimal reproduction of bm_dim not being inferred inside plate context."""
 
+from typing import cast
+
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
@@ -11,6 +13,7 @@ from dynestyx.models import (
     DynamicalModel,
     FullDiffusion,
     ScalarDiffusion,
+    StochasticContinuousTimeStateEvolution,
 )
 
 
@@ -76,9 +79,12 @@ def test_bm_dim_resolved_outside_plate(diffusion_form):
             x, 0.1 * jnp.eye(state_dim)
         ),
     )
-    assert dynamics.state_evolution.diffusion is not None
-    assert dynamics.state_evolution.diffusion.bm_dim == expected_bm_dim, (
-        f"Expected bm_dim={expected_bm_dim}, got {dynamics.state_evolution.diffusion.bm_dim}"
+    resolved_evolution = cast(
+        StochasticContinuousTimeStateEvolution, dynamics.state_evolution
+    )
+    assert resolved_evolution.diffusion is not None
+    assert resolved_evolution.diffusion.bm_dim == expected_bm_dim, (
+        f"Expected bm_dim={expected_bm_dim}, got {resolved_evolution.diffusion.bm_dim}"
     )
 
 
@@ -114,11 +120,14 @@ def test_bm_dim_resolved_inside_plate(diffusion_form):
                     x, 0.1 * jnp.eye(state_dim)
                 ),
             )
-            assert dynamics.state_evolution.diffusion is not None, (
+            resolved_evolution = cast(
+                StochasticContinuousTimeStateEvolution, dynamics.state_evolution
+            )
+            assert resolved_evolution.diffusion is not None, (
                 "bm_dim should not be None after DynamicalModel construction in plate"
             )
-            assert dynamics.state_evolution.diffusion.bm_dim == expected_bm_dim, (
-                f"Expected bm_dim={expected_bm_dim}, got {dynamics.state_evolution.diffusion.bm_dim}"
+            assert resolved_evolution.diffusion.bm_dim == expected_bm_dim, (
+                f"Expected bm_dim={expected_bm_dim}, got {resolved_evolution.diffusion.bm_dim}"
             )
 
     with numpyro.handlers.seed(rng_seed=0):

@@ -2,11 +2,11 @@
 
 from typing import TypeVar
 
-import jax
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
+from jaxtyping import Array, Real
 
 from dynestyx.models import (
     DynamicalModel,
@@ -26,11 +26,15 @@ def sample(
     name: str,
     dynamics: DynamicalModel,
     *,
-    obs_times: jax.Array | None = None,
-    obs_values: jax.Array | None = None,
-    ctrl_times: jax.Array | None = None,
-    ctrl_values: jax.Array | None = None,
-    predict_times: jax.Array | None = None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
 ) -> FunctionOfTime:
     """
@@ -122,11 +126,15 @@ def _sample_intp(
     name: str,
     dynamics: DynamicalModel,
     *,
-    obs_times: jax.Array | None = None,
-    obs_values: jax.Array | None = None,
-    ctrl_times: jax.Array | None = None,
-    ctrl_values: jax.Array | None = None,
-    predict_times: jax.Array | None = None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
 ) -> FunctionOfTime:
     """
@@ -174,6 +182,7 @@ class HandlesSelf:
         return self._cm
 
     def __exit__(self, exc_type, exc, tb):
+        assert self._cm is not None
         return self._cm.__exit__(exc_type, exc, tb)
 
 

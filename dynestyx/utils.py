@@ -8,11 +8,12 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
+from jaxtyping import Real, Shaped
 
 from dynestyx.models import DynamicalModel
 
 
-def flatten_draws(arr: Array) -> Array:
+def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
     """Merge the leading ``(num_samples, n_sim)`` axes of a simulator output into one.
 
     Simulators return arrays of shape ``(n_sim, T, ...)``. After wrapping the
@@ -186,7 +187,12 @@ def _should_record_field(
     return math.prod(shape) <= max_elems
 
 
-def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
+def _validate_control_dim(
+    dynamics: DynamicalModel,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None,
+) -> None:
     """
     Validate that control_dim is set in DynamicalModel when controls are present.
 
@@ -215,10 +221,12 @@ def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -
 
 
 def _validate_controls(
-    obs_times: Array | None,
-    predict_times: Array | None,
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None,
 ) -> None:
     """
     Validate control inputs against model time grids.
@@ -278,7 +286,10 @@ def _validate_controls(
 
 
 def _build_control_path(
-    ctrl_times: Array, ctrl_values: Array, obs_times: Array
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"],
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"],
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
 ) -> dfx.LinearInterpolation:
     """
     Build rectilinear control path for continuous-time simulators.
@@ -294,7 +305,7 @@ def _build_control_path(
     return dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
 
-def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
+def _get_val_or_None(values: Array | None, t_idx: int | Array) -> Array | None:
     """
     Safely get value at index t_idx, returning None if values is None.
 
@@ -309,7 +320,9 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
 
 
 def _get_dynamics_with_t0(
-    dynamics: DynamicalModel, obs_times: Array | None, predict_times: Array | None
+    dynamics: DynamicalModel,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
 ) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
@@ -320,7 +333,9 @@ def _get_dynamics_with_t0(
 
     # Use the first time step along the last (time) axis, then reduce across any
     # leading batch/plate dims to a scalar t0.
-    def _infer_t0_from_times(times: Array) -> Array:
+    def _infer_t0_from_times(
+        times: Real[Array, "*time_plate time"],
+    ) -> Real[Array, ""]:
         return jnp.min(times[..., 0])
 
     if obs_times is None:
@@ -356,7 +371,9 @@ def _get_dynamics_with_t0(
         )
 
 
-def _validate_site_sorting(times: Array | None, name: str) -> None:
+def _validate_site_sorting(
+    times: Real[Array, "*time_plate time"] | None, name: str
+) -> None:
     """Validate that times are strictly increasing (along the last axis)."""
     if times is not None and times.shape[-1] > 1:
         # Use slicing on the last axis to support batched time arrays.

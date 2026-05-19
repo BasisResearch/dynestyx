@@ -10,13 +10,16 @@ import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 from jax import Array, lax, vmap
+from jaxtyping import Real
 
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.models.diffusions import EvaluatedDiffusion
-from dynestyx.types import State, Time, TimeLike, as_scalar_time_array
+from dynestyx.types import as_scalar_time_array
 
 
-def _early_return_states(x0: State, saveat_times: Array) -> Array:
+def _early_return_states(
+    x0: Real[Array, " state_dim"] | Real[Array, ""], saveat_times: Array
+) -> Array:
     """Build no-op solve output by repeating the initial state.
 
     Args:
@@ -102,11 +105,11 @@ def _em_sample_from_terms(
 def euler_maruyama_integrate_state_to_time(
     state_evolution: StochasticContinuousTimeStateEvolution,
     x_init: Array,
-    t_init: Time,
+    t_init: Real[Array, ""],
     key_init: Array,
-    t_target: Time,
+    t_target: Real[Array, ""],
     *,
-    dt0: Time,
+    dt0: Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None] | None = None,
 ) -> tuple[Array, Array, Array]:
     """Integrate a sampled EM path from `t_init` to `t_target`.
@@ -256,11 +259,11 @@ def euler_maruyama_loc_cov(
 
 def _solve_sde_scan(
     dynamics: DynamicalModel,
-    t0: Time,
+    t0: Real[Array, ""],
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
-    dt0: Time,
+    dt0: Real[Array, ""],
     *,
     key: Array | None,
 ) -> Array:
@@ -321,14 +324,14 @@ def _solve_sde_scan(
 
 def _solve_sde_diffrax(
     dynamics: DynamicalModel,
-    t0: Time,
+    t0: Real[Array, ""],
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, Any],
     *,
     key: Array | None,
-    tol_vbt: Time,
+    tol_vbt: Real[Array, ""],
 ) -> Array:
     """Solve an SDE with Diffrax and a VirtualBrownianTree control.
 
@@ -388,13 +391,13 @@ def solve_sde(
     *,
     source: Literal["diffrax", "em_scan"],
     dynamics: DynamicalModel,
-    t0: TimeLike,
+    t0: float | int | Array,
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, Any],
     key: Array,
-    tol_vbt: TimeLike | None = None,
+    tol_vbt: float | int | Array | None = None,
 ) -> Array:
     """Dispatch between SDE solver backends.
 
