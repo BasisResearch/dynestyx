@@ -450,9 +450,11 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
 
     if isinstance(evo, GaussianStateEvolution) or isinstance(obs, GaussianObservation):
         warnings.warn(
-            "cd_dynamax discrete EKF/UKF ignores absolute time arguments in "
-            "GaussianStateEvolution/GaussianObservation. Use "
-            "filter_source='cuthbert' for genuinely time-varying discrete-time models.",
+            "cd_dynamax discrete-time filters ignore absolute time arguments in "
+            "GaussianStateEvolution/GaussianObservation. For genuinely "
+            "time-varying discrete-time models, use a filter/backend that "
+            "preserves absolute time semantics, "
+            "such as EnKFConfig(filter_source='cuthbert').",
             stacklevel=2,
         )
 

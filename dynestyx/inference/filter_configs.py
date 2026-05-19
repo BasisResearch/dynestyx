@@ -291,9 +291,10 @@ class EKFConfig(BaseFilterConfig):
 
     In the current interface with the `cd_dynamax` discrete-time backend,
     time-varying models silently ignore absolute time arguments.
-    For genuinely time-varying discrete-time models, use
-    `filter_source="cuthbert"` instead. Only use `filter_source="cd_dynamax"`
-    for time-invariant models.
+    For genuinely time-varying discrete-time models, use a
+    backend/configuration that preserves absolute time semantics, such as
+    `EnKFConfig(filter_source="cuthbert")`. Only use
+    `filter_source="cd_dynamax"` for time-invariant models.
 
     Attributes:
         filter_emission_order (FilterEmissionOrder): Linearisation order for
@@ -421,9 +422,10 @@ class UKFConfig(BaseFilterConfig):
 
     In the current interface with the `cd_dynamax` discrete-time backend,
     time-varying models silently ignore absolute time arguments.
-    For genuinely time-varying discrete-time models, use
-    `filter_source="cuthbert"` instead. Only use `filter_source="cd_dynamax"`
-    for time-invariant models.
+    For genuinely time-varying discrete-time models, use a
+    backend/configuration that preserves absolute time semantics, such as
+    `EKFConfig(filter_source="cuthbert")`. Only use
+    `filter_source="cd_dynamax"` for time-invariant models.
 
     Attributes:
         alpha (float): Spread of sigma points around the current mean.
