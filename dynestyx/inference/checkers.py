@@ -1,9 +1,25 @@
 """Validation helpers for inference modules."""
 
+import equinox as eqx
 import jax
+import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Real, Shaped
 
+from dynestyx.inference.filter_configs import (
+    BaseFilterConfig,
+    ContinuousTimeConfigs,
+    DiscreteTimeConfigs,
+    EnKFConfig,
+    HMMConfigs,
+    KFConfig,
+)
+from dynestyx.inference.smoother_configs import (
+    BaseSmootherConfig,
+    ContinuousTimeSmootherConfigs,
+    DiscreteTimeSmootherConfigs,
+    KFSmootherConfig,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _has_any_batched_plate_source
 
@@ -77,3 +93,115 @@ def _validate_batched_plate_alignment(
         "Expected at least one batched source to start with plate_shapes."
     )
     raise ValueError(diagnostics)
+
+
+def _validate_filter_missing_observation_support(
+    config: BaseFilterConfig,
+    *,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+) -> None:
+    """Reject unsupported NaN-valued observations for filter backends."""
+    if obs_values is None:
+        return
+
+    has_missing = jnp.any(jnp.isnan(obs_values))
+
+    if isinstance(config, ContinuousTimeConfigs):
+        _ = eqx.error_if(
+            obs_values,
+            has_missing,
+            "CD-Dynamax filters do not support NaNs in obs_values. "
+            "Missing observations via NaNs currently require a cuthbert-backed "
+            "discrete-time filter.",
+        )
+        return
+
+    if isinstance(config, HMMConfigs):
+        _ = eqx.error_if(
+            obs_values,
+            has_missing,
+            "HMM filtering does not support NaNs in obs_values.",
+        )
+        return
+
+    if isinstance(config, DiscreteTimeConfigs):
+        if config.filter_source == "cd_dynamax":
+            _ = eqx.error_if(
+                obs_values,
+                has_missing,
+                "CD-Dynamax filters do not support NaNs in obs_values. "
+                "Missing observations via NaNs currently require a cuthbert-backed "
+                "discrete-time filter.",
+            )
+            return
+
+        if config.filter_source == "cuthbert":
+            if isinstance(config, (KFConfig, EnKFConfig)):
+                return
+            _ = eqx.error_if(
+                obs_values,
+                has_missing,
+                "NaN-valued obs_values are currently supported only for "
+                "cuthbert KFConfig and EnKFConfig filters.",
+            )
+            return
+
+    _ = eqx.error_if(
+        obs_values,
+        has_missing,
+        f"NaN-valued obs_values are not supported for {type(config).__name__}.",
+    )
+
+
+def _validate_smoother_missing_observation_support(
+    config: BaseSmootherConfig,
+    *,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+) -> None:
+    """Reject unsupported NaN-valued observations for smoother backends."""
+    if obs_values is None:
+        return
+
+    has_missing = jnp.any(jnp.isnan(obs_values))
+
+    if isinstance(config, ContinuousTimeSmootherConfigs):
+        _ = eqx.error_if(
+            obs_values,
+            has_missing,
+            "CD-Dynamax smoothers do not support NaNs in obs_values. "
+            "Missing observations via NaNs currently require a cuthbert-backed "
+            "discrete-time smoother.",
+        )
+        return
+
+    if isinstance(config, DiscreteTimeSmootherConfigs):
+        if config.filter_source == "cd_dynamax":
+            _ = eqx.error_if(
+                obs_values,
+                has_missing,
+                "CD-Dynamax smoothers do not support NaNs in obs_values. "
+                "Missing observations via NaNs currently require a cuthbert-backed "
+                "discrete-time smoother.",
+            )
+            return
+
+        if config.filter_source == "cuthbert":
+            if isinstance(config, KFSmootherConfig):
+                return
+            _ = eqx.error_if(
+                obs_values,
+                has_missing,
+                "NaN-valued obs_values are currently supported only for "
+                "cuthbert KFSmootherConfig smoothers.",
+            )
+            return
+
+    _ = eqx.error_if(
+        obs_values,
+        has_missing,
+        f"NaN-valued obs_values are not supported for {type(config).__name__}.",
+    )
