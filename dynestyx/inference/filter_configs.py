@@ -289,6 +289,13 @@ class EKFConfig(BaseFilterConfig):
 
     This is exact (but wasteful) for linear-Gaussian models.
 
+    In the current interface with the `cd_dynamax` discrete-time backend,
+    time-varying models silently ignore absolute time arguments.
+    For genuinely time-varying discrete-time models, use a
+    backend/configuration that preserves absolute time semantics, such as
+    `EnKFConfig(filter_source="cuthbert")`. Only use
+    `filter_source="cd_dynamax"` for time-invariant models.
+
     Attributes:
         filter_emission_order (FilterEmissionOrder): Linearisation order for
             the observation function. `"first"` *(default)* is the standard
@@ -412,6 +419,13 @@ class UKFConfig(BaseFilterConfig):
 
     The default parameters (`alpha`, `beta`, `kappa`) work well for most
     problems; they rarely need to be changed.
+
+    In the current interface with the `cd_dynamax` discrete-time backend,
+    time-varying models silently ignore absolute time arguments.
+    For genuinely time-varying discrete-time models, use a
+    backend/configuration that preserves absolute time semantics, such as
+    `EKFConfig(filter_source="cuthbert")`. Only use
+    `filter_source="cd_dynamax"` for time-invariant models.
 
     Attributes:
         alpha (float): Spread of sigma points around the current mean.
