@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -445,6 +446,16 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             "cd_dynamax discrete EKF/UKF requires array-valued process covariance. "
             "Received callable state_evolution.cov. Use a fixed covariance matrix, "
             "or choose a backend that supports callable covariances."
+        )
+
+    if isinstance(evo, GaussianStateEvolution) or isinstance(obs, GaussianObservation):
+        warnings.warn(
+            "cd_dynamax discrete-time filters ignore absolute time arguments in "
+            "GaussianStateEvolution/GaussianObservation. For genuinely "
+            "time-varying discrete-time models, use a filter/backend that "
+            "preserves absolute time semantics, "
+            "such as EnKFConfig(filter_source='cuthbert').",
+            stacklevel=2,
         )
 
     if isinstance(ic, dist.MultivariateNormal):
