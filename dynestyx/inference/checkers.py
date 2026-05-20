@@ -12,7 +12,6 @@ from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     DiscreteTimeConfigs,
-    EKFConfig,
     EnKFConfig,
     HMMConfigs,
     KFConfig,
@@ -21,7 +20,6 @@ from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
     ContinuousTimeSmootherConfigs,
     DiscreteTimeSmootherConfigs,
-    EKFSmootherConfig,
     KFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
@@ -133,10 +131,10 @@ def _validate_missing_observation_support(
     if mode == "filter":
         continuous_types = ContinuousTimeConfigs
         discrete_types = DiscreteTimeConfigs
-        exact_supported_types = (KFConfig, EnKFConfig, EKFConfig)
+        exact_supported_types = (KFConfig, EnKFConfig)
         exact_supported_msg = (
             "NaN-valued obs_values are currently supported only for "
-            "cuthbert KFConfig, EnKFConfig, and EKFConfig filters."
+            "cuthbert KFConfig and EnKFConfig filters."
         )
         cd_dynamax_msg = (
             "CD-Dynamax filters do not support NaNs in obs_values. "
@@ -147,10 +145,10 @@ def _validate_missing_observation_support(
     elif mode == "smoother":
         continuous_types = ContinuousTimeSmootherConfigs
         discrete_types = DiscreteTimeSmootherConfigs
-        exact_supported_types = (KFSmootherConfig, EKFSmootherConfig)
+        exact_supported_types = (KFSmootherConfig,)
         exact_supported_msg = (
             "NaN-valued obs_values are currently supported only for "
-            "cuthbert KFSmootherConfig and EKFSmootherConfig smoothers."
+            "cuthbert KFSmootherConfig smoothers."
         )
         cd_dynamax_msg = (
             "CD-Dynamax smoothers do not support NaNs in obs_values. "

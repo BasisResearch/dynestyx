@@ -103,10 +103,9 @@ def _plate_continuous_sde_model(
 ):
     with dsx.plate("trajectories", M):
         alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
-        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
-        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
-        # Rectangular diffusion (bm_dim < state_dim) is padded in cd-dynamax integration.
-        L = 0.2 * jnp.array([[1.0], [0.5]])
+        A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(-alpha)
+        L = 0.2 * jnp.eye(2)
         H = jnp.array([[1.0, 0.0]])
         R = jnp.array([[0.25]])
         dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
@@ -430,9 +429,9 @@ def _plate_continuous_for_discretizer_model(
 ):
     with dsx.plate("trajectories", M):
         alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
-        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
-        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
-        L = 0.2 * jnp.array([[1.0], [0.5]])
+        A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(-alpha)
+        L = 0.2 * jnp.eye(2)
         H = jnp.array([[1.0, 0.0]])
         R = jnp.array([[0.25]])
         dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
@@ -453,14 +452,14 @@ def _nested_plate_continuous_for_discretizer_model(
     M=2,
 ):
     with dsx.plate("groups", G):
-        beta = numpyro.sample("beta", dist.Normal(0.0, 0.2))
+        beta = numpyro.sample("beta", dist.Uniform(0.0, 0.4))
         with dsx.plate("trajectories", M):
             alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
-            A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+            A_base = jnp.array([[0.0, 0.1], [-0.05, 0.0]])
             A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
-            A = A.at[:, :, 0, 0].set(alpha)
-            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
-            L = 0.2 * jnp.array([[1.0], [0.5]])
+            A = A.at[:, :, 0, 0].set(-alpha)
+            A = A.at[:, :, 1, 1].set(-(0.6 + beta[None, :]))
+            L = 0.2 * jnp.eye(2)
             H = jnp.array([[1.0, 0.0]])
             R = jnp.array([[0.25]])
             dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
@@ -631,6 +630,7 @@ def _plate_stable_continuous_hierarchical_model(
         alpha = numpyro.sample("alpha", dist.Uniform(0.2, 0.8))
         dynamics = LTI_continuous(
             A=-alpha[:, None, None],
+            b=0.1 * alpha[:, None],
             L=0.1 * jnp.ones((1, 1)),
             H=jnp.array([[1.0]]),
             R=jnp.array([[0.05]]),
@@ -667,9 +667,7 @@ def test_plate_discretizer_forward_and_rollout():
     obs = tr["f_observations"]["value"][:, 0]
 
     with DiscreteTimeSimulator():
-        with Filter(
-            filter_config=EKFConfig(filter_source="cuthbert")
-        ):
+        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
             with Discretizer():
                 with trace() as tr, seed(rng_seed=jr.PRNGKey(13)):
                     _plate_continuous_for_discretizer_model(
@@ -710,9 +708,7 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
     obs = tr["f_observations"]["value"][:, :, 0]
 
     with DiscreteTimeSimulator():
-        with Filter(
-            filter_config=EKFConfig(filter_source="cuthbert")
-        ):
+        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
             with Discretizer():
                 with trace() as tr, seed(rng_seed=jr.PRNGKey(21)):
                     _nested_plate_continuous_for_discretizer_model(
