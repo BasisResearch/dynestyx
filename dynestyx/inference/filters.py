@@ -13,7 +13,7 @@ from jaxtyping import Array, PRNGKeyArray, Real
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
-    _validate_filter_missing_observation_support,
+    _validate_missing_observation_support,
 )
 from dynestyx.inference.distribution_utils import (
     _categorical_log_probs_to_dists,
@@ -236,9 +236,10 @@ class Filter(BaseLogFactorAdder):
             else _default_filter_config(dynamics)
         )
         if isinstance(config, BaseFilterConfig):
-            _validate_filter_missing_observation_support(
+            _validate_missing_observation_support(
                 config,
                 obs_values=obs_values,
+                mode="filter",
             )
 
         key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed

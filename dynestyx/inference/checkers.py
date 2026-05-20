@@ -1,5 +1,7 @@
 """Validation helpers for inference modules."""
 
+from typing import Literal
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -101,7 +103,7 @@ def _validate_missing_observation_support(
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None,
-    mode: str,
+    mode: Literal["filter", "smoother"],
 ) -> None:
     """Reject unsupported NaN-valued observations for filter/smoother backends."""
     if obs_values is None:
@@ -138,8 +140,9 @@ def _validate_missing_observation_support(
         )
         fallback_label = "smoother"
     else:
-        raise ValueError(f"Unsupported missing-observation validation mode: {mode!r}.")
-
+        raise AssertionError(
+            f"Unexpected missing-observation validation mode: {mode!r}"
+        )
     if isinstance(config, continuous_types):
         _ = eqx.error_if(
             obs_values,
@@ -180,34 +183,4 @@ def _validate_missing_observation_support(
         obs_values,
         has_missing,
         f"NaN-valued obs_values are not supported for {type(config).__name__} {fallback_label}s.",
-    )
-
-
-def _validate_filter_missing_observation_support(
-    config: BaseFilterConfig,
-    *,
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
-    | None,
-) -> None:
-    """Reject unsupported NaN-valued observations for filter backends."""
-    _validate_missing_observation_support(
-        config,
-        obs_values=obs_values,
-        mode="filter",
-    )
-
-
-def _validate_smoother_missing_observation_support(
-    config: BaseSmootherConfig,
-    *,
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
-    | None,
-) -> None:
-    """Reject unsupported NaN-valued observations for smoother backends."""
-    _validate_missing_observation_support(
-        config,
-        obs_values=obs_values,
-        mode="smoother",
     )
