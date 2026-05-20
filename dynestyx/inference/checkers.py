@@ -12,6 +12,7 @@ from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     DiscreteTimeConfigs,
+    EKFConfig,
     EnKFConfig,
     HMMConfigs,
     KFConfig,
@@ -20,10 +21,28 @@ from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
     ContinuousTimeSmootherConfigs,
     DiscreteTimeSmootherConfigs,
+    EKFSmootherConfig,
     KFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _has_any_batched_plate_source
+
+
+def _raise_if_missing_detected(
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    has_missing,
+    message: str,
+) -> None:
+    """Raise plainly when possible; fall back to eqx.error_if under tracing."""
+    try:
+        missing_now = bool(has_missing)
+    except jax.errors.TracerBoolConversionError:
+        _ = eqx.error_if(obs_values, has_missing, message)
+        return
+
+    if missing_now:
+        raise ValueError(message)
 
 
 def _leading_dims(
@@ -114,10 +133,10 @@ def _validate_missing_observation_support(
     if mode == "filter":
         continuous_types = ContinuousTimeConfigs
         discrete_types = DiscreteTimeConfigs
-        exact_supported_types = (KFConfig, EnKFConfig)
+        exact_supported_types = (KFConfig, EnKFConfig, EKFConfig)
         exact_supported_msg = (
             "NaN-valued obs_values are currently supported only for "
-            "cuthbert KFConfig and EnKFConfig filters."
+            "cuthbert KFConfig, EnKFConfig, and EKFConfig filters."
         )
         cd_dynamax_msg = (
             "CD-Dynamax filters do not support NaNs in obs_values. "
@@ -128,10 +147,10 @@ def _validate_missing_observation_support(
     elif mode == "smoother":
         continuous_types = ContinuousTimeSmootherConfigs
         discrete_types = DiscreteTimeSmootherConfigs
-        exact_supported_types = (KFSmootherConfig,)
+        exact_supported_types = (KFSmootherConfig, EKFSmootherConfig)
         exact_supported_msg = (
             "NaN-valued obs_values are currently supported only for "
-            "cuthbert KFSmootherConfig smoothers."
+            "cuthbert KFSmootherConfig and EKFSmootherConfig smoothers."
         )
         cd_dynamax_msg = (
             "CD-Dynamax smoothers do not support NaNs in obs_values. "
@@ -144,7 +163,7 @@ def _validate_missing_observation_support(
             f"Unexpected missing-observation validation mode: {mode!r}"
         )
     if isinstance(config, continuous_types):
-        _ = eqx.error_if(
+        _raise_if_missing_detected(
             obs_values,
             has_missing,
             cd_dynamax_msg,
@@ -152,7 +171,7 @@ def _validate_missing_observation_support(
         return
 
     if mode == "filter" and isinstance(config, HMMConfigs):
-        _ = eqx.error_if(
+        _raise_if_missing_detected(
             obs_values,
             has_missing,
             "HMM filtering does not support NaNs in obs_values.",
@@ -162,7 +181,7 @@ def _validate_missing_observation_support(
     if isinstance(config, discrete_types):
         filter_source = getattr(config, "filter_source", None)
         if filter_source == "cd_dynamax":
-            _ = eqx.error_if(
+            _raise_if_missing_detected(
                 obs_values,
                 has_missing,
                 cd_dynamax_msg,
@@ -172,14 +191,14 @@ def _validate_missing_observation_support(
         if filter_source == "cuthbert":
             if isinstance(config, exact_supported_types):
                 return
-            _ = eqx.error_if(
+            _raise_if_missing_detected(
                 obs_values,
                 has_missing,
                 exact_supported_msg,
             )
             return
 
-    _ = eqx.error_if(
+    _raise_if_missing_detected(
         obs_values,
         has_missing,
         f"NaN-valued obs_values are not supported for {type(config).__name__} {fallback_label}s.",
