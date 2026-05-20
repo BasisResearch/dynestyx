@@ -1,7 +1,12 @@
+import itertools
+
+import equinox as eqx
 import jax
+import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Shaped
 
+from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.utils import (
     _array_has_plate_dims,
     _dist_has_plate_batch_dims,
@@ -67,3 +72,159 @@ def _slice_time_axis(
     """Slice an array at time index t where time axis follows plate dims."""
     time_axis = _get_time_axis(plate_shapes)
     return arr[(slice(None),) * time_axis + (t, ...)]
+
+
+def _slice_array_for_plate_member(
+    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+) -> Array | None:
+    """Slice leading plate dims if present; otherwise return unchanged."""
+    if arr is None:
+        return None
+    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
+        return arr[plate_idx]
+    return arr
+
+
+def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
+    """Slice plate-batched non-distribution leaves for one plate member."""
+
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
+    def _slice_leaf(path, leaf):
+        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree_util.tree_map_with_path(
+        _slice_leaf,
+        tree,
+        is_leaf=_is_distribution_leaf,
+    )
+
+
+def _slice_dist_for_plate_member(
+    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+):
+    """Slice plate-batched distribution parameters for one plate member."""
+    if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
+        return dist_obj
+
+    def _slice_required_array(arr_like) -> Array:
+        arr = jnp.asarray(arr_like)
+        sliced = _slice_array_for_plate_member(arr, plate_shapes, plate_idx)
+        if sliced is None:
+            raise ValueError("Expected a concrete array when slicing plate member.")
+        return sliced
+
+    if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
+        mixture = _slice_dist_for_plate_member(
+            dist_obj.mixing_distribution, plate_shapes, plate_idx
+        )
+        components = _slice_dist_for_plate_member(
+            dist_obj.component_distribution, plate_shapes, plate_idx
+        )
+        return numpyro.distributions.MixtureSameFamily(mixture, components)
+
+    if isinstance(dist_obj, numpyro.distributions.MultivariateNormal):
+        loc = _slice_required_array(dist_obj.loc)
+        cov = _slice_required_array(dist_obj.covariance_matrix)
+        return numpyro.distributions.MultivariateNormal(
+            loc=loc,
+            covariance_matrix=cov,
+        )
+
+    if isinstance(dist_obj, numpyro.distributions.Delta):
+        value = _slice_required_array(dist_obj.v)
+        log_density = _slice_required_array(dist_obj.log_density)
+        return numpyro.distributions.Delta(
+            value,
+            log_density=log_density,
+            event_dim=dist_obj.event_dim,
+        )
+
+    if isinstance(dist_obj, WeightedParticles):
+        particles = _slice_required_array(dist_obj.particles)
+        log_weights = _slice_required_array(dist_obj.log_weights)
+        return WeightedParticles(particles=particles, log_weights=log_weights)
+
+    if dist_obj.__class__.__name__.startswith("Categorical"):
+        if dist_obj.logits is not None:
+            logits = _slice_required_array(dist_obj.logits)
+            return numpyro.distributions.Categorical(logits=logits)
+        probs = _slice_required_array(dist_obj.probs)
+        return numpyro.distributions.Categorical(probs=probs)
+
+    if isinstance(dist_obj, numpyro.distributions.Independent):
+        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        return numpyro.distributions.Independent(
+            base,
+            dist_obj.reinterpreted_batch_ndims,
+        )
+
+    if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
+        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
+        transforms = getattr(dist_obj, "transforms")
+        return numpyro.distributions.TransformedDistribution(
+            base,
+            transforms,
+        )
+
+    def _slice_leaf(leaf):
+        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
+            leaf, plate_shapes, min_suffix_ndim=1
+        ):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree.map(_slice_leaf, dist_obj)
+
+
+def _slice_dynamics_for_plate_member(
+    dynamics, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+):
+    """Slice plate-batched dynamics, rebuilding any batched initial condition."""
+    member_dynamics = _slice_tree_for_plate_member(dynamics, plate_shapes, plate_idx)
+    if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
+        member_initial_condition = _slice_dist_for_plate_member(
+            dynamics.initial_condition, plate_shapes, plate_idx
+        )
+        member_dynamics = eqx.tree_at(
+            lambda m: m.initial_condition,
+            member_dynamics,
+            member_initial_condition,
+            is_leaf=lambda x: x is None,
+        )
+    return member_dynamics
+
+
+def _iter_plate_indices(plate_shapes: tuple[int, ...]) -> list[tuple[int, ...]]:
+    """Enumerate all member indices for the active plate axes."""
+    return list(itertools.product(*[range(size) for size in plate_shapes]))
+
+
+def _stack_plate_member_outputs(member_outputs, plate_shapes: tuple[int, ...]):
+    """Stack flat per-member outputs back into a pytree with plate-shaped leaves."""
+    if not member_outputs:
+        raise ValueError(
+            "member_outputs must be non-empty when stacking plate results."
+        )
+
+    def _stack_leaf(*xs):
+        if xs[0] is None:
+            return None
+        return jnp.stack(xs, axis=0)
+
+    stacked = jax.tree_util.tree_map(
+        _stack_leaf,
+        *member_outputs,
+        is_leaf=lambda x: x is None,
+    )
+
+    def _reshape_leaf(leaf):
+        if leaf is None:
+            return None
+        arr = jnp.asarray(leaf)
+        return arr.reshape(*plate_shapes, *arr.shape[1:])
+
+    return jax.tree.map(_reshape_leaf, stacked)

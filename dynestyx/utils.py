@@ -102,7 +102,9 @@ def _is_known_vector_field(path) -> bool:
         ("observation_model", "bias"),
     }:
         return True
-    return len(names) >= 3 and names[-3:] == ("state_evolution", "drift", "b")
+    if len(names) >= 3 and names[-3:] == ("state_evolution", "drift", "b"):
+        return True
+    return len(names) >= 4 and names[-4:] == ("state_evolution", "cte", "drift", "b")
 
 
 def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool:

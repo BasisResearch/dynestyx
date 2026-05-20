@@ -56,7 +56,12 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
+from dynestyx.inference.plate_utils import (
+    _iter_plate_indices,
+    _slice_array_for_plate_member,
+    _slice_dynamics_for_plate_member,
+    _stack_plate_member_outputs,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 
@@ -399,17 +404,10 @@ class Filter(BaseLogFactorAdder):
             if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
                 key = jax.random.wrap_key_data(key)
             total = math.prod(plate_shapes)
-            split_keys = jax.random.split(key, total)
-            keys = split_keys.reshape(*plate_shapes, *split_keys.shape[1:])
+            keys = jax.random.split(key, total)
         else:
             keys = None
 
-        # Build in_axes: same axes reused for each nested vmap.
-        dyn_axes = _make_plate_in_axes(dynamics, plate_shapes)
-        ot_axis = _array_plate_axis(obs_times, plate_shapes)
-        ov_axis = _array_plate_axis(obs_values, plate_shapes)
-        ct_axis = _array_plate_axis(ctrl_times, plate_shapes)
-        cv_axis = _array_plate_axis(ctrl_values, plate_shapes)
         _validate_batched_plate_alignment(
             dynamics,
             plate_shapes,
@@ -418,25 +416,21 @@ class Filter(BaseLogFactorAdder):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
-        k_axis = 0 if keys is not None else None
-
-        # Nest vmap for each plate dimension.
-        # TODO: Allow for partial plate dimensions here.
-        vmapped = compute_output
-        for _ in plate_shapes:
-            vmapped = jax.vmap(
-                vmapped,
-                in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+        plate_indices = _iter_plate_indices(plate_shapes)
+        member_outputs = []
+        for idx, plate_idx in enumerate(plate_indices):
+            member_outputs.append(
+                compute_output(
+                    _slice_dynamics_for_plate_member(dynamics, plate_shapes, plate_idx),
+                    _slice_array_for_plate_member(obs_times, plate_shapes, plate_idx),
+                    _slice_array_for_plate_member(obs_values, plate_shapes, plate_idx),
+                    _slice_array_for_plate_member(ctrl_times, plate_shapes, plate_idx),
+                    _slice_array_for_plate_member(ctrl_values, plate_shapes, plate_idx),
+                    None if keys is None else keys[idx],
+                )
             )
 
-        outputs = vmapped(
-            dynamics,
-            obs_times,
-            obs_values,
-            ctrl_times,
-            ctrl_values,
-            keys,
-        )
+        outputs = _stack_plate_member_outputs(member_outputs, plate_shapes)
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
