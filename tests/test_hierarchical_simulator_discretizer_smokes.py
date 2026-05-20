@@ -22,6 +22,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEnKFConfig,
     EKFConfig,
+    EnKFConfig,
     HMMConfig,
     KFConfig,
     PFConfig,
@@ -631,7 +632,13 @@ def test_plate_discretizer_forward_and_rollout():
     obs = tr["f_observations"]["value"][:, 0]
 
     with DiscreteTimeSimulator():
-        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+        with Filter(
+            filter_config=EnKFConfig(
+                filter_source="cuthbert",
+                n_particles=15,
+                crn_seed=jr.PRNGKey(0),
+            )
+        ):
             with Discretizer():
                 with trace() as tr, seed(rng_seed=jr.PRNGKey(13)):
                     _plate_continuous_for_discretizer_model(
@@ -672,7 +679,13 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
     obs = tr["f_observations"]["value"][:, :, 0]
 
     with DiscreteTimeSimulator():
-        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+        with Filter(
+            filter_config=EnKFConfig(
+                filter_source="cuthbert",
+                n_particles=15,
+                crn_seed=jr.PRNGKey(0),
+            )
+        ):
             with Discretizer():
                 with trace() as tr, seed(rng_seed=jr.PRNGKey(21)):
                     _nested_plate_continuous_for_discretizer_model(
