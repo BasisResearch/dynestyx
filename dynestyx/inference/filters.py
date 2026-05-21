@@ -11,7 +11,10 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
-from dynestyx.inference.checkers import _validate_batched_plate_alignment
+from dynestyx.inference.checkers import (
+    _validate_batched_plate_alignment,
+    _validate_missing_observation_support,
+)
 from dynestyx.inference.distribution_utils import (
     _categorical_log_probs_to_dists,
     _cholesky_state_sequence_to_dists,
@@ -53,7 +56,14 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
+from dynestyx.inference.plate_utils import (
+    _array_plate_axis,
+    _canonicalize_plate_dynamics_for_vmap,
+    _flatten_array_for_plate_vmap,
+    _make_plate_in_axes,
+    _reshape_vmap_outputs_to_plate,
+    _restore_batched_initial_condition_for_vmap_member,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 
@@ -227,6 +237,12 @@ class Filter(BaseLogFactorAdder):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
+        if isinstance(config, BaseFilterConfig):
+            _validate_missing_observation_support(
+                config,
+                obs_values=obs_values,
+                mode="filter",
+            )
 
         key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
 
@@ -391,17 +407,10 @@ class Filter(BaseLogFactorAdder):
             if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
                 key = jax.random.wrap_key_data(key)
             total = math.prod(plate_shapes)
-            split_keys = jax.random.split(key, total)
-            keys = split_keys.reshape(*plate_shapes, *split_keys.shape[1:])
+            keys = jax.random.split(key, total)
         else:
             keys = None
 
-        # Build in_axes: same axes reused for each nested vmap.
-        dyn_axes = _make_plate_in_axes(dynamics, plate_shapes)
-        ot_axis = _array_plate_axis(obs_times, plate_shapes)
-        ov_axis = _array_plate_axis(obs_values, plate_shapes)
-        ct_axis = _array_plate_axis(ctrl_times, plate_shapes)
-        cv_axis = _array_plate_axis(ctrl_values, plate_shapes)
         _validate_batched_plate_alignment(
             dynamics,
             plate_shapes,
@@ -410,25 +419,61 @@ class Filter(BaseLogFactorAdder):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
+        total = math.prod(plate_shapes)
+        canonical_plate_shapes = (total,)
+        member_indices = jnp.arange(total)
+        original_initial_condition = dynamics.initial_condition
+        batched_dynamics = _canonicalize_plate_dynamics_for_vmap(dynamics, plate_shapes)
+        flat_obs_times = _flatten_array_for_plate_vmap(
+            obs_times,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+        flat_obs_values = _flatten_array_for_plate_vmap(
+            obs_values,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+        flat_ctrl_times = _flatten_array_for_plate_vmap(
+            ctrl_times,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+        flat_ctrl_values = _flatten_array_for_plate_vmap(
+            ctrl_values,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+
+        dyn_axes = _make_plate_in_axes(batched_dynamics, canonical_plate_shapes)
+        ot_axis = _array_plate_axis(flat_obs_times, canonical_plate_shapes)
+        ov_axis = _array_plate_axis(flat_obs_values, canonical_plate_shapes)
+        ct_axis = _array_plate_axis(flat_ctrl_times, canonical_plate_shapes)
+        cv_axis = _array_plate_axis(flat_ctrl_values, canonical_plate_shapes)
         k_axis = 0 if keys is not None else None
 
-        # Nest vmap for each plate dimension.
-        # TODO: Allow for partial plate dimensions here.
-        vmapped = compute_output
-        for _ in plate_shapes:
-            vmapped = jax.vmap(
-                vmapped,
-                in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+        def compute_output_for_member(dyn, member_idx, ot, ov, ct, cv, k):
+            dyn = _restore_batched_initial_condition_for_vmap_member(
+                dyn,
+                original_initial_condition,
+                plate_shapes,
+                member_idx,
             )
+            return compute_output(dyn, ot, ov, ct, cv, k)
 
-        outputs = vmapped(
-            dynamics,
-            obs_times,
-            obs_values,
-            ctrl_times,
-            ctrl_values,
+        outputs = jax.vmap(
+            compute_output_for_member,
+            in_axes=(dyn_axes, 0, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+        )(
+            batched_dynamics,
+            member_indices,
+            flat_obs_times,
+            flat_obs_values,
+            flat_ctrl_times,
+            flat_ctrl_values,
             keys,
         )
+        outputs = _reshape_vmap_outputs_to_plate(outputs, plate_shapes)
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik

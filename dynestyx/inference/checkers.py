@@ -1,11 +1,46 @@
 """Validation helpers for inference modules."""
 
+from typing import Literal
+
+import equinox as eqx
 import jax
+import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Real, Shaped
 
+from dynestyx.inference.filter_configs import (
+    BaseFilterConfig,
+    ContinuousTimeConfigs,
+    DiscreteTimeConfigs,
+    EnKFConfig,
+    HMMConfigs,
+    KFConfig,
+)
+from dynestyx.inference.smoother_configs import (
+    BaseSmootherConfig,
+    ContinuousTimeSmootherConfigs,
+    DiscreteTimeSmootherConfigs,
+    KFSmootherConfig,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _has_any_batched_plate_source
+
+
+def _raise_if_missing_detected(
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    has_missing,
+    message: str,
+) -> None:
+    """Raise plainly when possible; fall back to eqx.error_if under tracing."""
+    try:
+        missing_now = bool(has_missing)
+    except jax.errors.TracerBoolConversionError:
+        _ = eqx.error_if(obs_values, has_missing, message)
+        return
+
+    if missing_now:
+        raise ValueError(message)
 
 
 def _leading_dims(
@@ -77,3 +112,92 @@ def _validate_batched_plate_alignment(
         "Expected at least one batched source to start with plate_shapes."
     )
     raise ValueError(diagnostics)
+
+
+def _validate_missing_observation_support(
+    config: BaseFilterConfig | BaseSmootherConfig,
+    *,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+    mode: Literal["filter", "smoother"],
+) -> None:
+    """Reject unsupported NaN-valued observations for filter/smoother backends."""
+    if obs_values is None:
+        return
+
+    has_missing = jnp.any(jnp.isnan(obs_values))
+
+    if mode == "filter":
+        continuous_types = ContinuousTimeConfigs
+        discrete_types = DiscreteTimeConfigs
+        exact_supported_types = (KFConfig, EnKFConfig)
+        exact_supported_msg = (
+            "NaN-valued obs_values are currently supported only for "
+            "cuthbert KFConfig and EnKFConfig filters."
+        )
+        cd_dynamax_msg = (
+            "CD-Dynamax filters do not support NaNs in obs_values. "
+            "Missing observations via NaNs currently require a cuthbert-backed "
+            "discrete-time filter."
+        )
+        fallback_label = "filter"
+    elif mode == "smoother":
+        continuous_types = ContinuousTimeSmootherConfigs
+        discrete_types = DiscreteTimeSmootherConfigs
+        exact_supported_types = (KFSmootherConfig,)
+        exact_supported_msg = (
+            "NaN-valued obs_values are currently supported only for "
+            "cuthbert KFSmootherConfig smoothers."
+        )
+        cd_dynamax_msg = (
+            "CD-Dynamax smoothers do not support NaNs in obs_values. "
+            "Missing observations via NaNs currently require a cuthbert-backed "
+            "discrete-time smoother."
+        )
+        fallback_label = "smoother"
+    else:
+        raise AssertionError(
+            f"Unexpected missing-observation validation mode: {mode!r}"
+        )
+    if isinstance(config, continuous_types):
+        _raise_if_missing_detected(
+            obs_values,
+            has_missing,
+            cd_dynamax_msg,
+        )
+        return
+
+    if mode == "filter" and isinstance(config, HMMConfigs):
+        _raise_if_missing_detected(
+            obs_values,
+            has_missing,
+            "HMM filtering does not support NaNs in obs_values.",
+        )
+        return
+
+    if isinstance(config, discrete_types):
+        filter_source = getattr(config, "filter_source", None)
+        if filter_source == "cd_dynamax":
+            _raise_if_missing_detected(
+                obs_values,
+                has_missing,
+                cd_dynamax_msg,
+            )
+            return
+
+        if filter_source == "cuthbert":
+            if isinstance(config, exact_supported_types):
+                return
+            _raise_if_missing_detected(
+                obs_values,
+                has_missing,
+                exact_supported_msg,
+            )
+            return
+
+    _raise_if_missing_detected(
+        obs_values,
+        has_missing,
+        f"NaN-valued obs_values are not supported for {type(config).__name__} {fallback_label}s.",
+    )

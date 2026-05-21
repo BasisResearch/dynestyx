@@ -9,6 +9,7 @@ import numpyro
 import numpyro.distributions as dist
 import pytest
 from numpyro.handlers import seed, trace
+from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
 from dynestyx import (
@@ -22,6 +23,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEnKFConfig,
     EKFConfig,
+    EnKFConfig,
     HMMConfig,
     KFConfig,
     PFConfig,
@@ -101,10 +103,9 @@ def _plate_continuous_sde_model(
 ):
     with dsx.plate("trajectories", M):
         alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
-        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
-        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
-        # Rectangular diffusion (bm_dim < state_dim) is padded in cd-dynamax integration.
-        L = 0.2 * jnp.array([[1.0], [0.5]])
+        A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(-alpha)
+        L = 0.2 * jnp.eye(2)
         H = jnp.array([[1.0, 0.0]])
         R = jnp.array([[0.25]])
         dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
@@ -428,9 +429,9 @@ def _plate_continuous_for_discretizer_model(
 ):
     with dsx.plate("trajectories", M):
         alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
-        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
-        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
-        L = 0.2 * jnp.array([[1.0], [0.5]])
+        A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(-alpha)
+        L = 0.2 * jnp.eye(2)
         H = jnp.array([[1.0, 0.0]])
         R = jnp.array([[0.25]])
         dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
@@ -451,14 +452,14 @@ def _nested_plate_continuous_for_discretizer_model(
     M=2,
 ):
     with dsx.plate("groups", G):
-        beta = numpyro.sample("beta", dist.Normal(0.0, 0.2))
+        beta = numpyro.sample("beta", dist.Uniform(0.0, 0.4))
         with dsx.plate("trajectories", M):
             alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
-            A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+            A_base = jnp.array([[0.0, 0.1], [-0.05, 0.0]])
             A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
-            A = A.at[:, :, 0, 0].set(alpha)
-            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
-            L = 0.2 * jnp.array([[1.0], [0.5]])
+            A = A.at[:, :, 0, 0].set(-alpha)
+            A = A.at[:, :, 1, 1].set(-(0.6 + beta[None, :]))
+            L = 0.2 * jnp.eye(2)
             H = jnp.array([[1.0, 0.0]])
             R = jnp.array([[0.25]])
             dynamics = LTI_continuous(A=A, L=L, H=H, R=R)
@@ -619,6 +620,76 @@ def _squeeze_n_sim_axis(observations, plate_ndim):
     return jnp.squeeze(observations, axis=plate_ndim)
 
 
+def _plate_stable_continuous_hierarchical_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=3,
+):
+    with dsx.plate("trajectories", M):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.2, 0.8))
+        dynamics = LTI_continuous(
+            A=-alpha[:, None, None],
+            b=0.1 * alpha[:, None],
+            L=0.1 * jnp.ones((1, 1)),
+            H=jnp.array([[1.0]]),
+            R=jnp.array([[0.05]]),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
+def _simulate_stable_plate_discretized_observations(obs_times, *, m=3):
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            samples = Predictive(
+                _plate_stable_continuous_hierarchical_model,
+                num_samples=1,
+                exclude_deterministic=False,
+            )(jr.PRNGKey(30), predict_times=obs_times, M=m)
+    return samples["f_observations"][0, :, 0]
+
+
+def _plate_vector_initial_mean_continuous_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=3,
+):
+    state_dim = 2
+    A = jnp.array([[-0.8, 0.25], [-0.15, -0.6]])
+    L = 0.20 * jnp.eye(state_dim)
+    H = jnp.eye(state_dim)
+    R = (0.08**2) * jnp.eye(state_dim)
+
+    with dsx.plate("trajectories", M):
+        mu_i = jnp.broadcast_to(jnp.array([0.2, -0.1]), (M, state_dim))
+        mu_0_i = jnp.broadcast_to(jnp.array([0.1, 0.05]), (M, state_dim))
+        b = -jnp.einsum("ij,...j->...i", A, mu_i)
+
+        dynamics = LTI_continuous(
+            A=A,
+            L=L,
+            H=H,
+            R=R,
+            b=b,
+            initial_mean=mu_0_i,
+            initial_cov=0.15 * jnp.eye(state_dim),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
 def test_plate_discretizer_forward_and_rollout():
     obs_times = jnp.arange(4.0)
     predict_times = jnp.arange(6.0)
@@ -687,6 +758,100 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
     assert tr["f_predicted_states"]["value"].shape == (2, 2, 1, len(predict_times), 2)
     assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
     assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0, 0], predict_times)
+
+
+def test_plate_discretizer_enkf_hierarchical_missingness_mcmc_smoke():
+    m = 3
+    obs_times = jnp.arange(6.0)
+    obs_values = _simulate_stable_plate_discretized_observations(obs_times, m=m)
+    obs_values = obs_values.at[0, 2:4, :].set(jnp.nan)
+    obs_values = obs_values.at[1, 1, 0].set(jnp.nan)
+
+    def conditioned_model(obs_times=None, obs_values=None, m=m):
+        with Filter(
+            filter_config=EnKFConfig(
+                filter_source="cuthbert",
+                n_particles=8,
+                crn_seed=jr.PRNGKey(31),
+            )
+        ):
+            with Discretizer():
+                _plate_stable_continuous_hierarchical_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    M=m,
+                )
+
+    mcmc = MCMC(
+        NUTS(conditioned_model),
+        num_warmup=5,
+        num_samples=5,
+        progress_bar=False,
+    )
+    mcmc.run(jr.PRNGKey(32), obs_times=obs_times, obs_values=obs_values, m=m)
+
+    posterior = mcmc.get_samples()
+    assert posterior["alpha"].shape == (5, m)
+    assert not jnp.isnan(posterior["alpha"]).any()
+
+
+def test_plate_discretizer_enkf_missingness_vector_initial_mean_shared_cov():
+    obs_times = jnp.arange(6.0)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(34)):
+                _plate_vector_initial_mean_continuous_model(
+                    predict_times=obs_times,
+                    M=3,
+                )
+    obs_values = tr["f_observations"]["value"][:, 0]
+    obs_values = obs_values.at[0, 2:4, :].set(jnp.nan)
+    obs_values = obs_values.at[1, 1, 0].set(jnp.nan)
+
+    with Filter(
+        filter_config=EnKFConfig(
+            filter_source="cuthbert",
+            n_particles=8,
+            crn_seed=jr.PRNGKey(35),
+        )
+    ):
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(36)):
+                _plate_vector_initial_mean_continuous_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    M=3,
+                )
+
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
+
+
+def test_plate_discretizer_ekf_hierarchical_mcmc_smoke():
+    m = 3
+    obs_times = jnp.arange(6.0)
+    obs_values = _simulate_stable_plate_discretized_observations(obs_times, m=m)
+
+    def conditioned_model(obs_times=None, obs_values=None, m=m):
+        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+            with Discretizer():
+                _plate_stable_continuous_hierarchical_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    M=m,
+                )
+
+    mcmc = MCMC(
+        NUTS(conditioned_model),
+        num_warmup=5,
+        num_samples=5,
+        progress_bar=False,
+    )
+    mcmc.run(jr.PRNGKey(33), obs_times=obs_times, obs_values=obs_values, m=m)
+
+    posterior = mcmc.get_samples()
+    assert posterior["alpha"].shape == (5, m)
+    assert not jnp.isnan(posterior["alpha"]).any()
 
 
 def test_plate_discrete_dirac_forward_and_conditioning_shapes():

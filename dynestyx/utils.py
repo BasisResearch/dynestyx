@@ -102,7 +102,9 @@ def _is_known_vector_field(path) -> bool:
         ("observation_model", "bias"),
     }:
         return True
-    return len(names) >= 3 and names[-3:] == ("state_evolution", "drift", "b")
+    if len(names) >= 3 and names[-3:] == ("state_evolution", "drift", "b"):
+        return True
+    return len(names) >= 4 and names[-4:] == ("state_evolution", "cte", "drift", "b")
 
 
 def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool:
@@ -254,6 +256,11 @@ def _validate_controls(
             "ctrl_times is not None, but ctrl_values is None. "
             "Provide both ctrl_times and ctrl_values together."
         )
+    _ = eqx.error_if(
+        ctrl_values,
+        jnp.any(jnp.isnan(ctrl_values)),
+        "ctrl_values must not contain NaNs.",
+    )
 
     if obs_times is None and predict_times is None:
         raise ValueError("At least one of obs_times or predict_times must be provided")
@@ -375,6 +382,12 @@ def _validate_site_sorting(
     times: Real[Array, "*time_plate time"] | None, name: str
 ) -> None:
     """Validate that times are strictly increasing (along the last axis)."""
+    if times is not None:
+        _ = eqx.error_if(
+            times,
+            jnp.any(jnp.isnan(times)),
+            f"{name} must not contain NaNs.",
+        )
     if times is not None and times.shape[-1] > 1:
         # Use slicing on the last axis to support batched time arrays.
         t_prev = times[..., :-1]

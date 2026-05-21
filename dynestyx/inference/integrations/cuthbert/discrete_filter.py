@@ -367,7 +367,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         )
 
     def init_sample(key, mi: CuthbertInputs):
-        return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
+        sample = jnp.asarray(dynamics.initial_condition.sample(key))
+        sample = squeeze_leading_singletons(sample, 1)
+        return jnp.atleast_1d(sample)
 
     def get_dynamics(mi: CuthbertInputs):
         def dynamics_fn(x, key):
@@ -376,7 +378,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             def _evolve(key):
                 d = dynamics.state_evolution(x, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
-                return jnp.atleast_1d(jnp.asarray(d.sample(key)))  # type: ignore
+                sample = jnp.asarray(d.sample(key))  # type: ignore
+                sample = squeeze_leading_singletons(sample, 1)
+                return jnp.atleast_1d(sample)
 
             return jax.lax.cond(mi.is_first_step, _noop, _evolve, key)
 
@@ -387,34 +391,47 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         y = jnp.atleast_1d(jnp.asarray(mi.y))
 
         if isinstance(obs_model, LinearGaussianObservation):
-            H = jnp.asarray(obs_model.H)
-            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+            H = squeeze_leading_singletons(jnp.asarray(obs_model.H), 2)
+            chol_R = jnp.linalg.cholesky(
+                squeeze_leading_singletons(jnp.asarray(obs_model.R), 2)
+            )
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
                 if obs_model.bias is None
-                else jnp.atleast_1d(jnp.asarray(obs_model.bias))
+                else squeeze_leading_singletons(jnp.asarray(obs_model.bias), 1)
             )
-            D = None if obs_model.D is None else jnp.asarray(obs_model.D)
+            D = (
+                None
+                if obs_model.D is None
+                else squeeze_leading_singletons(jnp.asarray(obs_model.D), 2)
+            )
 
             def observation_fn(x):
                 loc = H @ x + bias
                 if D is not None:
                     loc = loc + D @ jnp.atleast_1d(jnp.asarray(mi.u))
-                return jnp.atleast_1d(jnp.asarray(loc))
+                loc = squeeze_leading_singletons(jnp.asarray(loc), 1)
+                return jnp.atleast_1d(loc)
 
             return observation_fn, chol_R, y
         elif isinstance(obs_model, GaussianObservation):
-            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+            chol_R = jnp.linalg.cholesky(
+                squeeze_leading_singletons(jnp.asarray(obs_model.R), 2)
+            )
 
             def observation_fn(x):
-                return jnp.atleast_1d(jnp.asarray(obs_model.h(x, mi.u, mi.time)))
+                loc = jnp.asarray(obs_model.h(x, mi.u, mi.time))
+                loc = squeeze_leading_singletons(loc, 1)
+                return jnp.atleast_1d(loc)
 
             return observation_fn, chol_R, y
         else:
             probe_x0 = jnp.zeros((state_dim,), dtype=y.dtype)
             probe_x1 = jnp.ones((state_dim,), dtype=y.dtype)
             probe_dist = obs_model(probe_x0, mi.u, mi.time)
-            chol_R = _extract_gaussian_chol(probe_dist, obs_dim)
+            chol_R = squeeze_leading_singletons(
+                _extract_gaussian_chol(probe_dist, obs_dim), 2
+            )
             _check_state_independent_noise(
                 chol_R, obs_model(probe_x1, mi.u, mi.time), obs_dim
             )
@@ -433,7 +450,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
                         "Gaussian distributions; got "
                         f"{type(edist).__name__}."
                     )
-                return jnp.atleast_1d(jnp.asarray(edist.mean))
+                loc = jnp.asarray(edist.mean)
+                loc = squeeze_leading_singletons(loc, 1)
+                return jnp.atleast_1d(loc)
 
             return observation_fn, chol_R, y
 
