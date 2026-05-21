@@ -1,4 +1,5 @@
 import dataclasses
+import itertools
 import math
 from typing import cast
 
@@ -53,9 +54,16 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
+from dynestyx.inference.plate_utils import (
+    _array_plate_axis,
+    _make_plate_in_axes,
+    _slice_array_for_plate_member,
+    _slice_dist_for_plate_member,
+    _slice_tree_for_plate_member,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _dist_has_plate_batch_dims
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -384,6 +392,14 @@ class Filter(BaseLogFactorAdder):
                 f"Unsupported filter config for plate: {type(config).__name__}"
             )
 
+        _validate_batched_plate_alignment(
+            dynamics,
+            plate_shapes,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
         # Pre-split keys for all plate members (needed for stochastic filters).
         if key is not None:
             # Ensure we use typed PRNG keys so split returns shape (total,)
@@ -402,33 +418,70 @@ class Filter(BaseLogFactorAdder):
         ov_axis = _array_plate_axis(obs_values, plate_shapes)
         ct_axis = _array_plate_axis(ctrl_times, plate_shapes)
         cv_axis = _array_plate_axis(ctrl_values, plate_shapes)
-        _validate_batched_plate_alignment(
-            dynamics,
-            plate_shapes,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-        )
         k_axis = 0 if keys is not None else None
 
-        # Nest vmap for each plate dimension.
-        # TODO: Allow for partial plate dimensions here.
-        vmapped = compute_output
-        for _ in plate_shapes:
-            vmapped = jax.vmap(
-                vmapped,
-                in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+        if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
+            plate_indices = list(
+                itertools.product(*(range(size) for size in plate_shapes))
             )
+            if keys is None:
+                member_keys = [None] * len(plate_indices)
+            else:
+                member_keys = [keys[idx] for idx in plate_indices]
 
-        outputs = vmapped(
-            dynamics,
-            obs_times,
-            obs_values,
-            ctrl_times,
-            ctrl_values,
-            keys,
-        )
+            outputs_flat = []
+            for flat_idx, plate_idx in enumerate(plate_indices):
+                member_dyn = _slice_tree_for_plate_member(
+                    dynamics, plate_shapes, plate_idx
+                )
+                member_initial_condition = _slice_dist_for_plate_member(
+                    dynamics.initial_condition,
+                    plate_shapes,
+                    plate_idx,
+                )
+                member_dyn = dataclasses.replace(
+                    member_dyn,
+                    initial_condition=member_initial_condition,
+                )
+                outputs_flat.append(
+                    compute_output(
+                        member_dyn,
+                        _slice_array_for_plate_member(obs_times, plate_shapes, plate_idx),
+                        _slice_array_for_plate_member(
+                            obs_values, plate_shapes, plate_idx
+                        ),
+                        _slice_array_for_plate_member(
+                            ctrl_times, plate_shapes, plate_idx
+                        ),
+                        _slice_array_for_plate_member(
+                            ctrl_values, plate_shapes, plate_idx
+                        ),
+                        member_keys[flat_idx],
+                    )
+                )
+
+            outputs = jax.tree.map(
+                lambda *xs: jnp.stack(xs).reshape(*plate_shapes, *xs[0].shape),
+                *outputs_flat,
+            )
+        else:
+            # Nest vmap for each plate dimension.
+            # TODO: Allow for partial plate dimensions here.
+            vmapped = compute_output
+            for _ in plate_shapes:
+                vmapped = jax.vmap(
+                    vmapped,
+                    in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+                )
+
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+            )
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik

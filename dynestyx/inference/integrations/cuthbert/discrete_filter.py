@@ -367,7 +367,10 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         )
 
     def init_sample(key, mi: CuthbertInputs):
-        return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
+        return squeeze_leading_singletons(
+            jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key))),
+            event_ndim=1,
+        )
 
     def get_dynamics(mi: CuthbertInputs):
         def dynamics_fn(x, key):
@@ -376,7 +379,10 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             def _evolve(key):
                 d = dynamics.state_evolution(x, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
-                return jnp.atleast_1d(jnp.asarray(d.sample(key)))  # type: ignore
+                return squeeze_leading_singletons(
+                    jnp.atleast_1d(jnp.asarray(d.sample(key))),  # type: ignore
+                    event_ndim=1,
+                )
 
             return jax.lax.cond(mi.is_first_step, _noop, _evolve, key)
 

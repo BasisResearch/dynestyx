@@ -22,6 +22,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEnKFConfig,
     EKFConfig,
+    EnKFConfig,
     HMMConfig,
     KFConfig,
     PFConfig,
@@ -471,6 +472,43 @@ def _nested_plate_continuous_for_discretizer_model(
             )
 
 
+def _plate_vector_initial_mean_continuous_model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    predict_times=None,
+    M=3,
+):
+    state_dim = 2
+    L = 0.20 * jnp.eye(state_dim)
+    H = jnp.eye(state_dim)
+    R = (0.08**2) * jnp.eye(state_dim)
+
+    with dsx.plate("trajectories", M):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+        A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
+        A = jnp.broadcast_to(A_base, (M, state_dim, state_dim)).copy()
+        A = A.at[:, 0, 0].set(-alpha)
+        mu_0_i = jnp.broadcast_to(jnp.array([0.1, 0.05]), (M, state_dim))
+
+        dynamics = LTI_continuous(
+            A=A,
+            L=L,
+            H=H,
+            R=R,
+            initial_mean=mu_0_i,
+            initial_cov=0.15 * jnp.eye(state_dim),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
 def _plate_discrete_dirac_model(
     obs_times=None,
     obs_values=None,
@@ -687,6 +725,37 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
     assert tr["f_predicted_states"]["value"].shape == (2, 2, 1, len(predict_times), 2)
     assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
     assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0, 0], predict_times)
+
+
+def test_plate_discretizer_enkf_batched_initial_mean_shared_cov_regression():
+    """Minimal repro for the hierarchical EnKF+Discretizer initial-condition bug."""
+    obs_times = jnp.arange(6.0)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(40)):
+                _plate_vector_initial_mean_continuous_model(
+                    predict_times=obs_times,
+                    M=3,
+                )
+    obs_values = tr["f_observations"]["value"][:, 0]
+
+    with Filter(
+        filter_config=EnKFConfig(
+            filter_source="cuthbert",
+            n_particles=8,
+            crn_seed=jr.PRNGKey(41),
+        )
+    ):
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(42)):
+                _plate_vector_initial_mean_continuous_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    M=3,
+                )
+
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
 
 
 def test_plate_discrete_dirac_forward_and_conditioning_shapes():
