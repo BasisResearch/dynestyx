@@ -7,7 +7,8 @@ from numpyro.infer import Predictive
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Filter, Smoother
-from dynestyx.inference.filter_configs import EKFConfig, EnKFConfig, KFConfig
+from dynestyx.inference.checkers import _validate_missing_observation_support
+from dynestyx.inference.filter_configs import EKFConfig, EnKFConfig, KFConfig, PFConfig
 from dynestyx.inference.smoother_configs import EKFSmootherConfig, KFSmootherConfig
 
 _EQX_ERRORS = (
@@ -165,3 +166,18 @@ def test_cuthbert_gaussian_discrete_time_missing_observation_support_matrix(
     assert state_mean.shape == true_states.shape
     assert not jnp.isnan(tr["f_marginal_loglik"]["value"])
     assert not jnp.isnan(state_mean).any()
+
+
+def test_pf_checker_allows_missing_observations_with_warning():
+    _, _, obs_values = _simulate_identity_lti_data()
+    missing_obs_values = _partial_missing_observations(obs_values)
+
+    with pytest.warns(
+        UserWarning,
+        match="PFConfig does not treat NaN-valued obs_values specially",
+    ):
+        _validate_missing_observation_support(
+            PFConfig(),
+            obs_values=missing_obs_values,
+            mode="filter",
+        )

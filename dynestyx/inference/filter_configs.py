@@ -232,7 +232,10 @@ class PFConfig(BaseFilterConfig):
     `ess_threshold_ratio` controls the frequency of resampling; sampling more frequently
     can help avoid particle degeneracy, but also increases variance.
 
-    Does not support missing observations (data cannot have NaNs).
+    NaN-valued `obs_values` are allowed, but they are not treated specially by
+    the particle filter. Whether missing observations work correctly is up to
+    the user-specified transition and observation functions to handle NaNs
+    appropriately. A warning is emitted when NaNs are detected in `obs_values`.
 
     Attributes:
         n_particles (int): Number of particles. More particles give a lower-

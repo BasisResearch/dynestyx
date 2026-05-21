@@ -1,4 +1,6 @@
 import math
+import warnings
+from typing import Literal
 
 import diffrax as dfx
 import equinox as eqx
@@ -39,6 +41,34 @@ def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
 type SSMType = CDNLGSSM | CDNLSSM
 
 _CONTROL_EXTEND_EPSILON = 1e-5
+
+
+def _raise_now_or_error_if(
+    anchor,
+    predicate,
+    message: str,
+    *,
+    action: Literal["raise", "warn"] = "raise",
+) -> None:
+    """Raise or warn when a predicate is true, handling traced predicates safely."""
+    try:
+        should_handle = bool(predicate)
+    except jax.errors.TracerBoolConversionError:
+        if action == "raise":
+            _ = eqx.error_if(anchor, predicate, message)
+        return
+
+    if not should_handle:
+        return
+
+    if action == "warn":
+        warnings.warn(message, stacklevel=2)
+        return
+
+    if action == "raise":
+        raise ValueError(message)
+
+    raise AssertionError(f"Unexpected action for _raise_now_or_error_if: {action!r}")
 
 
 def _array_has_plate_dims(

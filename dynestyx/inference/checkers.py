@@ -2,7 +2,6 @@
 
 from typing import Literal
 
-import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -15,6 +14,7 @@ from dynestyx.inference.filter_configs import (
     EnKFConfig,
     HMMConfigs,
     KFConfig,
+    PFConfig,
 )
 from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
@@ -23,24 +23,7 @@ from dynestyx.inference.smoother_configs import (
     KFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import _has_any_batched_plate_source
-
-
-def _raise_if_missing_detected(
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    has_missing,
-    message: str,
-) -> None:
-    """Raise plainly when possible; fall back to eqx.error_if under tracing."""
-    try:
-        missing_now = bool(has_missing)
-    except jax.errors.TracerBoolConversionError:
-        _ = eqx.error_if(obs_values, has_missing, message)
-        return
-
-    if missing_now:
-        raise ValueError(message)
+from dynestyx.utils import _has_any_batched_plate_source, _raise_now_or_error_if
 
 
 def _leading_dims(
@@ -162,11 +145,11 @@ def _validate_missing_observation_support(
         )
 
     if isinstance(config, continuous_types):
-        _raise_if_missing_detected(obs_values, has_missing, cd_dynamax_msg)
+        _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
         return
 
     if mode == "filter" and isinstance(config, HMMConfigs):
-        _raise_if_missing_detected(
+        _raise_now_or_error_if(
             obs_values,
             has_missing,
             "HMM filtering does not support NaNs in obs_values.",
@@ -176,20 +159,31 @@ def _validate_missing_observation_support(
     if isinstance(config, discrete_types):
         filter_source = getattr(config, "filter_source", None)
         if filter_source == "cd_dynamax":
-            _raise_if_missing_detected(obs_values, has_missing, cd_dynamax_msg)
+            _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
             return
 
         if filter_source == "cuthbert":
+            if mode == "filter" and isinstance(config, PFConfig):
+                _raise_now_or_error_if(
+                    obs_values,
+                    has_missing,
+                    "PFConfig does not treat NaN-valued obs_values specially. "
+                    "Whether missing observations work correctly is up to the "
+                    "user-specified transition and observation functions to "
+                    "handle NaNs appropriately.",
+                    action="warn",
+                )
+                return
             if isinstance(config, exact_supported_types):
                 return
-            _raise_if_missing_detected(
+            _raise_now_or_error_if(
                 obs_values,
                 has_missing,
                 exact_supported_msg,
             )
             return
 
-    _raise_if_missing_detected(
+    _raise_now_or_error_if(
         obs_values,
         has_missing,
         f"NaN-valued obs_values are not supported for {type(config).__name__} {fallback_label}s.",
