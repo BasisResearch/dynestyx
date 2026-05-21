@@ -81,6 +81,8 @@ class KFSmootherConfig(KFConfig, BaseSmootherConfig):
     save smoothed means, covariances, or covariance diagonals in the NumPyro
     trace.
 
+    Supports missing observations via NaNs when `filter_source="cuthbert"`. Does not support missing observations (data cannot have NaNs) when `filter_source="cd_dynamax"`.
+
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
         associative (bool | None): Whether to enable cuthbert's associative
@@ -132,6 +134,8 @@ class EKFSmootherConfig(EKFConfig, BaseSmootherConfig):
     This is exact (but wasteful) for linear-Gaussian models. For those models,
     prefer `KFSmootherConfig`.
 
+    Does not support missing observations (data cannot have NaNs).
+
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
@@ -169,6 +173,8 @@ class UKFSmootherConfig(UKFConfig, BaseSmootherConfig):
 
     This smoother is currently supported with `filter_source="cd_dynamax"` only.
     Cuthbert UKF smoothing is not implemented.
+
+    Does not support missing observations (data cannot have NaNs).
 
     Attributes:
         alpha (float): Spread of sigma points around the current mean.
@@ -212,6 +218,8 @@ class PFSmootherConfig(PFConfig, BaseSmootherConfig):
     with the number of particles and backward-sampled smoother trajectories.
 
     This smoother is currently supported with `filter_source="cuthbert"` only.
+
+    Does not support missing observations (data cannot have NaNs).
 
     Attributes:
         n_particles (int): Number of particles in the forward particle filter.
@@ -274,6 +282,8 @@ class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, BaseSmootherConfig)
     filtering pass, and inherited `record_smoothed_*` fields control trace
     recording.
 
+    Does not support missing observations (data cannot have NaNs).
+
     Attributes:
         cdlgssm_smoother_type (CDKFSmootherType): CD-Dynamax smoother variant.
             `"cd_smoother_1"` is the default; `"cd_smoother_2"` exposes the
@@ -315,6 +325,8 @@ class ContinuousTimeEKFSmootherConfig(ContinuousTimeEKFConfig, BaseSmootherConfi
 
     This smoother is currently implemented through the `cd_dynamax` backend.
     See `ContinuousTimeEKFConfig` for linearisation and solver options.
+
+    Does not support missing observations (data cannot have NaNs).
 
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.

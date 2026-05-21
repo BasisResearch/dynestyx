@@ -101,6 +101,8 @@ class EnKFConfig(BaseFilterConfig):
     If the ensemble collapses over long trajectories, increase
     `inflation_delta` slightly (e.g. `0.05`–`0.2`).
 
+    Supports missing observations via NaNs.
+
     Attributes:
         n_particles (int): Number of ensemble members. More members give a
             better covariance estimate at higher compute cost. Defaults to
@@ -230,6 +232,8 @@ class PFConfig(BaseFilterConfig):
     `ess_threshold_ratio` controls the frequency of resampling; sampling more frequently
     can help avoid particle degeneracy, but also increases variance.
 
+    Does not support missing observations (data cannot have NaNs).
+
     Attributes:
         n_particles (int): Number of particles. More particles give a lower-
             variance log-likelihood estimate at linear compute cost. Defaults
@@ -296,6 +300,8 @@ class EKFConfig(BaseFilterConfig):
     `EnKFConfig(filter_source="cuthbert")`. Only use
     `filter_source="cd_dynamax"` for time-invariant models.
 
+    Does not support missing observations (data cannot have NaNs).
+
     Attributes:
         filter_emission_order (FilterEmissionOrder): Linearisation order for
             the observation function. `"first"` *(default)* is the standard
@@ -338,6 +344,8 @@ class KFConfig(BaseFilterConfig):
     a model built with `LTI_discrete` or using
     `LinearGaussianStateEvolution` + `LinearGaussianObservation`. For
     nonlinear Gaussian models, use `EKFConfig`, `UKFConfig`, or `EnKFConfig` instead.
+
+    Supports missing observations via NaNs when `filter_source="cuthbert"`. Does not support missing observations (data cannot have NaNs) when `filter_source="cd_dynamax"`.
 
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
@@ -427,6 +435,8 @@ class UKFConfig(BaseFilterConfig):
     `EKFConfig(filter_source="cuthbert")`. Only use
     `filter_source="cd_dynamax"` for time-invariant models.
 
+    Does not support missing observations (data cannot have NaNs).
+
     Attributes:
         alpha (float): Spread of sigma points around the current mean.
             Smaller → tighter cluster; larger → sigma points reach further.
@@ -503,6 +513,8 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     SDEs, use `ContinuousTimeEKFConfig`, `ContinuousTimeUKFConfig`, or
     `ContinuousTimeEnKFConfig`.
 
+    Does not support missing observations (data cannot have NaNs).
+
     Inherits solver options from `ContinuousTimeConfig` and recording
     options from `BaseFilterConfig`.
 
@@ -539,6 +551,8 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
     ensemble Kalman update is applied at observation times. Works with any
     SDE model without requiring gradients.
 
+    Does not support missing observations (data cannot have NaNs).
+
     See `EnKFConfig` for particle/ensemble tuning options and
     `ContinuousTimeConfig` for solver options.
 
@@ -568,6 +582,8 @@ class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
     solving the SDE between observations; importance weights are updated at
     each observation time. Supports non-Gaussian observations and arbitrary
     nonlinear dynamics.
+
+    Does not support missing observations (data cannot have NaNs).
 
     Uses multinomial resampling by default (vs. systematic in `PFConfig`)
     for better compatibility with gradient-based training.
@@ -600,6 +616,8 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     approximation are solved between observations and a Kalman update is
     applied at each observation.
 
+    Does not support missing observations (data cannot have NaNs).
+
     See `EKFConfig` for linearisation options and `ContinuousTimeConfig`
     for solver options.
 
@@ -625,6 +643,8 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     propagated through the SDE between observations; the unscented transform
     is applied at each observation update. More accurate than CD-EKF for
     strongly nonlinear drifts without requiring Jacobians.
+
+    Does not support missing observations (data cannot have NaNs).
 
     See `UKFConfig` for sigma-point tuning options and `ContinuousTimeConfig`
     for solver options.
@@ -669,6 +689,8 @@ class HMMConfig(BaseFilterConfig):
     log-likelihood and filtered belief over states at each time step.
 
     For continuous latent-state models, use any other filter config.
+
+    Does not support missing observations (data cannot have NaNs).
 
     Attributes:
         record_filtered (bool | None): Save the filtered state probabilities
