@@ -38,10 +38,12 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
 from dynestyx.inference.plate_utils import (
-    _iter_plate_indices,
-    _slice_array_for_plate_member,
-    _slice_dynamics_for_plate_member,
-    _stack_plate_member_outputs,
+    _array_plate_axis,
+    _canonicalize_plate_dynamics_for_vmap,
+    _flatten_array_for_plate_vmap,
+    _make_plate_in_axes,
+    _reshape_vmap_outputs_to_plate,
+    _restore_batched_initial_condition_for_vmap_member,
 )
 from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
@@ -393,21 +395,61 @@ class Smoother(BaseSmootherLogFactorAdder):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
-        plate_indices = _iter_plate_indices(plate_shapes)
-        member_outputs = []
-        for idx, plate_idx in enumerate(plate_indices):
-            member_outputs.append(
-                compute_output(
-                    _slice_dynamics_for_plate_member(dynamics, plate_shapes, plate_idx),
-                    _slice_array_for_plate_member(obs_times, plate_shapes, plate_idx),
-                    _slice_array_for_plate_member(obs_values, plate_shapes, plate_idx),
-                    _slice_array_for_plate_member(ctrl_times, plate_shapes, plate_idx),
-                    _slice_array_for_plate_member(ctrl_values, plate_shapes, plate_idx),
-                    None if keys is None else keys[idx],
-                )
-            )
+        total = math.prod(plate_shapes)
+        canonical_plate_shapes = (total,)
+        member_indices = jnp.arange(total)
+        original_initial_condition = dynamics.initial_condition
+        batched_dynamics = _canonicalize_plate_dynamics_for_vmap(dynamics, plate_shapes)
+        flat_obs_times = _flatten_array_for_plate_vmap(
+            obs_times,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+        flat_obs_values = _flatten_array_for_plate_vmap(
+            obs_values,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+        flat_ctrl_times = _flatten_array_for_plate_vmap(
+            ctrl_times,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
+        flat_ctrl_values = _flatten_array_for_plate_vmap(
+            ctrl_values,
+            plate_shapes,
+            min_suffix_ndim=1,
+        )
 
-        outputs = _stack_plate_member_outputs(member_outputs, plate_shapes)
+        dyn_axes = _make_plate_in_axes(batched_dynamics, canonical_plate_shapes)
+        ot_axis = _array_plate_axis(flat_obs_times, canonical_plate_shapes)
+        ov_axis = _array_plate_axis(flat_obs_values, canonical_plate_shapes)
+        ct_axis = _array_plate_axis(flat_ctrl_times, canonical_plate_shapes)
+        cv_axis = _array_plate_axis(flat_ctrl_values, canonical_plate_shapes)
+        k_axis = 0 if keys is not None else None
+
+        def compute_output_for_member(dyn, member_idx, ot, ov, ct, cv, k):
+            dyn = _restore_batched_initial_condition_for_vmap_member(
+                dyn,
+                original_initial_condition,
+                plate_shapes,
+                member_idx,
+            )
+            return compute_output(dyn, ot, ov, ct, cv, k)
+
+        outputs = jax.vmap(
+            compute_output_for_member,
+            in_axes=(dyn_axes, 0, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
+        )(
+            batched_dynamics,
+            member_indices,
+            flat_obs_times,
+            flat_obs_values,
+            flat_ctrl_times,
+            flat_ctrl_values,
+            keys,
+        )
+        outputs = _reshape_vmap_outputs_to_plate(outputs, plate_shapes)
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik

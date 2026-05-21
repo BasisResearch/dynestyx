@@ -1,4 +1,4 @@
-import itertools
+import math
 
 import equinox as eqx
 import jax
@@ -74,8 +74,31 @@ def _slice_time_axis(
     return arr[(slice(None),) * time_axis + (t, ...)]
 
 
+def _flatten_plate_shape(
+    shape: tuple[int, ...], plate_shapes: tuple[int, ...]
+) -> tuple[int, ...]:
+    """Collapse leading plate dims into one member axis."""
+    return (math.prod(plate_shapes), *shape[len(plate_shapes) :])
+
+
+def _flatten_array_for_plate_vmap(
+    arr: Array | None,
+    plate_shapes: tuple[int, ...],
+    *,
+    min_suffix_ndim: int,
+) -> Array | None:
+    """Flatten leading plate dims into one member axis when present."""
+    if arr is None:
+        return None
+    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=min_suffix_ndim):
+        return arr.reshape(_flatten_plate_shape(arr.shape, plate_shapes))
+    return arr
+
+
 def _slice_array_for_plate_member(
-    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+    arr: Array | None,
+    plate_shapes: tuple[int, ...],
+    plate_idx: tuple[int | Array, ...],
 ) -> Array | None:
     """Slice leading plate dims if present; otherwise return unchanged."""
     if arr is None:
@@ -85,7 +108,29 @@ def _slice_array_for_plate_member(
     return arr
 
 
-def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
+def _flatten_tree_for_plate_vmap(tree, plate_shapes: tuple[int, ...]):
+    """Flatten plate-batched non-distribution leaves for vmapped execution."""
+
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
+
+    def _flatten_leaf(path, leaf):
+        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
+            return leaf.reshape(_flatten_plate_shape(leaf.shape, plate_shapes))
+        return leaf
+
+    return jax.tree_util.tree_map_with_path(
+        _flatten_leaf,
+        tree,
+        is_leaf=_is_distribution_leaf,
+    )
+
+
+def _slice_tree_for_plate_member(
+    tree,
+    plate_shapes: tuple[int, ...],
+    plate_idx: tuple[int | Array, ...],
+):
     """Slice plate-batched non-distribution leaves for one plate member."""
 
     def _is_distribution_leaf(node) -> bool:
@@ -104,7 +149,9 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
 
 
 def _slice_dist_for_plate_member(
-    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
+    dist_obj,
+    plate_shapes: tuple[int, ...],
+    plate_idx: tuple[int | Array, ...],
 ):
     """Slice plate-batched distribution parameters for one plate member."""
     if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
@@ -180,46 +227,61 @@ def _slice_dist_for_plate_member(
     return jax.tree.map(_slice_leaf, dist_obj)
 
 
-def _slice_dynamics_for_plate_member(
-    dynamics, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
-):
-    """Slice plate-batched dynamics, rebuilding any batched initial condition."""
-    member_dynamics = _slice_tree_for_plate_member(dynamics, plate_shapes, plate_idx)
+def _flat_member_to_plate_idx(
+    flat_member_idx: Array, plate_shapes: tuple[int, ...]
+) -> tuple[Array, ...]:
+    """Convert a flattened member index back into a plate index tuple."""
+    return tuple(jnp.unravel_index(flat_member_idx, plate_shapes))
+
+
+def _canonicalize_plate_dynamics_for_vmap(dynamics, plate_shapes: tuple[int, ...]):
+    """Return dynamics with active plate dims flattened into one member axis.
+
+    ``initial_condition`` is replaced by a representative single member when it
+    is plate-batched. Raw NumPyro distribution objects do not member-slice
+    correctly under ``vmap``; callers should restore the true per-member
+    initial condition inside the vmapped body.
+    """
+    batched_dynamics = _flatten_tree_for_plate_vmap(dynamics, plate_shapes)
     if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
-        member_initial_condition = _slice_dist_for_plate_member(
-            dynamics.initial_condition, plate_shapes, plate_idx
+        representative_initial_condition = _slice_dist_for_plate_member(
+            dynamics.initial_condition,
+            plate_shapes,
+            tuple(0 for _ in plate_shapes),
         )
-        member_dynamics = eqx.tree_at(
+        batched_dynamics = eqx.tree_at(
             lambda m: m.initial_condition,
-            member_dynamics,
-            member_initial_condition,
+            batched_dynamics,
+            representative_initial_condition,
             is_leaf=lambda x: x is None,
         )
-    return member_dynamics
+    return batched_dynamics
 
 
-def _iter_plate_indices(plate_shapes: tuple[int, ...]) -> list[tuple[int, ...]]:
-    """Enumerate all member indices for the active plate axes."""
-    return list(itertools.product(*[range(size) for size in plate_shapes]))
-
-
-def _stack_plate_member_outputs(member_outputs, plate_shapes: tuple[int, ...]):
-    """Stack flat per-member outputs back into a pytree with plate-shaped leaves."""
-    if not member_outputs:
-        raise ValueError(
-            "member_outputs must be non-empty when stacking plate results."
-        )
-
-    def _stack_leaf(*xs):
-        if xs[0] is None:
-            return None
-        return jnp.stack(xs, axis=0)
-
-    stacked = jax.tree_util.tree_map(
-        _stack_leaf,
-        *member_outputs,
+def _restore_batched_initial_condition_for_vmap_member(
+    dynamics,
+    initial_condition,
+    plate_shapes: tuple[int, ...],
+    flat_member_idx: Array,
+):
+    """Rebuild the correct per-member initial condition inside a vmapped body."""
+    if not _dist_has_plate_batch_dims(initial_condition, plate_shapes):
+        return dynamics
+    member_initial_condition = _slice_dist_for_plate_member(
+        initial_condition,
+        plate_shapes,
+        _flat_member_to_plate_idx(flat_member_idx, plate_shapes),
+    )
+    return eqx.tree_at(
+        lambda m: m.initial_condition,
+        dynamics,
+        member_initial_condition,
         is_leaf=lambda x: x is None,
     )
+
+
+def _reshape_vmap_outputs_to_plate(outputs, plate_shapes: tuple[int, ...]):
+    """Reshape flat vmapped outputs back into the original plate shape."""
 
     def _reshape_leaf(leaf):
         if leaf is None:
@@ -227,4 +289,4 @@ def _stack_plate_member_outputs(member_outputs, plate_shapes: tuple[int, ...]):
         arr = jnp.asarray(leaf)
         return arr.reshape(*plate_shapes, *arr.shape[1:])
 
-    return jax.tree.map(_reshape_leaf, stacked)
+    return jax.tree.map(_reshape_leaf, outputs, is_leaf=lambda x: x is None)

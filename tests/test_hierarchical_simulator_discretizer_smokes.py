@@ -655,6 +655,41 @@ def _simulate_stable_plate_discretized_observations(obs_times, *, m=3):
     return samples["f_observations"][0, :, 0]
 
 
+def _plate_vector_initial_mean_continuous_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=3,
+):
+    state_dim = 2
+    A = jnp.array([[-0.8, 0.25], [-0.15, -0.6]])
+    L = 0.20 * jnp.eye(state_dim)
+    H = jnp.eye(state_dim)
+    R = (0.08**2) * jnp.eye(state_dim)
+
+    with dsx.plate("trajectories", M):
+        mu_i = jnp.broadcast_to(jnp.array([0.2, -0.1]), (M, state_dim))
+        mu_0_i = jnp.broadcast_to(jnp.array([0.1, 0.05]), (M, state_dim))
+        b = -jnp.einsum("ij,...j->...i", A, mu_i)
+
+        dynamics = LTI_continuous(
+            A=A,
+            L=L,
+            H=H,
+            R=R,
+            b=b,
+            initial_mean=mu_0_i,
+            initial_cov=0.15 * jnp.eye(state_dim),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
 def test_plate_discretizer_forward_and_rollout():
     obs_times = jnp.arange(4.0)
     predict_times = jnp.arange(6.0)
@@ -758,6 +793,38 @@ def test_plate_discretizer_enkf_hierarchical_missingness_mcmc_smoke():
     posterior = mcmc.get_samples()
     assert posterior["alpha"].shape == (5, m)
     assert not jnp.isnan(posterior["alpha"]).any()
+
+
+def test_plate_discretizer_enkf_missingness_vector_initial_mean_shared_cov():
+    obs_times = jnp.arange(6.0)
+
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(34)):
+                _plate_vector_initial_mean_continuous_model(
+                    predict_times=obs_times,
+                    M=3,
+                )
+    obs_values = tr["f_observations"]["value"][:, 0]
+    obs_values = obs_values.at[0, 2:4, :].set(jnp.nan)
+    obs_values = obs_values.at[1, 1, 0].set(jnp.nan)
+
+    with Filter(
+        filter_config=EnKFConfig(
+            filter_source="cuthbert",
+            n_particles=8,
+            crn_seed=jr.PRNGKey(35),
+        )
+    ):
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(36)):
+                _plate_vector_initial_mean_continuous_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    M=3,
+                )
+
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
 
 
 def test_plate_discretizer_ekf_hierarchical_mcmc_smoke():
