@@ -30,6 +30,7 @@ nav:
       - Hierarchical inference: tutorials/gentle_intro/08_hierarchical_inference.ipynb
       - Discrete-time smoothing: tutorials/gentle_intro/09_discrete_smoothing.ipynb
       - Continuous-time smoothing: tutorials/gentle_intro/10_continuous_smoothing.ipynb
+      - Missing observations: tutorials/gentle_intro/11_missing_observations.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:

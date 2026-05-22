@@ -12,7 +12,10 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
-from dynestyx.inference.checkers import _validate_batched_plate_alignment
+from dynestyx.inference.checkers import (
+    _validate_batched_plate_alignment,
+    _validate_missing_observation_support,
+)
 from dynestyx.inference.distribution_utils import (
     _cholesky_state_sequence_to_dists,
     _posterior_sequence_to_dists,
@@ -220,6 +223,11 @@ class Smoother(BaseSmootherLogFactorAdder):
                 "Expected a smoother config class from dynestyx.inference.smoother_configs. "
                 f"Valid types: {valid}"
             )
+        _validate_missing_observation_support(
+            config,
+            obs_values=obs_values,
+            mode="smoother",
+        )
 
         typed_config = config
         key = (
