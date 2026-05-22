@@ -148,14 +148,14 @@ def _make_shared_shared_continuous_observations(diffusion_form):
         pytest.param("shared", id="shared"),
         pytest.param(
             "plated",
-            # marks=pytest.mark.xfail(
-            #     reason=(
-            #         "Explicit continuous-time drift callables still return "
-            #         "plate-batched values during single-member simulation when "
-            #         "the drift parameter alpha is plated."
-            #     ),
-            #     strict=True,
-            # ),
+            marks=pytest.mark.xfail(
+                reason=(
+                    "Explicit continuous-time drift callables still return "
+                    "plate-batched values during single-member simulation when "
+                    "the drift parameter alpha is plated."
+                ),
+                strict=True,
+            ),
             id="plated",
         ),
     ],
@@ -237,14 +237,14 @@ def test_manual_continuous_model_shared_parameters_ct_enkf_shapes(diffusion_form
     [
         pytest.param(
             EKFConfig(filter_source="cuthbert"),
-            # marks=pytest.mark.xfail(
-            #     reason=(
-            #         "The hand-written drift/diffusion model still hits the same "
-            #         "cuthbert EKF batched-initial-mean reshape bug after "
-            #         "discretization."
-            #     ),
-            #     strict=True,
-            # ),
+            marks=pytest.mark.xfail(
+                reason=(
+                    "The hand-written drift/diffusion model still hits the same "
+                    "cuthbert EKF batched-initial-mean reshape bug after "
+                    "discretization."
+                ),
+                strict=True,
+            ),
             id="discretizer-ekf",
         ),
         pytest.param(
@@ -253,13 +253,13 @@ def test_manual_continuous_model_shared_parameters_ct_enkf_shapes(diffusion_form
                 n_particles=8,
                 crn_seed=jr.PRNGKey(81),
             ),
-            # marks=pytest.mark.xfail(
-            #     reason=(
-            #         "The hand-written drift/diffusion model still hits the same "
-            #         "cuthbert EnKF plate-axis bug after discretization."
-            #     ),
-            #     strict=True,
-            # ),
+            marks=pytest.mark.xfail(
+                reason=(
+                    "The hand-written drift/diffusion model still hits the same "
+                    "cuthbert EnKF plate-axis bug after discretization."
+                ),
+                strict=True,
+            ),
             id="discretizer-enkf",
         ),
         pytest.param(
@@ -268,14 +268,14 @@ def test_manual_continuous_model_shared_parameters_ct_enkf_shapes(diffusion_form
                 n_particles=16,
                 crn_seed=jr.PRNGKey(81),
             ),
-            # marks=pytest.mark.xfail(
-            #     reason=(
-            #         "The hand-written drift/diffusion model still hits the same "
-            #         "cuthbert PF batched state/control mismatch after "
-            #         "discretization."
-            #     ),
-            #     strict=True,
-            # ),
+            marks=pytest.mark.xfail(
+                reason=(
+                    "The hand-written drift/diffusion model still hits the same "
+                    "cuthbert PF batched state/control mismatch after "
+                    "discretization."
+                ),
+                strict=True,
+            ),
             id="discretizer-pf",
         ),
     ],
@@ -318,13 +318,13 @@ def test_manual_continuous_model_shared_parameters_discretizer_filters(
                 n_particles=16,
                 crn_seed=jr.PRNGKey(91),
             ),
-            # marks=pytest.mark.xfail(
-            #     reason=(
-            #         "The hand-written drift/diffusion model still triggers the "
-            #         "continuous-time PF batched dot-product shape bug."
-            #     ),
-            #     strict=True,
-            # ),
+            marks=pytest.mark.xfail(
+                reason=(
+                    "The hand-written drift/diffusion model still triggers the "
+                    "continuous-time PF batched solver-compatibility bug."
+                ),
+                strict=True,
+            ),
             id="ct-pf",
         ),
         pytest.param(ContinuousTimeUKFConfig(), id="ct-ukf"),
