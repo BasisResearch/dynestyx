@@ -872,6 +872,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 11: Handling Missing Observations with Filters and Smoothers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -4436,6 +4464,7 @@ the backend. Useful for advanced backend-specific options.</p>
 a model built with <code>LTI_discrete</code> or using
 <code>LinearGaussianStateEvolution</code> + <code>LinearGaussianObservation</code>. For
 nonlinear Gaussian models, use <code>EKFConfig</code>, <code>UKFConfig</code>, or <code>EnKFConfig</code> instead.</p>
+<p>Supports missing observations via NaNs when <code>filter_source="cuthbert"</code>. Does not support missing observations (data cannot have NaNs) when <code>filter_source="cd_dynamax"</code>.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4578,6 +4607,7 @@ For genuinely time-varying discrete-time models, use a
 backend/configuration that preserves absolute time semantics, such as
 <code>EnKFConfig(filter_source="cuthbert")</code>. Only use
 <code>filter_source="cd_dynamax"</code> for time-invariant models.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4707,6 +4737,7 @@ For genuinely time-varying discrete-time models, use a
 backend/configuration that preserves absolute time semantics, such as
 <code>EKFConfig(filter_source="cuthbert")</code>. Only use
 <code>filter_source="cd_dynamax"</code> for time-invariant models.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4850,6 +4881,10 @@ large state dimensions can become expensive.</p>
 and less noisy with more particles, but introduces a linear computational cost.
 <code>ess_threshold_ratio</code> controls the frequency of resampling; sampling more frequently
 can help avoid particle degeneracy, but also increases variance.</p>
+<p>NaN-valued <code>obs_values</code> are allowed, but they are not treated specially by
+the particle filter. Whether missing observations work correctly is up to
+the user-specified transition and observation functions to handle NaNs
+appropriately. A warning is emitted when NaNs are detected in <code>obs_values</code>.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5014,6 +5049,7 @@ use <code>PFConfig</code> instead.</p>
 more accurate results at the cost of higher compute.
 If the ensemble collapses over long trajectories, increase
 <code>inflation_delta</code> slightly (e.g. <code>0.05</code>–<code>0.2</code>).</p>
+<p>Supports missing observations via NaNs.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5352,6 +5388,7 @@ use it as the constant step. Defaults to <code>0.01</code>.</p>
 Use this when your model was built with <code>LTI_continuous</code>. For nonlinear
 SDEs, use <code>ContinuousTimeEKFConfig</code>, <code>ContinuousTimeUKFConfig</code>, or
 <code>ContinuousTimeEnKFConfig</code>.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 <p>Inherits solver options from <code>ContinuousTimeConfig</code> and recording
 options from <code>BaseFilterConfig</code>.</p>
 
@@ -5461,6 +5498,7 @@ Kalman–Bucy ODEs:</p>
 dynamics (JAX autodiff is used). The moment equations for the Gaussian
 approximation are solved between observations and a Kalman update is
 applied at each observation.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 <p>See <code>EKFConfig</code> for linearisation options and <code>ContinuousTimeConfig</code>
 for solver options.</p>
 
@@ -5563,6 +5601,7 @@ for solver options.</p>
 Use this when your model was built with <code>LTI_continuous</code>. For nonlinear
 SDEs, use <code>ContinuousTimeEKFConfig</code>, <code>ContinuousTimeUKFConfig</code>, or
 <code>ContinuousTimeEnKFConfig</code>.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 <p>Inherits solver options from <code>ContinuousTimeConfig</code> and recording
 options from <code>BaseFilterConfig</code>.</p>
 
@@ -5672,6 +5711,7 @@ Kalman–Bucy ODEs:</p>
 is propagated forward by solving the SDE between observations; the
 ensemble Kalman update is applied at observation times. Works with any
 SDE model without requiring gradients.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 <p>See <code>EnKFConfig</code> for particle/ensemble tuning options and
 <code>ContinuousTimeConfig</code> for solver options.</p>
 
@@ -5811,6 +5851,7 @@ SDE model without requiring gradients.</p>
 discrete regime model). The forward algorithm computes the exact marginal
 log-likelihood and filtered belief over states at each time step.</p>
 <p>For continuous latent-state models, use any other filter config.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>

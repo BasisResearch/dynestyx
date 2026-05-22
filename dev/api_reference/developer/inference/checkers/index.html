@@ -872,6 +872,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 11: Handling Missing Observations with Filters and Smoothers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3323,6 +3351,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.checkers._validate_missing_observation_support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _validate_missing_observation_support
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3999,6 +4038,24 @@
     <div class="doc doc-contents ">
 
         <p>Raise early when plate_shapes do not align with any batched input source.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.checkers._validate_missing_observation_support" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_validate_missing_observation_support</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span> <span class="o">|</span> <span class="n">BaseSmootherConfig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*obs_value_plate obs_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;filter&#39;</span><span class="p">,</span> <span class="s1">&#39;smoother&#39;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.inference.checkers._validate_missing_observation_support" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Reject unsupported NaN-valued observations for filter/smoother backends.</p>
 
 
     </div>

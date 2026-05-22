@@ -872,6 +872,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 11: Handling Missing Observations with Filters and Smoothers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3824,6 +3852,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.utils._raise_now_or_error_if" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _raise_now_or_error_if
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.utils._should_record_field" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4310,6 +4349,24 @@ fields, which protects shared vectors whose length equals a plate size.</p>
 meaningful <code>.name</code> here. <code>DictKey</code>/<code>SequenceKey</code>/<code>FlattenedIndexKey</code>
 are intentionally dropped: built-in dynestyx model classes are eqx Modules,
 so the whitelist in <code>_is_known_vector_field</code> only needs attribute names.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.utils._raise_now_or_error_if" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_raise_now_or_error_if</span><span class="p">(</span><span class="n">anchor</span><span class="p">,</span> <span class="n">predicate</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;raise&#39;</span><span class="p">,</span> <span class="s1">&#39;warn&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;raise&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.utils._raise_now_or_error_if" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Raise or warn when a predicate is true, handling traced predicates safely.</p>
 
 
     </div>

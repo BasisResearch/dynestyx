@@ -872,6 +872,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 11: Handling Missing Observations with Filters and Smoothers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -4236,6 +4264,7 @@ discrete observations. Requires differentiable dynamics; JAX autodiff is
 used to construct the local linearizations.</p>
 <p>This smoother is currently implemented through the <code>cd_dynamax</code> backend.
 See <code>ContinuousTimeEKFConfig</code> for linearisation and solver options.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4351,6 +4380,7 @@ discrete observations. Use this when your model was built with
 Inherited differential-equation solver options control the continuous-time
 filtering pass, and inherited <code>record_smoothed_*</code> fields control trace
 recording.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4477,6 +4507,7 @@ differentiable nonlinear dynamics when local linearization is a reasonable
 approximation to the filtering and smoothing distributions.</p>
 <p>This is exact (but wasteful) for linear-Gaussian models. For those models,
 prefer <code>KFSmootherConfig</code>.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4591,6 +4622,7 @@ models. Use this when your model was built with <code>LTI_discrete</code> or wit
 <span class="arithmatex">\(p(x_t \mid y_{1:t})\)</span>. Use the inherited <code>record_smoothed_*</code> fields to
 save smoothed means, covariances, or covariance diagonals in the NumPyro
 trace.</p>
+<p>Supports missing observations via NaNs when <code>filter_source="cuthbert"</code>. Does not support missing observations (data cannot have NaNs) when <code>filter_source="cd_dynamax"</code>.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4723,6 +4755,7 @@ states. For a linear transition matrix <span class="arithmatex">\(A_t\)</span>, 
 smoothing is more flexible than Gaussian smoothing, but accuracy scales
 with the number of particles and backward-sampled smoother trajectories.</p>
 <p>This smoother is currently supported with <code>filter_source="cuthbert"</code> only.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -4893,6 +4926,7 @@ sigma-point propagation is a better local approximation than EKF
 linearization.</p>
 <p>This smoother is currently supported with <code>filter_source="cd_dynamax"</code> only.
 Cuthbert UKF smoothing is not implemented.</p>
+<p>Does not support missing observations (data cannot have NaNs).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
