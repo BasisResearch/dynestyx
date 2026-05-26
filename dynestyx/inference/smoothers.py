@@ -1,5 +1,6 @@
 import dataclasses
 import math
+from abc import ABC, abstractmethod
 from typing import cast
 
 import equinox as eqx
@@ -37,6 +38,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
+from dynestyx.inference.numpyro_sites import register_smoother_sites
 from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
 from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
@@ -50,7 +52,7 @@ from dynestyx.inference.smoother_configs import (
     UKFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.types import FunctionOfTime
+from dynestyx.types import FunctionOfTime, InferResult
 
 DiscreteSmootherConfig = (
     KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
@@ -101,7 +103,7 @@ def _final_obs_times_for_rollout(
         return obs_times[..., -1:]
 
 
-class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
+class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base class for smoother handlers."""
 
     @implements(_sample_intp)
@@ -148,7 +150,8 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
             smoothed_times = None
             smoothed_dists = None
 
-        return fwd(
+        # fwd() lets handlers above (e.g. Simulator) use smoothed_dists for rollout.
+        fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
@@ -165,6 +168,9 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
             **kwargs,
         )
 
+        return self._build_infer_result(name, smoothed_dists)
+
+    @abstractmethod
     def _add_log_factors(
         self,
         name: str,
@@ -180,8 +186,12 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         **kwargs,
-    ) -> list[numpyro.distributions.Distribution] | None:
-        raise NotImplementedError()
+    ) -> list[numpyro.distributions.Distribution] | None: ...
+
+    @abstractmethod
+    def _build_infer_result(
+        self, name: str, smoothed_dists: list | None
+    ) -> InferResult: ...
 
 
 @dataclasses.dataclass
@@ -189,6 +199,13 @@ class Smoother(BaseSmootherLogFactorAdder):
     r"""Performs Bayesian smoothing to compute the smoothing distribution p(x_t | y_{1:T})."""
 
     smoother_config: SmootherAnyConfig | None = None
+    marginal_loglik: jax.Array | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
+    smoothed_states: object = dataclasses.field(default=None, repr=False, init=False)
+    _smoother_config_used: BaseSmootherConfig | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
 
     def _add_log_factors(
         self,
@@ -229,12 +246,20 @@ class Smoother(BaseSmootherLogFactorAdder):
             mode="smoother",
         )
 
+        # Resolve PRNG key: use explicit seed from config, fall back to numpyro
+        # context (inside a seeded model), or None (deterministic smoothers don't need one).
         typed_config = config
-        key = (
-            numpyro.prng_key()
-            if typed_config.crn_seed is None
-            else typed_config.crn_seed
-        )
+        if typed_config.crn_seed is not None:
+            key = typed_config.crn_seed
+        else:
+            import warnings  # noqa: PLC0415
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    key = numpyro.prng_key()
+                except Exception:
+                    key = None
 
         if plate_shapes:
             return self._add_log_factors_batched(
@@ -257,7 +282,7 @@ class Smoother(BaseSmootherLogFactorAdder):
                     f"Valid continuous-time config types: {valid}"
                 )
             continuous_config = cast(ContinuousSmootherConfig, typed_config)
-            return _smooth_continuous_time(
+            marginal_loglik, states, smoothed_dists = _smooth_continuous_time(
                 name,
                 dynamics,
                 continuous_config,
@@ -268,25 +293,58 @@ class Smoother(BaseSmootherLogFactorAdder):
                 ctrl_values=ctrl_values,
                 **kwargs,
             )
-
-        if not isinstance(typed_config, DiscreteTimeSmootherConfigs):
+        elif not isinstance(typed_config, DiscreteTimeSmootherConfigs):
             valid = _valid_smoother_config_names(continuous_time=False)
             raise ValueError(
                 f"Invalid smoother config: {type(typed_config).__name__}. "
                 f"Valid discrete-time config types: {valid}"
             )
-        discrete_config = cast(DiscreteSmootherConfig, typed_config)
+        else:
+            discrete_config = cast(DiscreteSmootherConfig, typed_config)
+            marginal_loglik, states, smoothed_dists = _smooth_discrete_time(
+                name,
+                dynamics,
+                discrete_config,
+                key=key,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                **kwargs,
+            )
 
-        return _smooth_discrete_time(
-            name,
-            dynamics,
-            discrete_config,
-            key=key,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            **kwargs,
+        self.marginal_loglik = marginal_loglik
+        self.smoothed_states = states
+        self._smoother_config_used = typed_config
+
+        return smoothed_dists
+
+    def _build_infer_result(
+        self, name: str, smoothed_dists: list | None
+    ) -> InferResult:
+        """Construct InferResult with a deferred numpyro registration callback."""
+        marginal_loglik = self.marginal_loglik
+        states = self.smoothed_states
+        config = self._smoother_config_used
+        _is_batched = (
+            isinstance(marginal_loglik, jax.Array) and marginal_loglik.ndim > 0
+        )
+
+        def _register(site_name: str) -> None:
+            if marginal_loglik is None or config is None:
+                return
+            if _is_batched:
+                # TODO: support per-field recording for batched (plate) states
+                numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
+                numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
+            else:
+                register_smoother_sites(site_name, marginal_loglik, states, config)
+
+        return InferResult(
+            marginal_loglik=marginal_loglik,
+            states=states,
+            dists=smoothed_dists,
+            _register_numpyro_sites=_register,
         )
 
     def _add_log_factors_batched(
@@ -419,8 +477,9 @@ class Smoother(BaseSmootherLogFactorAdder):
         else:
             raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
-        numpyro.factor(f"{name}_marginal_log_likelihood", marginal_logliks)
-        numpyro.deterministic(f"{name}_marginal_loglik", marginal_logliks)
+        self.marginal_loglik = marginal_logliks
+        self.smoothed_states = outputs
+        self._smoother_config_used = config
 
         if output_kind == "continuous":
             return _posterior_sequence_to_dists(
@@ -468,7 +527,7 @@ def _smooth_discrete_time(
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
     **kwargs,
-) -> list[numpyro.distributions.Distribution]:
+) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax smoothers."""
 
     if isinstance(smoother_config, UKFSmootherConfig) and (
@@ -488,7 +547,7 @@ def _smooth_discrete_time(
         )
 
     if smoother_config.filter_source == "cd_dynamax":
-        return run_cd_dynamax_discrete_smoother(
+        marginal_loglik, states, smoothed_dists = run_cd_dynamax_discrete_smoother(
             name,
             dynamics,
             smoother_config,
@@ -498,15 +557,14 @@ def _smooth_discrete_time(
             ctrl_values=ctrl_values,
             **kwargs,
         )
-
-    if smoother_config.filter_source == "cuthbert":
+    elif smoother_config.filter_source == "cuthbert":
         if isinstance(smoother_config, UKFSmootherConfig):
             raise ValueError(
                 "UKF smoothing is not available in cuthbert. "
                 "Use UKFSmootherConfig(filter_source='cd_dynamax') or a cuthbert-supported smoother "
                 "(KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig)."
             )
-        return run_cuthbert_discrete_smoother(
+        marginal_loglik, states, smoothed_dists = run_cuthbert_discrete_smoother(
             name,
             dynamics,
             smoother_config,
@@ -517,8 +575,10 @@ def _smooth_discrete_time(
             ctrl_values=ctrl_values,
             **kwargs,
         )
+    else:
+        raise ValueError(f"Unknown filter source: {smoother_config.filter_source}")
 
-    raise ValueError(f"Unknown filter source: {smoother_config.filter_source}")
+    return marginal_loglik, states, smoothed_dists
 
 
 def _smooth_continuous_time(
@@ -535,14 +595,14 @@ def _smooth_continuous_time(
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
     **kwargs,
-) -> list[numpyro.distributions.Distribution]:
+) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
     """Continuous-time marginal likelihood via CD-Dynamax smoothers."""
     if smoother_config.filter_source != "cd_dynamax":
         raise ValueError(
             f"{type(smoother_config).__name__} supports only filter_source='cd_dynamax'."
         )
 
-    return run_continuous_smoother(
+    marginal_loglik, smoothed, smoothed_dists = run_continuous_smoother(
         name,
         dynamics,
         smoother_config,
@@ -553,6 +613,7 @@ def _smooth_continuous_time(
         ctrl_values=ctrl_values,
         **kwargs,
     )
+    return marginal_loglik, smoothed, smoothed_dists
 
 
 __all__ = [

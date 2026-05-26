@@ -3,7 +3,6 @@ from typing import NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
-import numpyro
 import numpyro.distributions as dist
 from cuthbert import filter as cuthbert_filter
 from cuthbert.enkf import ensemble_kalman_filter
@@ -15,7 +14,6 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
-from numpyro.distributions import Distribution
 
 from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
 from dynestyx.inference.filter_configs import (
@@ -24,10 +22,8 @@ from dynestyx.inference.filter_configs import (
     EnKFConfig,
     KFConfig,
     PFConfig,
-    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.utils import (
-    covariance_from_cholesky,
     squeeze_leading_singletons,
 )
 from dynestyx.models import (
@@ -36,7 +32,6 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import _should_record_field
 
 
 class CuthbertInputs(NamedTuple):
@@ -100,10 +95,10 @@ def _probe_state_independent_observation_noise(
     probe_u = jnp.zeros(())
     probe_t = jnp.zeros(())
     try:
-        probe_d0: Distribution | None = obs_model(
+        probe_d0: dist.Distribution | None = obs_model(
             jnp.zeros((state_dim,)), probe_u, probe_t
         )
-        probe_d1: Distribution | None = obs_model(
+        probe_d1: dist.Distribution | None = obs_model(
             jnp.ones((state_dim,)), probe_u, probe_t
         )
     except Exception:
@@ -260,15 +255,18 @@ def run_discrete_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> list[dist.Distribution]:
+) -> tuple[jax.Array, object, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
+    Pure computation — no numpyro side-effects. Callers are responsible for
+    registering numpyro.factor / numpyro.deterministic if needed.
+
     Returns:
-        list[dist.Distribution]: Filtered state distributions at each obs time.
+        tuple: (marginal_loglik, raw_states, filtered_dists).
     """
     obs_len = int(obs_values.shape[0])
     if obs_len == 0:
-        return []
+        return jnp.array(0.0), None, []
 
     marginal_loglik, states = compute_cuthbert_filter(
         dynamics,
@@ -279,19 +277,11 @@ def run_discrete_filter(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
-    record_kwargs = _config_to_record_kwargs(filter_config)
-
-    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
-
-    if isinstance(filter_config, PFConfig):
-        _add_sites_pf(name, states, record_kwargs)
-    else:
-        _add_sites_gaussian_filter(name, states, record_kwargs)
-    return _cholesky_state_sequence_to_dists(
+    filtered_dists = _cholesky_state_sequence_to_dists(
         states,
         particle_mode=isinstance(filter_config, PFConfig),
     )
+    return marginal_loglik, states, filtered_dists
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
@@ -595,104 +585,3 @@ def _cuthbert_filter_taylor_kf(
         ignore_nan_dims=True,
     )
     return kf
-
-
-def _add_sites_pf(
-    name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
-):
-    log_weights = states.log_weights
-    particles = states.particles
-    if particles.ndim == 2:
-        particles = particles[..., None]
-    max_elems = record_kwargs["record_max_elems"]
-    t_len, n_particles, state_dim = particles.shape
-
-    add_particles = _should_record_field(
-        record_kwargs["record_filtered_particles"], particles.shape, max_elems
-    )
-    add_log_weights = _should_record_field(
-        record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
-    )
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], (t_len, state_dim), max_elems
-    )
-    add_filtered_states_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"],
-        (t_len, state_dim, state_dim),
-        max_elems,
-    )
-    add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
-    )
-
-    need_filtered_means = (
-        add_mean or add_filtered_states_cov or add_filtered_states_cov_diag
-    )
-
-    if need_filtered_means:
-        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T+1, n_particles, 1)
-        filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
-
-    if add_filtered_states_cov or add_filtered_states_cov_diag:
-        second_mom = jnp.einsum(
-            "...tnj,...tnk,...tn->...tjk", particles, particles, w.squeeze(-1)
-        )
-        filtered_covariances = second_mom - jnp.einsum(
-            "...tj,...tk->...tjk", filtered_means, filtered_means
-        )
-
-    if add_particles:
-        numpyro.deterministic(f"{name}_filtered_particles", particles)
-    if add_log_weights:
-        numpyro.deterministic(f"{name}_filtered_log_weights", log_weights)
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", filtered_means)
-    if add_filtered_states_cov:
-        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_covariances)
-    if add_filtered_states_cov_diag:
-        diag_cov = jnp.diagonal(filtered_covariances, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
-
-
-def _add_sites_gaussian_filter(
-    name: str,
-    states: kalman.KalmanFilterState
-    | taylor.LinearizedKalmanFilterState
-    | ensemble_kalman_filter.EnKFState,
-    record_kwargs: dict,
-):
-    max_elems = record_kwargs["record_max_elems"]
-    mean = states.mean
-    chol_cov = states.chol_cov
-    t_len, state_dim, _ = chol_cov.shape
-
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], mean.shape, max_elems
-    )
-    add_chol_cov = _should_record_field(
-        record_kwargs["record_filtered_states_chol_cov"],
-        chol_cov.shape,
-        max_elems,
-    )
-    add_filtered_states_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"],
-        (t_len, state_dim, state_dim),
-        max_elems,
-    )
-    add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
-    )
-
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", mean)
-    if add_chol_cov:
-        numpyro.deterministic(f"{name}_filtered_states_chol_cov", chol_cov)
-
-    if add_filtered_states_cov or add_filtered_states_cov_diag:
-        filtered_cov = covariance_from_cholesky(chol_cov)
-
-    if add_filtered_states_cov:
-        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
-    if add_filtered_states_cov_diag:
-        diag_cov = jnp.diagonal(filtered_cov, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)

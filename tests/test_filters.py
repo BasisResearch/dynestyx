@@ -209,15 +209,14 @@ def test_cuthbert_filtered_distribution_shapes_match_observations(filter_config)
     obs_times, obs_values = _make_discrete_lti_data()
     dynamics = _make_discrete_lti_dynamics()
 
-    with trace(), seed(rng_seed=jr.PRNGKey(1)):
-        filtered_dists = run_cuthbert_discrete_filter(
-            "f",
-            dynamics,
-            filter_config,
-            key=jr.PRNGKey(2),
-            obs_times=obs_times,
-            obs_values=obs_values,
-        )
+    _marginal_loglik, _states, filtered_dists = run_cuthbert_discrete_filter(
+        "f",
+        dynamics,
+        filter_config,
+        key=jr.PRNGKey(2),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 
     assert len(filtered_dists) == len(obs_times)
     for filtered_dist in filtered_dists:
@@ -293,15 +292,14 @@ def test_cuthbert_enkf_accepts_callable_independent_normal_observation():
         ),
     )
 
-    with trace(), seed(rng_seed=jr.PRNGKey(1)):
-        filtered_dists = run_cuthbert_discrete_filter(
-            "f",
-            dynamics,
-            EnKFConfig(n_particles=16, filter_source="cuthbert"),
-            key=jr.PRNGKey(2),
-            obs_times=obs_times,
-            obs_values=obs_values,
-        )
+    _marginal_loglik, _states, filtered_dists = run_cuthbert_discrete_filter(
+        "f",
+        dynamics,
+        EnKFConfig(n_particles=16, filter_source="cuthbert"),
+        key=jr.PRNGKey(2),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 
     assert len(filtered_dists) == len(obs_times)
     assert all(d.event_shape == (dynamics.state_dim,) for d in filtered_dists)

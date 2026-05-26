@@ -5,7 +5,7 @@ from importlib.metadata import version
 __version__ = version("dynestyx")
 
 from dynestyx.discretizers import Discretizer, euler_maruyama
-from dynestyx.handlers import plate, sample
+from dynestyx.handlers import infer, plate, sample
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
@@ -33,6 +33,7 @@ from dynestyx.simulators import (
     SDESimulator,
     Simulator,
 )
+from dynestyx.types import InferResult
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -56,6 +57,8 @@ __all__ = [
     "Filter",
     "Smoother",
     "flatten_draws",
+    "infer",
+    "InferResult",
     "plate",
     "sample",
     "DiracIdentityObservation",
