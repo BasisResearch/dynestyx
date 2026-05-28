@@ -21,6 +21,12 @@ from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.integrations.utils import WeightedParticles
+from dynestyx.internal.observation_missingness import (
+    MissingObservationData,
+    MissingObservationScorer,
+    build_missing_observation_scorer,
+    prepare_missing_observation_data,
+)
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -707,6 +713,29 @@ def _emit_observations(
         return observations
 
 
+def _score_missing_observations(
+    name: str,
+    states: Array,
+    times: Array,
+    scorer: MissingObservationScorer,
+    control_path_eval: Callable[[Array], Array | None],
+) -> Array:
+    """Score masked observations with numpyro.factor and preserve NaNs in outputs."""
+    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
+    T = len(times)
+
+    def _step(carry, t_idx):
+        x_t = states[t_idx]
+        t = times[t_idx]
+        u_t = ctrl(t)
+        lp = scorer.score_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
+        numpyro.factor(f"{name}_y_{t_idx}_lp", lp)
+        return carry, scorer.materialize_observation(t_idx)
+
+    _, observations = nscan(_step, None, jnp.arange(T))
+    return observations
+
+
 class SDESimulator(BaseSimulator):
     """Simulator for continuous-time stochastic dynamics (SDEs).
 
@@ -961,6 +990,64 @@ class DiscreteTimeSimulator(BaseSimulator):
 
     n_simulations: int = 1
 
+    def _simulate_missing_scan(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        times: Array,
+        ctrl_values: Array | None,
+        missing_data: MissingObservationData,
+    ) -> dict[str, Array]:
+        """Sequential latent-state scan with factor-scored masked observations."""
+        scorer = build_missing_observation_scorer(
+            observation_model=dynamics.observation_model,
+            missing_data=missing_data,
+        )
+        state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
+                f"{name}_x_0", dynamics.initial_condition
+            )
+        x_prev = x_prev_site[0]
+
+        u_0 = _get_val_or_None(ctrl_values, 0)
+        numpyro.factor(
+            f"{name}_y_0_lp",
+            scorer.score_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
+        )
+        y_0 = scorer.materialize_observation(0)
+
+        def _step(x_prev, t_idx):
+            t_now = times[t_idx]
+            t_next = times[t_idx + 1]
+            u_now = _get_val_or_None(ctrl_values, t_idx)
+            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+            trans_dist = state_transition(x=x_prev, u=u_now, t_now=t_now, t_next=t_next)
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x_t_site = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
+            x_t = x_t_site[0]
+            numpyro.factor(
+                f"{name}_y_{t_idx + 1}_lp",
+                scorer.score_step(x=x_t, u=u_next, t=t_next, t_idx=t_idx + 1),
+            )
+            y_t = scorer.materialize_observation(t_idx + 1)
+            return x_t, (x_t, y_t)
+
+        _, scan_outputs = nscan(_step, x_prev, jnp.arange(len(times) - 1))
+        scan_states, scan_observations = scan_outputs
+
+        states = jnp.concatenate([jnp.expand_dims(x_prev, axis=0), scan_states], axis=0)
+        observations = jnp.concatenate(
+            [jnp.expand_dims(y_0, axis=0), scan_observations], axis=0
+        )
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+        }
+
     def _simulate(
         self,
         name: str,
@@ -1005,13 +1092,25 @@ class DiscreteTimeSimulator(BaseSimulator):
             raise ValueError("obs_times must contain at least one timepoint")
 
         n_sim = self.n_simulations
+        is_dirac_observation = isinstance(
+            dynamics.observation_model, DiracIdentityObservation
+        )
+
+        if obs_values is not None and not is_dirac_observation:
+            missing_data = prepare_missing_observation_data(obs_values)
+            return self._simulate_missing_scan(
+                name,
+                dynamics,
+                times=times,
+                ctrl_values=ctrl_values,
+                missing_data=missing_data,
+            )
+
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
-            obs_values is not None
-        ):
+        if is_dirac_observation and (obs_values is not None):
             with numpyro.plate(f"{name}_n_simulations", 1):
                 numpyro.sample(
                     f"{name}_x_0",
@@ -1273,6 +1372,9 @@ class ODESimulator(BaseSimulator):
             raise ValueError("obs_times or predict_times must be provided")
 
         n_sim = self.n_simulations
+        is_dirac_observation = isinstance(
+            dynamics.observation_model, DiracIdentityObservation
+        )
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
@@ -1281,6 +1383,14 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        scorer = (
+            build_missing_observation_scorer(
+                observation_model=dynamics.observation_model,
+                missing_data=prepare_missing_observation_data(obs_values),
+            )
+            if obs_values is not None and not is_dirac_observation
+            else None
+        )
 
         def _sim_one_trajectory(x0: Array, *, obs_key=None):
             """Simulate one ODE trajectory and emit observations."""
@@ -1292,20 +1402,30 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-            observations = _emit_observations(
-                name,
-                dynamics,
-                states,
-                times,
-                obs_values,
-                control_path_eval,
-                key=obs_key,
-            )
+            if scorer is not None:
+                observations = _score_missing_observations(
+                    name,
+                    states,
+                    times,
+                    scorer,
+                    control_path_eval,
+                )
+            else:
+                observations = _emit_observations(
+                    name,
+                    dynamics,
+                    states,
+                    times,
+                    obs_values,
+                    control_path_eval,
+                    key=obs_key,
+                )
             return states, observations
 
         if obs_values is not None:
             # Conditioning mode (n_sim must be 1 due to guard above).
-            # Uses numpyro.sample per observation site to support obs= conditioning.
+            # Uses numpyro.sample per observation site unless missingness requires
+            # factor-scored masked likelihoods.
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
             x0_arr: Array = jnp.asarray(x0)[0]
