@@ -20,7 +20,10 @@ from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
-from dynestyx.inference.integrations.utils import WeightedParticles
+from dynestyx.inference.plate_utils import (
+    _slice_array_for_plate_member,
+    _slice_dist_for_plate_member,
+)
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -32,7 +35,6 @@ from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (
-    _array_has_plate_dims,
     _build_control_path,
     _dist_has_plate_batch_dims,
     _get_val_or_None,
@@ -93,21 +95,6 @@ def _suspend_numpyro_plate_frames():
         stack[:] = original
 
 
-def _slice_array_for_plate_member(
-    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
-) -> Array | None:
-    """Slice leading plate dims if present; otherwise return unchanged.
-
-    This is used in our Simulator loops for plated dimensions: we choose the times/values
-    for a particular plate member.
-    """
-    if arr is None:
-        return None
-    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
-        return arr[plate_idx]
-    return arr
-
-
 def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
     """Slice plate-batched dynamics leaves for one simulator plate member.
 
@@ -129,97 +116,6 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
         tree,
         is_leaf=_is_distribution_leaf,
     )
-
-
-def _slice_dist_for_plate_member(
-    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
-):
-    """Slice plate-batched distribution parameters for one member.
-
-    To obtain distributions for a particular plate member, we must
-    slice the corresponding parameter arrays. This function implements
-    such slicing for:
-    - MixtureSameFamily
-    - MultivariateNormal
-    - Delta
-    - WeightedParticles
-    - Categorical
-    - Independent
-    - TransformedDistribution
-    """
-    if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
-        return dist_obj
-
-    def _slice_required_array(arr_like) -> Array:
-        arr = jnp.asarray(arr_like)
-        sliced = _slice_array_for_plate_member(arr, plate_shapes, plate_idx)
-        if sliced is None:
-            raise ValueError("Expected a concrete array when slicing plate member.")
-        return sliced
-
-    # Rebuild common distributions explicitly so cached/static batch metadata is
-    # consistent after slicing.
-    if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
-        mixture = _slice_dist_for_plate_member(
-            dist_obj.mixing_distribution, plate_shapes, plate_idx
-        )
-        components = _slice_dist_for_plate_member(
-            dist_obj.component_distribution, plate_shapes, plate_idx
-        )
-        return numpyro.distributions.MixtureSameFamily(mixture, components)
-
-    if isinstance(dist_obj, numpyro.distributions.MultivariateNormal):
-        loc = _slice_required_array(dist_obj.loc)
-        cov = _slice_required_array(dist_obj.covariance_matrix)
-        return numpyro.distributions.MultivariateNormal(
-            loc=loc,
-            covariance_matrix=cov,
-        )
-
-    if isinstance(dist_obj, numpyro.distributions.Delta):
-        value = _slice_required_array(dist_obj.v)
-        log_density = _slice_required_array(dist_obj.log_density)
-        return numpyro.distributions.Delta(
-            value,
-            log_density=log_density,
-            event_dim=dist_obj.event_dim,
-        )
-
-    if isinstance(dist_obj, WeightedParticles):
-        particles = _slice_required_array(dist_obj.particles)
-        log_weights = _slice_required_array(dist_obj.log_weights)
-        return WeightedParticles(particles=particles, log_weights=log_weights)
-
-    if dist_obj.__class__.__name__.startswith("Categorical"):
-        if dist_obj.logits is not None:
-            logits = _slice_required_array(dist_obj.logits)
-            return numpyro.distributions.Categorical(logits=logits)
-        probs = _slice_required_array(dist_obj.probs)
-        return numpyro.distributions.Categorical(probs=probs)
-
-    if isinstance(dist_obj, numpyro.distributions.Independent):
-        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
-        return numpyro.distributions.Independent(
-            base,
-            dist_obj.reinterpreted_batch_ndims,
-        )
-
-    if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
-        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
-        transforms = getattr(dist_obj, "transforms")
-        return numpyro.distributions.TransformedDistribution(
-            base,
-            transforms,
-        )
-
-    def _slice_leaf(leaf):
-        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
-            leaf, plate_shapes, min_suffix_ndim=1
-        ):
-            return leaf[plate_idx]
-        return leaf
-
-    return jax.tree.map(_slice_leaf, dist_obj)
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):

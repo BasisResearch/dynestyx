@@ -1,4 +1,5 @@
 import jax
+import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Shaped
 
@@ -6,41 +7,32 @@ from dynestyx.utils import (
     _array_has_plate_dims,
     _dist_has_plate_batch_dims,
     _leaf_is_plate_batched,
-    _path_field_names,
 )
 
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     """Build ``in_axes`` for leaves whose leading dims match active plates.
 
-    Unbatched distributions are treated as opaque shared leaves. Batched
-    distributions are traversed so mixed batched/shared parameters, such as a
-    batched ``MultivariateNormal.loc`` with shared covariance, can be mapped
-    correctly.
+    All numpyro distributions are treated as opaque leaves with ``in_axes=None``.
+    A plate-batched ``initial_condition`` is *not* sliced by ``vmap`` here; the
+    batched filter/smoother dispatch rebuilds it per member from the clean
+    original via ``_slice_dist_for_plate_member``. This avoids ``vmap`` leaving a
+    stale ``batch_shape`` in the distribution's static aux-data (which would make
+    ``.mean`` / ``.sample`` / ``.log_prob`` re-expand to the full plate shape).
     """
 
-    def _is_unbatched_distribution_leaf(node) -> bool:
-        return isinstance(
-            node, numpyro.distributions.Distribution
-        ) and not _dist_has_plate_batch_dims(node, plate_shapes)
+    def _is_distribution_leaf(node) -> bool:
+        return isinstance(node, numpyro.distributions.Distribution)
 
     def _axis(path, leaf):
         if isinstance(leaf, numpyro.distributions.Distribution):
             return None
-
-        if "initial_condition" in _path_field_names(path):
-            return (
-                0
-                if _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=1)
-                else None
-            )
-
         return 0 if _leaf_is_plate_batched(leaf, plate_shapes, path=path) else None
 
     return jax.tree_util.tree_map_with_path(
         _axis,
         tree,
-        is_leaf=_is_unbatched_distribution_leaf,
+        is_leaf=_is_distribution_leaf,
     )
 
 
@@ -67,3 +59,82 @@ def _slice_time_axis(
     """Slice an array at time index t where time axis follows plate dims."""
     time_axis = _get_time_axis(plate_shapes)
     return arr[(slice(None),) * time_axis + (t, ...)]
+
+
+def _slice_array_for_plate_member(
+    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple
+) -> Array | None:
+    """Slice leading plate dims if present; otherwise return unchanged.
+
+    Used both by the simulator enumerate loops and by the filter/smoother batched
+    dispatch to select the times/values/parameters for a particular plate member.
+
+    ``plate_idx`` entries may be Python ints (simulator enumerate path) or traced
+    scalar arrays (filter/smoother ``vmap`` path), so it is intentionally untyped.
+    """
+    if arr is None:
+        return None
+    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
+        return arr[plate_idx]
+    return arr
+
+
+def _slice_dist_for_plate_member(
+    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple
+):
+    """Return the single-member distribution for plate index ``plate_idx``.
+
+    Slicing a distribution leaf with ``jax.vmap`` leaves a stale ``batch_shape``
+    in NumPyro's static aux-data, so derived quantities (``.mean`` / ``.sample`` /
+    ``.log_prob``) re-expand to the full plate shape. To avoid that we rebuild the
+    member distribution from the clean original:
+
+    - **Structural** distributions (``MixtureSameFamily``, ``Independent``,
+      ``TransformedDistribution``) wrap sub-distributions whose own ``batch_shape``
+      would otherwise stay stale, so we recurse and rebuild via their constructors.
+    - **Flat** distributions are rebatched generically: broadcast each leaf's
+      leading ``n = len(plate_shapes)`` dims to the real plate sizes, slice out
+      ``plate_idx``, then trim the now-removed plate dims from ``batch_shape``.
+      Broadcasting first means even leaves NumPyro stored with a collapsed singleton
+      batch (e.g. an MVN ``scale_tril`` of shape ``(1, d, d)``) slice to a clean
+      per-member shape, so no stray ``batch_shape (1,)`` survives.
+
+    ``plate_idx`` entries may be Python ints (simulator) or traced scalar arrays
+    (filter/smoother ``vmap`` path); both index correctly via gather.
+    """
+    if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
+        return dist_obj
+
+    if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
+        return numpyro.distributions.MixtureSameFamily(
+            _slice_dist_for_plate_member(
+                dist_obj.mixing_distribution, plate_shapes, plate_idx
+            ),
+            _slice_dist_for_plate_member(
+                dist_obj.component_distribution, plate_shapes, plate_idx
+            ),
+        )
+    if isinstance(dist_obj, numpyro.distributions.Independent):
+        return numpyro.distributions.Independent(
+            _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx),
+            dist_obj.reinterpreted_batch_ndims,
+        )
+    if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
+        return numpyro.distributions.TransformedDistribution(
+            _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx),
+            dist_obj.transforms,
+        )
+
+    n = len(plate_shapes)
+    batch_shape = tuple(dist_obj.batch_shape)
+    leaves, treedef = jax.tree_util.tree_flatten(dist_obj)
+    sliced_leaves = []
+    for leaf in leaves:
+        arr = jnp.asarray(leaf)
+        full = jnp.broadcast_to(arr, tuple(plate_shapes) + arr.shape[n:])
+        sliced_leaves.append(full[plate_idx])
+    member = jax.tree_util.tree_unflatten(treedef, sliced_leaves)
+    # _batch_shape is NumPyro's static aux field (see pytree_aux_fields); trim the
+    # plate dims we just sliced away so the per-member distribution is unbatched.
+    object.__setattr__(member, "_batch_shape", batch_shape[n:])
+    return member
