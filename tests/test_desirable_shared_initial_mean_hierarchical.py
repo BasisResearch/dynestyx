@@ -38,7 +38,7 @@ def _plate_vector_initial_mean_continuous_model(
     with dsx.plate("trajectories", M):
         alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
         A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
-        A = A_base.at[0, 0].set(-alpha)
+        A = jnp.broadcast_to(A_base, (M, state_dim, state_dim)).at[:, 0, 0].set(-alpha)
 
         dynamics = LTI_continuous(
             A=A,
@@ -85,10 +85,6 @@ def _make_continuous_observations():
     [
         pytest.param(
             EKFConfig(filter_source="cuthbert"),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
-            ),
             id="discretizer-ekf",
         ),
         pytest.param(
@@ -97,10 +93,6 @@ def _make_continuous_observations():
                 n_particles=8,
                 crn_seed=jr.PRNGKey(41),
             ),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
-            ),
             id="discretizer-enkf",
         ),
         pytest.param(
@@ -108,10 +100,6 @@ def _make_continuous_observations():
                 filter_source="cuthbert",
                 n_particles=16,
                 crn_seed=jr.PRNGKey(41),
-            ),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
             ),
             id="discretizer-pf",
         ),
@@ -141,18 +129,10 @@ def test_plate_vector_initial_mean_continuous_discretizer_filters(filter_config)
                 n_particles=8,
                 crn_seed=jr.PRNGKey(51),
             ),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
-            ),
             id="ct-enkf",
         ),
         pytest.param(
             ContinuousTimeEKFConfig(),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
-            ),
             id="ct-ekf",
         ),
         pytest.param(
@@ -160,18 +140,10 @@ def test_plate_vector_initial_mean_continuous_discretizer_filters(filter_config)
                 n_particles=16,
                 crn_seed=jr.PRNGKey(51),
             ),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
-            ),
             id="ct-pf",
         ),
         pytest.param(
             ContinuousTimeUKFConfig(),
-            marks=pytest.mark.xfail(
-                reason="initial_mean is not broadcast to M trajectories",
-                strict=True,
-            ),
             id="ct-ukf",
         ),
     ],
