@@ -6,6 +6,7 @@ import dataclasses
 from typing import Protocol
 
 import equinox as eqx
+import jax.lax as lax
 import jax.numpy as jnp
 import jax.scipy as jsp
 import numpy as np
@@ -31,7 +32,7 @@ class MissingObservationData:
 
 def prepare_missing_observation_data(obs_values: Array) -> MissingObservationData:
     """Replace NaNs with safe fill values and cache row-level missingness summaries."""
-    obs_mask = jnp.isfinite(obs_values)
+    obs_mask = ~jnp.isnan(obs_values)
     safe_obs = jnp.where(obs_mask, obs_values, jnp.zeros_like(obs_values))
     row_has_any_observed = (
         obs_mask if obs_values.ndim <= 1 else jnp.any(obs_mask, axis=-1)
@@ -136,33 +137,45 @@ class MissingObservationScorer:
         y = self.missing_data.safe_obs[t_idx]
         obs_mask = self.missing_data.obs_mask[t_idx]
         row_has_any_observed = self.missing_data.row_has_any_observed[t_idx]
-        obs_dist = self.observation_model(x=x, u=u, t=t)
 
-        # Scalar-like observations only need the full-row missingness rule.
-        if jnp.ndim(y) == 0 or (jnp.ndim(y) == 1 and y.shape[-1] == 1):
-            lp = obs_dist.log_prob(y)
-            return jnp.where(row_has_any_observed, lp, jnp.zeros_like(lp))
+        def _score_observed(_) -> Array:
+            obs_dist = self.observation_model(x=x, u=u, t=t)
 
-        if isinstance(obs_dist, dist.MultivariateNormal):
-            return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
+            # Scalar-like observations only need the full-row missingness rule.
+            if jnp.ndim(y) == 0 or (jnp.ndim(y) == 1 and y.shape[-1] == 1):
+                return obs_dist.log_prob(y)
 
-        if _is_factorized_independent_distribution(obs_dist):
-            return _masked_independent_log_prob(obs_dist, y, obs_mask)
+            if isinstance(obs_dist, dist.MultivariateNormal):
+                return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
 
-        partial_missing = row_has_any_observed & ~jnp.all(obs_mask)
-        error_msg = (
-            "Partial missingness is currently supported only for "
-            "marginalizable MultivariateNormal observations and "
-            "factorizable Independent(..., 1) observations."
-        )
+            if _is_factorized_independent_distribution(obs_dist):
+                return _masked_independent_log_prob(obs_dist, y, obs_mask)
+
+            partial_missing = ~jnp.all(obs_mask)
+            error_msg = (
+                "Partial missingness is currently supported only for "
+                "marginalizable MultivariateNormal observations and "
+                "factorizable Independent(..., 1) observations."
+            )
+            try:
+                if bool(partial_missing):
+                    raise NotImplementedError(error_msg)
+            except TracerBoolConversionError:
+                _ = eqx.error_if(y, partial_missing, error_msg)
+
+            return obs_dist.log_prob(y)
+
         try:
-            if bool(partial_missing):
-                raise NotImplementedError(error_msg)
+            if not bool(row_has_any_observed):
+                return jnp.zeros((), dtype=y.dtype)
+            return _score_observed(None)
         except TracerBoolConversionError:
-            y = eqx.error_if(y, partial_missing, error_msg)
-
-        lp = obs_dist.log_prob(y)
-        return jnp.where(row_has_any_observed, lp, jnp.zeros_like(lp))
+            return lax.cond(
+                row_has_any_observed,
+                _score_observed,
+                lambda _: jnp.zeros((), dtype=y.dtype),
+                operand=None,
+            )
 
     def materialize_observation(self, t_idx) -> Array:
         """Return the original NaN-preserving observation row."""

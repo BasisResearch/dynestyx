@@ -45,7 +45,16 @@ def test_discrete_no_missing_path_preserves_observation_sample_sites():
         discrete_linear_gaussian_model, obs_times=times, obs_values=obs_values
     )
 
-    assert observation_log_probs(conditioned).shape == (len(times),)
+    y_sites = sorted(
+        name
+        for name in conditioned
+        if name.startswith("f_y_") and not name.endswith("_lp")
+    )
+    assert "f_y_0" in y_sites
+    assert any(name != "f_y_0" for name in y_sites)
+    assert not any(
+        name.endswith("_lp") for name in conditioned if name.startswith("f_y_")
+    )
 
 
 @pytest.mark.parametrize(

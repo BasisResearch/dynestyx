@@ -1098,13 +1098,14 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         if obs_values is not None and not is_dirac_observation:
             missing_data = prepare_missing_observation_data(obs_values)
-            return self._simulate_missing_scan(
-                name,
-                dynamics,
-                times=times,
-                ctrl_values=ctrl_values,
-                missing_data=missing_data,
-            )
+            if missing_data.has_missing:
+                return self._simulate_missing_scan(
+                    name,
+                    dynamics,
+                    times=times,
+                    ctrl_values=ctrl_values,
+                    missing_data=missing_data,
+                )
 
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
@@ -1383,12 +1384,17 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        missing_data = (
+            prepare_missing_observation_data(obs_values)
+            if obs_values is not None and not is_dirac_observation
+            else None
+        )
         scorer = (
             build_missing_observation_scorer(
                 observation_model=dynamics.observation_model,
-                missing_data=prepare_missing_observation_data(obs_values),
+                missing_data=missing_data,
             )
-            if obs_values is not None and not is_dirac_observation
+            if missing_data is not None and missing_data.has_missing
             else None
         )
 
