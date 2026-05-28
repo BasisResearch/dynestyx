@@ -86,10 +86,6 @@ def _make_continuous_observations():
     [
         pytest.param(
             EKFConfig(filter_source="cuthbert"),
-            marks=pytest.mark.xfail(
-                reason="Plate-batched initial means are not yet handled by cuthbert EKF after discretization.",
-                strict=True,
-            ),
             id="discretizer-ekf",
         ),
         pytest.param(
@@ -98,10 +94,6 @@ def _make_continuous_observations():
                 n_particles=8,
                 crn_seed=jr.PRNGKey(41),
             ),
-            marks=pytest.mark.xfail(
-                reason="cuthbert EnKF still receives a plate axis inside the ensemble state for this discretized path.",
-                strict=True,
-            ),
             id="discretizer-enkf",
         ),
         pytest.param(
@@ -109,10 +101,6 @@ def _make_continuous_observations():
                 filter_source="cuthbert",
                 n_particles=16,
                 crn_seed=jr.PRNGKey(41),
-            ),
-            marks=pytest.mark.xfail(
-                reason="cuthbert PF still mismatches batched state and control shapes for this discretized path.",
-                strict=True,
             ),
             id="discretizer-pf",
         ),
@@ -149,10 +137,6 @@ def test_plate_vector_initial_mean_continuous_discretizer_filters(filter_config)
             ContinuousTimeDPFConfig(
                 n_particles=16,
                 crn_seed=jr.PRNGKey(51),
-            ),
-            marks=pytest.mark.xfail(
-                reason="Continuous-time PF does not yet support this plate-batched initial-mean setup.",
-                strict=True,
             ),
             id="ct-pf",
         ),
