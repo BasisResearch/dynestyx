@@ -10,6 +10,7 @@ from tests.missingness.models import (
     INDEPENDENT_SCALE,
     _independent_observation_mean,
     _nonlinear_observation_mean,
+    discrete_dirac_model,
     discrete_independent_normal_model,
     discrete_linear_gaussian_model,
     discrete_nonlinear_gaussian_model,
@@ -160,3 +161,19 @@ def test_discrete_missingness_mcmc_smoke():
         mcmc.run(jr.PRNGKey(2), obs_times=times, obs_values=obs_values)
 
     assert "alpha" in mcmc.get_samples()
+
+
+def test_discrete_dirac_missingness_raises_clear_error():
+    times = jnp.arange(5.0)
+    forward = _run_discrete_trace(discrete_dirac_model, predict_times=times)
+    obs_values = forward["f_observations"]["value"][0]
+    obs_values = set_full_row_missing(obs_values, 2)
+
+    with pytest.raises(
+        ValueError,
+        match="NaN-valued obs_values are not currently supported with "
+        "DiracIdentityObservation under DiscreteTimeSimulator",
+    ):
+        _run_discrete_trace(
+            discrete_dirac_model, obs_times=times, obs_values=obs_values
+        )

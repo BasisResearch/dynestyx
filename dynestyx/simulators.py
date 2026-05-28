@@ -1095,17 +1095,27 @@ class DiscreteTimeSimulator(BaseSimulator):
         is_dirac_observation = isinstance(
             dynamics.observation_model, DiracIdentityObservation
         )
+        missing_data = (
+            prepare_missing_observation_data(obs_values)
+            if obs_values is not None
+            else None
+        )
 
-        if obs_values is not None and not is_dirac_observation:
-            missing_data = prepare_missing_observation_data(obs_values)
-            if missing_data.has_missing:
-                return self._simulate_missing_scan(
-                    name,
-                    dynamics,
-                    times=times,
-                    ctrl_values=ctrl_values,
-                    missing_data=missing_data,
+        if missing_data is not None and missing_data.has_missing:
+            if is_dirac_observation:
+                raise ValueError(
+                    "NaN-valued obs_values are not currently supported with "
+                    "DiracIdentityObservation under DiscreteTimeSimulator. "
+                    "Dirac observations are treated as exact latent-state constraints, "
+                    "so missingness would require a separate marginalization path."
                 )
+            return self._simulate_missing_scan(
+                name,
+                dynamics,
+                times=times,
+                ctrl_values=ctrl_values,
+                missing_data=missing_data,
+            )
 
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 

@@ -6,6 +6,7 @@ import numpyro.distributions as dist
 import dynestyx as dsx
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
     DynamicalModel,
     GaussianObservation,
     GaussianStateEvolution,
@@ -118,6 +119,28 @@ def sampled_discrete_linear_gaussian_model(
         ),
         state_evolution=LinearGaussianStateEvolution(A=A, cov=DISCRETE_Q),
         observation_model=LinearGaussianObservation(H=jnp.eye(2), R=GAUSSIAN_R),
+    )
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
+
+
+def discrete_dirac_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+):
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(2), covariance_matrix=0.5 * jnp.eye(2)
+        ),
+        state_evolution=LinearGaussianStateEvolution(A=DISCRETE_A, cov=DISCRETE_Q),
+        observation_model=DiracIdentityObservation(),
     )
     dsx.sample(
         "f",
