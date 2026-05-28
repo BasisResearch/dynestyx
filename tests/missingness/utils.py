@@ -61,23 +61,17 @@ def factor_log_prob(trace, name):
 
 
 def observation_site_names(trace, *, prefix="f_y"):
-    return sorted(
+    return [
         name for name in trace if name.startswith(prefix) and not name.endswith("_lp")
-    )
+    ]
 
 
 def observation_log_probs(trace, *, prefix="f_y"):
-    pieces = []
-    scalar_name = f"{prefix}_0_lp"
-    if scalar_name in trace:
-        pieces.append(jnp.atleast_1d(factor_log_prob(trace, scalar_name)))
-
-    scan_names = sorted(
-        name
+    pieces = [
+        jnp.ravel(factor_log_prob(trace, name))
         for name in trace
-        if name.startswith(prefix) and name.endswith("_lp") and name != scalar_name
-    )
-    pieces.extend(jnp.ravel(factor_log_prob(trace, name)) for name in scan_names)
+        if name.startswith(prefix) and name.endswith("_lp")
+    ]
 
     if not pieces:
         raise KeyError(f"No observation log-prob sites found for prefix {prefix!r}.")
