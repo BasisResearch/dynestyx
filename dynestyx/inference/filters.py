@@ -354,7 +354,10 @@ class Filter(BaseLogFactorAdder):
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             elif isinstance(config, HMMConfigs):
                 register_hmm_filter_sites(
-                    site_name, marginal_loglik, states, cast(HMMConfig, config)
+                    site_name,
+                    marginal_loglik,
+                    cast(jax.Array, states),
+                    cast(HMMConfig, config),
                 )
             else:
                 register_filter_sites(site_name, marginal_loglik, states, config)
