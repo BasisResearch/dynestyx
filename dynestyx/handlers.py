@@ -305,9 +305,8 @@ class plate(ObjectInterpretation):
     Sharp edges:
         - **Drift/diffusion must be sliceable pytrees.** Plated parameters must be
           stored as array fields of an ``eqx.Module``, not captured in a Python
-          closure. A closure-captured variable is invisible to pytree flattening and
-          will not be sliced per member, causing the drift to emit a plate-shaped
-          output for a single member. The built-in components (``AffineDrift``,
+          closure. A closure-captured variable is invisible to pytree munging,
+          and can introduce shape errors. The built-in components (``AffineDrift``,
           ``LTI_continuous``, ``FullDiffusion``, etc.) follow this rule. See the
           hierarchical inference tutorial (``08_hierarchical_inference.ipynb``) for
           the full sharp-edges list including event-shape vs. sample-shape rules and
