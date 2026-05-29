@@ -37,7 +37,11 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
-from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
+from dynestyx.inference.plate_utils import (
+    _array_plate_axis,
+    _make_plate_in_axes,
+    _slice_dist_for_plate_member,
+)
 from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
     ContinuousTimeEKFSmootherConfig,
@@ -51,6 +55,7 @@ from dynestyx.inference.smoother_configs import (
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _dist_has_plate_batch_dims
 
 DiscreteSmootherConfig = (
     KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
@@ -395,22 +400,59 @@ class Smoother(BaseSmootherLogFactorAdder):
             ctrl_values=ctrl_values,
         )
         k_axis = 0 if keys is not None else None
+        base_axes = (dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis)
 
-        vmapped = compute_output
-        for _ in plate_shapes:
-            vmapped = jax.vmap(
-                vmapped,
-                in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
-            )
-
-        outputs = vmapped(
-            dynamics,
-            obs_times,
-            obs_values,
-            ctrl_times,
-            ctrl_values,
-            keys,
+        # A plate-batched ``initial_condition`` cannot be sliced by vmap (numpyro
+        # keeps ``batch_shape`` in static aux-data). Thread a per-plate-member index
+        # through the nested vmap and rebuild the member's initial condition from the
+        # clean original. See ``Filter._add_log_factors_batched`` for details.
+        ic_batched = _dist_has_plate_batch_dims(
+            dynamics.initial_condition, plate_shapes
         )
+
+        if ic_batched:
+            orig_ic = dynamics.initial_condition
+
+            def compute_output_member(dyn, ot, ov, ct, cv, k, *idxs):
+                member_ic = _slice_dist_for_plate_member(
+                    orig_ic, plate_shapes, tuple(idxs)
+                )
+                dyn = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    dyn,
+                    member_ic,
+                    is_leaf=lambda x: x is None,
+                )
+                return compute_output(dyn, ot, ov, ct, cv, k)
+
+            idx_arrays = [jnp.arange(s) for s in plate_shapes]
+            n_plates = len(plate_shapes)
+            vmapped = compute_output_member
+            for w in range(n_plates):
+                d = n_plates - 1 - w
+                idx_axes = tuple(0 if j == d else None for j in range(n_plates))
+                vmapped = jax.vmap(vmapped, in_axes=(*base_axes, *idx_axes))
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+                *idx_arrays,
+            )
+        else:
+            vmapped = compute_output
+            for _ in plate_shapes:
+                vmapped = jax.vmap(vmapped, in_axes=base_axes)
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+            )
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik

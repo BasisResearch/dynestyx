@@ -2,6 +2,7 @@ import dataclasses
 import math
 from typing import cast
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -56,9 +57,14 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
+from dynestyx.inference.plate_utils import (
+    _array_plate_axis,
+    _make_plate_in_axes,
+    _slice_dist_for_plate_member,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _dist_has_plate_batch_dims
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -420,24 +426,65 @@ class Filter(BaseLogFactorAdder):
             ctrl_values=ctrl_values,
         )
         k_axis = 0 if keys is not None else None
+        base_axes = (dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis)
+
+        # A plate-batched ``initial_condition`` cannot be sliced by vmap: numpyro
+        # keeps ``batch_shape`` in static aux-data, so a vmap-sliced distribution
+        # has a stale batch shape and its ``.mean``/``.sample``/``.log_prob``
+        # re-expand to the full plate shape. Instead, thread a per-plate-member
+        # index through the nested vmap and rebuild the member's initial condition
+        # from the clean original (same reconstruction the simulator uses).
+        ic_batched = _dist_has_plate_batch_dims(
+            dynamics.initial_condition, plate_shapes
+        )
 
         # Nest vmap for each plate dimension.
         # TODO: Allow for partial plate dimensions here.
-        vmapped = compute_output
-        for _ in plate_shapes:
-            vmapped = jax.vmap(
-                vmapped,
-                in_axes=(dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis),
-            )
+        if ic_batched:
+            orig_ic = dynamics.initial_condition
 
-        outputs = vmapped(
-            dynamics,
-            obs_times,
-            obs_values,
-            ctrl_times,
-            ctrl_values,
-            keys,
-        )
+            def compute_output_member(dyn, ot, ov, ct, cv, k, *idxs):
+                member_ic = _slice_dist_for_plate_member(
+                    orig_ic, plate_shapes, tuple(idxs)
+                )
+                dyn = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    dyn,
+                    member_ic,
+                    is_leaf=lambda x: x is None,
+                )
+                return compute_output(dyn, ot, ov, ct, cv, k)
+
+            idx_arrays = [jnp.arange(s) for s in plate_shapes]
+            n_plates = len(plate_shapes)
+            vmapped = compute_output_member
+            # Wrap w (innermost-first) maps plate dim d = n_plates - 1 - w, so the
+            # index array for that dim is mapped on axis 0 only at that level.
+            for w in range(n_plates):
+                d = n_plates - 1 - w
+                idx_axes = tuple(0 if j == d else None for j in range(n_plates))
+                vmapped = jax.vmap(vmapped, in_axes=(*base_axes, *idx_axes))
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+                *idx_arrays,
+            )
+        else:
+            vmapped = compute_output
+            for _ in plate_shapes:
+                vmapped = jax.vmap(vmapped, in_axes=base_axes)
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+            )
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
