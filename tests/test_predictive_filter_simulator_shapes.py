@@ -32,6 +32,7 @@ from tests.models import (
     discrete_time_lti_simplified_model,
     jumpy_controls_model_ode,
 )
+from tests.test_utils import assert_tree_all_finite
 
 
 def _gen_obs_sde(source: Literal["diffrax", "em_scan"]):
@@ -123,6 +124,14 @@ def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim, source):
     pred_states = samples["f_predicted_states"]
     pred_times = samples["f_predicted_times"]
     filtered_means = samples["f_filtered_states_mean"]
+    assert_tree_all_finite(
+        {
+            "predicted_states": pred_states,
+            "predicted_times": pred_times,
+            "filtered_states_mean": filtered_means,
+        },
+        where="predictive SDE samples",
+    )
 
     # Always (num_samples, n_sim, T, state_dim) for consistent shaping
     expected_T = len(predict_times)
@@ -159,6 +168,14 @@ def test_predictive_filter_discretetimesimulator_shapes(num_samples, n_sim):
     pred_states = samples["f_predicted_states"]
     pred_times = samples["f_predicted_times"]
     filtered_means = samples["f_filtered_states_mean"]
+    assert_tree_all_finite(
+        {
+            "predicted_states": pred_states,
+            "predicted_times": pred_times,
+            "filtered_states_mean": filtered_means,
+        },
+        where="predictive discrete samples",
+    )
 
     # Always (num_samples, n_sim, T, state_dim) for consistent shaping
     expected_T = len(predict_times)
@@ -201,6 +218,14 @@ def test_predictive_filter_odesimulator_shapes(num_samples, n_sim):
     pred_states = samples["f_predicted_states"]
     pred_times = samples["f_predicted_times"]
     filtered_means = samples["f_filtered_states_mean"]
+    assert_tree_all_finite(
+        {
+            "predicted_states": pred_states,
+            "predicted_times": pred_times,
+            "filtered_states_mean": filtered_means,
+        },
+        where="predictive ODE samples",
+    )
 
     # Always (num_samples, n_sim, T, state_dim) for consistent shaping
     assert pred_states.shape == (num_samples, n_sim, len(predict_times), state_dim)
@@ -251,6 +276,10 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
     # For future-only rollout, only one segment should be simulated.
     x0_keys = [k for k in samples if re.fullmatch(r"f_\d+_x_0", k)]
     assert len(x0_keys) == 1
+    assert_tree_all_finite(
+        {"predicted_states": samples["f_predicted_states"]},
+        where="future-only rollout samples",
+    )
 
     # Keep a shape assertion in the same scenario (num_samples > 1, n_sim > 1).
     assert samples["f_predicted_states"].shape == (2, 2, len(predict_times), 2)
@@ -269,6 +298,14 @@ def test_predictive_simulator_only_times_has_n_sim_axis_sde(num_samples, n_sim):
     )
     with SDESimulator(n_simulations=n_sim):
         samples = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    assert_tree_all_finite(
+        {
+            "times": samples["f_times"],
+            "states": samples["f_states"],
+            "observations": samples["f_observations"],
+        },
+        where="simulator-only SDE samples",
+    )
     assert samples["f_times"].shape == (num_samples, n_sim, len(predict_times))
     assert samples["f_states"].shape[0:3] == (num_samples, n_sim, len(predict_times))
     assert samples["f_observations"].shape[0:3] == (
@@ -291,6 +328,14 @@ def test_predictive_simulator_only_times_has_n_sim_axis_discrete(num_samples, n_
     )
     with DiscreteTimeSimulator(n_simulations=n_sim):
         samples = predictive(jr.PRNGKey(0), predict_times=predict_times)
+    assert_tree_all_finite(
+        {
+            "times": samples["f_times"],
+            "states": samples["f_states"],
+            "observations": samples["f_observations"],
+        },
+        where="simulator-only discrete samples",
+    )
     assert samples["f_times"].shape == (num_samples, n_sim, len(predict_times))
     assert samples["f_states"].shape[0:3] == (num_samples, n_sim, len(predict_times))
     assert samples["f_observations"].shape[0:3] == (
@@ -322,6 +367,14 @@ def test_predictive_simulator_only_times_has_n_sim_axis_ode(num_samples, n_sim):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
+    assert_tree_all_finite(
+        {
+            "times": samples["f_times"],
+            "states": samples["f_states"],
+            "observations": samples["f_observations"],
+        },
+        where="simulator-only ODE samples",
+    )
     assert samples["f_times"].shape == (num_samples, n_sim, len(predict_times))
     assert samples["f_states"].shape[0:3] == (num_samples, n_sim, len(predict_times))
     assert samples["f_observations"].shape[0:3] == (

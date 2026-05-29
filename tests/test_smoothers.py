@@ -39,6 +39,10 @@ from tests.models import (
     discrete_time_lti_simplified_model,
     jumpy_controls_model_ode,
 )
+from tests.test_utils import (
+    assert_trace_sites_exist_and_field_all_finite,
+    assert_tree_all_finite,
+)
 
 
 def _gen_obs_discrete():
@@ -117,10 +121,24 @@ def test_compute_cuthbert_smoother_returns_observation_aligned_states(
     )
 
     assert jnp.ndim(marginal_loglik) == 0
+    assert_tree_all_finite(
+        {"marginal_loglik": marginal_loglik}, where="smoother output"
+    )
     if isinstance(smoother_config, PFSmootherConfig):
+        assert_tree_all_finite(
+            {
+                "particles": states.particles,
+                "log_weights": states.log_weights,
+            },
+            where="PF smoother states",
+        )
         assert states.particles.shape[0] == len(obs_times)
         assert states.log_weights.shape[0] == len(obs_times)
     else:
+        assert_tree_all_finite(
+            {"mean": states.mean, "chol_cov": states.chol_cov},
+            where="Gaussian smoother states",
+        )
         assert states.mean.shape[0] == len(obs_times)
         assert states.chol_cov.shape[0] == len(obs_times)
 
@@ -153,6 +171,15 @@ def test_predictive_smoother_discretetimesimulator_shapes():
     assert samples["f_predicted_times"].shape == (2, 2, len(predict_times))
     assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 2)
     assert samples["f_smoothed_states_cov_diag"].shape == (2, len(obs_times), 2)
+    assert_tree_all_finite(
+        {
+            "predicted_states": samples["f_predicted_states"],
+            "predicted_times": samples["f_predicted_times"],
+            "smoothed_states_mean": samples["f_smoothed_states_mean"],
+            "smoothed_states_cov_diag": samples["f_smoothed_states_cov_diag"],
+        },
+        where="predictive discrete smoother samples",
+    )
     x0_keys = [k for k in samples if k.endswith("_x_0")]
     assert "f_1_x_0" in x0_keys
     assert "f_6_x_0" not in x0_keys
@@ -185,6 +212,14 @@ def test_predictive_smoother_odesimulator_shapes():
     assert samples["f_predicted_states"].shape == (2, 2, len(predict_times), 1)
     assert samples["f_predicted_times"].shape == (2, 2, len(predict_times))
     assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 1)
+    assert_tree_all_finite(
+        {
+            "predicted_states": samples["f_predicted_states"],
+            "predicted_times": samples["f_predicted_times"],
+            "smoothed_states_mean": samples["f_smoothed_states_mean"],
+        },
+        where="predictive ODE smoother samples",
+    )
 
 
 @pytest.mark.parametrize(
@@ -471,6 +506,11 @@ def test_smoother_plate_batched_loglik_shape():
                 m=m,
             )
 
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_marginal_loglik",
+        where="plate smoother trace",
+    )
     assert tr["f_marginal_loglik"]["value"].shape == (m,)
 
 
@@ -489,6 +529,13 @@ def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout
                         M=3,
                     )
 
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_marginal_loglik",
+        "f_predicted_times",
+        "f_predicted_states",
+        where="discretized plate smoother trace",
+    )
     assert tr["f_marginal_loglik"]["value"].shape == (3,)
     assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
     assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
@@ -508,6 +555,13 @@ def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
                     M=3,
                 )
 
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_marginal_loglik",
+        "f_predicted_times",
+        "f_predicted_states",
+        where="continuous plate smoother trace",
+    )
     assert tr["f_marginal_loglik"]["value"].shape == (3,)
     assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
     assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
