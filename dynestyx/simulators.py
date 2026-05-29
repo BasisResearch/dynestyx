@@ -20,15 +20,15 @@ from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
-from dynestyx.inference.integrations.utils import WeightedParticles
+from dynestyx.inference.plate_utils import (
+    _slice_array_for_plate_member,
+    _slice_dist_for_plate_member,
+)
 from dynestyx.internal.observation_missingness import (
     MissingObservationData,
     MissingObservationScorer,
     build_missing_observation_scorer,
     prepare_missing_observation_data,
-from dynestyx.inference.plate_utils import (
-    _slice_array_for_plate_member,
-    _slice_dist_for_plate_member,
 )
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
