@@ -3,7 +3,7 @@ import numpyro.distributions as dist
 import pytest
 
 from dynestyx.internal.observation_missingness import (
-    MissingObservationLogPotential,
+    ObservationLogPotential,
     _masked_multivariate_normal_log_prob,
 )
 from dynestyx.models import DynamicalModel, LinearGaussianObservation
@@ -34,7 +34,7 @@ def _build_scalar_dynamics(observation_model):
     )
 
 
-def test_missing_observation_log_potential_init_tracks_partial_and_full_row_missingness():
+def test_observation_log_potential_init_tracks_partial_and_full_row_missingness():
     obs_values = jnp.array(
         [
             [1.0, 2.0],
@@ -43,7 +43,7 @@ def test_missing_observation_log_potential_init_tracks_partial_and_full_row_miss
         ]
     )
 
-    log_potential = MissingObservationLogPotential(
+    log_potential = ObservationLogPotential(
         dynamics=_build_vector_dynamics(
             lambda x, u, t: dist.MultivariateNormal(
                 jnp.zeros(2), covariance_matrix=jnp.eye(2)
@@ -89,9 +89,9 @@ def test_masked_independent_distribution_matches_manual_subset_formula():
     assert jnp.allclose(actual, expected)
 
 
-def test_missing_observation_log_potential_scalar_rows_zero_out_full_missing_steps():
+def test_observation_log_potential_scalar_rows_zero_out_full_missing_steps():
     obs_values = jnp.array([jnp.nan, 1.25])
-    log_potential = MissingObservationLogPotential(
+    log_potential = ObservationLogPotential(
         dynamics=_build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
         obs_values=obs_values,
     )
@@ -110,19 +110,19 @@ def test_missing_observation_log_potential_scalar_rows_zero_out_full_missing_ste
     )
 
 
-def test_missing_observation_log_potential_partial_missing_unsupported_distribution_raises_at_init():
+def test_observation_log_potential_partial_missing_unsupported_distribution_raises_at_init():
     obs_values = jnp.array([[1.0, jnp.nan]])
     with pytest.raises(
         NotImplementedError,
         match="Partial missingness currently requires",
     ):
-        MissingObservationLogPotential(
+        ObservationLogPotential(
             dynamics=_build_vector_dynamics(lambda x, u, t: dist.Delta(x, event_dim=1)),
             obs_values=obs_values,
         )
 
 
-def test_missing_observation_log_potential_can_fail_late_if_distribution_type_changes():
+def test_observation_log_potential_can_fail_late_if_distribution_type_changes():
     obs_values = jnp.array([[1.0, jnp.nan], [1.0, jnp.nan]])
 
     def observation_model(x, u, t):
@@ -130,7 +130,7 @@ def test_missing_observation_log_potential_can_fail_late_if_distribution_type_ch
             return dist.MultivariateNormal(x, covariance_matrix=GAUSSIAN_R)
         return dist.Delta(x, event_dim=1)
 
-    log_potential = MissingObservationLogPotential(
+    log_potential = ObservationLogPotential(
         dynamics=_build_vector_dynamics(observation_model),
         obs_values=obs_values,
     )
@@ -144,9 +144,9 @@ def test_missing_observation_log_potential_can_fail_late_if_distribution_type_ch
         )
 
 
-def test_missing_observation_log_potential_linear_gaussian_matches_manual_reference():
+def test_observation_log_potential_linear_gaussian_matches_manual_reference():
     obs_values = jnp.array([[jnp.nan, 0.2]])
-    log_potential = MissingObservationLogPotential(
+    log_potential = ObservationLogPotential(
         dynamics=_build_vector_dynamics(
             LinearGaussianObservation(H=jnp.eye(2), R=GAUSSIAN_R)
         ),

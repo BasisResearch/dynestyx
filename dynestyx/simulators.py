@@ -25,7 +25,7 @@ from dynestyx.inference.plate_utils import (
     _slice_dist_for_plate_member,
 )
 from dynestyx.internal.observation_missingness import (
-    MissingObservationLogPotential,
+    ObservationLogPotential,
 )
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
@@ -606,14 +606,14 @@ def _emit_observations(
         return observations
 
 
-def _apply_missing_observation_log_potential(
+def _apply_observation_log_potential(
     name: str,
     states: Array,
     times: Array,
-    log_potential: MissingObservationLogPotential,
+    log_potential: ObservationLogPotential,
     control_path_eval: Callable[[Array], Array | None],
 ) -> Array:
-    """Apply masked-observation log-potentials and preserve NaNs in outputs."""
+    """Apply observation log-potentials and preserve NaNs in outputs."""
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     T = len(times)
 
@@ -894,7 +894,7 @@ class DiscreteTimeSimulator(BaseSimulator):
     ) -> dict[str, Array]:
         """Sequential latent-state scan for conditioned observations via log-potentials."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
-        log_potential = MissingObservationLogPotential(
+        log_potential = ObservationLogPotential(
             dynamics=dynamics,
             obs_values=obs_values,
         )
@@ -962,7 +962,8 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         Creates NumPyro sample sites for the initial condition (`"x_0"`), subsequent
         states (`"x_1"`, ...), and observations (`"y_0"`, ...). If `obs_values` is
-        provided, observation sites are conditioned via `obs=...`.
+        provided for a non-Dirac observation model, conditioning is handled via
+        per-step log-potential factors rather than `obs=...` sample sites.
 
         Notes:
             - For `DiracIdentityObservation` with provided `obs_values`, the latent
@@ -1131,7 +1132,7 @@ class DiscreteTimeSimulator(BaseSimulator):
                 "observations": _ensure_trailing_dim(observations),
             }
 
-        # Default: scan over time (n_simulations == 1)...allows for obs= conditioning.
+        # Default forward-simulation scan (n_simulations == 1).
         with numpyro.plate(f"{name}_n_simulations", 1):
             x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
                 f"{name}_x_0", dynamics.initial_condition
@@ -1266,8 +1267,9 @@ class ODESimulator(BaseSimulator):
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `DeterministicContinuousTimeStateEvolution`.
             obs_times: Times at which to save the latent state and emit observations.
-            obs_values: Optional observation array. If provided, observation sites are
-                conditioned via `obs=obs_values[i]`.
+            obs_values: Optional observation array. If provided for a non-Dirac
+                observation model, conditioning is handled via per-step
+                log-potential factors.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Used when obs_times is None (e.g. from Filter).
@@ -1293,7 +1295,7 @@ class ODESimulator(BaseSimulator):
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
         log_potential = (
-            MissingObservationLogPotential(
+            ObservationLogPotential(
                 dynamics=dynamics,
                 obs_values=obs_values,
             )
@@ -1312,7 +1314,7 @@ class ODESimulator(BaseSimulator):
                 self.diffeqsolve_settings,
             )
             if log_potential is not None:
-                observations = _apply_missing_observation_log_potential(
+                observations = _apply_observation_log_potential(
                     name,
                     states,
                     times,
@@ -1333,8 +1335,6 @@ class ODESimulator(BaseSimulator):
 
         if obs_values is not None:
             # Conditioning mode (n_sim must be 1 due to guard above).
-            # Uses numpyro.sample per observation site unless missingness requires
-            # factor-scored masked likelihoods.
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
             x0_arr: Array = jnp.asarray(x0)[0]

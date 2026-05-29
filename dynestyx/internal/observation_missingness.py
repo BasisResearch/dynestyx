@@ -1,4 +1,4 @@
-"""Internal helpers for missing-observation log-potentials under simulator inference."""
+"""Internal helpers for conditioned observation log-potentials under simulator inference."""
 
 from __future__ import annotations
 
@@ -39,8 +39,8 @@ def _masked_multivariate_normal_log_prob(
 
 
 @dataclasses.dataclass
-class MissingObservationLogPotential:
-    """Evaluate missing-observation log-potentials and preserve NaNs in outputs."""
+class ObservationLogPotential:
+    """Evaluate conditioned observation log-potentials and preserve NaNs in outputs."""
 
     dynamics: DynamicalModel
     obs_values: Array
@@ -141,7 +141,7 @@ class MissingObservationLogPotential:
         """Return log p(y_{obs} | x, u, t) at a single observation index."""
         if self.distribution_mode == "uninitialized":
             raise RuntimeError(
-                "MissingObservationLogPotential must be configured with an initial "
+                "ObservationLogPotential must be configured with an initial "
                 "observation distribution before log_potential_step is used."
             )
 
