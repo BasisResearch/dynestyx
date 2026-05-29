@@ -1,10 +1,12 @@
 """Plate-aware continuous model built from explicit drift and diffusion pieces."""
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 import pytest
+from jax import Array
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
@@ -26,6 +28,26 @@ from dynestyx.models import (
     LinearGaussianObservation,
     ScalarDiffusion,
 )
+
+
+class _AlphaDrift(eqx.Module):
+    """Continuous-time drift whose (possibly plated) parameter is a module field.
+
+    Storing ``alpha`` as an array field (instead of capturing it in a closure)
+    makes it a sliceable pytree leaf, so plate machinery can give each trajectory
+    its own ``alpha`` during both simulation and filtering. A closure capture would
+    leak the plate axis into single-member computations. See the hierarchical
+    tutorial's "sharp edges" section.
+    """
+
+    alpha: Array
+
+    def __call__(self, x, u, t):
+        x0 = x[..., 0]
+        x1 = x[..., 1]
+        first = -self.alpha * x0 + 0.1 * x1
+        second = -0.05 * x0 - 0.6 * x1
+        return jnp.stack([first, second], axis=-1)
 
 
 def _make_diffusion(diffusion_form, sigma):
@@ -80,13 +102,7 @@ def _manual_plate_vector_initial_mean_continuous_model(
             else numpyro.sample("sigma", dist.Uniform(0.15, 0.25))
         )
 
-        def drift(x, u, t):
-            x0 = x[..., 0]
-            x1 = x[..., 1]
-            lead_shape = jnp.broadcast_shapes(jnp.shape(alpha), jnp.shape(x0))
-            first = -alpha * x0 + 0.1 * x1
-            second = jnp.broadcast_to(-0.05 * x0 - 0.6 * x1, lead_shape)
-            return jnp.stack([first, second], axis=-1)
+        drift = _AlphaDrift(alpha=alpha)
 
         dynamics = DynamicalModel(
             control_dim=0,
@@ -148,14 +164,6 @@ def _make_shared_shared_continuous_observations(diffusion_form):
         pytest.param("shared", id="shared"),
         pytest.param(
             "plated",
-            marks=pytest.mark.xfail(
-                reason=(
-                    "Explicit continuous-time drift callables still return "
-                    "plate-batched values during single-member simulation when "
-                    "the drift parameter alpha is plated."
-                ),
-                strict=True,
-            ),
             id="plated",
         ),
     ],
@@ -237,14 +245,6 @@ def test_manual_continuous_model_shared_parameters_ct_enkf_shapes(diffusion_form
     [
         pytest.param(
             EKFConfig(filter_source="cuthbert"),
-            marks=pytest.mark.xfail(
-                reason=(
-                    "The hand-written drift/diffusion model still hits the same "
-                    "cuthbert EKF batched-initial-mean reshape bug after "
-                    "discretization."
-                ),
-                strict=True,
-            ),
             id="discretizer-ekf",
         ),
         pytest.param(
@@ -253,13 +253,6 @@ def test_manual_continuous_model_shared_parameters_ct_enkf_shapes(diffusion_form
                 n_particles=8,
                 crn_seed=jr.PRNGKey(81),
             ),
-            marks=pytest.mark.xfail(
-                reason=(
-                    "The hand-written drift/diffusion model still hits the same "
-                    "cuthbert EnKF plate-axis bug after discretization."
-                ),
-                strict=True,
-            ),
             id="discretizer-enkf",
         ),
         pytest.param(
@@ -267,14 +260,6 @@ def test_manual_continuous_model_shared_parameters_ct_enkf_shapes(diffusion_form
                 filter_source="cuthbert",
                 n_particles=16,
                 crn_seed=jr.PRNGKey(81),
-            ),
-            marks=pytest.mark.xfail(
-                reason=(
-                    "The hand-written drift/diffusion model still hits the same "
-                    "cuthbert PF batched state/control mismatch after "
-                    "discretization."
-                ),
-                strict=True,
             ),
             id="discretizer-pf",
         ),
@@ -317,13 +302,6 @@ def test_manual_continuous_model_shared_parameters_discretizer_filters(
             ContinuousTimeDPFConfig(
                 n_particles=16,
                 crn_seed=jr.PRNGKey(91),
-            ),
-            marks=pytest.mark.xfail(
-                reason=(
-                    "The hand-written drift/diffusion model still triggers the "
-                    "continuous-time PF batched solver-compatibility bug."
-                ),
-                strict=True,
             ),
             id="ct-pf",
         ),

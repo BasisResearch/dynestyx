@@ -127,6 +127,11 @@ def _path_field_names(path) -> tuple[str, ...]:
 def _is_known_vector_field(path) -> bool:
     """Return True for built-in leaves whose final axis is a vector event axis."""
     names = _path_field_names(path)
+    # `Discretizer` wraps the original continuous-time evolution in a `cte` field
+    # of `EulerMaruyamaGaussianStateEvolution`, so a drift bias that lived at
+    # `state_evolution.drift.b` moves to `state_evolution.cte.drift.b`. Drop that
+    # internal wrapper segment so the same whitelist matches discretized models.
+    names = tuple(name for name in names if name != "cte")
     if len(names) >= 2 and names[-2:] in {
         ("state_evolution", "bias"),
         ("observation_model", "bias"),

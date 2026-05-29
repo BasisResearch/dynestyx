@@ -1,6 +1,7 @@
 import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
+import numpyro
 import numpyro.distributions as dist
 import pytest
 from jaxtyping import TypeCheckError
@@ -8,7 +9,14 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
-from dynestyx import DiscreteTimeSimulator, ODESimulator, Simulator, Smoother
+from dynestyx import (
+    DiscreteTimeSimulator,
+    Discretizer,
+    ODESimulator,
+    SDESimulator,
+    Simulator,
+    Smoother,
+)
 from dynestyx.inference.filter_configs import (
     ContinuousTimeEnKFConfig,
     EnKFConfig,
@@ -391,6 +399,64 @@ def _plate_discrete_model(obs_times=None, obs_values=None, predict_times=None, m
         )
 
 
+def _plate_vector_initial_mean_continuous_model(
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+    M=3,
+):
+    state_dim = 2
+    L = 0.20 * jnp.eye(state_dim)
+    H = jnp.eye(state_dim)
+    R = (0.08**2) * jnp.eye(state_dim)
+
+    with dsx.plate("trajectories", M):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+        A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
+        A = jnp.broadcast_to(A_base, (M, state_dim, state_dim)).copy()
+        A = A.at[:, 0, 0].set(-alpha)
+        mu_0_i = jnp.broadcast_to(jnp.array([0.1, 0.05]), (M, state_dim))
+
+        dynamics = dsx.LTI_continuous(
+            A=A,
+            L=L,
+            H=H,
+            R=R,
+            initial_mean=mu_0_i,
+            initial_cov=0.15 * jnp.eye(state_dim),
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+
+def _make_plate_vector_discretized_observations():
+    obs_times = jnp.arange(6.0)
+    with DiscreteTimeSimulator():
+        with Discretizer():
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(40)):
+                _plate_vector_initial_mean_continuous_model(
+                    predict_times=obs_times,
+                    M=3,
+                )
+    return obs_times, tr["f_observations"]["value"][:, 0]
+
+
+def _make_plate_vector_continuous_observations():
+    obs_times = jnp.linspace(0.0, 0.5, 6)
+    with SDESimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(50)):
+            _plate_vector_initial_mean_continuous_model(
+                predict_times=obs_times,
+                M=3,
+            )
+    return obs_times, tr["f_observations"]["value"][:, 0]
+
+
 def test_smoother_plate_batched_loglik_shape():
     obs_times = jnp.arange(0.0, 5.0, 1.0)
     m = 3
@@ -406,6 +472,45 @@ def test_smoother_plate_batched_loglik_shape():
             )
 
     assert tr["f_marginal_loglik"]["value"].shape == (m,)
+
+
+def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout():
+    obs_times, obs_values = _make_plate_vector_discretized_observations()
+    predict_times = jnp.arange(obs_times[-1], obs_times[-1] + 2.0, 1.0)
+
+    with DiscreteTimeSimulator():
+        with Smoother(smoother_config=EKFSmootherConfig(filter_source="cuthbert")):
+            with Discretizer():
+                with trace() as tr, seed(rng_seed=jr.PRNGKey(42)):
+                    _plate_vector_initial_mean_continuous_model(
+                        obs_times=obs_times,
+                        obs_values=obs_values,
+                        predict_times=predict_times,
+                        M=3,
+                    )
+
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
+    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
+
+
+def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
+    obs_times, obs_values = _make_plate_vector_continuous_observations()
+    predict_times = jnp.linspace(obs_times[-1], 0.8, 4)
+
+    with SDESimulator():
+        with Smoother(smoother_config=ContinuousTimeEKFSmootherConfig()):
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(52)):
+                _plate_vector_initial_mean_continuous_model(
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=predict_times,
+                    M=3,
+                )
+
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
+    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
 
 
 def _explicit_rollout_metadata_model(predict_times=None):
