@@ -1,9 +1,9 @@
-"""Internal helpers for scoring missing observations under simulator inference."""
+"""Internal helpers for missing-observation log-potentials under simulator inference."""
 
 from __future__ import annotations
 
 import dataclasses
-from typing import Protocol
+from collections.abc import Callable
 
 import equinox as eqx
 import jax.lax as lax
@@ -15,63 +15,6 @@ from jax import Array
 from jax.errors import TracerArrayConversionError, TracerBoolConversionError
 
 LOG_2PI = jnp.log(2.0 * jnp.pi)
-
-
-@dataclasses.dataclass(frozen=True)
-class MissingObservationData:
-    """Preprocessed observation array with NaN-aware masks and cached summaries."""
-
-    obs_values: Array
-    safe_obs: Array
-    obs_mask: Array
-    row_has_any_observed: Array
-    has_missing: bool
-    has_partial_missing: bool
-    has_fully_missing_rows: bool
-
-
-def prepare_missing_observation_data(obs_values: Array) -> MissingObservationData:
-    """Replace NaNs with safe fill values and cache row-level missingness summaries."""
-    obs_mask = ~jnp.isnan(obs_values)
-    safe_obs = jnp.where(obs_mask, obs_values, jnp.zeros_like(obs_values))
-    row_has_any_observed = (
-        obs_mask if obs_values.ndim <= 1 else jnp.any(obs_mask, axis=-1)
-    )
-
-    try:
-        obs_mask_host = np.asarray(obs_mask)
-    except TracerArrayConversionError:
-        obs_mask_host = None
-
-    if obs_values.ndim <= 1:
-        has_partial_missing = False
-        has_fully_missing_rows = (
-            bool((~obs_mask_host).any()) if obs_mask_host is not None else True
-        )
-    else:
-        if obs_mask_host is not None:
-            row_has_any_host = obs_mask_host.any(axis=-1)
-            row_has_all_host = obs_mask_host.all(axis=-1)
-            row_has_any_observed = jnp.asarray(row_has_any_host)
-            has_partial_missing = bool((row_has_any_host & ~row_has_all_host).any())
-            has_fully_missing_rows = bool((~row_has_any_host).any())
-        else:
-            has_partial_missing = obs_values.shape[-1] > 1
-            has_fully_missing_rows = False
-
-    try:
-        has_missing = bool(np.isnan(np.asarray(obs_values)).any())
-    except TracerArrayConversionError:
-        has_missing = False
-    return MissingObservationData(
-        obs_values=obs_values,
-        safe_obs=safe_obs,
-        obs_mask=obs_mask,
-        row_has_any_observed=row_has_any_observed,
-        has_missing=has_missing,
-        has_partial_missing=has_partial_missing,
-        has_fully_missing_rows=has_fully_missing_rows,
-    )
 
 
 def _masked_independent_log_prob(
@@ -113,32 +56,67 @@ def _masked_multivariate_normal_log_prob(
     return -0.5 * (quad + logdet + n_obs * LOG_2PI)
 
 
-def _is_factorized_independent_distribution(obs_dist: dist.Distribution) -> bool:
-    return isinstance(obs_dist, dist.Independent) and (
-        obs_dist.reinterpreted_batch_ndims == 1
-    )
-
-
-class MissingObservationModel(Protocol):
-    """Protocol for observation callables accepted by the missingness scorer."""
-
-    def __call__(self, x, u, t) -> dist.Distribution: ...
-
-
 @dataclasses.dataclass
-class MissingObservationScorer:
-    """Score only observed coordinates while preserving NaNs in outputs."""
+class MissingObservationLogPotential:
+    """Evaluate missing-observation log-potentials and preserve NaNs in outputs."""
 
-    observation_model: MissingObservationModel
-    missing_data: MissingObservationData
+    observation_model: Callable[..., dist.Distribution]
+    obs_values: Array
+    safe_obs: Array = dataclasses.field(init=False)
+    obs_mask: Array = dataclasses.field(init=False)
+    row_has_any_observed: Array = dataclasses.field(init=False)
+    has_missing: bool = dataclasses.field(init=False)
+    has_partial_missing: bool = dataclasses.field(init=False)
+    has_fully_missing_rows: bool = dataclasses.field(init=False)
 
-    def score_step(self, *, x, u, t, t_idx) -> Array:
+    def __post_init__(self) -> None:
+        """Precompute NaN-aware observation summaries once at construction time."""
+        obs_mask = ~jnp.isnan(self.obs_values)
+        safe_obs = jnp.where(obs_mask, self.obs_values, jnp.zeros_like(self.obs_values))
+        row_has_any_observed = (
+            obs_mask if self.obs_values.ndim <= 1 else jnp.any(obs_mask, axis=-1)
+        )
+
+        try:
+            obs_mask_host = np.asarray(obs_mask)
+        except TracerArrayConversionError:
+            obs_mask_host = None
+
+        if self.obs_values.ndim <= 1:
+            has_partial_missing = False
+            has_fully_missing_rows = (
+                bool((~obs_mask_host).any()) if obs_mask_host is not None else True
+            )
+        else:
+            if obs_mask_host is not None:
+                row_has_any_host = obs_mask_host.any(axis=-1)
+                row_has_all_host = obs_mask_host.all(axis=-1)
+                row_has_any_observed = jnp.asarray(row_has_any_host)
+                has_partial_missing = bool((row_has_any_host & ~row_has_all_host).any())
+                has_fully_missing_rows = bool((~row_has_any_host).any())
+            else:
+                has_partial_missing = self.obs_values.shape[-1] > 1
+                has_fully_missing_rows = False
+
+        try:
+            has_missing = bool(np.isnan(np.asarray(self.obs_values)).any())
+        except TracerArrayConversionError:
+            has_missing = False
+
+        self.safe_obs = safe_obs
+        self.obs_mask = obs_mask
+        self.row_has_any_observed = row_has_any_observed
+        self.has_missing = has_missing
+        self.has_partial_missing = has_partial_missing
+        self.has_fully_missing_rows = has_fully_missing_rows
+
+    def log_potential_step(self, *, x, u, t, t_idx) -> Array:
         """Return log p(y_{obs} | x, u, t) at a single observation index."""
-        y = self.missing_data.safe_obs[t_idx]
-        obs_mask = self.missing_data.obs_mask[t_idx]
-        row_has_any_observed = self.missing_data.row_has_any_observed[t_idx]
+        y = self.safe_obs[t_idx]
+        obs_mask = self.obs_mask[t_idx]
+        row_has_any_observed = self.row_has_any_observed[t_idx]
 
-        def _score_observed(_) -> Array:
+        def _log_potential_observed(_) -> Array:
             obs_dist = self.observation_model(x=x, u=u, t=t)
 
             # Scalar-like observations only need the full-row missingness rule.
@@ -148,7 +126,9 @@ class MissingObservationScorer:
             if isinstance(obs_dist, dist.MultivariateNormal):
                 return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
 
-            if _is_factorized_independent_distribution(obs_dist):
+            if isinstance(obs_dist, dist.Independent) and (
+                obs_dist.reinterpreted_batch_ndims == 1
+            ):
                 return _masked_independent_log_prob(obs_dist, y, obs_mask)
 
             partial_missing = ~jnp.all(obs_mask)
@@ -168,27 +148,15 @@ class MissingObservationScorer:
         try:
             if not bool(row_has_any_observed):
                 return jnp.zeros((), dtype=y.dtype)
-            return _score_observed(None)
+            return _log_potential_observed(None)
         except TracerBoolConversionError:
             return lax.cond(
                 row_has_any_observed,
-                _score_observed,
+                _log_potential_observed,
                 lambda _: jnp.zeros((), dtype=y.dtype),
                 operand=None,
             )
 
-    def materialize_observation(self, t_idx) -> Array:
+    def observation_step(self, t_idx) -> Array:
         """Return the original NaN-preserving observation row."""
-        return self.missing_data.obs_values[t_idx]
-
-
-def build_missing_observation_scorer(
-    *,
-    observation_model: MissingObservationModel,
-    missing_data: MissingObservationData,
-) -> MissingObservationScorer:
-    """Build a shared missingness scorer for a concrete simulator run."""
-    return MissingObservationScorer(
-        observation_model=observation_model,
-        missing_data=missing_data,
-    )
+        return self.obs_values[t_idx]

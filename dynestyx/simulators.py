@@ -25,10 +25,7 @@ from dynestyx.inference.plate_utils import (
     _slice_dist_for_plate_member,
 )
 from dynestyx.internal.observation_missingness import (
-    MissingObservationData,
-    MissingObservationScorer,
-    build_missing_observation_scorer,
-    prepare_missing_observation_data,
+    MissingObservationLogPotential,
 )
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
@@ -609,14 +606,14 @@ def _emit_observations(
         return observations
 
 
-def _score_missing_observations(
+def _apply_missing_observation_log_potential(
     name: str,
     states: Array,
     times: Array,
-    scorer: MissingObservationScorer,
+    log_potential: MissingObservationLogPotential,
     control_path_eval: Callable[[Array], Array | None],
 ) -> Array:
-    """Score masked observations with numpyro.factor and preserve NaNs in outputs."""
+    """Apply masked-observation log-potentials and preserve NaNs in outputs."""
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     T = len(times)
 
@@ -624,9 +621,9 @@ def _score_missing_observations(
         x_t = states[t_idx]
         t = times[t_idx]
         u_t = ctrl(t)
-        lp = scorer.score_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
+        lp = log_potential.log_potential_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
         numpyro.factor(f"{name}_y_{t_idx}_lp", lp)
-        return carry, scorer.materialize_observation(t_idx)
+        return carry, log_potential.observation_step(t_idx)
 
     _, observations = nscan(_step, None, jnp.arange(T))
     return observations
@@ -893,13 +890,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         *,
         times: Array,
         ctrl_values: Array | None,
-        missing_data: MissingObservationData,
+        log_potential: MissingObservationLogPotential,
     ) -> dict[str, Array]:
-        """Sequential latent-state scan with factor-scored masked observations."""
-        scorer = build_missing_observation_scorer(
-            observation_model=dynamics.observation_model,
-            missing_data=missing_data,
-        )
+        """Sequential latent-state scan with masked-observation log-potentials."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
         with numpyro.plate(f"{name}_n_simulations", 1):
@@ -911,9 +904,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         u_0 = _get_val_or_None(ctrl_values, 0)
         numpyro.factor(
             f"{name}_y_0_lp",
-            scorer.score_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
+            log_potential.log_potential_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
         )
-        y_0 = scorer.materialize_observation(0)
+        y_0 = log_potential.observation_step(0)
 
         def _step(x_prev, t_idx):
             t_now = times[t_idx]
@@ -926,9 +919,14 @@ class DiscreteTimeSimulator(BaseSimulator):
             x_t = x_t_site[0]
             numpyro.factor(
                 f"{name}_y_{t_idx + 1}_lp",
-                scorer.score_step(x=x_t, u=u_next, t=t_next, t_idx=t_idx + 1),
+                log_potential.log_potential_step(
+                    x=x_t,
+                    u=u_next,
+                    t=t_next,
+                    t_idx=t_idx + 1,
+                ),
             )
-            y_t = scorer.materialize_observation(t_idx + 1)
+            y_t = log_potential.observation_step(t_idx + 1)
             return x_t, (x_t, y_t)
 
         _, scan_outputs = nscan(_step, x_prev, jnp.arange(len(times) - 1))
@@ -991,13 +989,16 @@ class DiscreteTimeSimulator(BaseSimulator):
         is_dirac_observation = isinstance(
             dynamics.observation_model, DiracIdentityObservation
         )
-        missing_data = (
-            prepare_missing_observation_data(obs_values)
+        log_potential = (
+            MissingObservationLogPotential(
+                observation_model=dynamics.observation_model,
+                obs_values=obs_values,
+            )
             if obs_values is not None
             else None
         )
 
-        if missing_data is not None and missing_data.has_missing:
+        if log_potential is not None and log_potential.has_missing:
             if is_dirac_observation:
                 raise ValueError(
                     "NaN-valued obs_values are not currently supported with "
@@ -1010,7 +1011,7 @@ class DiscreteTimeSimulator(BaseSimulator):
                 dynamics,
                 times=times,
                 ctrl_values=ctrl_values,
-                missing_data=missing_data,
+                log_potential=log_potential,
             )
 
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
@@ -1290,17 +1291,12 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
-        missing_data = (
-            prepare_missing_observation_data(obs_values)
-            if obs_values is not None and not is_dirac_observation
-            else None
-        )
-        scorer = (
-            build_missing_observation_scorer(
+        log_potential = (
+            MissingObservationLogPotential(
                 observation_model=dynamics.observation_model,
-                missing_data=missing_data,
+                obs_values=obs_values,
             )
-            if missing_data is not None and missing_data.has_missing
+            if obs_values is not None and not is_dirac_observation
             else None
         )
 
@@ -1314,12 +1310,12 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-            if scorer is not None:
-                observations = _score_missing_observations(
+            if log_potential is not None and log_potential.has_missing:
+                observations = _apply_missing_observation_log_potential(
                     name,
                     states,
                     times,
-                    scorer,
+                    log_potential,
                     control_path_eval,
                 )
             else:
