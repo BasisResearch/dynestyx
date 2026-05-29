@@ -121,7 +121,7 @@ def infer(
         predict_times=predict_times,
     )
 
-    return _sample_intp(
+    return _infer_intp(
         name,
         dynamics_with_t0,
         obs_times=obs_times,
@@ -191,7 +191,7 @@ def sample(
 
 
 @defop
-def _sample_intp(
+def _infer_intp(
     name: str,
     dynamics: DynamicalModel,
     *,
@@ -406,7 +406,7 @@ class plate(ObjectInterpretation):
         self._cm.__exit__(exc_type, exc, tb)
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
 
-    @implements(_sample_intp)
+    @implements(_infer_intp)
     def _sample_ds(
         self, name, dynamics, *, plate_shapes=(), **kwargs
     ) -> FunctionOfTime:

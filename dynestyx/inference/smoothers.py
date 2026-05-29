@@ -12,7 +12,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.handlers import HandlesSelf, _infer_intp
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
     _validate_missing_observation_support,
@@ -106,7 +106,7 @@ def _final_obs_times_for_rollout(
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base class for smoother handlers."""
 
-    @implements(_sample_intp)
+    @implements(_infer_intp)
     def _sample_ds(
         self,
         name: str,
