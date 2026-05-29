@@ -883,17 +883,21 @@ class DiscreteTimeSimulator(BaseSimulator):
 
     n_simulations: int = 1
 
-    def _simulate_missing_scan(
+    def _simulate_conditioned_scan(
         self,
         name: str,
         dynamics: DynamicalModel,
         *,
         times: Array,
         ctrl_values: Array | None,
-        log_potential: MissingObservationLogPotential,
+        obs_values: Array,
     ) -> dict[str, Array]:
-        """Sequential latent-state scan with masked-observation log-potentials."""
+        """Sequential latent-state scan for conditioned observations via log-potentials."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+        log_potential = MissingObservationLogPotential(
+            dynamics=dynamics,
+            obs_values=obs_values,
+        )
 
         with numpyro.plate(f"{name}_n_simulations", 1):
             x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
@@ -989,29 +993,26 @@ class DiscreteTimeSimulator(BaseSimulator):
         is_dirac_observation = isinstance(
             dynamics.observation_model, DiracIdentityObservation
         )
-        log_potential = (
-            MissingObservationLogPotential(
-                observation_model=dynamics.observation_model,
-                obs_values=obs_values,
-            )
-            if obs_values is not None
-            else None
-        )
 
-        if log_potential is not None and log_potential.has_missing:
-            if is_dirac_observation:
-                raise ValueError(
-                    "NaN-valued obs_values are not currently supported with "
-                    "DiracIdentityObservation under DiscreteTimeSimulator. "
-                    "Dirac observations are treated as exact latent-state constraints, "
-                    "so missingness would require a separate marginalization path."
-                )
-            return self._simulate_missing_scan(
+        if (
+            is_dirac_observation
+            and obs_values is not None
+            and np.isnan(np.asarray(obs_values)).any()
+        ):
+            raise ValueError(
+                "NaN-valued obs_values are not currently supported with "
+                "DiracIdentityObservation under DiscreteTimeSimulator. "
+                "Dirac observations are treated as exact latent-state constraints, "
+                "so missingness would require a separate marginalization path."
+            )
+
+        if obs_values is not None and not is_dirac_observation:
+            return self._simulate_conditioned_scan(
                 name,
                 dynamics,
                 times=times,
                 ctrl_values=ctrl_values,
-                log_potential=log_potential,
+                obs_values=obs_values,
             )
 
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
@@ -1293,7 +1294,7 @@ class ODESimulator(BaseSimulator):
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
         log_potential = (
             MissingObservationLogPotential(
-                observation_model=dynamics.observation_model,
+                dynamics=dynamics,
                 obs_values=obs_values,
             )
             if obs_values is not None and not is_dirac_observation
@@ -1310,7 +1311,7 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-            if log_potential is not None and log_potential.has_missing:
+            if log_potential is not None:
                 observations = _apply_missing_observation_log_potential(
                     name,
                     states,

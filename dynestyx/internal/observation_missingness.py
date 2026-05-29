@@ -3,37 +3,19 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
+from typing import Literal
 
-import equinox as eqx
-import jax.lax as lax
 import jax.numpy as jnp
 import jax.scipy as jsp
 import numpy as np
 import numpyro.distributions as dist
 from jax import Array
-from jax.errors import TracerArrayConversionError, TracerBoolConversionError
+from jax.errors import TracerArrayConversionError
+
+from dynestyx.models.checkers import _make_probe_state
+from dynestyx.models.core import DynamicalModel
 
 LOG_2PI = jnp.log(2.0 * jnp.pi)
-
-
-def _masked_independent_log_prob(
-    obs_dist: dist.Independent,
-    y: Array,
-    obs_mask: Array,
-) -> Array:
-    """Exact masked log-prob for factorized Independent(..., 1) observations."""
-    if obs_dist.reinterpreted_batch_ndims != 1:
-        raise NotImplementedError(
-            "Partial missingness currently requires Independent(..., 1) "
-            "observations with one factor per observation dimension."
-        )
-    per_dim_lp = obs_dist.base_dist.log_prob(y)
-    if jnp.ndim(per_dim_lp) == 0:
-        raise NotImplementedError(
-            "Partial missingness requires factorized per-dimension log-probs."
-        )
-    return jnp.sum(jnp.where(obs_mask, per_dim_lp, 0.0))
 
 
 def _masked_multivariate_normal_log_prob(
@@ -60,8 +42,11 @@ def _masked_multivariate_normal_log_prob(
 class MissingObservationLogPotential:
     """Evaluate missing-observation log-potentials and preserve NaNs in outputs."""
 
-    observation_model: Callable[..., dist.Distribution]
+    dynamics: DynamicalModel
     obs_values: Array
+    distribution_mode: Literal[
+        "uninitialized", "masked", "multivariate_normal", "independent"
+    ] = dataclasses.field(init=False, default="uninitialized")
     safe_obs: Array = dataclasses.field(init=False)
     obs_mask: Array = dataclasses.field(init=False)
     row_has_any_observed: Array = dataclasses.field(init=False)
@@ -110,52 +95,68 @@ class MissingObservationLogPotential:
         self.has_partial_missing = has_partial_missing
         self.has_fully_missing_rows = has_fully_missing_rows
 
+        x_probe = _make_probe_state(
+            initial_condition=self.dynamics.initial_condition,
+            state_dim=self.dynamics.state_dim,
+        )
+        u_probe = (
+            None
+            if self.dynamics.control_dim == 0
+            else jnp.zeros((self.dynamics.control_dim,))
+        )
+        t_probe = jnp.array(0.0) if self.dynamics.t0 is None else self.dynamics.t0
+        self._configure_from_distribution(
+            self.dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe)
+        )
+
+    def _is_scalar_like_row(self) -> bool:
+        return self.obs_values.ndim <= 1 or self.obs_values.shape[-1] == 1
+
+    def _configure_from_distribution(self, obs_dist: dist.Distribution) -> None:
+        """Choose the log-potential evaluation mode once before scanning in time."""
+        if self._is_scalar_like_row():
+            self.distribution_mode = "masked"
+            return
+
+        if isinstance(obs_dist, dist.MultivariateNormal):
+            self.distribution_mode = "multivariate_normal"
+            return
+
+        if isinstance(obs_dist, dist.Independent) and (
+            obs_dist.reinterpreted_batch_ndims == 1
+        ):
+            self.distribution_mode = "independent"
+            return
+
+        if self.has_partial_missing:
+            raise NotImplementedError(
+                "Partial missingness currently requires marginalizable "
+                "MultivariateNormal observations or factorizable "
+                "Independent(..., 1) observations."
+            )
+
+        self.distribution_mode = "masked"
+
     def log_potential_step(self, *, x, u, t, t_idx) -> Array:
         """Return log p(y_{obs} | x, u, t) at a single observation index."""
+        if self.distribution_mode == "uninitialized":
+            raise RuntimeError(
+                "MissingObservationLogPotential must be configured with an initial "
+                "observation distribution before log_potential_step is used."
+            )
+
         y = self.safe_obs[t_idx]
         obs_mask = self.obs_mask[t_idx]
         row_has_any_observed = self.row_has_any_observed[t_idx]
+        obs_dist = self.dynamics.observation_model(x=x, u=u, t=t)
 
-        def _log_potential_observed(_) -> Array:
-            obs_dist = self.observation_model(x=x, u=u, t=t)
+        if self.distribution_mode == "masked":
+            return obs_dist.mask(row_has_any_observed).log_prob(y)
 
-            # Scalar-like observations only need the full-row missingness rule.
-            if jnp.ndim(y) == 0 or (jnp.ndim(y) == 1 and y.shape[-1] == 1):
-                return obs_dist.log_prob(y)
+        if self.distribution_mode == "independent":
+            return obs_dist.base_dist.mask(obs_mask).to_event(1).log_prob(y)
 
-            if isinstance(obs_dist, dist.MultivariateNormal):
-                return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
-
-            if isinstance(obs_dist, dist.Independent) and (
-                obs_dist.reinterpreted_batch_ndims == 1
-            ):
-                return _masked_independent_log_prob(obs_dist, y, obs_mask)
-
-            partial_missing = ~jnp.all(obs_mask)
-            error_msg = (
-                "Partial missingness is currently supported only for "
-                "marginalizable MultivariateNormal observations and "
-                "factorizable Independent(..., 1) observations."
-            )
-            try:
-                if bool(partial_missing):
-                    raise NotImplementedError(error_msg)
-            except TracerBoolConversionError:
-                _ = eqx.error_if(y, partial_missing, error_msg)
-
-            return obs_dist.log_prob(y)
-
-        try:
-            if not bool(row_has_any_observed):
-                return jnp.zeros((), dtype=y.dtype)
-            return _log_potential_observed(None)
-        except TracerBoolConversionError:
-            return lax.cond(
-                row_has_any_observed,
-                _log_potential_observed,
-                lambda _: jnp.zeros((), dtype=y.dtype),
-                operand=None,
-            )
+        return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
 
     def observation_step(self, t_idx) -> Array:
         """Return the original NaN-preserving observation row."""

@@ -37,25 +37,34 @@ def _run_discrete_trace(model, *, obs_times=None, obs_values=None, predict_times
     return tr
 
 
-def test_discrete_no_missing_path_preserves_observation_sample_sites():
+def test_discrete_no_missing_conditioning_uses_log_potential_path():
     times = jnp.arange(5.0)
     forward = _run_discrete_trace(discrete_linear_gaussian_model, predict_times=times)
     obs_values = forward["f_observations"]["value"][0]
+    latent_data = latent_conditioning_data(forward)
 
+    conditioned_model = condition(discrete_linear_gaussian_model, data=latent_data)
     conditioned = _run_discrete_trace(
-        discrete_linear_gaussian_model, obs_times=times, obs_values=obs_values
+        conditioned_model, obs_times=times, obs_values=obs_values
     )
 
-    y_sites = sorted(
-        name
-        for name in conditioned
-        if name.startswith("f_y_") and not name.endswith("_lp")
+    actual = observation_log_probs(conditioned)
+    states = conditioned["f_states"]["value"][0]
+    expected = jnp.stack(
+        [
+            manual_masked_mvn_log_prob(
+                states[k],
+                GAUSSIAN_R,
+                obs_values[k],
+                jnp.ones_like(obs_values[k], dtype=bool),
+            )
+            for k in range(len(times))
+        ]
     )
-    assert "f_y_0" in y_sites
-    assert any(name != "f_y_0" for name in y_sites)
     assert not any(
-        name.endswith("_lp") for name in conditioned if name.startswith("f_y_")
+        name.startswith("f_y_") and not name.endswith("_lp") for name in conditioned
     )
+    assert jnp.allclose(actual, expected)
 
 
 @pytest.mark.parametrize(
