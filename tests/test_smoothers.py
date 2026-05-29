@@ -506,12 +506,12 @@ def test_smoother_plate_batched_loglik_shape():
                 m=m,
             )
 
-    assert tr["f_marginal_loglik"]["value"].shape == (m,)
     assert_trace_sites_exist_and_field_all_finite(
         tr,
         "f_marginal_loglik",
         where="plate smoother trace",
     )
+    assert tr["f_marginal_loglik"]["value"].shape == (m,)
 
 
 def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout():
@@ -529,9 +529,6 @@ def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout
                         M=3,
                     )
 
-    assert tr["f_marginal_loglik"]["value"].shape == (3,)
-    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
     assert_trace_sites_exist_and_field_all_finite(
         tr,
         "f_marginal_loglik",
@@ -539,6 +536,9 @@ def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout
         "f_predicted_states",
         where="discretized plate smoother trace",
     )
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
+    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
 
 
 def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
@@ -555,9 +555,6 @@ def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
                     M=3,
                 )
 
-    assert tr["f_marginal_loglik"]["value"].shape == (3,)
-    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
     assert_trace_sites_exist_and_field_all_finite(
         tr,
         "f_marginal_loglik",
@@ -565,6 +562,9 @@ def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
         "f_predicted_states",
         where="continuous plate smoother trace",
     )
+    assert tr["f_marginal_loglik"]["value"].shape == (3,)
+    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
+    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
 
 
 def _explicit_rollout_metadata_model(predict_times=None):

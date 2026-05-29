@@ -395,13 +395,6 @@ def test_cuthbert_enkf_records_filtered_gaussian_sites():
         with Filter(filter_config=filter_config):
             substituted(obs_times=obs_times, obs_values=obs_values)
 
-    assert tr["f_filtered_states_mean"]["value"].shape == (len(obs_times), 2)
-    assert tr["f_filtered_states_cov"]["value"].shape == (len(obs_times), 2, 2)
-    assert tr["f_filtered_states_cov_diag"]["value"].shape == (len(obs_times), 2)
-    assert tr["f_filtered_states_chol_cov"]["value"].shape[:2] == (
-        len(obs_times),
-        2,
-    )
     assert_trace_sites_exist_and_field_all_finite(
         tr,
         "f_marginal_loglik",
@@ -410,6 +403,13 @@ def test_cuthbert_enkf_records_filtered_gaussian_sites():
         "f_filtered_states_cov_diag",
         "f_filtered_states_chol_cov",
         where="recorded filter trace",
+    )
+    assert tr["f_filtered_states_mean"]["value"].shape == (len(obs_times), 2)
+    assert tr["f_filtered_states_cov"]["value"].shape == (len(obs_times), 2, 2)
+    assert tr["f_filtered_states_cov_diag"]["value"].shape == (len(obs_times), 2)
+    assert tr["f_filtered_states_chol_cov"]["value"].shape[:2] == (
+        len(obs_times),
+        2,
     )
 
 
