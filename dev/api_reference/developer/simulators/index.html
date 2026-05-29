@@ -3902,28 +3902,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.simulators._slice_array_for_plate_member" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _slice_array_for_plate_member
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.simulators._slice_dist_for_plate_member" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _slice_dist_for_plate_member
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#dynestyx.simulators._slice_tree_for_plate_member" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5641,54 +5619,6 @@ need to switch model types, create a new <code>Simulator()</code> instance.</p>
         <p>Merge segment outputs into one array in predict-time order.</p>
 <p>Each segment contributes values only where its mask is True. Input arrays
 must already be shaped (n_sim, T_seg, dim).</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.simulators._slice_array_for_plate_member" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_slice_array_for_plate_member</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">plate_idx</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.simulators._slice_array_for_plate_member" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Slice leading plate dims if present; otherwise return unchanged.</p>
-<p>This is used in our Simulator loops for plated dimensions: we choose the times/values
-for a particular plate member.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.simulators._slice_dist_for_plate_member" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_slice_dist_for_plate_member</span><span class="p">(</span><span class="n">dist_obj</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">plate_idx</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span></code>
-
-<a href="#dynestyx.simulators._slice_dist_for_plate_member" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Slice plate-batched distribution parameters for one member.</p>
-<p>To obtain distributions for a particular plate member, we must
-slice the corresponding parameter arrays. This function implements
-such slicing for:
-- MixtureSameFamily
-- MultivariateNormal
-- Delta
-- WeightedParticles
-- Categorical
-- Independent
-- TransformedDistribution</p>
 
 
     </div>

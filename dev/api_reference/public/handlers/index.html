@@ -4154,6 +4154,20 @@ plotting/credible intervals.</p>
 </code></pre></div>
 
 
+<details class="sharp-edges" open>
+  <summary>Sharp edges</summary>
+  <ul>
+<li><strong>Drift/diffusion must be sliceable pytrees.</strong> Plated parameters must be
+  stored as array fields of an <code>eqx.Module</code>, not captured in a Python
+  closure. A closure-captured variable is invisible to pytree munging,
+  and can introduce shape errors. The built-in components (<code>AffineDrift</code>,
+  <code>LTI_continuous</code>, <code>FullDiffusion</code>, etc.) follow this rule. See the
+  hierarchical inference tutorial (<code>08_hierarchical_inference.ipynb</code>) for
+  the full sharp-edges list including event-shape vs. sample-shape rules and
+  the rank-1 shared/batched ambiguity.</li>
+</ul>
+</details>
+
 <details class="note" open>
   <summary>Note</summary>
   <p>The <code>dim</code> argument is not currently supported for dynestyx plates.</p>
