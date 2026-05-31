@@ -32,6 +32,7 @@ from dynestyx.models import (
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.core import DiscreteStateTransition
+from dynestyx.observation_missingness import ObservationLogProb
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (
@@ -603,6 +604,31 @@ def _emit_observations(
         return observations
 
 
+def _apply_observation_log_prob(
+    name: str,
+    states: Array,
+    times: Array,
+    log_prob: ObservationLogProb,
+    control_path_eval: Callable[[Array], Array | None],
+) -> Array:
+    """Apply observation log-probability terms and preserve NaNs in outputs."""
+    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
+    T = len(times)
+
+    def _step(carry, t_idx):
+        x_t = states[t_idx]
+        t = times[t_idx]
+        u_t = ctrl(t)
+        lp = log_prob.log_prob_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
+        numpyro.factor(f"{name}_y_{t_idx}_lp", lp)
+        return carry, log_prob.observation_step(t_idx)
+
+    _, observations = nscan(_step, None, jnp.arange(T))
+    for t_idx in range(T):
+        numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
+    return observations
+
+
 class SDESimulator(BaseSimulator):
     """Simulator for continuous-time stochastic dynamics (SDEs).
 
@@ -857,6 +883,74 @@ class DiscreteTimeSimulator(BaseSimulator):
 
     n_simulations: int = 1
 
+    def _simulate_conditioned_scan(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        times: Array,
+        ctrl_values: Array | None,
+        obs_values: Array,
+    ) -> dict[str, Array]:
+        """Sequential latent-state scan for conditioned observations via log-probability terms."""
+        state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+        obs_values_for_helper = (
+            obs_values[:, None] if obs_values.ndim == 1 else obs_values
+        )
+        log_prob = ObservationLogProb(
+            dynamics=dynamics,
+            obs_values=obs_values_for_helper,
+        )
+
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
+                f"{name}_x_0", dynamics.initial_condition
+            )
+        x_prev = x_prev_site[0]
+
+        u_0 = _get_val_or_None(ctrl_values, 0)
+        numpyro.factor(
+            f"{name}_y_0_lp",
+            log_prob.log_prob_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
+        )
+        y_0 = log_prob.observation_step(0)
+
+        def _step(x_prev, t_idx):
+            t_now = times[t_idx]
+            t_next = times[t_idx + 1]
+            u_now = _get_val_or_None(ctrl_values, t_idx)
+            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+            trans_dist = state_transition(x=x_prev, u=u_now, t_now=t_now, t_next=t_next)
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x_t_site = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
+            x_t = x_t_site[0]
+            numpyro.factor(
+                f"{name}_y_{t_idx + 1}_lp",
+                log_prob.log_prob_step(
+                    x=x_t,
+                    u=u_next,
+                    t=t_next,
+                    t_idx=t_idx + 1,
+                ),
+            )
+            y_t = log_prob.observation_step(t_idx + 1)
+            return x_t, (x_t, y_t)
+
+        _, scan_outputs = nscan(_step, x_prev, jnp.arange(len(times) - 1))
+        scan_states, scan_observations = scan_outputs
+
+        states = jnp.concatenate([jnp.expand_dims(x_prev, axis=0), scan_states], axis=0)
+        observations = jnp.concatenate(
+            [jnp.expand_dims(y_0, axis=0), scan_observations], axis=0
+        )
+        for t_idx in range(len(times)):
+            numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+        }
+
     def _simulate(
         self,
         name: str,
@@ -873,7 +967,12 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         Creates NumPyro sample sites for the initial condition (`"x_0"`), subsequent
         states (`"x_1"`, ...), and observations (`"y_0"`, ...). If `obs_values` is
-        provided, observation sites are conditioned via `obs=...`.
+        provided for a non-Dirac observation model, conditioning is handled via
+        per-step log-probability factors rather than `obs=...` sample sites. In
+        that path, each time step contributes a scalar
+        `log p(y_observed | x_t, u_t, t)` term through `numpyro.factor(...)`,
+        while deterministic `y_t` sites still record the original observation
+        values in the trace.
 
         Notes:
             - For `DiracIdentityObservation` with provided `obs_values`, the latent
@@ -883,7 +982,12 @@ class DiscreteTimeSimulator(BaseSimulator):
         Args:
             dynamics: Discrete-time `DynamicalModel` to unroll.
             obs_times: Discrete observation indices/times. Required.
-            obs_values: Optional observations for conditioning.
+            obs_values: Optional observations for conditioning. For non-Dirac
+                observation models, missingness-aware conditioning adds
+                per-time-step log-probability factors for the observed portions
+                of each row instead of using `obs=...` directly. For partially
+                observed vector observations, the observation distribution
+                family and event shape must remain fixed across time.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Optional prediction times. If provided, prediction sites are
@@ -901,13 +1005,36 @@ class DiscreteTimeSimulator(BaseSimulator):
             raise ValueError("obs_times must contain at least one timepoint")
 
         n_sim = self.n_simulations
+        is_dirac_observation = isinstance(
+            dynamics.observation_model, DiracIdentityObservation
+        )
+
+        if (
+            is_dirac_observation
+            and obs_values is not None
+            and np.isnan(np.asarray(obs_values)).any()
+        ):
+            raise ValueError(
+                "NaN-valued obs_values are not currently supported with "
+                "DiracIdentityObservation under DiscreteTimeSimulator. "
+                "Dirac observations are treated as exact latent-state constraints, "
+                "so missingness would require a separate marginalization path."
+            )
+
+        if obs_values is not None and not is_dirac_observation:
+            return self._simulate_conditioned_scan(
+                name,
+                dynamics,
+                times=times,
+                ctrl_values=ctrl_values,
+                obs_values=obs_values,
+            )
+
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
-            obs_values is not None
-        ):
+        if is_dirac_observation and (obs_values is not None):
             with numpyro.plate(f"{name}_n_simulations", 1):
                 numpyro.sample(
                     f"{name}_x_0",
@@ -1019,7 +1146,7 @@ class DiscreteTimeSimulator(BaseSimulator):
                 "observations": _ensure_trailing_dim(observations),
             }
 
-        # Default: scan over time (n_simulations == 1)...allows for obs= conditioning.
+        # Default forward-simulation scan (n_simulations == 1).
         with numpyro.plate(f"{name}_n_simulations", 1):
             x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
                 f"{name}_x_0", dynamics.initial_condition
@@ -1154,8 +1281,14 @@ class ODESimulator(BaseSimulator):
             dynamics: A `DynamicalModel` whose `state_evolution` is a
                 `DeterministicContinuousTimeStateEvolution`.
             obs_times: Times at which to save the latent state and emit observations.
-            obs_values: Optional observation array. If provided, observation sites are
-                conditioned via `obs=obs_values[i]`.
+            obs_values: Optional observation array. If provided for a non-Dirac
+                observation model, conditioning is handled via per-step
+                log-probability factors. Each step adds a scalar
+                `log p(y_observed | x_t, u_t, t)` term with `numpyro.factor(...)`
+                while deterministic `y_t` sites preserve the original
+                observation values in the trace. For partially observed vector
+                observations, the observation distribution family and event
+                shape must remain fixed across time.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Used when obs_times is None (e.g. from Filter).
@@ -1169,6 +1302,9 @@ class ODESimulator(BaseSimulator):
             raise ValueError("obs_times or predict_times must be provided")
 
         n_sim = self.n_simulations
+        is_dirac_observation = isinstance(
+            dynamics.observation_model, DiracIdentityObservation
+        )
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
@@ -1177,6 +1313,14 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        log_prob = (
+            ObservationLogProb(
+                dynamics=dynamics,
+                obs_values=obs_values[:, None] if obs_values.ndim == 1 else obs_values,
+            )
+            if obs_values is not None and not is_dirac_observation
+            else None
+        )
 
         def _sim_one_trajectory(x0: Array, *, obs_key=None):
             """Simulate one ODE trajectory and emit observations."""
@@ -1188,20 +1332,28 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-            observations = _emit_observations(
-                name,
-                dynamics,
-                states,
-                times,
-                obs_values,
-                control_path_eval,
-                key=obs_key,
-            )
+            if log_prob is not None:
+                observations = _apply_observation_log_prob(
+                    name,
+                    states,
+                    times,
+                    log_prob,
+                    control_path_eval,
+                )
+            else:
+                observations = _emit_observations(
+                    name,
+                    dynamics,
+                    states,
+                    times,
+                    obs_values,
+                    control_path_eval,
+                    key=obs_key,
+                )
             return states, observations
 
         if obs_values is not None:
             # Conditioning mode (n_sim must be 1 due to guard above).
-            # Uses numpyro.sample per observation site to support obs= conditioning.
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
             x0_arr: Array = jnp.asarray(x0)[0]
