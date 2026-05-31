@@ -896,9 +896,12 @@ class DiscreteTimeSimulator(BaseSimulator):
     ) -> dict[str, Array]:
         """Sequential latent-state scan for conditioned observations via log-potentials."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+        obs_values_for_helper = (
+            obs_values[:, None] if obs_values.ndim == 1 else obs_values
+        )
         log_potential = ObservationLogPotential(
             dynamics=dynamics,
-            obs_values=obs_values,
+            obs_values=obs_values_for_helper,
         )
 
         with numpyro.plate(f"{name}_n_simulations", 1):
@@ -967,7 +970,11 @@ class DiscreteTimeSimulator(BaseSimulator):
         Creates NumPyro sample sites for the initial condition (`"x_0"`), subsequent
         states (`"x_1"`, ...), and observations (`"y_0"`, ...). If `obs_values` is
         provided for a non-Dirac observation model, conditioning is handled via
-        per-step log-potential factors rather than `obs=...` sample sites.
+        per-step log-probability factors rather than `obs=...` sample sites. In
+        that path, each time step contributes a scalar
+        `log p(y_observed | x_t, u_t, t)` term through `numpyro.factor(...)`,
+        while deterministic `y_t` sites still record the original observation
+        values in the trace.
 
         Notes:
             - For `DiracIdentityObservation` with provided `obs_values`, the latent
@@ -977,7 +984,10 @@ class DiscreteTimeSimulator(BaseSimulator):
         Args:
             dynamics: Discrete-time `DynamicalModel` to unroll.
             obs_times: Discrete observation indices/times. Required.
-            obs_values: Optional observations for conditioning.
+            obs_values: Optional observations for conditioning. For non-Dirac
+                observation models, missingness-aware conditioning adds
+                per-time-step log-probability factors for the observed portions
+                of each row instead of using `obs=...` directly.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Optional prediction times. If provided, prediction sites are
@@ -1273,7 +1283,10 @@ class ODESimulator(BaseSimulator):
             obs_times: Times at which to save the latent state and emit observations.
             obs_values: Optional observation array. If provided for a non-Dirac
                 observation model, conditioning is handled via per-step
-                log-potential factors.
+                log-probability factors. Each step adds a scalar
+                `log p(y_observed | x_t, u_t, t)` term with `numpyro.factor(...)`
+                while deterministic `y_t` sites preserve the original
+                observation values in the trace.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Used when obs_times is None (e.g. from Filter).
@@ -1301,7 +1314,7 @@ class ODESimulator(BaseSimulator):
         log_potential = (
             ObservationLogPotential(
                 dynamics=dynamics,
-                obs_values=obs_values,
+                obs_values=obs_values[:, None] if obs_values.ndim == 1 else obs_values,
             )
             if obs_values is not None and not is_dirac_observation
             else None

@@ -1,4 +1,12 @@
-"""Helpers for simulator-side observation conditioning with missing data."""
+"""Helpers for simulator-side observation conditioning with missing data.
+
+These utilities support simulator conditioning when `obs_values` may contain
+NaNs. In that case we cannot always rely on `numpyro.sample(..., obs=...)`
+directly, because some observation dimensions or full rows may be missing.
+Instead, the simulator evaluates only the observed part of each likelihood term
+and records per-time observation rows separately for downstream trace
+inspection.
+"""
 
 from __future__ import annotations
 
@@ -9,8 +17,8 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 import numpy as np
 import numpyro.distributions as dist
-from jax import Array
 from jax.errors import TracerArrayConversionError
+from jaxtyping import Array, Bool, Float, Shaped
 
 from dynestyx.models.checkers import _make_probe_state
 from dynestyx.models.core import DynamicalModel
@@ -20,10 +28,15 @@ LOG_2PI = jnp.log(2.0 * jnp.pi)
 
 def _masked_multivariate_normal_log_prob(
     obs_dist: dist.MultivariateNormal,
-    y: Array,
-    obs_mask: Array,
-) -> Array:
-    """Exact masked Gaussian log-prob via a fixed-shape marginalization formula."""
+    y: Float[Array, " observation_dim"],
+    obs_mask: Bool[Array, " observation_dim"],
+) -> Shaped[Array, ""]:
+    """Evaluate a masked multivariate Normal log-prob without changing array shape.
+
+    The masked dimensions are replaced with an identity contribution so the
+    Cholesky solve keeps a fixed shape across time, while the resulting scalar
+    log-prob matches the exact Gaussian marginal over the observed components.
+    """
     mask_f = obs_mask.astype(obs_dist.loc.dtype)
     residual = (y - obs_dist.loc) * mask_f
     cov = obs_dist.covariance_matrix
@@ -38,53 +51,83 @@ def _masked_multivariate_normal_log_prob(
     return -0.5 * (quad + logdet + n_obs * LOG_2PI)
 
 
+def _lift_scalar_observation_distribution(
+    obs_dist: dist.Distribution,
+) -> dist.Distribution:
+    """Lift a scalar-event observation distribution to a length-1 event."""
+    if obs_dist.batch_shape == ():
+        return obs_dist.expand((1,)).to_event(1)
+    if obs_dist.batch_shape == (1,):
+        return obs_dist.to_event(1)
+    raise NotImplementedError(
+        "Scalar observation distributions for missingness-aware simulator "
+        "conditioning must have batch shape () or (1,)."
+    )
+
+
 @dataclasses.dataclass
 class ObservationLogPotential:
-    """Evaluate conditioned observation log-potentials and preserve NaNs in outputs."""
+    """Evaluate conditioned observation log-probability contributions for simulators.
+
+    This helper is used when simulator conditioning cannot be expressed as a
+    simple `numpyro.sample(..., obs=obs_values[t])` call, typically because
+    `obs_values` contains missing entries. It expects a single trajectory's
+    observation array with shape `(time, observation_dim)`, preprocesses that
+    array once, keeps both a NaN-preserving view and a zero-filled safe view,
+    and then provides per-time-step scalar log-probability contributions of the
+    form `log p(y_observed | x_t, u_t, t)`.
+
+    For partially observed vector rows, the marginalization strategy is chosen
+    from an initial probe distribution and then treated as a contract for the
+    rest of the trajectory. In particular, changing the observation
+    distribution family or event shape across time is not supported in that
+    case. Scalar observation distributions are lifted to length-1 event
+    distributions so the helper can use one row-oriented contract internally.
+    """
 
     dynamics: DynamicalModel
-    obs_values: Array
+    obs_values: Float[Array, "time observation_dim"]
     distribution_mode: Literal[
         "uninitialized", "masked", "multivariate_normal", "independent"
     ] = dataclasses.field(init=False, default="uninitialized")
-    safe_obs: Array = dataclasses.field(init=False)
-    obs_mask: Array = dataclasses.field(init=False)
-    row_has_any_observed: Array = dataclasses.field(init=False)
+    safe_obs: Float[Array, "time observation_dim"] = dataclasses.field(init=False)
+    obs_mask: Bool[Array, "time observation_dim"] = dataclasses.field(init=False)
+    row_has_any_observed: Bool[Array, " time"] = dataclasses.field(init=False)
     has_missing: bool = dataclasses.field(init=False)
     has_partial_missing: bool = dataclasses.field(init=False)
     has_fully_missing_rows: bool = dataclasses.field(init=False)
+    observation_dim: int = dataclasses.field(init=False)
     expected_event_shape: tuple[int, ...] = dataclasses.field(
         init=False, default_factory=tuple
     )
 
     def __post_init__(self) -> None:
         """Precompute NaN-aware observation summaries once at construction time."""
+        if self.obs_values.ndim != 2:
+            raise ValueError(
+                "ObservationLogPotential expects per-trajectory obs_values with "
+                "shape (time, observation_dim)."
+            )
+
+        self.observation_dim = self.obs_values.shape[-1]
         obs_mask = ~jnp.isnan(self.obs_values)
         safe_obs = jnp.where(obs_mask, self.obs_values, jnp.zeros_like(self.obs_values))
-        row_has_any_observed = (
-            obs_mask if self.obs_values.ndim <= 1 else jnp.any(obs_mask, axis=-1)
-        )
+        row_has_any_observed = jnp.any(obs_mask, axis=-1)
 
         try:
             obs_mask_host = np.asarray(obs_mask)
         except TracerArrayConversionError:
             obs_mask_host = None
 
-        if self.obs_values.ndim <= 1:
-            has_partial_missing = False
-            has_fully_missing_rows = (
-                bool((~obs_mask_host).any()) if obs_mask_host is not None else True
-            )
+        if obs_mask_host is not None:
+            row_has_any_host = obs_mask_host.any(axis=-1)
+            row_has_all_host = obs_mask_host.all(axis=-1)
+            row_has_any_observed = jnp.asarray(row_has_any_host)
+            has_partial_missing = bool((row_has_any_host & ~row_has_all_host).any())
+            has_fully_missing_rows = bool((~row_has_any_host).any())
         else:
-            if obs_mask_host is not None:
-                row_has_any_host = obs_mask_host.any(axis=-1)
-                row_has_all_host = obs_mask_host.all(axis=-1)
-                row_has_any_observed = jnp.asarray(row_has_any_host)
-                has_partial_missing = bool((row_has_any_host & ~row_has_all_host).any())
-                has_fully_missing_rows = bool((~row_has_any_host).any())
-            else:
-                has_partial_missing = self.obs_values.shape[-1] > 1
-                has_fully_missing_rows = False
+            has_partial_missing = self.observation_dim > 1
+            has_fully_missing_rows = False
 
         try:
             has_missing = bool(np.isnan(np.asarray(self.obs_values)).any())
@@ -112,8 +155,18 @@ class ObservationLogPotential:
             self.dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe)
         )
 
-    def _is_scalar_like_row(self) -> bool:
-        return self.obs_values.ndim <= 1 or self.obs_values.shape[-1] == 1
+    def _canonicalize_observation_distribution(
+        self, obs_dist: dist.Distribution
+    ) -> dist.Distribution:
+        """Match runtime observation distributions to the row-oriented data contract."""
+        if tuple(obs_dist.event_shape) != ():
+            return obs_dist
+        if self.observation_dim != 1:
+            raise ValueError(
+                "Scalar observation distributions are only compatible with "
+                "obs_values shaped (time, 1)."
+            )
+        return _lift_scalar_observation_distribution(obs_dist)
 
     def _configure_from_distribution(self, obs_dist: dist.Distribution) -> None:
         """Choose the log-potential evaluation mode once before scanning in time.
@@ -122,6 +175,7 @@ class ObservationLogPotential:
         observation distributions must stay in the same supported family and
         preserve the same event shape.
         """
+        obs_dist = self._canonicalize_observation_distribution(obs_dist)
         self.distribution_mode = self._distribution_mode(obs_dist)
         self.expected_event_shape = tuple(obs_dist.event_shape)
 
@@ -129,9 +183,6 @@ class ObservationLogPotential:
         self,
         obs_dist: dist.Distribution,
     ) -> Literal["masked", "multivariate_normal", "independent"]:
-        if self._is_scalar_like_row():
-            return "masked"
-
         if isinstance(obs_dist, dist.MultivariateNormal):
             return "multivariate_normal"
 
@@ -152,9 +203,11 @@ class ObservationLogPotential:
     def _validate_partial_missing_distribution(
         self, obs_dist: dist.Distribution
     ) -> None:
+        """Check the partial-missingness distribution contract at a time step."""
         if not self.has_partial_missing:
             return
 
+        obs_dist = self._canonicalize_observation_distribution(obs_dist)
         try:
             actual_mode = self._distribution_mode(obs_dist)
         except NotImplementedError as exc:
@@ -178,8 +231,14 @@ class ObservationLogPotential:
                 f"{actual_mode!r} with event shape {actual_event_shape}."
             )
 
-    def log_potential_step(self, *, x, u, t, t_idx) -> Array:
-        """Return log p(y_{obs} | x, u, t) at a single observation index."""
+    def log_potential_step(self, *, x, u, t, t_idx) -> Shaped[Array, ""]:
+        """Return `log p(y_observed | x, u, t)` at one observation index.
+
+        The returned value is a scalar log-probability contribution suitable for
+        use in `numpyro.factor(...)`. Fully missing rows contribute zero, while
+        partially missing vector rows are marginalized according to the mode
+        chosen during initialization.
+        """
         if self.distribution_mode == "uninitialized":
             raise RuntimeError(
                 "ObservationLogPotential must be configured with an initial "
@@ -189,7 +248,9 @@ class ObservationLogPotential:
         y = self.safe_obs[t_idx]
         obs_mask = self.obs_mask[t_idx]
         row_has_any_observed = self.row_has_any_observed[t_idx]
-        obs_dist = self.dynamics.observation_model(x=x, u=u, t=t)
+        obs_dist = self._canonicalize_observation_distribution(
+            self.dynamics.observation_model(x=x, u=u, t=t)
+        )
         self._validate_partial_missing_distribution(obs_dist)
 
         if self.distribution_mode == "masked":
@@ -200,6 +261,6 @@ class ObservationLogPotential:
 
         return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
 
-    def observation_step(self, t_idx) -> Array:
-        """Return the original NaN-preserving observation row."""
+    def observation_step(self, t_idx) -> Float[Array, " observation_dim"]:
+        """Return the original NaN-preserving observation row for trace output."""
         return self.obs_values[t_idx]

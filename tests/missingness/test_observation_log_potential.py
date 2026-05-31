@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 import numpyro.distributions as dist
 import pytest
+from jaxtyping import TypeCheckError
 
 from dynestyx.internal.observation_missingness import (
     ObservationLogPotential,
@@ -90,7 +91,7 @@ def test_masked_independent_distribution_matches_manual_subset_formula():
 
 
 def test_observation_log_potential_scalar_rows_zero_out_full_missing_steps():
-    obs_values = jnp.array([jnp.nan, 1.25])
+    obs_values = jnp.array([[jnp.nan], [1.25]])
     log_potential = ObservationLogPotential(
         dynamics=_build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
         obs_values=obs_values,
@@ -108,6 +109,14 @@ def test_observation_log_potential_scalar_rows_zero_out_full_missing_steps():
         ),
         dist.Normal(1.2, 0.4).log_prob(1.25),
     )
+
+
+def test_observation_log_potential_requires_time_by_observation_dim_inputs():
+    with pytest.raises(TypeCheckError, match="parameter 'obs_values'"):
+        ObservationLogPotential(
+            dynamics=_build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
+            obs_values=jnp.array([jnp.nan, 1.25]),
+        )
 
 
 def test_observation_log_potential_partial_missing_unsupported_distribution_raises_at_init():
