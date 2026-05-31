@@ -3,11 +3,11 @@ import numpyro.distributions as dist
 import pytest
 from jaxtyping import TypeCheckError
 
-from dynestyx.internal.observation_missingness import (
+from dynestyx.models import DynamicalModel, LinearGaussianObservation
+from dynestyx.observation_missingness import (
     ObservationLogProb,
     _masked_multivariate_normal_log_prob,
 )
-from dynestyx.models import DynamicalModel, LinearGaussianObservation
 from tests.missingness.models import GAUSSIAN_R, INDEPENDENT_SCALE
 from tests.missingness.utils import (
     manual_masked_independent_normal_log_prob,

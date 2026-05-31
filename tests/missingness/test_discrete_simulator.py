@@ -38,7 +38,7 @@ def _run_discrete_trace(model, *, obs_times=None, obs_values=None, predict_times
     return tr
 
 
-def test_discrete_no_missing_conditioning_uses_log_potential_path():
+def test_discrete_no_missing_conditioning_uses_log_prob_path():
     times = jnp.arange(5.0)
     forward = _run_discrete_trace(discrete_linear_gaussian_model, predict_times=times)
     obs_values = forward["f_observations"]["value"][0]

@@ -24,7 +24,6 @@ from dynestyx.inference.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
 )
-from dynestyx.internal.observation_missingness import ObservationLogProb
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -33,6 +32,7 @@ from dynestyx.models import (
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.core import DiscreteStateTransition
+from dynestyx.observation_missingness import ObservationLogProb
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (

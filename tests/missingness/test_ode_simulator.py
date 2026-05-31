@@ -37,7 +37,7 @@ def _run_ode_trace(model, *, obs_times=None, obs_values=None, predict_times=None
     return tr
 
 
-def test_ode_no_missing_conditioning_uses_log_potential_path():
+def test_ode_no_missing_conditioning_uses_log_prob_path():
     times = jnp.linspace(0.0, 0.4, 5)
     forward = _run_ode_trace(ode_linear_gaussian_model, predict_times=times)
     obs_values = forward["f_observations"]["value"][0]
