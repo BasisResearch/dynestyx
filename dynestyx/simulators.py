@@ -24,9 +24,7 @@ from dynestyx.inference.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
 )
-from dynestyx.internal.observation_missingness import (
-    ObservationLogPotential,
-)
+from dynestyx.internal.observation_missingness import ObservationLogProb
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
@@ -606,14 +604,14 @@ def _emit_observations(
         return observations
 
 
-def _apply_observation_log_potential(
+def _apply_observation_log_prob(
     name: str,
     states: Array,
     times: Array,
-    log_potential: ObservationLogPotential,
+    log_prob: ObservationLogProb,
     control_path_eval: Callable[[Array], Array | None],
 ) -> Array:
-    """Apply observation log-potentials and preserve NaNs in outputs."""
+    """Apply observation log-probability terms and preserve NaNs in outputs."""
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     T = len(times)
 
@@ -621,9 +619,9 @@ def _apply_observation_log_potential(
         x_t = states[t_idx]
         t = times[t_idx]
         u_t = ctrl(t)
-        lp = log_potential.log_potential_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
+        lp = log_prob.log_prob_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
         numpyro.factor(f"{name}_y_{t_idx}_lp", lp)
-        return carry, log_potential.observation_step(t_idx)
+        return carry, log_prob.observation_step(t_idx)
 
     _, observations = nscan(_step, None, jnp.arange(T))
     for t_idx in range(T):
@@ -894,12 +892,12 @@ class DiscreteTimeSimulator(BaseSimulator):
         ctrl_values: Array | None,
         obs_values: Array,
     ) -> dict[str, Array]:
-        """Sequential latent-state scan for conditioned observations via log-potentials."""
+        """Sequential latent-state scan for conditioned observations via log-probability terms."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
         obs_values_for_helper = (
             obs_values[:, None] if obs_values.ndim == 1 else obs_values
         )
-        log_potential = ObservationLogPotential(
+        log_prob = ObservationLogProb(
             dynamics=dynamics,
             obs_values=obs_values_for_helper,
         )
@@ -913,9 +911,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         u_0 = _get_val_or_None(ctrl_values, 0)
         numpyro.factor(
             f"{name}_y_0_lp",
-            log_potential.log_potential_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
+            log_prob.log_prob_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
         )
-        y_0 = log_potential.observation_step(0)
+        y_0 = log_prob.observation_step(0)
 
         def _step(x_prev, t_idx):
             t_now = times[t_idx]
@@ -928,14 +926,14 @@ class DiscreteTimeSimulator(BaseSimulator):
             x_t = x_t_site[0]
             numpyro.factor(
                 f"{name}_y_{t_idx + 1}_lp",
-                log_potential.log_potential_step(
+                log_prob.log_prob_step(
                     x=x_t,
                     u=u_next,
                     t=t_next,
                     t_idx=t_idx + 1,
                 ),
             )
-            y_t = log_potential.observation_step(t_idx + 1)
+            y_t = log_prob.observation_step(t_idx + 1)
             return x_t, (x_t, y_t)
 
         _, scan_outputs = nscan(_step, x_prev, jnp.arange(len(times) - 1))
@@ -1311,8 +1309,8 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
-        log_potential = (
-            ObservationLogPotential(
+        log_prob = (
+            ObservationLogProb(
                 dynamics=dynamics,
                 obs_values=obs_values[:, None] if obs_values.ndim == 1 else obs_values,
             )
@@ -1330,12 +1328,12 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-            if log_potential is not None:
-                observations = _apply_observation_log_potential(
+            if log_prob is not None:
+                observations = _apply_observation_log_prob(
                     name,
                     states,
                     times,
-                    log_potential,
+                    log_prob,
                     control_path_eval,
                 )
             else:

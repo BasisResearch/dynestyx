@@ -4,7 +4,7 @@ import pytest
 from jaxtyping import TypeCheckError
 
 from dynestyx.internal.observation_missingness import (
-    ObservationLogPotential,
+    ObservationLogProb,
     _masked_multivariate_normal_log_prob,
 )
 from dynestyx.models import DynamicalModel, LinearGaussianObservation
@@ -35,7 +35,7 @@ def _build_scalar_dynamics(observation_model):
     )
 
 
-def test_observation_log_potential_init_tracks_partial_and_full_row_missingness():
+def test_observation_log_prob_init_tracks_partial_and_full_row_missingness():
     obs_values = jnp.array(
         [
             [1.0, 2.0],
@@ -44,7 +44,7 @@ def test_observation_log_potential_init_tracks_partial_and_full_row_missingness(
         ]
     )
 
-    log_potential = ObservationLogPotential(
+    log_prob = ObservationLogProb(
         dynamics=_build_vector_dynamics(
             lambda x, u, t: dist.MultivariateNormal(
                 jnp.zeros(2), covariance_matrix=jnp.eye(2)
@@ -53,15 +53,15 @@ def test_observation_log_potential_init_tracks_partial_and_full_row_missingness(
         obs_values=obs_values,
     )
 
-    assert log_potential.has_missing
-    assert log_potential.has_partial_missing
-    assert log_potential.has_fully_missing_rows
+    assert log_prob.has_missing
+    assert log_prob.has_partial_missing
+    assert log_prob.has_fully_missing_rows
     assert jnp.array_equal(
-        log_potential.obs_mask,
+        log_prob.obs_mask,
         jnp.array([[True, True], [False, True], [False, False]]),
     )
-    assert jnp.allclose(log_potential.safe_obs[0], obs_values[0])
-    assert jnp.allclose(log_potential.safe_obs[1], jnp.array([0.0, 3.0]))
+    assert jnp.allclose(log_prob.safe_obs[0], obs_values[0])
+    assert jnp.allclose(log_prob.safe_obs[1], jnp.array([0.0, 3.0]))
 
 
 def test_masked_multivariate_normal_log_prob_matches_manual_subset_formula():
@@ -90,48 +90,44 @@ def test_masked_independent_distribution_matches_manual_subset_formula():
     assert jnp.allclose(actual, expected)
 
 
-def test_observation_log_potential_scalar_rows_zero_out_full_missing_steps():
+def test_observation_log_prob_scalar_rows_zero_out_full_missing_steps():
     obs_values = jnp.array([[jnp.nan], [1.25]])
-    log_potential = ObservationLogPotential(
+    log_prob = ObservationLogProb(
         dynamics=_build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
         obs_values=obs_values,
     )
 
     assert jnp.allclose(
-        log_potential.log_potential_step(
-            x=jnp.array(0.2), u=None, t=jnp.array(0.0), t_idx=0
-        ),
+        log_prob.log_prob_step(x=jnp.array(0.2), u=None, t=jnp.array(0.0), t_idx=0),
         0.0,
     )
     assert jnp.allclose(
-        log_potential.log_potential_step(
-            x=jnp.array(0.2), u=None, t=jnp.array(1.0), t_idx=1
-        ),
+        log_prob.log_prob_step(x=jnp.array(0.2), u=None, t=jnp.array(1.0), t_idx=1),
         dist.Normal(1.2, 0.4).log_prob(1.25),
     )
 
 
-def test_observation_log_potential_requires_time_by_observation_dim_inputs():
+def test_observation_log_prob_requires_time_by_observation_dim_inputs():
     with pytest.raises(TypeCheckError, match="parameter 'obs_values'"):
-        ObservationLogPotential(
+        ObservationLogProb(
             dynamics=_build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
             obs_values=jnp.array([jnp.nan, 1.25]),
         )
 
 
-def test_observation_log_potential_partial_missing_unsupported_distribution_raises_at_init():
+def test_observation_log_prob_partial_missing_unsupported_distribution_raises_at_init():
     obs_values = jnp.array([[1.0, jnp.nan]])
     with pytest.raises(
         NotImplementedError,
         match="Partial missingness currently requires",
     ):
-        ObservationLogPotential(
+        ObservationLogProb(
             dynamics=_build_vector_dynamics(lambda x, u, t: dist.Delta(x, event_dim=1)),
             obs_values=obs_values,
         )
 
 
-def test_observation_log_potential_partial_missing_type_change_raises_clear_error():
+def test_observation_log_prob_partial_missing_type_change_raises_clear_error():
     obs_values = jnp.array([[1.0, jnp.nan], [1.0, jnp.nan]])
 
     def observation_model(x, u, t):
@@ -139,7 +135,7 @@ def test_observation_log_potential_partial_missing_type_change_raises_clear_erro
             return dist.MultivariateNormal(x, covariance_matrix=GAUSSIAN_R)
         return dist.Delta(x, event_dim=1)
 
-    log_potential = ObservationLogPotential(
+    log_prob = ObservationLogProb(
         dynamics=_build_vector_dynamics(observation_model),
         obs_values=obs_values,
     )
@@ -148,7 +144,7 @@ def test_observation_log_potential_partial_missing_type_change_raises_clear_erro
         ValueError,
         match="Partial missingness requires a time-stable marginalizable observation family",
     ):
-        log_potential.log_potential_step(
+        log_prob.log_prob_step(
             x=jnp.array([1.0, 2.0]),
             u=None,
             t=jnp.array(1.0),
@@ -156,16 +152,16 @@ def test_observation_log_potential_partial_missing_type_change_raises_clear_erro
         )
 
 
-def test_observation_log_potential_linear_gaussian_matches_manual_reference():
+def test_observation_log_prob_linear_gaussian_matches_manual_reference():
     obs_values = jnp.array([[jnp.nan, 0.2]])
-    log_potential = ObservationLogPotential(
+    log_prob = ObservationLogProb(
         dynamics=_build_vector_dynamics(
             LinearGaussianObservation(H=jnp.eye(2), R=GAUSSIAN_R)
         ),
         obs_values=obs_values,
     )
     x = jnp.array([0.5, -0.3])
-    actual = log_potential.log_potential_step(
+    actual = log_prob.log_prob_step(
         x=x,
         u=None,
         t=jnp.array(0.0),

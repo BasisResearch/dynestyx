@@ -66,7 +66,7 @@ def _lift_scalar_observation_distribution(
 
 
 @dataclasses.dataclass
-class ObservationLogPotential:
+class ObservationLogProb:
     """Evaluate conditioned observation log-probability contributions for simulators.
 
     This helper is used when simulator conditioning cannot be expressed as a
@@ -105,7 +105,7 @@ class ObservationLogPotential:
         """Precompute NaN-aware observation summaries once at construction time."""
         if self.obs_values.ndim != 2:
             raise ValueError(
-                "ObservationLogPotential expects per-trajectory obs_values with "
+                "ObservationLogProb expects per-trajectory obs_values with "
                 "shape (time, observation_dim)."
             )
 
@@ -169,7 +169,7 @@ class ObservationLogPotential:
         return _lift_scalar_observation_distribution(obs_dist)
 
     def _configure_from_distribution(self, obs_dist: dist.Distribution) -> None:
-        """Choose the log-potential evaluation mode once before scanning in time.
+        """Choose the log-probability evaluation mode once before scanning in time.
 
         For partial missingness, the chosen mode is a contract: later
         observation distributions must stay in the same supported family and
@@ -231,7 +231,7 @@ class ObservationLogPotential:
                 f"{actual_mode!r} with event shape {actual_event_shape}."
             )
 
-    def log_potential_step(self, *, x, u, t, t_idx) -> Shaped[Array, ""]:
+    def log_prob_step(self, *, x, u, t, t_idx) -> Shaped[Array, ""]:
         """Return `log p(y_observed | x, u, t)` at one observation index.
 
         The returned value is a scalar log-probability contribution suitable for
@@ -241,8 +241,8 @@ class ObservationLogPotential:
         """
         if self.distribution_mode == "uninitialized":
             raise RuntimeError(
-                "ObservationLogPotential must be configured with an initial "
-                "observation distribution before log_potential_step is used."
+                "ObservationLogProb must be configured with an initial "
+                "observation distribution before log_prob_step is used."
             )
 
         y = self.safe_obs[t_idx]
