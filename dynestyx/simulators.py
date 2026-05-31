@@ -985,7 +985,9 @@ class DiscreteTimeSimulator(BaseSimulator):
             obs_values: Optional observations for conditioning. For non-Dirac
                 observation models, missingness-aware conditioning adds
                 per-time-step log-probability factors for the observed portions
-                of each row instead of using `obs=...` directly.
+                of each row instead of using `obs=...` directly. For partially
+                observed vector observations, the observation distribution
+                family and event shape must remain fixed across time.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Optional prediction times. If provided, prediction sites are
@@ -1284,7 +1286,9 @@ class ODESimulator(BaseSimulator):
                 log-probability factors. Each step adds a scalar
                 `log p(y_observed | x_t, u_t, t)` term with `numpyro.factor(...)`
                 while deterministic `y_t` sites preserve the original
-                observation values in the trace.
+                observation values in the trace. For partially observed vector
+                observations, the observation distribution family and event
+                shape must remain fixed across time.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Used when obs_times is None (e.g. from Filter).
