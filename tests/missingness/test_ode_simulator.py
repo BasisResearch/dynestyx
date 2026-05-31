@@ -20,6 +20,7 @@ from tests.missingness.utils import (
     manual_masked_independent_normal_log_prob,
     manual_masked_mvn_log_prob,
     observation_log_probs,
+    observation_site_names,
     set_full_row_missing,
     set_partial_row_missing,
 )
@@ -60,9 +61,11 @@ def test_ode_no_missing_conditioning_uses_log_potential_path():
             for k in range(len(times))
         ]
     )
-    assert not any(
-        name.startswith("f_y_") and not name.endswith("_lp") for name in conditioned
-    )
+    y_sites = observation_site_names(conditioned)
+    assert y_sites == [f"f_y_{k}" for k in range(len(times))]
+    for k, site_name in enumerate(y_sites):
+        assert conditioned[site_name]["type"] == "deterministic"
+        assert jnp.allclose(conditioned[site_name]["value"], obs_values[k])
     assert jnp.allclose(actual, expected)
 
 

@@ -626,6 +626,8 @@ def _apply_observation_log_potential(
         return carry, log_potential.observation_step(t_idx)
 
     _, observations = nscan(_step, None, jnp.arange(T))
+    for t_idx in range(T):
+        numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
     return observations
 
 
@@ -940,6 +942,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         observations = jnp.concatenate(
             [jnp.expand_dims(y_0, axis=0), scan_observations], axis=0
         )
+        for t_idx in range(len(times)):
+            numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
         return {
             "times": _tile_times(times, 1),
             "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
