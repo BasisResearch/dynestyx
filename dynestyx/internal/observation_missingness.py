@@ -1,4 +1,4 @@
-"""Internal helpers for conditioned observation log-potentials under simulator inference."""
+"""Helpers for simulator-side observation conditioning with missing data."""
 
 from __future__ import annotations
 
@@ -53,6 +53,9 @@ class ObservationLogPotential:
     has_missing: bool = dataclasses.field(init=False)
     has_partial_missing: bool = dataclasses.field(init=False)
     has_fully_missing_rows: bool = dataclasses.field(init=False)
+    expected_event_shape: tuple[int, ...] = dataclasses.field(
+        init=False, default_factory=tuple
+    )
 
     def __post_init__(self) -> None:
         """Precompute NaN-aware observation summaries once at construction time."""
@@ -113,20 +116,29 @@ class ObservationLogPotential:
         return self.obs_values.ndim <= 1 or self.obs_values.shape[-1] == 1
 
     def _configure_from_distribution(self, obs_dist: dist.Distribution) -> None:
-        """Choose the log-potential evaluation mode once before scanning in time."""
+        """Choose the log-potential evaluation mode once before scanning in time.
+
+        For partial missingness, the chosen mode is a contract: later
+        observation distributions must stay in the same supported family and
+        preserve the same event shape.
+        """
+        self.distribution_mode = self._distribution_mode(obs_dist)
+        self.expected_event_shape = tuple(obs_dist.event_shape)
+
+    def _distribution_mode(
+        self,
+        obs_dist: dist.Distribution,
+    ) -> Literal["masked", "multivariate_normal", "independent"]:
         if self._is_scalar_like_row():
-            self.distribution_mode = "masked"
-            return
+            return "masked"
 
         if isinstance(obs_dist, dist.MultivariateNormal):
-            self.distribution_mode = "multivariate_normal"
-            return
+            return "multivariate_normal"
 
         if isinstance(obs_dist, dist.Independent) and (
             obs_dist.reinterpreted_batch_ndims == 1
         ):
-            self.distribution_mode = "independent"
-            return
+            return "independent"
 
         if self.has_partial_missing:
             raise NotImplementedError(
@@ -135,7 +147,36 @@ class ObservationLogPotential:
                 "Independent(..., 1) observations."
             )
 
-        self.distribution_mode = "masked"
+        return "masked"
+
+    def _validate_partial_missing_distribution(
+        self, obs_dist: dist.Distribution
+    ) -> None:
+        if not self.has_partial_missing:
+            return
+
+        try:
+            actual_mode = self._distribution_mode(obs_dist)
+        except NotImplementedError as exc:
+            raise ValueError(
+                "Partial missingness requires a time-stable marginalizable "
+                "observation family. The simulator was configured with "
+                f"{self.distribution_mode!r}, but encountered an unsupported "
+                f"{type(obs_dist).__name__} at runtime."
+            ) from exc
+
+        actual_event_shape = tuple(obs_dist.event_shape)
+        if (
+            actual_mode != self.distribution_mode
+            or actual_event_shape != self.expected_event_shape
+        ):
+            raise ValueError(
+                "Partial missingness requires the observation distribution "
+                "family and event shape to remain fixed across time. "
+                f"Expected mode {self.distribution_mode!r} with event shape "
+                f"{self.expected_event_shape}, but received mode "
+                f"{actual_mode!r} with event shape {actual_event_shape}."
+            )
 
     def log_potential_step(self, *, x, u, t, t_idx) -> Array:
         """Return log p(y_{obs} | x, u, t) at a single observation index."""
@@ -149,6 +190,7 @@ class ObservationLogPotential:
         obs_mask = self.obs_mask[t_idx]
         row_has_any_observed = self.row_has_any_observed[t_idx]
         obs_dist = self.dynamics.observation_model(x=x, u=u, t=t)
+        self._validate_partial_missing_distribution(obs_dist)
 
         if self.distribution_mode == "masked":
             return obs_dist.mask(row_has_any_observed).log_prob(y)

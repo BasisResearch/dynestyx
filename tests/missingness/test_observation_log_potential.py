@@ -122,7 +122,7 @@ def test_observation_log_potential_partial_missing_unsupported_distribution_rais
         )
 
 
-def test_observation_log_potential_can_fail_late_if_distribution_type_changes():
+def test_observation_log_potential_partial_missing_type_change_raises_clear_error():
     obs_values = jnp.array([[1.0, jnp.nan], [1.0, jnp.nan]])
 
     def observation_model(x, u, t):
@@ -135,7 +135,10 @@ def test_observation_log_potential_can_fail_late_if_distribution_type_changes():
         obs_values=obs_values,
     )
 
-    with pytest.raises(Exception, match="obs_dist"):
+    with pytest.raises(
+        ValueError,
+        match="Partial missingness requires a time-stable marginalizable observation family",
+    ):
         log_potential.log_potential_step(
             x=jnp.array([1.0, 2.0]),
             u=None,
