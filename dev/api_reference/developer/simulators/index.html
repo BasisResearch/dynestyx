@@ -3774,6 +3774,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#dynestyx.simulators.DiscreteTimeSimulator._simulate_conditioned_scan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _simulate_conditioned_scan
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3862,6 +3873,17 @@
     <span class="md-ellipsis">
       
         Simulator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.simulators._apply_observation_log_prob" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _apply_observation_log_prob
       
     </span>
   </a>
@@ -4576,7 +4598,12 @@ as <code>numpyro.deterministic(...)</code> sites.</p>
         <p>Unroll a discrete-time model as a NumPyro model.</p>
 <p>Creates NumPyro sample sites for the initial condition (<code>"x_0"</code>), subsequent
 states (<code>"x_1"</code>, ...), and observations (<code>"y_0"</code>, ...). If <code>obs_values</code> is
-provided, observation sites are conditioned via <code>obs=...</code>.</p>
+provided for a non-Dirac observation model, conditioning is handled via
+per-step log-probability factors rather than <code>obs=...</code> sample sites. In
+that path, each time step contributes a scalar
+<code>log p(y_observed | x_t, u_t, t)</code> term through <code>numpyro.factor(...)</code>,
+while deterministic <code>y_t</code> sites still record the original observation
+values in the trace.</p>
 
 
 <details class="notes" open>
@@ -4638,7 +4665,12 @@ provided, observation sites are conditioned via <code>obs=...</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional observations for conditioning.</p>
+                <p>Optional observations for conditioning. For non-Dirac
+observation models, missingness-aware conditioning adds
+per-time-step log-probability factors for the observed portions
+of each row instead of using <code>obs=...</code> directly. For partially
+observed vector observations, the observation distribution
+family and event shape must remain fixed across time.</p>
               </div>
             </td>
             <td>
@@ -4696,6 +4728,24 @@ emitted at those times as <code>numpyro.sample("y_i", ..., obs=None)</code>.</p>
         <p>Returns:
     dict[str, State]: Dictionary with <code>"times"</code>, <code>"states"</code>, and
         <code>"observations"</code> trajectories.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.simulators.DiscreteTimeSimulator._simulate_conditioned_scan" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_simulate_conditioned_scan</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">times</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Array</span><span class="p">]</span></code>
+
+<a href="#dynestyx.simulators.DiscreteTimeSimulator._simulate_conditioned_scan" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Sequential latent-state scan for conditioned observations via log-probability terms.</p>
 
 
     </div>
@@ -4982,8 +5032,14 @@ states and observations have shape (n_simulations, T, ...).</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional observation array. If provided, observation sites are
-conditioned via <code>obs=obs_values[i]</code>.</p>
+                <p>Optional observation array. If provided for a non-Dirac
+observation model, conditioning is handled via per-step
+log-probability factors. Each step adds a scalar
+<code>log p(y_observed | x_t, u_t, t)</code> term with <code>numpyro.factor(...)</code>
+while deterministic <code>y_t</code> sites preserve the original
+observation values in the trace. For partially observed vector
+observations, the observation distribution family and event
+shape must remain fixed across time.</p>
               </div>
             </td>
             <td>
@@ -5568,6 +5624,24 @@ need to switch model types, create a new <code>Simulator()</code> instance.</p>
 
 </div>
 
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.simulators._apply_observation_log_prob" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_apply_observation_log_prob</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">states</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">times</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">log_prob</span><span class="p">:</span> <span class="n">ObservationLogProb</span><span class="p">,</span> <span class="n">control_path_eval</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Array</span><span class="p">],</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Array</span></code>
+
+<a href="#dynestyx.simulators._apply_observation_log_prob" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply observation log-probability terms and preserve NaNs in outputs.</p>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
