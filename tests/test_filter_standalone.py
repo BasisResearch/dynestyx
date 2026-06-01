@@ -1,4 +1,4 @@
-"""Tests for dsx.infer (standalone, no numpyro) and dsx.sample (numpyro model)."""
+"""Tests for dsx.condition (standalone, no numpyro) and dsx.sample (numpyro model)."""
 
 import jax
 import jax.numpy as jnp
@@ -27,16 +27,18 @@ def _make_data():
     return obs_times, obs_values
 
 
-# --- dsx.infer tests (standalone, no numpyro) ---
+# --- dsx.condition tests (standalone, no numpyro) ---
 
 
 def test_infer_returns_infer_result():
-    """dsx.infer returns an InferResult with marginal_loglik."""
+    """dsx.condition returns an InferResult with marginal_loglik."""
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)
 
     with Filter(filter_config=KFConfig(filter_source="cuthbert")):
-        result = dsx.infer("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        result = dsx.condition(
+            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+        )
 
     assert isinstance(result, InferResult)
     assert result.marginal_loglik is not None
@@ -46,14 +48,16 @@ def test_infer_returns_infer_result():
 
 
 def test_infer_enkf_with_crn_seed():
-    """dsx.infer works with EnKF and explicit crn_seed."""
+    """dsx.condition works with EnKF and explicit crn_seed."""
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)
 
     with Filter(
         filter_config=EnKFConfig(n_particles=16, crn_seed=jr.PRNGKey(0)),
     ):
-        result = dsx.infer("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        result = dsx.condition(
+            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+        )
 
     assert isinstance(result, InferResult)
     assert result.marginal_loglik is not None
@@ -61,13 +65,13 @@ def test_infer_enkf_with_crn_seed():
 
 
 def test_infer_optax_mle():
-    """Use dsx.infer + optax to do MLE without numpyro."""
+    """Use dsx.condition + optax to do MLE without numpyro."""
     obs_times, obs_values = _make_data()
 
     def neg_loglik(alpha):
         dynamics = _make_lti_dynamics(alpha)
         with Filter(filter_config=KFConfig(filter_source="cuthbert")):
-            result = dsx.infer(
+            result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
         return -result.marginal_loglik
@@ -89,7 +93,7 @@ def test_infer_optax_mle():
 
 
 def test_infer_does_not_register_numpyro_sites():
-    """dsx.infer does NOT register numpyro sites — that's dsx.sample's job."""
+    """dsx.condition does NOT register numpyro sites — that's dsx.sample's job."""
     from numpyro.handlers import seed, trace
 
     obs_times, obs_values = _make_data()
@@ -97,7 +101,7 @@ def test_infer_does_not_register_numpyro_sites():
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
         with Filter(filter_config=KFConfig(filter_source="cuthbert")):
-            result = dsx.infer(
+            result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
 
@@ -105,6 +109,25 @@ def test_infer_does_not_register_numpyro_sites():
     assert result.marginal_loglik is not None
     assert "f_marginal_loglik" not in tr
     assert "f_marginal_log_likelihood" not in tr
+
+
+def test_condition_no_observations():
+    """dsx.condition with no obs returns InferResult with marginal_loglik=None."""
+    dynamics = _make_lti_dynamics(0.5)
+
+    with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+        result = dsx.condition(
+            "f",
+            dynamics,
+            obs_times=None,
+            obs_values=None,
+            predict_times=jnp.arange(0.0, 5.0, 1.0),
+        )
+
+    assert isinstance(result, InferResult)
+    assert result.marginal_loglik is None
+    assert result.states is None
+    assert result.dists is None
 
 
 # --- dsx.sample tests (numpyro model) ---

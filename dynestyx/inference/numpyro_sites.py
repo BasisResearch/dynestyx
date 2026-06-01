@@ -1,7 +1,8 @@
 """NumPyro site registration for filter and smoother outputs.
 
 All numpyro.factor and numpyro.deterministic calls live here,
-keeping the integration backends (cuthbert, cd-dynamax) numpyro-free.
+keeping the integration backends (cuthbert, cd-dynamax) free of numpyro
+side effects (they still use numpyro.distributions for return types).
 """
 
 import jax

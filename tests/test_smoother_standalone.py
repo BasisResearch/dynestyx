@@ -1,4 +1,4 @@
-"""Tests for dsx.infer with Smoother (standalone, no numpyro)."""
+"""Tests for dsx.condition with Smoother (standalone, no numpyro)."""
 
 import jax
 import jax.numpy as jnp
@@ -27,16 +27,18 @@ def _make_data():
     return obs_times, obs_values
 
 
-# --- dsx.infer tests (standalone, no numpyro) ---
+# --- dsx.condition tests (standalone, no numpyro) ---
 
 
 def test_infer_smoother_returns_infer_result():
-    """dsx.infer with Smoother returns an InferResult."""
+    """dsx.condition with Smoother returns an InferResult."""
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)
 
     with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
-        result = dsx.infer("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        result = dsx.condition(
+            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+        )
 
     assert isinstance(result, InferResult)
     assert result.marginal_loglik is not None
@@ -46,13 +48,13 @@ def test_infer_smoother_returns_infer_result():
 
 
 def test_infer_smoother_optax_mle():
-    """Use dsx.infer + Smoother + optax to do MLE without numpyro."""
+    """Use dsx.condition + Smoother + optax to do MLE without numpyro."""
     obs_times, obs_values = _make_data()
 
     def neg_loglik(alpha):
         dynamics = _make_lti_dynamics(alpha)
         with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
-            result = dsx.infer(
+            result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
         return -result.marginal_loglik
@@ -74,7 +76,7 @@ def test_infer_smoother_optax_mle():
 
 
 def test_infer_smoother_does_not_register_numpyro_sites():
-    """dsx.infer with Smoother does NOT register numpyro sites."""
+    """dsx.condition with Smoother does NOT register numpyro sites."""
     from numpyro.handlers import seed, trace
 
     obs_times, obs_values = _make_data()
@@ -82,7 +84,7 @@ def test_infer_smoother_does_not_register_numpyro_sites():
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
         with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
-            result = dsx.infer(
+            result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
 
@@ -90,6 +92,25 @@ def test_infer_smoother_does_not_register_numpyro_sites():
     assert result.marginal_loglik is not None
     assert "f_marginal_loglik" not in tr
     assert "f_marginal_log_likelihood" not in tr
+
+
+def test_condition_smoother_no_observations():
+    """dsx.condition with Smoother and no obs returns InferResult with marginal_loglik=None."""
+    dynamics = _make_lti_dynamics(0.5)
+
+    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        result = dsx.condition(
+            "f",
+            dynamics,
+            obs_times=None,
+            obs_values=None,
+            predict_times=jnp.arange(0.0, 5.0, 1.0),
+        )
+
+    assert isinstance(result, InferResult)
+    assert result.marginal_loglik is None
+    assert result.states is None
+    assert result.dists is None
 
 
 # --- dsx.sample tests (numpyro model) ---

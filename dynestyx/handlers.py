@@ -81,7 +81,7 @@ def _validate_and_prepare(
     return _get_dynamics_with_t0(dynamics, obs_times, predict_times)
 
 
-def infer(
+def condition(
     name: str,
     dynamics: DynamicalModel,
     *,
@@ -121,7 +121,7 @@ def infer(
         predict_times=predict_times,
     )
 
-    return _infer_intp(
+    return _condition_intp(
         name,
         dynamics_with_t0,
         obs_times=obs_times,
@@ -154,7 +154,7 @@ def sample(
     The ``sample`` primitive is meant to mimic the ``numpyro.sample`` primitive
     in usage, but using a ``DynamicalModel`` instead of a ``Distribution``.
 
-    Internally, ``sample`` calls ``dsx.infer(...)`` and then registers the
+    Internally, ``sample`` calls ``dsx.condition(...)`` and then registers the
     results as numpyro sites (``numpyro.factor``, ``numpyro.deterministic``).
 
     Shape note:
@@ -173,7 +173,7 @@ def sample(
         predict_times: Times at which to predict the observations.
         **kwargs: Additional keyword arguments.
     """
-    result = infer(
+    result = condition(
         name,
         dynamics,
         obs_times=obs_times,
@@ -191,7 +191,7 @@ def sample(
 
 
 @defop
-def _infer_intp(
+def _condition_intp(
     name: str,
     dynamics: DynamicalModel,
     *,
@@ -406,7 +406,7 @@ class plate(ObjectInterpretation):
         self._cm.__exit__(exc_type, exc, tb)
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
 
-    @implements(_infer_intp)
+    @implements(_condition_intp)
     def _sample_ds(
         self, name, dynamics, *, plate_shapes=(), **kwargs
     ) -> FunctionOfTime:

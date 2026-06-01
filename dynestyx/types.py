@@ -19,7 +19,7 @@ class FunctionOfTime(Protocol):
 
 @dataclasses.dataclass
 class InferResult:
-    """Result of dsx.infer — the numpyro-free inference primitive.
+    """Result of dsx.condition — the numpyro-free conditioning primitive.
 
     Carries all outputs from the handler stack (Filter, Smoother, etc.)
     without registering any numpyro sites.

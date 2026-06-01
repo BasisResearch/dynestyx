@@ -255,18 +255,24 @@ def run_discrete_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> tuple[jax.Array, object, list[dist.Distribution]]:
+) -> tuple[jax.Array | None, object | None, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
     Pure computation — no numpyro side-effects. Callers are responsible for
     registering numpyro.factor / numpyro.deterministic if needed.
 
     Returns:
-        tuple: (marginal_loglik, raw_states, filtered_dists).
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}),
+              or None if obs_values is empty.
+            - raw_states: cuthbert filter state object (KalmanFilterState,
+              ParticleFilterState, etc.), or None if obs_values is empty.
+            - filtered_dists: list of distributions p(x_t | y_{1:t}) at each
+              obs time, for posterior rollout.
     """
     obs_len = int(obs_values.shape[0])
     if obs_len == 0:
-        return jnp.array(0.0), None, []
+        return None, None, []
 
     marginal_loglik, states = compute_cuthbert_filter(
         dynamics,

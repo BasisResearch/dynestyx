@@ -81,7 +81,12 @@ def run_discrete_smoother(
     registering numpyro.factor / numpyro.deterministic if needed.
 
     Returns:
-        tuple: (marginal_loglik, posterior, smoothed_dists).
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - posterior: CD-Dynamax posterior object with smoothed_means and
+              smoothed_covariances attributes.
+            - smoothed_dists: list of MultivariateNormal distributions p(x_t | y_{1:T})
+              at each obs time, for posterior rollout.
     """
     posterior = compute_cd_dynamax_discrete_smoother(
         dynamics,

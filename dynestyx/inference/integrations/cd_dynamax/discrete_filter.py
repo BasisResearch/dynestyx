@@ -140,7 +140,12 @@ def run_discrete_filter(
     registering numpyro.factor / numpyro.deterministic if needed.
 
     Returns:
-        tuple: (marginal_loglik, posterior, filtered_dists).
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - posterior: CD-Dynamax posterior object with filtered_means and
+              filtered_covariances attributes.
+            - filtered_dists: list of MultivariateNormal distributions p(x_t | y_{1:t})
+              at each obs time, for posterior rollout.
     """
     posterior = compute_cd_dynamax_discrete_filter(
         dynamics,

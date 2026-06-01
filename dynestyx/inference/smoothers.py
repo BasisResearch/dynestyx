@@ -12,7 +12,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.handlers import HandlesSelf, _infer_intp
+from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
     _validate_missing_observation_support,
@@ -106,7 +106,7 @@ def _final_obs_times_for_rollout(
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base class for smoother handlers."""
 
-    @implements(_infer_intp)
+    @implements(_condition_intp)
     def _sample_ds(
         self,
         name: str,
@@ -256,10 +256,7 @@ class Smoother(BaseSmootherLogFactorAdder):
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                try:
-                    key = numpyro.prng_key()
-                except Exception:
-                    key = None
+                key = numpyro.prng_key()  # returns None outside seed handler
 
         if plate_shapes:
             return self._add_log_factors_batched(
@@ -527,7 +524,7 @@ def _smooth_discrete_time(
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
+) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax smoothers."""
 
     if isinstance(smoother_config, UKFSmootherConfig) and (

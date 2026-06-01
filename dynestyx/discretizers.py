@@ -3,7 +3,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
-from dynestyx.handlers import HandlesSelf, _infer_intp
+from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.models import (
     DynamicalModel,
     GaussianStateEvolution,
@@ -152,7 +152,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         super().__init__()
         self.discretize = discretize
 
-    @implements(_infer_intp)
+    @implements(_condition_intp)
     def _sample_ds(
         self,
         name: str,

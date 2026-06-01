@@ -19,7 +19,7 @@ from jax import Array
 from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
-from dynestyx.handlers import HandlesSelf, _infer_intp
+from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
@@ -553,7 +553,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
         return stacked
 
-    @implements(_infer_intp)
+    @implements(_condition_intp)
     def _sample_ds(
         self,
         name: str,

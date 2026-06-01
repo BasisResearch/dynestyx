@@ -257,15 +257,21 @@ def run_discrete_smoother(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> tuple[jax.Array, object, list[dist.Distribution]]:
+) -> tuple[jax.Array | None, object | None, list[dist.Distribution]]:
     """Run discrete-time smoother via cuthbert.
 
     Returns:
-        tuple: (marginal_loglik, raw_states, smoothed_dists).
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}),
+              or None if obs_values is empty.
+            - raw_states: cuthbert smoother state object, or None if obs_values
+              is empty.
+            - smoothed_dists: list of distributions p(x_t | y_{1:T}) at each
+              obs time, for posterior rollout.
     """
     t1 = int(obs_values.shape[0])
     if t1 == 0:
-        return jnp.array(0.0), None, []
+        return None, None, []
 
     marginal_loglik, states = compute_cuthbert_smoother(
         dynamics,
