@@ -12,7 +12,7 @@ from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
 from jaxtyping import Real, Shaped
 
-from dynestyx.models import DynamicalModel
+from dynestyx.models import Diffusion, DynamicalModel
 
 
 def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
@@ -159,6 +159,56 @@ def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool
     return suffix_ndim == 0 or suffix_ndim >= 2
 
 
+def _diffusion_coefficient_is_plate_batched(
+    diffusion: Diffusion, plate_shapes: tuple[int, ...]
+) -> bool:
+    """Return True if a diffusion's *constant* coefficient is laid out per-member.
+
+    True means the coefficient is a constant array whose leading axes are exactly
+    ``plate_shapes`` followed by its intrinsic event axes — i.e. it should be
+    sliced (``coefficient[plate_idx]``) or vmapped (``in_axes=0``) as an opaque
+    unit. Classification uses the coefficient's event rank (a static property of
+    the ``Diffusion``) rather than a raw suffix-rank heuristic, so a *shared*
+    matrix/vector coefficient whose shape happens to coincide with the plate sizes
+    (e.g. a ``(state_dim, bm_dim)`` matrix under nested plates ``(state_dim,
+    bm_dim)``) is correctly treated as shared.
+
+    Returns False for a callable coefficient: such a coefficient is not classified
+    as a unit here. The plate consumers instead recurse into a callable
+    ``eqx.Module`` coefficient and slice/vmap its per-member array fields
+    generically (a plain closure that captures per-member parameters remains the
+    unsupported sharp edge; see the ``dsx.plate`` docstring).
+    """
+    event_rank = diffusion.coefficient_event_rank
+    if event_rank is None:
+        return False
+    shape = diffusion._constant_shape()
+    assert shape is not None
+    n_plates = len(plate_shapes)
+    return len(shape) == n_plates + event_rank and tuple(shape[:n_plates]) == tuple(
+        plate_shapes
+    )
+
+
+def _is_opaque_plate_leaf(node) -> bool:
+    """Shared ``is_leaf`` predicate for plate classification, slicing, and vmap.
+
+    A ``Diffusion`` with a *constant* coefficient is an opaque unit (classified by
+    its own ``coefficient_event_rank``, since a path-blind shape check cannot
+    disambiguate it). A *callable* coefficient may be an ``eqx.Module`` carrying
+    per-member array fields, so the tree must recurse into it and handle those
+    fields generically. NumPyro distributions are always opaque. The three
+    consumers (:func:`_has_any_batched_plate_source`,
+    ``inference.plate_utils._make_plate_in_axes``,
+    ``simulators._slice_tree_for_plate_member``) must share this one predicate so
+    a callable diffusion is never seen as batched by the slicer/vmap while being
+    invisible to the alignment guard.
+    """
+    if isinstance(node, Diffusion):
+        return not callable(node.coefficient)
+    return isinstance(node, numpyro.distributions.Distribution)
+
+
 def _dist_has_plate_batch_dims(dist_obj, plate_shapes: tuple[int, ...]) -> bool:
     """Return True when a distribution's leading ``batch_shape`` matches plates."""
     if dist_obj is None or not hasattr(dist_obj, "batch_shape"):
@@ -183,10 +233,17 @@ def _has_any_batched_plate_source(
     """Return True if dynamics, arrays, or distributions carry plate axes."""
     for path, leaf in jax.tree_util.tree_flatten_with_path(
         dynamics,
-        is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+        is_leaf=_is_opaque_plate_leaf,
     )[0]:
         if isinstance(leaf, numpyro.distributions.Distribution):
             if _dist_has_plate_batch_dims(leaf, plate_shapes):
+                return True
+            continue
+        # Only constant-coefficient diffusions are opaque leaves here; a callable
+        # coefficient is recursed into, so its per-member array fields reach the
+        # generic ``_leaf_is_plate_batched`` branch below.
+        if isinstance(leaf, Diffusion):
+            if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
                 return True
             continue
         if _leaf_is_plate_batched(leaf, plate_shapes, path=path):

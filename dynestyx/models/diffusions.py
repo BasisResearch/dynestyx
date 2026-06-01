@@ -62,6 +62,27 @@ class Diffusion(eqx.Module):
         self.bm_dim = None if bm_dim is None else int(bm_dim)
         self._validate_init()
 
+    @property
+    def coefficient_event_rank(self) -> int | None:
+        """The per-member event rank of a constant coefficient (``None`` if callable).
+
+        The event rank is the number of trailing axes that make up one member's
+        coefficient, independent of any leading plate batch axes (``FullDiffusion``
+        is matrix-valued so rank 2, ``DiagonalDiffusion`` vector-valued so rank 1,
+        ``ScalarDiffusion`` scalar so rank 0). It lets the plate machinery tell a
+        shared coefficient from a genuinely per-member one even when its shape
+        coincides with the plate sizes. ``None`` for callable coefficients, whose
+        value is not a sliceable pytree leaf.
+
+        This is a derived property rather than a stored field beacuse of interactions
+        with effectful and equinox.
+        """
+        raise NotImplementedError(
+            "Please don't construct `Diffusion` directly; instead instantiate one "
+            "of its subclasses (e.g., `FullDiffusion`, `DiagonalDiffusion`, or "
+            "`ScalarDiffusion`)"
+        )
+
     def evaluate_value(
         self,
         *,
@@ -199,6 +220,11 @@ class FullDiffusion(Diffusion):
         if shape is not None and self.bm_dim is None:
             self.bm_dim = int(shape[-1])
 
+    @property
+    def coefficient_event_rank(self) -> int | None:
+        # Matrix-valued coefficient with trailing shape (..., state_dim, bm_dim).
+        return None if self._constant_shape() is None else 2
+
     def resolve_metadata(
         self,
         *,
@@ -279,6 +305,11 @@ class DiagonalDiffusion(Diffusion):
                 "with trailing shape (..., state_dim). "
                 f"Got shape {shape}."
             )
+
+    @property
+    def coefficient_event_rank(self) -> int | None:
+        # Vector-valued coefficient with trailing shape (..., state_dim).
+        return None if self._constant_shape() is None else 1
 
     def resolve_metadata(
         self,
@@ -366,6 +397,15 @@ class ScalarDiffusion(Diffusion):
                 "shape (..., 1). "
                 f"Got shape {shape}."
             )
+
+    @property
+    def coefficient_event_rank(self) -> int | None:
+        # Scalar coefficient: rank 0 when stored as a bare scalar ``()``, or rank 1
+        # when stored with an explicit trailing event axis ``(..., 1)``.
+        shape = self._constant_shape()
+        if shape is None:
+            return None
+        return 1 if (len(shape) > 0 and shape[-1] == 1) else 0
 
     def resolve_metadata(
         self,
