@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "effectful",
+    "effectful>=0.2.0",
     "cuthbert>=0.0.10",
     "cuthbertlib>=0.0.10",
     "cd-dynamax>=0.3.3",
@@ -45,6 +45,8 @@ dependencies = [
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
     "jaxtyping>=0.3.9",
+    "diffrax>=0.6.2",
+    "numpy>=2.0",
     # NumPyro 0.20.1 currently fails to import with JAX 0.10.0
     # (removed xla_pmap_p); cap until upstream compatibility lands.
     "jax>=0.6.2,<0.10",
@@ -63,7 +65,7 @@ allow-direct-references = true
 dev = [
     "mike>=2.1.0",
     "mkdocs-material>=9.7.1",
-    "mkdocs>=1.6.1",
+    "mkdocs>=1.6.1,<2",
     "pytest>=9.0.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.11",
@@ -73,7 +75,7 @@ dev = [
     "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
-    "nbconvert>=7"
+    "optax>=0.2.0"
 ]
 
 [tool.ruff.lint]
