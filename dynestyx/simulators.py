@@ -26,6 +26,7 @@ from dynestyx.inference.plate_utils import (
 )
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
+    Diffusion,
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
@@ -37,9 +38,11 @@ from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (
     _build_control_path,
+    _diffusion_coefficient_is_plate_batched,
     _dist_has_plate_batch_dims,
     _get_val_or_None,
     _has_any_batched_plate_source,
+    _is_opaque_plate_leaf,
     _leaf_is_plate_batched,
     _validate_site_sorting,
 )
@@ -104,10 +107,17 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
     sliced separately by ``_slice_dist_for_plate_member``.
     """
 
-    def _is_distribution_leaf(node) -> bool:
-        return isinstance(node, numpyro.distributions.Distribution)
-
     def _slice_leaf(path, leaf):
+        # Only constant-coefficient diffusions are opaque leaves (see
+        # ``_is_opaque_plate_leaf``), so indexing the coefficient by ``plate_idx``
+        # is well-defined; a callable coefficient is recursed into and its array
+        # fields are sliced generically by the branch below.
+        if isinstance(leaf, Diffusion):
+            if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
+                return eqx.tree_at(
+                    lambda d: d.coefficient, leaf, leaf.coefficient[plate_idx]
+                )
+            return leaf
         if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
             return leaf[plate_idx]
         return leaf
@@ -115,7 +125,7 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
     return jax.tree_util.tree_map_with_path(
         _slice_leaf,
         tree,
-        is_leaf=_is_distribution_leaf,
+        is_leaf=_is_opaque_plate_leaf,
     )
 
 
