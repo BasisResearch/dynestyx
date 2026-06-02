@@ -33,7 +33,7 @@ from dynestyx.simulators import (
     SDESimulator,
     Simulator,
 )
-from dynestyx.types import InferResult
+from dynestyx.types import ConditionedResult
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -58,7 +58,7 @@ __all__ = [
     "Smoother",
     "flatten_draws",
     "condition",
-    "InferResult",
+    "ConditionedResult",
     "plate",
     "sample",
     "DiracIdentityObservation",

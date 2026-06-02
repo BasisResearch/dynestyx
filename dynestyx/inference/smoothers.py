@@ -52,7 +52,7 @@ from dynestyx.inference.smoother_configs import (
     UKFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.types import FunctionOfTime, InferResult
+from dynestyx.types import ConditionedResult, FunctionOfTime
 
 DiscreteSmootherConfig = (
     KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
@@ -191,7 +191,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     @abstractmethod
     def _build_infer_result(
         self, name: str, smoothed_dists: list | None
-    ) -> InferResult: ...
+    ) -> ConditionedResult: ...
 
 
 @dataclasses.dataclass
@@ -318,8 +318,8 @@ class Smoother(BaseSmootherLogFactorAdder):
 
     def _build_infer_result(
         self, name: str, smoothed_dists: list | None
-    ) -> InferResult:
-        """Construct InferResult with a deferred numpyro registration callback."""
+    ) -> ConditionedResult:
+        """Construct ConditionedResult with a deferred numpyro registration callback."""
         marginal_loglik = self.marginal_loglik
         states = self.smoothed_states
         config = self._smoother_config_used
@@ -337,7 +337,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             else:
                 register_smoother_sites(site_name, marginal_loglik, states, config)
 
-        return InferResult(
+        return ConditionedResult(
             marginal_loglik=marginal_loglik,
             states=states,
             dists=smoothed_dists,

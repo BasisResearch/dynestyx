@@ -11,7 +11,7 @@ from jaxtyping import Array, Real
 from dynestyx.models import (
     DynamicalModel,
 )
-from dynestyx.types import FunctionOfTime, InferResult
+from dynestyx.types import ConditionedResult, FunctionOfTime
 from dynestyx.utils import (
     _get_dynamics_with_t0,
     _validate_control_dim,
@@ -99,7 +99,7 @@ def condition(
     """Run inference on a dynamical model without registering numpyro sites.
 
     This is the numpyro-free entry point. When a Filter or Smoother handler
-    is active, returns an InferResult dataclass with marginal_loglik, states, etc.
+    is active, returns a ConditionedResult dataclass with marginal_loglik, states, etc.
 
     Parameters:
         name: Name of the inference site.
@@ -184,7 +184,10 @@ def sample(
         **kwargs,
     )
 
-    if isinstance(result, InferResult) and result._register_numpyro_sites is not None:
+    if (
+        isinstance(result, ConditionedResult)
+        and result._register_numpyro_sites is not None
+    ):
         result._register_numpyro_sites(name)
 
     return result

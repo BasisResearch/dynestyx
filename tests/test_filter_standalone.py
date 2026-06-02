@@ -8,7 +8,7 @@ import optax
 import dynestyx as dsx
 from dynestyx.inference.filter_configs import EnKFConfig, KFConfig
 from dynestyx.inference.filters import Filter
-from dynestyx.types import InferResult
+from dynestyx.types import ConditionedResult
 
 
 def _make_lti_dynamics(alpha):
@@ -31,7 +31,7 @@ def _make_data():
 
 
 def test_infer_returns_infer_result():
-    """dsx.condition returns an InferResult with marginal_loglik."""
+    """dsx.condition returns an ConditionedResult with marginal_loglik."""
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)
 
@@ -40,7 +40,7 @@ def test_infer_returns_infer_result():
             "f", dynamics, obs_times=obs_times, obs_values=obs_values
         )
 
-    assert isinstance(result, InferResult)
+    assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
     assert jnp.isfinite(result.marginal_loglik)
     assert result.states is not None
@@ -59,7 +59,7 @@ def test_infer_enkf_with_crn_seed():
             "f", dynamics, obs_times=obs_times, obs_values=obs_values
         )
 
-    assert isinstance(result, InferResult)
+    assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
     assert jnp.isfinite(result.marginal_loglik)
 
@@ -105,14 +105,14 @@ def test_infer_does_not_register_numpyro_sites():
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
 
-    assert isinstance(result, InferResult)
+    assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
     assert "f_marginal_loglik" not in tr
     assert "f_marginal_log_likelihood" not in tr
 
 
 def test_condition_no_observations():
-    """dsx.condition with no obs returns InferResult with marginal_loglik=None."""
+    """dsx.condition with no obs returns ConditionedResult with marginal_loglik=None."""
     dynamics = _make_lti_dynamics(0.5)
 
     with Filter(filter_config=KFConfig(filter_source="cuthbert")):
@@ -124,7 +124,7 @@ def test_condition_no_observations():
             predict_times=jnp.arange(0.0, 5.0, 1.0),
         )
 
-    assert isinstance(result, InferResult)
+    assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is None
     assert result.states is None
     assert result.dists is None

@@ -63,7 +63,7 @@ from dynestyx.inference.numpyro_sites import (
 )
 from dynestyx.inference.plate_utils import _array_plate_axis, _make_plate_in_axes
 from dynestyx.models import DynamicalModel
-from dynestyx.types import FunctionOfTime, InferResult
+from dynestyx.types import ConditionedResult, FunctionOfTime
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -139,7 +139,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     @abstractmethod
     def _build_infer_result(
         self, name: str, filtered_dists: list | None
-    ) -> InferResult: ...
+    ) -> ConditionedResult: ...
 
 
 def _default_filter_config(dynamics: DynamicalModel):
@@ -232,7 +232,7 @@ class Filter(BaseLogFactorAdder):
         """Run filtering and store the marginal log-likelihood.
 
         Pure computation — no numpyro side effects. Site registration
-        happens via the callback in InferResult when called through dsx.sample.
+        happens via the callback in ConditionedResult when called through dsx.sample.
         """
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
@@ -333,8 +333,8 @@ class Filter(BaseLogFactorAdder):
 
     def _build_infer_result(
         self, name: str, filtered_dists: list | None
-    ) -> InferResult:
-        """Construct InferResult with a deferred numpyro registration callback."""
+    ) -> ConditionedResult:
+        """Construct ConditionedResult with a deferred numpyro registration callback."""
         marginal_loglik = self.marginal_loglik
         states = self.filtered_states
         config = self._filter_config_used
@@ -359,7 +359,7 @@ class Filter(BaseLogFactorAdder):
             else:
                 register_filter_sites(site_name, marginal_loglik, states, config)
 
-        return InferResult(
+        return ConditionedResult(
             marginal_loglik=marginal_loglik,
             states=states,
             dists=filtered_dists,

@@ -18,7 +18,7 @@ class FunctionOfTime(Protocol):
 
 
 @dataclasses.dataclass
-class InferResult:
+class ConditionedResult:
     """Result of dsx.condition — the numpyro-free conditioning primitive.
 
     Carries all outputs from the handler stack (Filter, Smoother, etc.)
@@ -36,7 +36,7 @@ class InferResult:
         self, t: float | int | Real[Array, ""]
     ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError(
-            "InferResult is not callable as a FunctionOfTime. "
+            "ConditionedResult is not callable as a FunctionOfTime. "
             "Access .marginal_loglik, .states, or .dists instead."
         )
 
