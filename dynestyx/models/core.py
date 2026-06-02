@@ -457,7 +457,7 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
     discretizers, and inference backends.
     """
 
-    diffusion: Diffusion = eqx.field(static=True, kw_only=True)
+    diffusion: Diffusion = eqx.field(kw_only=True)
 
     def __init__(
         self,
