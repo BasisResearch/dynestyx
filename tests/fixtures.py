@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -79,6 +80,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EKFConfig,
+    EnKFConfig,
     KFConfig,
     PFConfig,
     UKFConfig,
@@ -917,7 +919,8 @@ def data_conditioned_discrete_time_l63_auto(request):
 
 
 def data_conditioned_jumpy_controls(
-    filter_type: str = "ekf", filter_source: str = "cuthbert"
+    filter_type: str = "ekf",
+    filter_source: Literal["cuthbert", "cd_dynamax"] = "cuthbert",
 ):
     rng_key = jr.PRNGKey(0)
     data_init_key, data_solver_key, mcmc_key, posterior_pred_key, ctrl_key = jr.split(
@@ -951,22 +954,38 @@ def data_conditioned_jumpy_controls(
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        config = {
-            "kf": KFConfig(
+        if filter_type == "kf":
+            config = KFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
-            ),
-            "ekf": EKFConfig(
+            )
+        elif filter_type == "ekf":
+            config = EKFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
-            ),
-            "ukf": UKFConfig(
+            )
+        elif filter_type == "enkf":
+            if filter_source != "cuthbert":
+                raise ValueError("EnKFConfig only supports filter_source='cuthbert'.")
+            config = EnKFConfig(
+                record_filtered_states_mean=True,
+                n_particles=_n_particles(64),
+                filter_source=filter_source,
+            )
+        elif filter_type == "ukf":
+            if filter_source != "cd_dynamax":
+                raise ValueError("UKFConfig only supports filter_source='cd_dynamax'.")
+            config = UKFConfig(
                 record_filtered_states_mean=True, filter_source=filter_source
-            ),
-            "pf": PFConfig(
+            )
+        elif filter_type == "pf":
+            if filter_source != "cuthbert":
+                raise ValueError("PFConfig only supports filter_source='cuthbert'.")
+            config = PFConfig(
                 record_filtered_states_mean=True,
                 n_particles=_n_particles(3_000),
                 filter_source=filter_source,
-            ),
-        }[filter_type]
+            )
+        else:
+            raise ValueError(f"Unknown filter_type: {filter_type!r}")
         with Filter(filter_config=config):
             return jumpy_controls_model(
                 obs_times=obs_times,
@@ -1075,11 +1094,13 @@ def data_conditioned_jumpy_controls_ode():
         (False, "kf", "cd_dynamax"),
         (False, "kf", "cuthbert"),
         (False, "ekf", "cuthbert"),
+        (False, "enkf", "cuthbert"),
         (False, "ekf", "cd_dynamax"),
         (False, "ukf", "cd_dynamax"),
         (True, "kf", "cd_dynamax"),
         (True, "kf", "cuthbert"),
         (True, "ekf", "cuthbert"),
+        (True, "enkf", "cuthbert"),
         (True, "ekf", "cd_dynamax"),
         (True, "ukf", "cd_dynamax"),
     ],
@@ -1132,11 +1153,18 @@ def data_conditioned_discrete_time_lti_kf(request):
 
     # Build conditioned model
     def data_conditioned_model():
-        config = {
-            "kf": KFConfig(filter_source=filter_source),
-            "ekf": EKFConfig(filter_source=filter_source),
-            "ukf": UKFConfig(filter_source=filter_source),
-        }[filter_type]
+        if filter_type == "kf":
+            config = KFConfig(filter_source=filter_source)
+        elif filter_type == "ekf":
+            config = EKFConfig(filter_source=filter_source)
+        elif filter_type == "enkf":
+            config = EnKFConfig(
+                n_particles=_n_particles(64), filter_source=filter_source
+            )
+        elif filter_type == "ukf":
+            config = UKFConfig(filter_source=filter_source)
+        else:
+            raise ValueError(f"Unsupported filter_type={filter_type!r}")
         with Filter(filter_config=config):
             return discrete_time_lti_model(
                 obs_times=obs_times,

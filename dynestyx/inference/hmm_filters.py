@@ -1,18 +1,22 @@
 """HMM filter: exact forward filtering for discrete-state models."""
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
+from jaxtyping import Array, Float, Int, Real, Shaped
 
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
+from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.utils import _should_record_field
 
 
-def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
+def enumerate_latent_states(dynamics: DynamicalModel) -> Int[Array, " n_states"]:
     """
     Returns all possible latent states.
     """
@@ -22,8 +26,8 @@ def enumerate_latent_states(dynamics: DynamicalModel) -> jnp.ndarray:
 
 def hmm_log_initial_probs(
     dynamics: DynamicalModel,
-    xs: jnp.ndarray,
-) -> jnp.ndarray:
+    xs: Int[Array, " n_states"],
+) -> Float[Array, " n_states"]:
     """
     log p(x_0)
     shape: (K,)
@@ -38,18 +42,19 @@ def hmm_log_initial_probs(
 
 def hmm_log_transition_matrix(
     dynamics: DynamicalModel,
-    xs: jnp.ndarray,
-    t_now,
-    t_next,
+    xs: Int[Array, " n_states"],
+    t_now: float | int | Real[Array, ""],
+    t_next: float | int | Real[Array, ""],
     u=None,
-) -> jnp.ndarray:
+) -> Float[Array, "n_states n_states"]:
     """
     log p(x_{t_next} = j | x_{t_now} = i, u)
     shape: (K, K)
     """
+    state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
     def row(x_prev):
-        dist = dynamics.state_evolution(x=x_prev, u=u, t_now=t_now, t_next=t_next)
+        dist = state_transition(x=x_prev, u=u, t_now=t_now, t_next=t_next)
 
         def col(x_next):
             return dist.log_prob(x_next)
@@ -61,11 +66,11 @@ def hmm_log_transition_matrix(
 
 def hmm_log_emission_probs(
     dynamics: DynamicalModel,
-    xs: jnp.ndarray,
-    y,
-    t,
+    xs: Int[Array, " n_states"],
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    t: float | int | Real[Array, ""],
     u=None,
-) -> jnp.ndarray:
+) -> Float[Array, " n_states"]:
     """
     log p(y_t | x_t, u_t)
     shape: (K,)
@@ -81,10 +86,15 @@ def hmm_log_emission_probs(
 
 def hmm_log_components(
     dynamics: DynamicalModel,
-    obs_times: jnp.ndarray,  # (T,)
-    obs_values: jnp.ndarray,  # (T, ...)
-    ctrl_values=None,  # (T, ...) or None
-):
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+) -> tuple[
+    Float[Array, " n_states"],
+    Float[Array, "*plate time_minus_1 n_states n_states"],
+    Float[Array, "*plate time n_states"],
+]:
     """
     Returns:
       log_pi        : (K,)
@@ -126,10 +136,10 @@ def hmm_log_components(
 
 
 def hmm_filter(
-    log_pi: jnp.ndarray,  # (K,)
-    log_A_seq: jnp.ndarray,  # (T-1, K, K)
-    log_emit_seq: jnp.ndarray,  # (T, K)
-):
+    log_pi: Float[Array, " n_states"],
+    log_A_seq: Float[Array, "*plate time_minus_1 n_states n_states"],
+    log_emit_seq: Float[Array, "*plate time n_states"],
+) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
     """
     Exact HMM filtering.
 
@@ -150,16 +160,15 @@ def hmm_filter(
 
         # Update: p(x_t | y_{1:t}) \propto p(y_t | x_t) p(x_t | y_{1:t-1})
         log_alpha = log_emit_t + log_pred
-
+        log_filt = jax.nn.log_softmax(log_alpha, axis=-1)
         log_Z = logsumexp(log_alpha, axis=-1)
-        log_filt = log_alpha - log_Z
 
         return (log_filt, loglik + log_Z), log_filt
 
     # t = 0
     log_alpha0 = log_pi + log_emit_seq[0]
     log_Z0 = logsumexp(log_alpha0, axis=-1)
-    log_filt0 = log_alpha0 - log_Z0
+    log_filt0 = jax.nn.log_softmax(log_alpha0, axis=-1)
 
     # t = 1..T-1
     # Use normalized filtered state (log_filt0) in carry for numerical stability
@@ -174,15 +183,44 @@ def hmm_filter(
     return loglik, log_filt_seq
 
 
+def compute_hmm_filter(
+    dynamics: DynamicalModel,
+    *,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
+    """Pure-JAX HMM filter computation (no numpyro side-effects).
+
+    Returns:
+        tuple: (loglik, log_filt_seq) where loglik is the marginal log-likelihood
+        and log_filt_seq is (T, K) log-filtered state probabilities.
+    """
+    log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+        dynamics,
+        obs_times,
+        obs_values,
+        ctrl_values=ctrl_values,
+    )
+
+    return hmm_filter(
+        log_pi,
+        log_A_seq,
+        log_emit_seq,
+    )
+
+
 def _filter_hmm(
     name: str,
     dynamics: DynamicalModel,
     filter_config: HMMConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,
 ) -> list[dist.Distribution]:
     """Exact HMM marginal likelihood via forward filtering.
@@ -200,18 +238,11 @@ def _filter_hmm(
         List of Categorical distributions p(x_t | y_{1:t}) at each obs time,
         for use with Filter + DiscreteTimeSimulator rollout.
     """
-
-    log_pi, log_A_seq, log_emit_seq = hmm_log_components(
+    loglik, log_filt_seq = compute_hmm_filter(
         dynamics,
-        obs_times,
-        obs_values,
+        obs_times=obs_times,
+        obs_values=obs_values,
         ctrl_values=ctrl_values,
-    )
-
-    loglik, log_filt_seq = hmm_filter(
-        log_pi,
-        log_A_seq,
-        log_emit_seq,
     )
 
     numpyro.factor(f"{name}_marginal_log_likelihood", loglik)

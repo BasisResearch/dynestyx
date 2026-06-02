@@ -9,7 +9,103 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
+import pytest
 from numpyro.infer import Predictive
+
+_OUTPUT_MASTER_DIR: Path | None = None
+
+
+def assert_tree_all_finite(tree, *, where: str = "value") -> None:
+    """Assert that every floating-point leaf in a nested value is finite."""
+
+    def _walk(node, path: str) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                next_path = f"{path}.{key}" if path else f".{key}"
+                _walk(value, next_path)
+            return
+
+        if isinstance(node, (list, tuple)):
+            for index, value in enumerate(node):
+                _walk(value, f"{path}[{index}]")
+            return
+
+        try:
+            arr = jnp.asarray(node)
+        except Exception:
+            return
+
+        if not jnp.issubdtype(arr.dtype, jnp.inexact):
+            return
+
+        finite = jnp.isfinite(arr)
+        if bool(jnp.all(finite)):
+            return
+
+        bad_index = tuple(int(i) for i in np.argwhere(~np.asarray(finite))[0])
+        bad_value = np.asarray(arr)[bad_index]
+        location = f"{where}{path}" if path else where
+        raise AssertionError(
+            f"{location} contains non-finite value {bad_value} at index {bad_index}"
+        )
+
+    _walk(tree, "")
+
+
+def assert_trace_sites_exist_and_field_all_finite(
+    tr,
+    *site_names: str,
+    field: str = "value",
+    where: str,
+) -> None:
+    """Assert that selected trace sites exist and have a finite field."""
+
+    selected = {}
+    for site_name in site_names:
+        if site_name not in tr:
+            raise AssertionError(f"{where}: site {site_name!r} not found in trace")
+
+        site = tr[site_name]
+        if field not in site:
+            raise AssertionError(
+                f"{where}: site {site_name!r} does not contain field {field!r}"
+            )
+
+        selected[site_name] = site[field]
+
+    assert_tree_all_finite(
+        selected,
+        where=where,
+    )
+
+
+def test_assert_trace_sites_exist_and_field_all_finite_missing_site_error():
+    tr = {"present": {"value": jnp.array(1.0)}}
+
+    with pytest.raises(
+        AssertionError,
+        match=r"demo trace: site 'missing' not found in trace",
+    ):
+        assert_trace_sites_exist_and_field_all_finite(
+            tr,
+            "present",
+            "missing",
+            where="demo trace",
+        )
+
+
+def test_assert_trace_sites_exist_and_field_all_finite_nonfinite_error():
+    tr = {"present": {"value": jnp.array([1.0, jnp.nan])}}
+
+    with pytest.raises(
+        AssertionError,
+        match=r"demo trace\.present contains non-finite value nan at index \(1,\)",
+    ):
+        assert_trace_sites_exist_and_field_all_finite(
+            tr,
+            "present",
+            where="demo trace",
+        )
 
 
 def run_profile_likelihood(
@@ -123,12 +219,12 @@ def get_output_dir(test_name: str) -> Path:
     if master_dir_str is not None:
         master_dir = Path(master_dir_str)
     else:
-        if not hasattr(get_output_dir, "_master_dir"):
+        global _OUTPUT_MASTER_DIR
+        if _OUTPUT_MASTER_DIR is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            master_dir = Path(".output") / timestamp
-            master_dir.mkdir(parents=True, exist_ok=True)
-            get_output_dir._master_dir = master_dir  # type: ignore[attr-defined]
-        master_dir = get_output_dir._master_dir  # type: ignore[attr-defined]
+            _OUTPUT_MASTER_DIR = Path(".output") / timestamp
+            _OUTPUT_MASTER_DIR.mkdir(parents=True, exist_ok=True)
+        master_dir = _OUTPUT_MASTER_DIR
 
     output_dir = master_dir / test_name
     output_dir.mkdir(parents=True, exist_ok=True)

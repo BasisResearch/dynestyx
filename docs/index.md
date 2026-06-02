@@ -20,16 +20,17 @@ Why `dynestyx`? It seamlessly wraps our favorite ways to learn dynamics from mes
 We recommend [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install git+https://github.com/BasisResearch/dynestyx.git
+uv pip install dynestyx
 ```
 
 Or with `pip`:
 
 ```bash
-pip install git+https://github.com/BasisResearch/dynestyx.git
+pip install dynestyx
 ```
+
+!!! tip "Documentation versions"
+    Published docs use **versioned builds**: **`stable`** matches the latest **git tag** (e.g. `v0.0.1`); **`latest`** matches the **`main`** branch. Use the version menu in the site header to switch. See [Versioned documentation](versioning.md) for install commands and how this relates to notebooks.
 
 ## Quick Example: Simulation
 
@@ -106,7 +107,7 @@ Other JAX-based libraries for dynamical systems:
 - **[dynamax](https://github.com/probml/dynamax)** — Discrete-time state space models with linear/non-linear Kalman filters and Bayesian parameter estimation
 - **[cd-dynamax](https://github.com/hd-UQ/cd_dynamax)** — Continuous-discrete state space models with EnKF, EKF, UKF, PF and Bayesian parameter estimation
 - **[PFJax](https://pfjax.readthedocs.io/en/latest/)** — Nonlinear and non-Gaussian discrete-time models with particle filters and particle MCMC
-- **[Cuthbert](https://state-space-models.github.io/cuthbert/)** — Discrete-time state space models with linear/non-linear Kalman (and Particle Filters) filters, options for associative scans.
+- **[Cuthbert](https://state-space-models.github.io/cuthbert/)** — Discrete-time state space models with linear/non-linear Kalman, ensemble Kalman, and particle filters, plus options for associative scans.
 - **[diffrax](https://docs.kidger.site/diffrax/)** - Numerical differential equation solvers.
 
 Other probabilistic programming languages with support for dynamical systems:

@@ -27,9 +27,9 @@ def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811
 
     if SAVE_FIG and OUTPUT_DIR is not None:
         plot_hmm_states_and_observations(
-            times=obs_times.squeeze(0),
-            x=synthetic["states"].squeeze(0),
-            y=synthetic["observations"].squeeze(0),
+            times=obs_times,
+            x=synthetic["states"],
+            y=synthetic["observations"],
             save_path=OUTPUT_DIR / "data_generation.png",
         )
 

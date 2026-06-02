@@ -6,8 +6,9 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
-
-from dynestyx.types import Control, State, Time
+import numpyro.primitives
+from jax import Array
+from jaxtyping import Real
 
 
 def _unwrap_base_distribution(distribution: Any) -> Any:
@@ -37,11 +38,32 @@ def _is_categorical_distribution(distribution: Any) -> bool:
     return name.startswith("Categorical") and "OneHot" not in name
 
 
-def _infer_vector_dim_from_distribution(distribution: Any, name: str) -> int:
-    """Infer scalar/vector dimension from a NumPyro-compatible distribution."""
+def _infer_vector_dim_from_distribution(
+    distribution: Any, name: str, *, allow_batch_shape: bool = False
+) -> int:
+    """Infer scalar/vector event dimension from a NumPyro-compatible distribution.
+
+    When ``allow_batch_shape`` is true, leading batch dimensions are ignored and
+    only the distribution event shape is used. This is needed inside
+    ``dsx.plate`` where a vector-valued state distribution can have shape
+    ``(plate_size, state_dim)`` but still represents a ``state_dim`` event.
+
+    Note: Name is used only for error messages.
+    """
     if _is_categorical_distribution(distribution):
         base = _unwrap_base_distribution(distribution)
         return int(jnp.asarray(base.probs).shape[-1])
+
+    if allow_batch_shape and hasattr(distribution, "event_shape"):
+        event_shape = tuple(int(d) for d in distribution.event_shape)
+        if len(event_shape) == 0:
+            return 1
+        if len(event_shape) == 1:
+            return int(event_shape[0])
+        raise ValueError(
+            f"{name} must have scalar or vector event shape; got event_shape "
+            f"{event_shape}."
+        )
 
     shape: tuple[int, ...] | None = None
 
@@ -72,7 +94,9 @@ def _infer_vector_dim_from_distribution(distribution: Any, name: str) -> int:
     )
 
 
-def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
+def _make_probe_state(
+    initial_condition: Any, state_dim: int
+) -> Real[Array, " state_dim"] | Real[Array, ""]:
     """Build a synthetic state value used for shape-check probes."""
     if _is_categorical_distribution(initial_condition):
         return jnp.array(0, dtype=jnp.int32)
@@ -82,82 +106,129 @@ def _make_probe_state(initial_condition: Any, state_dim: int) -> jax.Array:
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
-    x0: State,
-    u0: Control | None,
-    t0: Time,
+    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
+    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_probe: Real[Array, ""],
 ) -> None:
-    """Validate the shape of the continuous-time state evolution w.r.t. state_dim and bm_dim."""
-    drift_shape = jax.eval_shape(lambda: state_evolution.total_drift(x0, u0, t0)).shape
+    """Validate the drift shape of a continuous-time state evolution."""
+    drift_shape = jax.eval_shape(
+        lambda: state_evolution.total_drift(x_probe, u_probe, t_probe)
+    ).shape
     if drift_shape != (state_dim,):
         raise ValueError(
             "State drift shape is inconsistent with state_dim. "
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
 
-    if state_evolution.diffusion_coefficient is not None:
-        diffusion_shape = jax.eval_shape(
-            lambda: state_evolution.diffusion_coefficient(x0, u0, t0)
-        ).shape
-        if len(diffusion_shape) != 2:
-            raise ValueError(
-                "diffusion_coefficient must return a matrix with shape "
-                "(state_dim, bm_dim). "
-                f"Got shape {diffusion_shape}."
-            )
-        if diffusion_shape[0] != state_dim:
-            raise ValueError(
-                "diffusion_coefficient first dimension must match state_dim. "
-                f"Got diffusion shape {diffusion_shape}, state_dim={state_dim}."
-            )
-        inferred_bm_dim = int(diffusion_shape[1])
-        if (
-            state_evolution.bm_dim is not None
-            and int(state_evolution.bm_dim) != inferred_bm_dim
-        ):
-            raise ValueError(
-                "bm_dim does not match inferred diffusion_coefficient output shape. "
-                f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
-            )
-        state_evolution.bm_dim = inferred_bm_dim
-    else:
-        if state_evolution.bm_dim is not None:
-            raise ValueError("bm_dim cannot be set when diffusion_coefficient is None.")
-        state_evolution.bm_dim = None
 
-
-def _validate_state_evolution_output_shape(
-    state_evolution: Callable[[State, Control, Time], State]
-    | Callable[[State, Control, Time, Time], State],
+def _validate_discrete_state_evolution_output_shape(
+    state_evolution: Any,
     state_dim: int,
-    x0: State,
-    u0: Control | None,
-    t0: Time,
-    *,
-    continuous_time: bool,
+    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
+    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_probe: Real[Array, ""],
 ) -> None:
-    """Validate the shape of the state evolution w.r.t. state_dim (and bm_dim for continuous-time models)."""
-    if continuous_time:
-        _validate_continuous_state_evolution(
-            state_evolution=state_evolution,
-            state_dim=state_dim,
-            x0=x0,
-            u0=u0,
-            t0=t0,
+    """Validate a discrete-time state evolution against the inferred state dimension."""
+    if getattr(state_evolution, "diffusion", None) is not None:
+        raise ValueError("diffusion can only be set for continuous-time models.")
+    t_now = t_probe
+    t_next = t_probe + 1.0
+    transition_dist = state_evolution(x=x_probe, u=u_probe, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]
+    inferred_state_dim = _infer_vector_dim_from_distribution(
+        transition_dist, "state_evolution(x, u, t_now, t_next)"
+    )
+    if inferred_state_dim != state_dim:
+        raise ValueError(
+            "State transition shape is inconsistent with state_dim. "
+            f"state_dim={state_dim}, inferred={inferred_state_dim}."
         )
-    else:
-        if getattr(state_evolution, "bm_dim", None) is not None:
-            raise ValueError(
-                "bm_dim can only be set for continuous-time models with "
-                "diffusion_coefficient."
-            )
-        t_now = t0
-        t_next = t0 + 1.0
-        transition_dist = state_evolution(x=x0, u=u0, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]
-        inferred_state_dim = _infer_vector_dim_from_distribution(
-            transition_dist, "state_evolution(x, u, t_now, t_next)"
+
+
+def _validate_continuous_time_flag(
+    continuous_time: bool | None, inferred_continuous_time: bool
+) -> None:
+    """Ensure optional continuous_time agrees with inferred model type."""
+    if (
+        continuous_time is not None
+        and bool(continuous_time) != inferred_continuous_time
+    ):
+        raise ValueError(
+            "continuous_time does not match inferred state_evolution type."
         )
-        if inferred_state_dim != state_dim:
-            raise ValueError(
-                "State transition shape is inconsistent with state_dim. "
-                f"state_dim={state_dim}, inferred={inferred_state_dim}."
+
+
+def _validate_state_dim(state_dim: int | None, inferred_state_dim: int) -> None:
+    """Ensure optional state_dim agrees with inferred initial condition shape."""
+    if state_dim is not None and int(state_dim) != int(inferred_state_dim):
+        raise ValueError(
+            "state_dim does not match inferred initial_condition shape. "
+            f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
+        )
+
+
+def _validate_categorical_state(
+    categorical_state: bool | None, inferred_categorical_state: bool
+) -> None:
+    """Ensure optional categorical_state agrees with inferred initial condition type."""
+    if (
+        categorical_state is not None
+        and bool(categorical_state) != inferred_categorical_state
+    ):
+        raise ValueError(
+            "categorical_state does not match inferred initial_condition type. "
+            f"Got categorical_state={categorical_state}, "
+            f"inferred={inferred_categorical_state}."
+        )
+
+
+def _inside_numpyro_plate_context() -> bool:
+    """Return True when currently executing inside any active numpyro.plate frame."""
+    return any(
+        isinstance(frame, numpyro.primitives.plate)
+        for frame in numpyro.primitives._PYRO_STACK
+    )
+
+
+def _infer_observation_dim_in_plate_context(
+    *,
+    observation_model: Callable[
+        [
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            Real[Array, ""],
+        ],
+        Any,
+    ],
+    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
+    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_probe: Real[Array, ""],
+    observation_dim: int | None,
+) -> int:
+    """Infer observation dimension in plate context, falling back to explicit value."""
+    if observation_dim is not None:
+        return int(observation_dim)
+
+    try:
+        obs_dist = observation_model(x_probe, u_probe, t_probe)
+        return int(
+            _infer_vector_dim_from_distribution(
+                obs_dist,
+                "observation_model(x, u, t)",
+                allow_batch_shape=True,
             )
+        )
+    except Exception:
+        return 0
+
+
+def _validate_observation_dim(
+    observation_dim: int | None, inferred_observation_dim: int
+) -> None:
+    """Ensure optional observation_dim agrees with inferred observation shape."""
+    if observation_dim is not None and int(observation_dim) != int(
+        inferred_observation_dim
+    ):
+        raise ValueError(
+            "observation_dim does not match inferred observation_model output shape. "
+            f"Got observation_dim={observation_dim}, inferred={inferred_observation_dim}."
+        )

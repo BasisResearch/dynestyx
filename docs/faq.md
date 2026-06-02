@@ -24,13 +24,13 @@ with Filter(filter_config=HMMConfig()):
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (pseudo-marginal MCMC—parameters only). Note: the usage of discrete-time filters is currently under active development (likely incorrect implementations).
+- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
 For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), use the simulator approach (currently working reliably), do:
 ```python
 with DiscreteTimeSimulator():
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
-For filter-based marginalization (currently not working reliably), do:
+For filter-based marginalization with the default EnKF, do:
 ```python
 with Filter():
     return model(obs_times=obs_times, obs_values=obs_values)
@@ -93,7 +93,7 @@ The `n_simulations` parameter is available on `DiscreteTimeSimulator`, `SDESimul
 
 ## What about hierarchical models?
 
-Feature coming soon.
+Hierarchical models are supported by the [`dsx.plate`](./api_reference/public/handlers.md) primitive! This allows for multiple levels of hierarchy (e.g., modelling populations, treatment arms, and individuals within each treatment arm), or simple multi-trajectory inference. You can see an example [here](./tutorials/gentle_intro/08_hierarchical_inference.ipynb).
 
 ## What about neural nets?
 

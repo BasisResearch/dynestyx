@@ -1,8 +1,40 @@
 from typing import Any
 
 import jax
+import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Array, Float, Real
 from numpyro.distributions import constraints
+
+
+def covariance_from_cholesky(
+    chol_cov: Float[Array, "*plate time state_dim state_dim"],
+) -> Float[Array, "*plate time state_dim state_dim"]:
+    return jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
+
+
+def squeeze_leading_singletons(arr: Any, event_ndim: int) -> jax.Array:
+    """Remove leading broadcast singleton axes while preserving event dimensions.
+
+    Used at integration boundaries (cd_dynamax / cuthbert) where per-member
+    parameters may arrive with broadcast ``(1, ..., 1, *event)`` prefixes from
+    NumPyro plate machinery. Strips those leading 1s without touching the
+    trailing ``event_ndim`` axes.
+
+    Raises:
+        ValueError: if ``arr`` has fewer than ``event_ndim`` axes — the caller
+            asked us to preserve more axes than exist.
+    """
+    arr = jnp.asarray(arr)
+    if arr.ndim < event_ndim:
+        raise ValueError(
+            f"squeeze_leading_singletons: arr has ndim={arr.ndim} but "
+            f"event_ndim={event_ndim}; cannot preserve more event axes than "
+            f"the array has."
+        )
+    while arr.ndim > event_ndim and arr.shape[0] == 1:
+        arr = arr[0]
+    return arr
 
 
 class WeightedParticles(dist.Distribution):
@@ -25,24 +57,40 @@ class WeightedParticles(dist.Distribution):
         learnable distribution parameters.
 
     Args:
-        particles: Array of shape ``(n_particles, state_dim)``.
-        log_weights: Array of shape ``(n_particles,)`` containing
+        particles: Array of shape ``(*batch_shape, n_particles, state_dim)``.
+        log_weights: Array of shape ``(*batch_shape, n_particles)`` containing
             (possibly unnormalized) log weights.
     """
 
     arg_constraints: dict = {}
     support: Any = constraints.real_vector
     pytree_data_fields = ("particles", "log_weights")
-    particles: jax.Array
-    log_weights: jax.Array
+    particles: (
+        Real[Array, "*plate n_particles state_dim"] | Real[Array, "*plate n_particles"]
+    )
+    log_weights: Float[Array, "*plate n_particles"]
 
     def __init__(
-        self, particles: jax.Array, log_weights: jax.Array, validate_args=None
+        self,
+        particles: Real[Array, "*plate n_particles state_dim"]
+        | Real[Array, "*plate n_particles"],
+        log_weights: Float[Array, "*plate n_particles"],
+        validate_args=None,
     ):
-        self.particles = particles  # (n_particles, state_dim)
-        self.log_weights = log_weights  # (n_particles,)
-        batch_shape = ()
-        event_shape = particles.shape[1:]
+        if particles.ndim < 2:
+            raise ValueError(
+                "particles must have shape (*batch_shape, n_particles, state_dim)."
+            )
+        if log_weights.shape != particles.shape[:-1]:
+            raise ValueError(
+                "log_weights must have shape particles.shape[:-1]. "
+                f"Got particles.shape={particles.shape}, log_weights.shape={log_weights.shape}."
+            )
+
+        self.particles = particles
+        self.log_weights = log_weights
+        batch_shape = particles.shape[:-2]
+        event_shape = particles.shape[-1:]
         super().__init__(
             batch_shape=batch_shape,
             event_shape=event_shape,
@@ -51,14 +99,26 @@ class WeightedParticles(dist.Distribution):
 
     def sample(self, key, sample_shape=()):
         idx = dist.Categorical(logits=self.log_weights).sample(key, sample_shape)
-        return self.particles[idx]
+        n_particles = self.particles.shape[-2]
+        state_dim = self.particles.shape[-1]
+
+        particles = jnp.broadcast_to(
+            self.particles,
+            idx.shape + (n_particles, state_dim),
+        )
+        flat_particles = particles.reshape((-1, n_particles, state_dim))
+        flat_idx = idx.reshape((-1,))
+        sampled = jax.vmap(lambda p, i: p[i])(flat_particles, flat_idx)
+        return sampled.reshape(idx.shape + (state_dim,))
 
     def log_prob(self, value):
         raise NotImplementedError("log_prob is not implemented for WeightedParticles.")
 
 
 def particles_to_delta_mixtures(
-    particles: jax.Array, log_weights: jax.Array
+    particles: Real[Array, "*plate time n_particles state_dim"]
+    | Real[Array, "*plate time n_particles"],
+    log_weights: Float[Array, "*plate time n_particles"],
 ) -> list[dist.Distribution]:
     """Convert particles and weights to per-time weighted-particle distributions.
 
@@ -79,10 +139,5 @@ def particles_to_delta_mixtures(
         f"got {particles.shape[:2]} and {log_weights.shape[:2]}."
     )
 
-    log_weights_norm = log_weights - jax.scipy.special.logsumexp(
-        log_weights, axis=-1, keepdims=True
-    )
-    return [
-        WeightedParticles(particles[i], log_weights_norm[i])
-        for i in range(particles.shape[0])
-    ]
+    z = jax.nn.log_softmax(log_weights, axis=-1)
+    return [WeightedParticles(particles[i], z[i]) for i in range(particles.shape[0])]

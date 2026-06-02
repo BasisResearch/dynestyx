@@ -5,14 +5,14 @@ extension to LTI factories, Neural SDEs, etc.
 """
 
 from collections.abc import Callable
+from typing import cast
 
 import equinox as eqx
-import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
-from dynestyx.types import Control, State, Time, dState
 
 
 class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
@@ -30,17 +30,17 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     covariance.
     """
 
-    A: jax.Array
-    B: jax.Array | None = None
-    bias: jax.Array | None = None
-    cov: jax.Array
+    A: Float[Array, "*a_plate state_dim state_dim"]
+    cov: Float[Array, "*cov_plate state_dim state_dim"]
+    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None
+    bias: Float[Array, "*bias_plate state_dim"] | None = None
 
     def __init__(
         self,
-        A: jax.Array,
-        cov: jax.Array,
-        B: jax.Array | None = None,
-        bias: jax.Array | None = None,
+        A: Float[Array, "*a_plate state_dim state_dim"],
+        cov: Float[Array, "*cov_plate state_dim state_dim"],
+        B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
+        bias: Float[Array, "*bias_plate state_dim"] | None = None,
     ):
         """
         Args:
@@ -79,31 +79,84 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
     $$
 
     where $F$ is a user-provided transition function and $Q$ is the
-    process-noise covariance.
+    process-noise covariance (either constant or state/time dependent).
     """
 
-    F: Callable[[State, Control, Time, Time], State]
-    cov: jax.Array
+    F: Callable[
+        [
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            float | int | Real[Array, ""],
+            float | int | Real[Array, ""],
+        ],
+        Real[Array, " state_dim"] | Real[Array, ""],
+    ]
+    cov: (
+        Float[Array, "*plate state_dim state_dim"]
+        | Callable[
+            [
+                Real[Array, " state_dim"] | Real[Array, ""],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                float | int | Real[Array, ""],
+                float | int | Real[Array, ""],
+            ],
+            Float[Array, "*plate state_dim state_dim"],
+        ]
+    )
 
     def __init__(
         self,
-        F: Callable[[State, Control, Time, Time], State],
-        cov: jax.Array,
+        F: Callable[
+            [
+                Real[Array, " state_dim"] | Real[Array, ""],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                float | int | Real[Array, ""],
+                float | int | Real[Array, ""],
+            ],
+            Real[Array, " state_dim"] | Real[Array, ""],
+        ],
+        cov: Float[Array, "*plate state_dim state_dim"]
+        | Callable[
+            [
+                Real[Array, " state_dim"] | Real[Array, ""],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                float | int | Real[Array, ""],
+                float | int | Real[Array, ""],
+            ],
+            Float[Array, "*plate state_dim state_dim"],
+        ],
     ):
         """
         Args:
             F (Callable[[State, Control, Time, Time], State]): Transition
                 function mapping $(x, u, t_k, t_{k+1})$ to the conditional mean.
-            cov (jax.Array): Process-noise covariance with shape
-                $(d_x, d_x)$.
+            cov (jax.Array | Callable[[State, Control, Time, Time], jax.Array]):
+                Process-noise covariance with shape $(d_x, d_x)$, or a callable
+                mapping $(x, u, t_k, t_{k+1})$ to that covariance.
         """
         self.F = F
         self.cov = cov
 
     def __call__(self, x, u, t_now, t_next):
         loc = self.F(x, u, t_now, t_next)
+        if callable(self.cov):
+            cov_fn = cast(
+                Callable[
+                    [
+                        Real[Array, " state_dim"] | Real[Array, ""],
+                        Real[Array, " control_dim"] | Real[Array, ""] | None,
+                        float | int | Real[Array, ""],
+                        float | int | Real[Array, ""],
+                    ],
+                    Float[Array, "*plate state_dim state_dim"],
+                ],
+                self.cov,
+            )
+            cov = cov_fn(x, u, t_now, t_next)
+        else:
+            cov = self.cov
 
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
 
 class AffineDrift(eqx.Module):
@@ -128,16 +181,16 @@ class AffineDrift(eqx.Module):
         b (jax.Array | None): Optional additive bias with shape $(d_x,)$.
     """
 
-    A: jax.Array
-    B: jax.Array | None = None
-    b: jax.Array | None = None
+    A: Float[Array, "*a_plate state_dim state_dim"]
+    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None
+    b: Float[Array, "*bias_plate state_dim"] | None = None
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> dState:
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Real[Array, " state_dim"]:
         out = jnp.dot(self.A, x)
         if self.B is not None:
             u_vec = u if u is not None else jnp.zeros(self.B.shape[1])

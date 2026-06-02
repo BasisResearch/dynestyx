@@ -7,6 +7,7 @@ from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,
     DynamicalModel,
+    FullDiffusion,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
@@ -173,7 +174,7 @@ def continuous_time_stochastic_l63_model(
                 )
                 + (10 * u if u is not None else jnp.zeros(3))
             ),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
+            diffusion=FullDiffusion(lambda x, u, t: jnp.eye(3)),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[1.0, 0.0, 0.0]]), R=jnp.array([[1.0**2]])
@@ -229,7 +230,7 @@ def continuous_time_stochastic_l63_model_dirac_obs(
                 )
                 + (10 * u if u is not None else jnp.zeros_like(x))
             ),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(3),
+            diffusion=FullDiffusion(lambda x, u, t: jnp.eye(3)),
         ),
         observation_model=DiracIdentityObservation(),
     )
@@ -290,7 +291,7 @@ def continuous_time_LTI_gaussian(
         ),
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: A @ x + (10 * u if u is not None else jnp.zeros(2)),
-            diffusion_coefficient=lambda x, u, t: jnp.eye(2),
+            diffusion=FullDiffusion(lambda x, u, t: jnp.eye(2)),
         ),
         observation_model=LinearGaussianObservation(
             H=jnp.array([[0.0, 1.0]]), R=jnp.array([[1.0**2]])
@@ -543,7 +544,7 @@ def jumpy_controls_model_sde(
 ):
     state_evolution = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: x + u,
-        diffusion_coefficient=lambda x, u, t: 0.01 * jnp.eye(1),
+        diffusion=FullDiffusion(lambda x, u, t: 0.01 * jnp.eye(1)),
     )
     dynamics = DynamicalModel(
         control_dim=1,

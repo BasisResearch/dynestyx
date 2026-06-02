@@ -1,26 +1,27 @@
-import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Array, Float
 
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
 )
+from dynestyx.models.diffusions import FullDiffusion
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.models.state_evolution import AffineDrift, LinearGaussianStateEvolution
 
 
 def LTI_discrete(
-    A: jax.Array,
-    Q: jax.Array,
-    H: jax.Array,
-    R: jax.Array,
-    B: jax.Array | None = None,
-    b: jax.Array | None = None,
-    D: jax.Array | None = None,
-    d: jax.Array | None = None,
-    initial_mean: jax.Array | None = None,
-    initial_cov: jax.Array | None = None,
+    A: Float[Array, "*a_plate state_dim state_dim"],
+    Q: Float[Array, "*q_plate state_dim state_dim"],
+    H: Float[Array, "*h_plate observation_dim state_dim"],
+    R: Float[Array, "*r_plate observation_dim observation_dim"],
+    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
+    b: Float[Array, "*state_bias_plate state_dim"] | None = None,
+    D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None,
+    d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
+    initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
+    initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
 ) -> DynamicalModel:
     """
     Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
@@ -64,20 +65,20 @@ def LTI_discrete(
     Returns:
         DynamicalModel: A discrete-time LTI state-space model.
     """
-    state_dim = A.shape[0]
-    control_dim = B.shape[1] if B is not None else 0
+    state_dim = A.shape[-1]
+    control_dim = B.shape[-1] if B is not None else 0
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
-    elif initial_mean.shape != (state_dim,):
+    elif initial_mean.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_mean must have shape ({state_dim},), got {initial_mean.shape}"
+            f"initial_mean must have last dim {state_dim}, got shape {initial_mean.shape}"
         )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
-    elif initial_cov.shape != (state_dim, state_dim):
+    elif initial_cov.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_cov must have shape ({state_dim}, {state_dim}), got {initial_cov.shape}"
+            f"initial_cov must have last dim {state_dim}, got shape {initial_cov.shape}"
         )
 
     initial_condition = dist.MultivariateNormal(
@@ -97,16 +98,16 @@ def LTI_discrete(
 
 
 def LTI_continuous(
-    A: jax.Array,
-    L: jax.Array,
-    H: jax.Array,
-    R: jax.Array,
-    B: jax.Array | None = None,
-    b: jax.Array | None = None,
-    D: jax.Array | None = None,
-    d: jax.Array | None = None,
-    initial_mean: jax.Array | None = None,
-    initial_cov: jax.Array | None = None,
+    A: Float[Array, "*a_plate state_dim state_dim"],
+    L: Float[Array, "*diffusion_plate state_dim bm_dim"],
+    H: Float[Array, "*h_plate observation_dim state_dim"],
+    R: Float[Array, "*r_plate observation_dim observation_dim"],
+    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
+    b: Float[Array, "*state_bias_plate state_dim"] | None = None,
+    D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None,
+    d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
+    initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
+    initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
 ) -> DynamicalModel:
     """
     Build a continuous-time linear time-invariant (LTI) `DynamicalModel`.
@@ -151,20 +152,20 @@ def LTI_continuous(
     Returns:
         DynamicalModel: A continuous-time LTI state-space model.
     """
-    state_dim = A.shape[0]
-    control_dim = B.shape[1] if B is not None else 0
+    state_dim = A.shape[-1]
+    control_dim = B.shape[-1] if B is not None else 0
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
-    elif initial_mean.shape != (state_dim,):
+    elif initial_mean.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_mean must have shape ({state_dim},), got {initial_mean.shape}"
+            f"initial_mean must have last dim {state_dim}, got shape {initial_mean.shape}"
         )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
-    elif initial_cov.shape != (state_dim, state_dim):
+    elif initial_cov.shape[-1] != state_dim:
         raise ValueError(
-            f"initial_cov must have shape ({state_dim}, {state_dim}), got {initial_cov.shape}"
+            f"initial_cov must have last dim {state_dim}, got shape {initial_cov.shape}"
         )
 
     initial_condition = dist.MultivariateNormal(
@@ -175,7 +176,7 @@ def LTI_continuous(
 
     state_evolution = ContinuousTimeStateEvolution(
         drift=drift,
-        diffusion_coefficient=lambda x, u, t: L,
+        diffusion=FullDiffusion(L),
     )
 
     observation_model = LinearGaussianObservation(H=H, R=R, D=D, bias=d)

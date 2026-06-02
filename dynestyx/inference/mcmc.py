@@ -63,7 +63,7 @@ class MCMCInference:
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                *model_args,
+                *model_args,  # type: ignore
                 **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
@@ -75,7 +75,7 @@ class MCMCInference:
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                *model_args,
+                *model_args,  # type: ignore
                 **model_kwargs,
             )
         else:
@@ -96,7 +96,7 @@ def _numpyro_mcmc(
     """Run NumPyro-based MCMC (`NUTS` or `HMC`) and return samples."""
     if isinstance(mcmc_config, NUTSConfig):
         mcmc = MCMC(
-            NUTS(model),
+            NUTS(model, init_strategy=mcmc_config.init_strategy),
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
             num_chains=mcmc_config.num_chains,
@@ -109,6 +109,7 @@ def _numpyro_mcmc(
                 num_steps=mcmc_config.num_steps,
                 adapt_step_size=mcmc_config.adapt,
                 adapt_mass_matrix=mcmc_config.adapt,
+                init_strategy=mcmc_config.init_strategy,
             ),
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
@@ -153,6 +154,6 @@ def _blackjax_mcmc(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        *model_args,
+        *model_args,  # type: ignore
         **model_kwargs,
     )

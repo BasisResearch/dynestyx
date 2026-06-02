@@ -2,12 +2,11 @@
 
 from collections.abc import Callable
 
-import jax
 import jax.numpy as jnp
+from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
 from dynestyx.models.core import ObservationModel
-from dynestyx.types import Control, Observation, State, Time
 
 
 class LinearGaussianObservation(ObservationModel):
@@ -25,17 +24,17 @@ class LinearGaussianObservation(ObservationModel):
     noise covariance.
     """
 
-    H: jax.Array
-    R: jax.Array
-    D: jax.Array | None = None
-    bias: jax.Array | None = None
+    H: Float[Array, "*h_plate observation_dim state_dim"]
+    R: Float[Array, "*r_plate observation_dim observation_dim"]
+    D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None
+    bias: Float[Array, "*bias_plate observation_dim"] | None = None
 
     def __init__(
         self,
-        H: jax.Array,
-        R: jax.Array,
-        D: jax.Array | None = None,
-        bias: jax.Array | None = None,
+        H: Float[Array, "*h_plate observation_dim state_dim"],
+        R: Float[Array, "*r_plate observation_dim observation_dim"],
+        D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None,
+        bias: Float[Array, "*bias_plate observation_dim"] | None = None,
     ):
         """
         Args:
@@ -76,10 +75,28 @@ class GaussianObservation(ObservationModel):
     observation noise covariance.
     """
 
-    h: Callable[[State, Control, Time], Observation]
-    R: jax.Array
+    h: Callable[
+        [
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            Real[Array, ""],
+        ],
+        Real[Array, " observation_dim"] | Real[Array, ""],
+    ]
+    R: Float[Array, "*plate observation_dim observation_dim"]
 
-    def __init__(self, h: Callable[[State, Control, Time], jax.Array], R: jax.Array):
+    def __init__(
+        self,
+        h: Callable[
+            [
+                Real[Array, " state_dim"] | Real[Array, ""],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                Real[Array, ""],
+            ],
+            Real[Array, " observation_dim"] | Real[Array, ""],
+        ],
+        R: Float[Array, "*plate observation_dim observation_dim"],
+    ):
         """
         Args:
             h (Callable[[State, Control, Time], jax.Array]): Measurement
@@ -109,4 +126,8 @@ class DiracIdentityObservation(ObservationModel):
     """
 
     def __call__(self, x, u, t):
-        return dist.Delta(x)
+        # Treat scalar latent states as scalar events, and otherwise use only
+        # the trailing state axis as the event dimension so any leading batch
+        # or plate axes are preserved.
+        event_dim = 0 if jnp.ndim(x) == 0 else 1
+        return dist.Delta(x, event_dim=event_dim)

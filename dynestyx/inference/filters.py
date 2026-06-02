@@ -1,12 +1,26 @@
 import dataclasses
+import math
+from typing import cast
 
+import equinox as eqx
 import jax
+import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.inference.checkers import (
+    _validate_batched_plate_alignment,
+    _validate_missing_observation_support,
+)
+from dynestyx.inference.distribution_utils import (
+    _categorical_log_probs_to_dists,
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
@@ -25,16 +39,32 @@ from dynestyx.inference.filter_configs import (
     PFResamplingConfig,
     UKFConfig,
 )
-from dynestyx.inference.hmm_filters import _filter_hmm
-from dynestyx.inference.integrations.cd_dynamax.continuous import run_continuous_filter
+from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
+from dynestyx.inference.integrations.cd_dynamax.continuous import (
+    ContinuousTimeFilterConfig,
+    compute_continuous_filter,
+    run_continuous_filter,
+)
+from dynestyx.inference.integrations.cd_dynamax.discrete import (
+    compute_cd_dynamax_discrete_filter,
+)
 from dynestyx.inference.integrations.cd_dynamax.discrete import (
     run_discrete_filter as run_cd_dynamax_discrete,
 )
 from dynestyx.inference.integrations.cuthbert.discrete import (
+    compute_cuthbert_filter,
+)
+from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
+)
+from dynestyx.inference.plate_utils import (
+    _array_plate_axis,
+    _make_plate_in_axes,
+    _slice_dist_for_plate_member,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
+from dynestyx.utils import _dist_has_plate_batch_dims
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -48,10 +78,15 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
+        plate_shapes=(),
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
     ) -> FunctionOfTime:
         filtered_dists = None
@@ -59,6 +94,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
             filtered_dists = self._add_log_factors(
                 name,
                 dynamics,
+                plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
@@ -70,6 +106,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         return fwd(
             name,
             dynamics,
+            plate_shapes=plate_shapes,
             obs_times=None,
             obs_values=None,
             ctrl_times=ctrl_times,
@@ -84,12 +121,17 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
+        plate_shapes=(),
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
-    ) -> list[numpyro.distributions.Distribution]:
+    ) -> list[numpyro.distributions.Distribution] | None:
         # Inheritors should implement this method.
         raise NotImplementedError()
 
@@ -99,8 +141,7 @@ def _default_filter_config(dynamics: DynamicalModel):
     if dynamics.continuous_time:
         return ContinuousTimeEnKFConfig()
 
-    # default to particle filter in discrete time
-    return EKFConfig(filter_source="cuthbert")
+    return EnKFConfig()
 
 
 @dataclasses.dataclass
@@ -144,7 +185,7 @@ class Filter(BaseLogFactorAdder):
     If `filter_config=None`, defaults are:
 
     - `ContinuousTimeEnKFConfig()` for continuous-time models, and
-    - `EKFConfig(filter_source="cuthbert")` for discrete-time models.
+    - `EnKFConfig()` for discrete-time models.
 
     Notes:
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
@@ -164,18 +205,24 @@ class Filter(BaseLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        obs_times: jax.Array | None = None,
-        obs_values: jax.Array | None = None,
-        ctrl_times=None,
-        ctrl_values=None,
+        plate_shapes=(),
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
         **kwargs,
-    ) -> list[numpyro.distributions.Distribution]:
+    ) -> list[numpyro.distributions.Distribution] | None:
         """
         Add the marginal log likelihood as a numpyro factor.
 
         Args:
             name: Name of the factor.
             dynamics: Dynamical model to filter.
+            plate_shapes: Tuple of plate sizes from enclosing dsx.plate contexts.
             obs_times: Observation times.
             obs_values: Observed values.
             ctrl_times: Control times (optional).
@@ -189,15 +236,36 @@ class Filter(BaseLogFactorAdder):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
+        if isinstance(config, BaseFilterConfig):
+            _validate_missing_observation_support(
+                config,
+                obs_values=obs_values,
+                mode="filter",
+            )
 
         key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
+
+        if plate_shapes:
+            return self._add_log_factors_batched(
+                name,
+                dynamics,
+                config,
+                key=key,
+                plate_shapes=plate_shapes,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
 
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
                 raise ValueError(
-                    f"Invalid filter config: {type(config).__name__}. "
-                    f"Valid config types: {valid}"
+                    "Continuous-time models require a continuous-time filter config. "
+                    "If you want to use a discrete-time filter, nest `Discretizer()` "
+                    "inside `Filter()`. "
+                    f"Got {type(config).__name__}; valid continuous-time config types: {valid}."
                 )
             return _filter_continuous_time(
                 name,
@@ -215,7 +283,7 @@ class Filter(BaseLogFactorAdder):
                 return _filter_hmm(
                     name,
                     dynamics,
-                    config,  # type: ignore[arg-type]
+                    cast(HMMConfig, config),
                     obs_times=obs_times,
                     obs_values=obs_values,
                     ctrl_times=ctrl_times,
@@ -241,23 +309,252 @@ class Filter(BaseLogFactorAdder):
                     f"Valid config types: {valid}"
                 )
 
+    def _add_log_factors_batched(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        config: BaseFilterConfig,
+        *,
+        key: PRNGKeyArray | None,
+        plate_shapes: tuple[int, ...],
+        obs_times: Real[Array, "*obs_time_plate obs_time"],
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"],
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
+    ) -> list[numpyro.distributions.Distribution]:
+        """Compute batched marginal log-likelihoods via vmap for plate contexts.
+
+        Vmaps the pure-JAX compute function over each plate dimension, issues one
+        numpyro.factor with batched log-likelihoods, and reconstructs per-time
+        filtered distributions with plate-shaped batch dimensions for rollout.
+        """
+        # Determine the compute function (dispatch before vmap).
+        output_kind: str
+        if dynamics.continuous_time:
+            if not isinstance(config, ContinuousTimeConfigs):
+                valid = [c.__name__ for c in ContinuousTimeConfigs]
+                raise ValueError(
+                    f"Invalid filter config: {type(config).__name__}. "
+                    f"Valid config types: {valid}"
+                )
+            output_kind = "continuous"
+
+            def compute_output(dyn, ot, ov, ct, cv, k):
+                return compute_continuous_filter(
+                    dyn,
+                    cast(ContinuousTimeFilterConfig, config),
+                    k,
+                    obs_times=ot,
+                    obs_values=ov,
+                    ctrl_times=ct,
+                    ctrl_values=cv,
+                )
+
+        elif isinstance(config, HMMConfigs):
+            output_kind = "hmm"
+
+            def compute_output(dyn, ot, ov, ct, cv, k):
+                return compute_hmm_filter(
+                    dyn,
+                    obs_times=ot,
+                    obs_values=ov,
+                    ctrl_values=cv,
+                )
+
+        elif isinstance(config, DiscreteTimeConfigs):
+            if config.filter_source == "cuthbert":
+                output_kind = "cuthbert"
+
+                def compute_output(dyn, ot, ov, ct, cv, k):
+                    return compute_cuthbert_filter(
+                        dyn,
+                        config,
+                        k,
+                        obs_times=ot,
+                        obs_values=ov,
+                        ctrl_times=ct,
+                        ctrl_values=cv,
+                    )
+
+            elif config.filter_source == "cd_dynamax":
+                output_kind = "cd_dynamax_discrete"
+
+                def compute_output(dyn, ot, ov, ct, cv, k):
+                    return compute_cd_dynamax_discrete_filter(
+                        dyn,
+                        config,
+                        obs_times=ot,
+                        obs_values=ov,
+                        ctrl_times=ct,
+                        ctrl_values=cv,
+                    )
+
+            else:
+                raise ValueError(f"Unknown filter source: {config.filter_source}")
+        else:
+            raise ValueError(
+                f"Unsupported filter config for plate: {type(config).__name__}"
+            )
+
+        # Pre-split keys for all plate members (needed for stochastic filters).
+        if key is not None:
+            # Ensure we use typed PRNG keys so split returns shape (total,)
+            # rather than old-style (total, 2).
+            if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
+                key = jax.random.wrap_key_data(key)
+            total = math.prod(plate_shapes)
+            split_keys = jax.random.split(key, total)
+            keys = split_keys.reshape(*plate_shapes, *split_keys.shape[1:])
+        else:
+            keys = None
+
+        # Build in_axes: same axes reused for each nested vmap.
+        dyn_axes = _make_plate_in_axes(dynamics, plate_shapes)
+        ot_axis = _array_plate_axis(obs_times, plate_shapes)
+        ov_axis = _array_plate_axis(obs_values, plate_shapes)
+        ct_axis = _array_plate_axis(ctrl_times, plate_shapes)
+        cv_axis = _array_plate_axis(ctrl_values, plate_shapes)
+        _validate_batched_plate_alignment(
+            dynamics,
+            plate_shapes,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
+        k_axis = 0 if keys is not None else None
+        base_axes = (dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis)
+
+        # A plate-batched ``initial_condition`` cannot be sliced by vmap: numpyro
+        # keeps ``batch_shape`` in static aux-data, so a vmap-sliced distribution
+        # has a stale batch shape and its ``.mean``/``.sample``/``.log_prob``
+        # re-expand to the full plate shape. Instead, thread a per-plate-member
+        # index through the nested vmap and rebuild the member's initial condition
+        # from the clean original (same reconstruction the simulator uses).
+        ic_batched = _dist_has_plate_batch_dims(
+            dynamics.initial_condition, plate_shapes
+        )
+
+        # Nest vmap for each plate dimension.
+        # TODO: Allow for partial plate dimensions here.
+        if ic_batched:
+            orig_ic = dynamics.initial_condition
+
+            def compute_output_member(dyn, ot, ov, ct, cv, k, *idxs):
+                member_ic = _slice_dist_for_plate_member(
+                    orig_ic, plate_shapes, tuple(idxs)
+                )
+                dyn = eqx.tree_at(
+                    lambda m: m.initial_condition,
+                    dyn,
+                    member_ic,
+                    is_leaf=lambda x: x is None,
+                )
+                return compute_output(dyn, ot, ov, ct, cv, k)
+
+            idx_arrays = [jnp.arange(s) for s in plate_shapes]
+            n_plates = len(plate_shapes)
+            vmapped = compute_output_member
+            # Wrap w (innermost-first) maps plate dim d = n_plates - 1 - w, so the
+            # index array for that dim is mapped on axis 0 only at that level.
+            for w in range(n_plates):
+                d = n_plates - 1 - w
+                idx_axes = tuple(0 if j == d else None for j in range(n_plates))
+                vmapped = jax.vmap(vmapped, in_axes=(*base_axes, *idx_axes))
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+                *idx_arrays,
+            )
+        else:
+            vmapped = compute_output
+            for _ in plate_shapes:
+                vmapped = jax.vmap(vmapped, in_axes=base_axes)
+            outputs = vmapped(
+                dynamics,
+                obs_times,
+                obs_values,
+                ctrl_times,
+                ctrl_values,
+                keys,
+            )
+
+        if output_kind in {"continuous", "cd_dynamax_discrete"}:
+            marginal_logliks = outputs.marginal_loglik
+        elif output_kind == "hmm":
+            marginal_logliks, log_filt_seq = outputs
+        elif output_kind == "cuthbert":
+            marginal_logliks, states = outputs
+        else:
+            raise ValueError(f"Unsupported batched output kind: {output_kind}")
+
+        numpyro.factor(f"{name}_marginal_log_likelihood", marginal_logliks)
+        numpyro.deterministic(f"{name}_marginal_loglik", marginal_logliks)
+
+        if output_kind == "continuous":
+            particle_mode = isinstance(config, ContinuousTimeDPFConfig)
+            return _posterior_sequence_to_dists(
+                outputs,
+                means_attr="filtered_means",
+                covariances_attr="filtered_covariances",
+                plate_shapes=plate_shapes,
+                particle_mode=particle_mode,
+                missing_message=(
+                    "Filtered means/covariances were unavailable for a Gaussian rollout path."
+                ),
+            )
+        if output_kind == "cd_dynamax_discrete":
+            return _posterior_sequence_to_dists(
+                outputs,
+                means_attr="filtered_means",
+                covariances_attr="filtered_covariances",
+                plate_shapes=plate_shapes,
+                particle_mode=False,
+                missing_message=(
+                    "Filtered means/covariances were unavailable for a Gaussian rollout path."
+                ),
+            )
+        if output_kind == "hmm":
+            return _categorical_log_probs_to_dists(
+                log_filt_seq,
+                plate_shapes=plate_shapes,
+            )
+        if output_kind == "cuthbert":
+            return _cholesky_state_sequence_to_dists(
+                states,
+                particle_mode=isinstance(config, PFConfig),
+                plate_shapes=plate_shapes,
+            )
+
+        raise ValueError(f"Unsupported batched output kind: {output_kind}")
+
 
 def _filter_discrete_time(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
-    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig (cd-dynamax)
-    or EKFConfig (cuthbert), PFConfig (cuthbert).
+    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
+    (cd-dynamax) or KFConfig, EKFConfig, EnKFConfig, PFConfig (cuthbert).
 
     Args:
         name: Name of the factor.
@@ -300,12 +597,15 @@ def _filter_continuous_time(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"],
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.
@@ -324,7 +624,7 @@ def _filter_continuous_time(
     return run_continuous_filter(
         name,
         dynamics,
-        filter_config,  # type: ignore[arg-type]
+        cast(ContinuousTimeFilterConfig, filter_config),
         key=key,
         obs_times=obs_times,
         obs_values=obs_values,

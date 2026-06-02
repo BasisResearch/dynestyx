@@ -96,6 +96,8 @@ uv run mkdocs serve
 
 Then open `http://127.0.0.1:8000` in your browser.
 
+Published docs on GitHub Pages are **versioned with [mike](https://github.com/jimporter/mike)** (`latest` = `main`, `stable` = newest `v*` tag). Maintainers deploy via CI; see [docs/versioning.md](docs/versioning.md). When you change tutorials (notebooks), remember readers on **stable** may still use an older install—add an optional banner (template in that page). For versioned local previews (`stable` vs `latest`) and manual backfills from historical tags, use the commands in [docs/versioning.md](docs/versioning.md).
+
 ## 4) Commit and push
 
 ```bash

@@ -15,23 +15,24 @@ with SDESimulator:
 import argparse
 import os
 
-import dynestyx as dsx
 import imageio.v2 as imageio
 import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 import numpyro.distributions as dist
-from dynestyx import (
-    ContinuousTimeStateEvolution,
-    DiracIdentityObservation,
-    DynamicalModel,
-    SDESimulator,
-)
 from numpyro.infer import Predictive
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
 from scipy.ndimage import binary_erosion
 
+import dynestyx as dsx
+from dynestyx import (
+    ContinuousTimeStateEvolution,
+    DiracIdentityObservation,
+    DynamicalModel,
+    FullDiffusion,
+    SDESimulator,
+)
 
 # -----------------------------
 # Fonts (cross-platform)
@@ -286,9 +287,6 @@ def simulate_boundary_orbit_gif(
             dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
             return 0.5 * kappa * (dist_to_boundary - ring) ** 2
 
-        def diffusion_fn(x, u, t):
-            return sigma * jnp.eye(2, dtype=jnp.float32)
-
         dynamics = DynamicalModel(
             control_dim=0,
             initial_condition=dist.Uniform(
@@ -299,7 +297,7 @@ def simulate_boundary_orbit_gif(
                 drift=drift_fn,
                 potential=potential_fn,
                 use_negative_gradient=True,
-                diffusion_coefficient=diffusion_fn,
+                diffusion=FullDiffusion(sigma * jnp.eye(2, dtype=jnp.float32)),
             ),
             observation_model=DiracIdentityObservation(),
         )
