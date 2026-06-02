@@ -69,26 +69,6 @@ def hmm_log_transition_matrix(
     return jax.vmap(row)(xs)
 
 
-def hmm_log_emission_probs(
-    dynamics: DynamicalModel,
-    xs: Int[Array, " n_states"],
-    y: Real[Array, " observation_dim"] | Real[Array, ""],
-    t: float | int | Real[Array, ""],
-    u=None,
-) -> Float[Array, " n_states"]:
-    """
-    log p(y_t | x_t, u_t)
-    shape: (K,)
-    """
-
-    def lp(x):
-        dist = dynamics.observation_model(x=x, u=u, t=t)
-        lp = dist.log_prob(y)
-        return jnp.sum(lp)  # critical for vector-valued observations
-
-    return jax.vmap(lp)(xs)
-
-
 def _coerce_hmm_observation_value(
     obs_dist: dist.Distribution,
     y: Real[Array, " observation_dim"],
@@ -169,70 +149,59 @@ def hmm_log_components(
         safe_obs,
         obs_mask,
         row_has_any_observed,
-        has_missing,
+        _has_missing,
         has_partial_missing,
         _has_fully_missing_rows,
         observation_dim,
     ) = prepare_observation_mask(obs_values_2d)
-
-    if not has_missing:
-        if ctrl_values is not None:
-            log_emit_seq = jax.vmap(
-                lambda y, t, u: hmm_log_emission_probs(dynamics, xs, y, t, u=u)
-            )(obs_values, obs_times, ctrl_values)
-        else:
-            log_emit_seq = jax.vmap(
-                lambda y, t: hmm_log_emission_probs(dynamics, xs, y, t, u=None)
-            )(obs_values, obs_times)
-    else:
-        expected_mode, expected_event_shape = probe_observation_distribution_contract(
-            dynamics,
-            observation_dim=observation_dim,
-            has_partial_missing=has_partial_missing,
+    expected_mode, expected_event_shape = probe_observation_distribution_contract(
+        dynamics,
+        observation_dim=observation_dim,
+        has_partial_missing=has_partial_missing,
+    )
+    if ctrl_values is not None:
+        log_emit_seq = jax.vmap(
+            lambda y, obs_mask_t, row_has_any, t, u: hmm_log_emission_probs_masked(
+                dynamics,
+                xs,
+                y,
+                obs_mask_t,
+                row_has_any,
+                t,
+                observation_dim,
+                has_partial_missing,
+                expected_mode,
+                expected_event_shape,
+                u=u,
+            )
+        )(
+            safe_obs,
+            obs_mask,
+            row_has_any_observed,
+            obs_times,
+            ctrl_values,
         )
-        if ctrl_values is not None:
-            log_emit_seq = jax.vmap(
-                lambda y, obs_mask_t, row_has_any, t, u: hmm_log_emission_probs_masked(
-                    dynamics,
-                    xs,
-                    y,
-                    obs_mask_t,
-                    row_has_any,
-                    t,
-                    observation_dim,
-                    has_partial_missing,
-                    expected_mode,
-                    expected_event_shape,
-                    u=u,
-                )
-            )(
-                safe_obs,
-                obs_mask,
-                row_has_any_observed,
-                obs_times,
-                ctrl_values,
+    else:
+        log_emit_seq = jax.vmap(
+            lambda y, obs_mask_t, row_has_any, t: hmm_log_emission_probs_masked(
+                dynamics,
+                xs,
+                y,
+                obs_mask_t,
+                row_has_any,
+                t,
+                observation_dim,
+                has_partial_missing,
+                expected_mode,
+                expected_event_shape,
+                u=None,
             )
-        else:
-            log_emit_seq = jax.vmap(
-                lambda y, obs_mask_t, row_has_any, t: hmm_log_emission_probs_masked(
-                    dynamics,
-                    xs,
-                    y,
-                    obs_mask_t,
-                    row_has_any,
-                    t,
-                    observation_dim,
-                    has_partial_missing,
-                    expected_mode,
-                    expected_event_shape,
-                    u=None,
-                )
-            )(
-                safe_obs,
-                obs_mask,
-                row_has_any_observed,
-                obs_times,
-            )
+        )(
+            safe_obs,
+            obs_mask,
+            row_has_any_observed,
+            obs_times,
+        )
 
     # Transitions
     # Note: Controls affect state evolution, use u_now for transitions from t_now to t_next
