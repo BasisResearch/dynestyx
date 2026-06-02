@@ -3775,6 +3775,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.utils._diffusion_coefficient_is_plate_batched" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _diffusion_coefficient_is_plate_batched
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.utils._dist_has_plate_batch_dims" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3823,6 +3834,17 @@
     <span class="md-ellipsis">
       
         _is_known_vector_field
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.utils._is_opaque_plate_leaf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _is_opaque_plate_leaf
       
     </span>
   </a>
@@ -4152,6 +4174,37 @@ at the boundary).</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynestyx.utils._diffusion_coefficient_is_plate_batched" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_diffusion_coefficient_is_plate_batched</span><span class="p">(</span><span class="n">diffusion</span><span class="p">:</span> <span class="n">Diffusion</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+<a href="#dynestyx.utils._diffusion_coefficient_is_plate_batched" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return True if a diffusion's <em>constant</em> coefficient is laid out per-member.</p>
+<p>True means the coefficient is a constant array whose leading axes are exactly
+<code>plate_shapes</code> followed by its intrinsic event axes — i.e. it should be
+sliced (<code>coefficient[plate_idx]</code>) or vmapped (<code>in_axes=0</code>) as an opaque
+unit. Classification uses the coefficient's event rank (a static property of
+the <code>Diffusion</code>) rather than a raw suffix-rank heuristic, so a <em>shared</em>
+matrix/vector coefficient whose shape happens to coincide with the plate sizes
+(e.g. a <code>(state_dim, bm_dim)</code> matrix under nested plates <code>(state_dim,
+bm_dim)</code>) is correctly treated as shared.</p>
+<p>Returns False for a callable coefficient: such a coefficient is not classified
+as a unit here. The plate consumers instead recurse into a callable
+<code>eqx.Module</code> coefficient and slice/vmap its per-member array fields
+generically (a plain closure that captures per-member parameters remains the
+unsupported sharp edge; see the <code>dsx.plate</code> docstring).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynestyx.utils._dist_has_plate_batch_dims" class="doc doc-heading">
             <code class=" language-python"><span class="n">_dist_has_plate_batch_dims</span><span class="p">(</span><span class="n">dist_obj</span><span class="p">,</span> <span class="n">plate_shapes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
 
@@ -4306,6 +4359,34 @@ from <code>obs_times[0]</code> or <code>predict_times[0]</code> (kept as a JAX s
     <div class="doc doc-contents ">
 
         <p>Return True for built-in leaves whose final axis is a vector event axis.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.utils._is_opaque_plate_leaf" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_is_opaque_plate_leaf</span><span class="p">(</span><span class="n">node</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+<a href="#dynestyx.utils._is_opaque_plate_leaf" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Shared <code>is_leaf</code> predicate for plate classification, slicing, and vmap.</p>
+<p>A <code>Diffusion</code> with a <em>constant</em> coefficient is an opaque unit (classified by
+its own <code>coefficient_event_rank</code>, since a path-blind shape check cannot
+disambiguate it). A <em>callable</em> coefficient may be an <code>eqx.Module</code> carrying
+per-member array fields, so the tree must recurse into it and handle those
+fields generically. NumPyro distributions are always opaque. The three
+consumers (:func:<code>_has_any_batched_plate_source</code>,
+<code>inference.plate_utils._make_plate_in_axes</code>,
+<code>simulators._slice_tree_for_plate_member</code>) must share this one predicate so
+a callable diffusion is never seen as batched by the slicer/vmap while being
+invisible to the alignment guard.</p>
 
 
     </div>

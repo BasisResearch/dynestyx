@@ -3247,6 +3247,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.models.diffusions.Diffusion.coefficient_event_rank" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coefficient_event_rank
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.models.diffusions.Diffusion.apply" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4367,6 +4378,37 @@ inferred from the matrix shape. For <code>DiagonalDiffusion</code> and
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynestyx.models.diffusions.Diffusion.coefficient_event_rank" class="doc doc-heading">
+            <code class=" language-python"><span class="n">coefficient_event_rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#dynestyx.models.diffusions.Diffusion.coefficient_event_rank" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The per-member event rank of a constant coefficient (<code>None</code> if callable).</p>
+<p>The event rank is the number of trailing axes that make up one member's
+coefficient, independent of any leading plate batch axes (<code>FullDiffusion</code>
+is matrix-valued so rank 2, <code>DiagonalDiffusion</code> vector-valued so rank 1,
+<code>ScalarDiffusion</code> scalar so rank 0). It lets the plate machinery tell a
+shared coefficient from a genuinely per-member one even when its shape
+coincides with the plate sizes. <code>None</code> for callable coefficients, whose
+value is not a sliceable pytree leaf.</p>
+<p>This is a derived property rather than a stored field beacuse of interactions
+with effectful and equinox.</p>
+
+    </div>
+
+</div>
 
 
 
