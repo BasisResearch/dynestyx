@@ -792,6 +792,41 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
     assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0, 0], predict_times)
 
 
+def test_nested_plate_continuous_sde_enkf_shapes():
+    # Exercises the vmap (continuous-time filter) path with the nested SHARED
+    # (2, 2) diffusion coefficient whose shape collides with the (2, 2) plate
+    # sizes; the coefficient must be classified as shared (not sliced/vmapped).
+    obs_times = jnp.linspace(0.0, 1.5, 4)
+
+    with SDESimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(31)):
+            _nested_plate_continuous_for_discretizer_model(
+                predict_times=obs_times, G=2, M=2
+            )
+    obs = tr["f_observations"]["value"][:, :, 0]
+
+    with Filter(
+        filter_config=ContinuousTimeEnKFConfig(
+            n_particles=8,
+            crn_seed=jr.PRNGKey(32),
+        )
+    ):
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(33)):
+            _nested_plate_continuous_for_discretizer_model(
+                obs_times=obs_times,
+                obs_values=obs,
+                G=2,
+                M=2,
+            )
+
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_marginal_loglik",
+        where="nested plate continuous SDE EnKF trace",
+    )
+    assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
+
+
 def test_plate_discrete_dirac_forward_and_conditioning_shapes():
     t = jnp.arange(4.0)
 
