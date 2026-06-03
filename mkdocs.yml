@@ -41,6 +41,7 @@ nav:
       - Associative Cuthbert KF scaling: deep_dives/discrete_time_kf_associative_scaling.ipynb
       - Comparing MCMC algorithms with MCMCInference: deep_dives/mcmc_inference_algorithm_comparison.ipynb
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
+      - Universal ODEs (Lotka-Volterra): deep_dives/lv_uode.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
       - Continuous-time LTI profile likelihood: deep_dives/continuous_time_lti_profile_likelihood.ipynb
       - GP prior on drift (FitzHugh-Nagumo): deep_dives/gp_drift.ipynb
