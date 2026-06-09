@@ -9,6 +9,8 @@ from dynestyx.handlers import plate, sample
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
+    WSP,
+    Box,
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
     DiagonalDiffusion,
@@ -66,4 +68,6 @@ __all__ = [
     "SDESimulator",
     "Simulator",
     "euler_maruyama",
+    "WSP",
+    "Box",
 ]

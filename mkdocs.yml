@@ -45,7 +45,8 @@ nav:
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
       - Continuous-time LTI profile likelihood: deep_dives/continuous_time_lti_profile_likelihood.ipynb
       - GP prior on drift (FitzHugh-Nagumo): deep_dives/gp_drift.ipynb
-  - API Reference: 
+      - SDEs on compact spaces with WSP: deep_dives/wsp_box_constrained_sde.ipynb
+  - API Reference:
     - api_reference/index.md
     - Public API:
       - Overview: api_reference/public/index.md
@@ -66,6 +67,8 @@ nav:
           - AffineDrift: api_reference/public/models/specialized/affine_drift.md
           - LTI_continuous: api_reference/public/models/specialized/lti_continuous.md
           - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
+          - WSP: api_reference/public/models/specialized/wsp.md
+          - Box: api_reference/public/models/specialized/box.md
       - Inference:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/filter_configs.md

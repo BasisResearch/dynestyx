@@ -29,6 +29,12 @@ from dynestyx.models.state_evolution import (
     GaussianStateEvolution,
     LinearGaussianStateEvolution,
 )
+from dynestyx.models.wsp import (
+    WSP,
+    Box,
+    WSPDiffusionCoefficient,
+    WSPDrift,
+)
 
 __all__ = [
     "ContinuousTimeStateEvolution",
@@ -50,4 +56,8 @@ __all__ = [
     "LTI_continuous",
     "LTI_discrete",
     "ScalarDiffusion",
+    "WSP",
+    "Box",
+    "WSPDrift",
+    "WSPDiffusionCoefficient",
 ]
