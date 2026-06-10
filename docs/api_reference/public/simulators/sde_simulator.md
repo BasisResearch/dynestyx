@@ -14,7 +14,12 @@
     import jax.random as jr
     import numpyro
     import numpyro.distributions as dist
-    from dynestyx import ContinuousTimeStateEvolution, DynamicalModel, SDESimulator
+    from dynestyx import (
+        ContinuousTimeStateEvolution,
+        DynamicalModel,
+        FullDiffusion,
+        SDESimulator,
+    )
     from numpyro.infer import Predictive
 
     state_dim = 1
@@ -33,7 +38,7 @@
             ),
             state_evolution=ContinuousTimeStateEvolution(
                 drift=lambda x, u, t: -theta * x,
-                diffusion_coefficient=lambda x, u, t: sigma_x * jnp.eye(state_dim, bm_dim),
+                diffusion=FullDiffusion(sigma_x * jnp.eye(state_dim, bm_dim)),
             ),
             observation_model=lambda x, u, t: dist.MultivariateNormal(
                 x,

@@ -26,7 +26,7 @@
 ??? example "Ornstein–Uhlenbeck (OU) process"
     ```python
     import jax.numpy as jnp
-    from dynestyx import AffineDrift, ContinuousTimeStateEvolution
+    from dynestyx import AffineDrift, ContinuousTimeStateEvolution, FullDiffusion
 
     # OU SDE: dX_t = -theta (X_t - mu) dt + sigma dW_t
     theta = 0.7
@@ -38,6 +38,6 @@
 
     ou_sde = ContinuousTimeStateEvolution(
         drift=drift,
-        diffusion_coefficient=lambda x, u, t: jnp.array([[sigma]]),
+        diffusion=FullDiffusion(jnp.array([[sigma]])),
     )
     ```

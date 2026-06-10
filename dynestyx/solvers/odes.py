@@ -8,15 +8,16 @@ from typing import Any
 import diffrax as dfx
 import jax.numpy as jnp
 from jax import Array, lax
+from jaxtyping import Real
 
-from dynestyx.types import State, TimeLike, as_scalar_time_array
+from dynestyx.types import as_scalar_time_array
 
 
 def solve_ode(
     dynamics: Any,
-    t0: TimeLike,
+    t0: float | int | Array,
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, Any],
 ) -> Array:

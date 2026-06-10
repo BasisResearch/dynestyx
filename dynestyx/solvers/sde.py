@@ -12,31 +12,16 @@ import jax.numpy as jnp
 import jax.random as jr
 import jax.scipy.linalg as jsp_linalg
 from jax import Array, lax, vmap
+from jaxtyping import Real
 
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.types import State, Time, TimeLike, as_scalar_time_array
-
-
-def _apply_diffusion(diffusion_term: Array, dw: Array) -> Array:
-    """Apply diffusion operator to a Brownian increment.
-
-    Args:
-        diffusion_term: Diffusion coefficient with shape compatible with `dw`.
-        dw: Brownian increment vector.
-
-    Returns:
-        State increment induced by the diffusion term.
-    """
-    if diffusion_term.ndim == 0:
-        return diffusion_term * dw[0]
-    if diffusion_term.ndim == 1:
-        if dw.shape[0] == 1:
-            return diffusion_term * dw[0]
-        return diffusion_term * dw
-    return diffusion_term @ dw
+from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
+from dynestyx.models.diffusions import EvaluatedDiffusion
+from dynestyx.types import as_scalar_time_array
 
 
-def _early_return_states(x0: State, saveat_times: Array) -> Array:
+def _early_return_states(
+    x0: Real[Array, " state_dim"] | Real[Array, ""], saveat_times: Array
+) -> Array:
     """Build no-op solve output by repeating the initial state.
 
     Args:
@@ -49,43 +34,13 @@ def _early_return_states(x0: State, saveat_times: Array) -> Array:
     return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
 
 
-def _require_bm_dim(state_evolution: ContinuousTimeStateEvolution) -> int:
-    """Return Brownian dimension or raise if unspecified.
-
-    Args:
-        state_evolution: Continuous-time state evolution.
-
-    Returns:
-        Brownian motion dimension used by EM sampling.
-    """
-    if state_evolution.bm_dim is None:
-        raise ValueError("SDE sampling requires state_evolution.bm_dim to be set.")
-    return int(state_evolution.bm_dim)
-
-
-def _require_diffusion_fn(
-    state_evolution: ContinuousTimeStateEvolution,
-) -> Callable[[Array, Array | None, Array], Array]:
-    """Get diffusion callable or raise if unavailable.
-
-    Args:
-        state_evolution: Continuous-time state evolution.
-
-    Returns:
-        Diffusion function with signature `(x, u, t) -> diffusion`.
-    """
-    diffusion_fn = state_evolution.diffusion_coefficient
-    if diffusion_fn is None:
-        raise ValueError("SDE solver requires diffusion_coefficient to be defined.")
-    return diffusion_fn
-
-
 def _em_local_terms(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    diffusion,
     x: Array,
     u: Array | None,
     t_now: Array,
-) -> tuple[Array, Array]:
+) -> tuple[Array, EvaluatedDiffusion]:
     """Compute local EM drift and diffusion terms.
 
     Args:
@@ -98,13 +53,11 @@ def _em_local_terms(
         Tuple `(drift, diffusion)` at `(x, u, t_now)`.
     """
     drift = state_evolution.total_drift(x=x, u=u, t=t_now)
-    diffusion_fn = _require_diffusion_fn(state_evolution)
-    diffusion = jnp.asarray(diffusion_fn(x, u, t_now))
-    return drift, diffusion
+    return drift, diffusion.evaluate(x=x, u=u, t=t_now)
 
 
 def _em_moments_from_terms(
-    x: Array, dt: Array, drift: Array, diffusion: Array
+    x: Array, dt: Array, drift: Array, diffusion: EvaluatedDiffusion
 ) -> tuple[Array, Array]:
     """Convert local EM terms to one-step Gaussian moments.
 
@@ -118,7 +71,7 @@ def _em_moments_from_terms(
         Tuple `(loc, cov)` for the EM Gaussian approximation.
     """
     loc = x + drift * dt
-    cov = diffusion @ diffusion.T * dt
+    cov = diffusion.gram_matrix(state_dim=x.shape[-1]) * dt
     return loc, cov
 
 
@@ -189,7 +142,7 @@ def _map_transition_outputs(
 
 
 def _frozen_jacobian_gaussian_single_loc_cov(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -222,7 +175,7 @@ def _frozen_jacobian_gaussian_single_loc_cov(
 
 
 def frozen_jacobian_gaussian_loc_cov(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -246,7 +199,7 @@ def frozen_jacobian_gaussian_loc_cov(
 
 
 def _generator_apply_array(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     phi: Callable[[Array], Array],
     x: Array,
     u: Array | None,
@@ -269,7 +222,7 @@ def _generator_apply_array(
 
 
 def _taylor_moment_single_loc_cov(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -307,7 +260,7 @@ def _taylor_moment_single_loc_cov(
 
 
 def taylor_moment_loc_cov(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -331,7 +284,7 @@ def taylor_moment_loc_cov(
 
 
 def _simulated_likelihood_single_components(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -355,7 +308,7 @@ def _simulated_likelihood_single_components(
         def _one_particle(x_curr, z):
             drift, diffusion = _em_local_terms(state_evolution, x_curr, u, t_curr)
             dw = jnp.sqrt(dt) * z
-            return x_curr + drift * dt + _apply_diffusion(diffusion, dw)
+            return x_curr + drift * dt + diffusion.apply(dw, state_dim=x_curr.shape[-1])
 
         particles_next = vmap(_one_particle)(particles_curr, z_step)
         return (particles_next, t_curr + dt), None
@@ -376,7 +329,7 @@ def _simulated_likelihood_single_components(
 
 
 def simulated_likelihood_components(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -407,7 +360,7 @@ def _em_sample_from_terms(
     x: Array,
     dt: Array,
     drift: Array,
-    diffusion: Array,
+    diffusion: EvaluatedDiffusion,
     *,
     key: Array,
     bm_dim: int,
@@ -428,18 +381,18 @@ def _em_sample_from_terms(
     key_next, k_step = jr.split(key)
     z = jr.normal(k_step, shape=(bm_dim,), dtype=jnp.asarray(x).dtype)
     dw = jnp.sqrt(dt) * z
-    x_next = x + drift * dt + _apply_diffusion(diffusion, dw)
+    x_next = x + drift * dt + diffusion.apply(dw, state_dim=x.shape[-1])
     return x_next, key_next
 
 
 def euler_maruyama_integrate_state_to_time(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x_init: Array,
-    t_init: Time,
+    t_init: Real[Array, ""],
     key_init: Array,
-    t_target: Time,
+    t_target: Real[Array, ""],
     *,
-    dt0: Time,
+    dt0: Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None] | None = None,
 ) -> tuple[Array, Array, Array]:
     """Integrate a sampled EM path from `t_init` to `t_target`.
@@ -460,7 +413,8 @@ def euler_maruyama_integrate_state_to_time(
         dt0, dt0 <= 0, f"EM integration requires dt0 > 0, got dt0={dt0!r}."
     )
 
-    bm_dim = _require_bm_dim(state_evolution)
+    diffusion = state_evolution.diffusion
+    bm_dim = state_evolution.bm_dim
 
     def _cond_fn(carry):
         _, t_curr, _, t_end = carry
@@ -470,9 +424,11 @@ def euler_maruyama_integrate_state_to_time(
         x_curr, t_curr, key_curr, t_end = carry
         h = jnp.minimum(dt0, t_end - t_curr)
         u_t = control_path_eval(t_curr) if control_path_eval is not None else None
-        drift, diffusion = _em_local_terms(state_evolution, x_curr, u_t, t_curr)
+        drift, evaluated_diffusion = _em_local_terms(
+            state_evolution, diffusion, x_curr, u_t, t_curr
+        )
         x_next, key_next = _em_sample_from_terms(
-            x_curr, h, drift, diffusion, key=key_curr, bm_dim=bm_dim
+            x_curr, h, drift, evaluated_diffusion, key=key_curr, bm_dim=bm_dim
         )
         return x_next, t_curr + h, key_next, t_end
 
@@ -482,7 +438,7 @@ def euler_maruyama_integrate_state_to_time(
 
 
 def euler_maruyama_loc_cov(
-    state_evolution: ContinuousTimeStateEvolution,
+    state_evolution: StochasticContinuousTimeStateEvolution,
     x: Array,
     u: Array | None,
     t_now: Array,
@@ -517,10 +473,13 @@ def euler_maruyama_loc_cov(
         the time axis to the front as a side effect of `vmap`.
     """
     x_arr = jnp.asarray(x)
+    diffusion = state_evolution.diffusion
 
     def _step_interval(_x, _u, _t_now, _t_next):
-        drift, diffusion = _em_local_terms(state_evolution, _x, _u, _t_now)
-        return _em_moments_from_terms(_x, _t_next - _t_now, drift, diffusion)
+        drift, evaluated_diffusion = _em_local_terms(
+            state_evolution, diffusion, _x, _u, _t_now
+        )
+        return _em_moments_from_terms(_x, _t_next - _t_now, drift, evaluated_diffusion)
 
     if x_arr.ndim == 1:
         loc, cov = _step_interval(x_arr, u, jnp.asarray(t_now), jnp.asarray(t_next))
@@ -583,11 +542,11 @@ def euler_maruyama_loc_cov(
 
 def _solve_sde_scan(
     dynamics: DynamicalModel,
-    t0: Time,
+    t0: Real[Array, ""],
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
-    dt0: Time,
+    dt0: Real[Array, ""],
     *,
     key: Array | None,
 ) -> Array:
@@ -607,9 +566,9 @@ def _solve_sde_scan(
     """
     if key is None:
         raise ValueError("PRNG key is required for em_scan SDE solves.")
-    if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+    if not isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
         raise TypeError(
-            "SDE solver requires ContinuousTimeStateEvolution, got "
+            "SDE solver requires StochasticContinuousTimeStateEvolution, got "
             f"{type(dynamics.state_evolution)}"
         )
 
@@ -648,14 +607,14 @@ def _solve_sde_scan(
 
 def _solve_sde_diffrax(
     dynamics: DynamicalModel,
-    t0: Time,
+    t0: Real[Array, ""],
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, Any],
     *,
     key: Array | None,
-    tol_vbt: Time,
+    tol_vbt: Real[Array, ""],
 ) -> Array:
     """Solve an SDE with Diffrax and a VirtualBrownianTree control.
 
@@ -674,13 +633,14 @@ def _solve_sde_diffrax(
     """
     if key is None:
         raise ValueError("PRNG key is required for diffrax SDE solves.")
-    if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+    if not isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
         raise TypeError(
-            "SDE solver requires ContinuousTimeStateEvolution, got "
+            "SDE solver requires StochasticContinuousTimeStateEvolution, got "
             f"{type(dynamics.state_evolution)}"
         )
 
     state_evolution = dynamics.state_evolution
+    diffusion = state_evolution.diffusion
 
     def _drift(t, y, args):
         u_t = args(t) if args is not None else None
@@ -688,7 +648,7 @@ def _solve_sde_diffrax(
 
     def _diffusion(t, y, args):
         u_t = args(t) if args is not None else None
-        return state_evolution.diffusion_coefficient(x=y, u=u_t, t=t)
+        return diffusion.as_matrix(x=y, u=u_t, t=t, state_dim=y.shape[-1])
 
     k_bm, _ = jr.split(key, 2)
     bm = dfx.VirtualBrownianTree(
@@ -698,11 +658,8 @@ def _solve_sde_diffrax(
         shape=(state_evolution.bm_dim,),
         key=k_bm,
     )
-    terms = dfx.MultiTerm(  # type: ignore[arg-type]
-        dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)
-    )
     sol = dfx.diffeqsolve(
-        terms,
+        dfx.MultiTerm(dfx.ODETerm(_drift), dfx.ControlTerm(_diffusion, bm)),
         t0=t0,
         t1=saveat_times[-1],
         y0=x0,
@@ -717,13 +674,13 @@ def solve_sde(
     *,
     source: Literal["diffrax", "em_scan"],
     dynamics: DynamicalModel,
-    t0: TimeLike,
+    t0: float | int | Array,
     saveat_times: Array,
-    x0: State,
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
     control_path_eval: Callable[[Array], Array | None],
     diffeqsolve_settings: dict[str, Any],
     key: Array,
-    tol_vbt: TimeLike | None = None,
+    tol_vbt: float | int | Array | None = None,
 ) -> Array:
     """Dispatch between SDE solver backends.
 

@@ -1,27 +1,60 @@
 """Core interfaces and base classes for dynamical models."""
 
-from collections.abc import Callable
-from typing import Any, Protocol
+from __future__ import annotations
+
+from typing import Any, Protocol, cast, runtime_checkable
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+from jax import Array
+from jaxtyping import Real, Shaped
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
-    _infer_bm_dim,
     _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
     _inside_numpyro_plate_context,
     _is_categorical_distribution,
     _make_probe_state,
     _validate_categorical_state,
+    _validate_continuous_state_evolution,
     _validate_continuous_time_flag,
+    _validate_discrete_state_evolution_output_shape,
     _validate_observation_dim,
     _validate_state_dim,
-    _validate_state_evolution_output_shape,
 )
-from dynestyx.types import Control, State, Time, TimeLike, as_scalar_time_array, dState
+from dynestyx.models.diffusions import Diffusion
+from dynestyx.types import as_scalar_time_array
+
+
+@runtime_checkable
+class DiscreteStateTransition(Protocol):
+    def __call__(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> Distribution:
+        raise NotImplementedError()
+
+
+@runtime_checkable
+class ObservationCallable(Protocol):
+    def __call__(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Distribution:
+        raise NotImplementedError()
+
+
+type StateEvolutionLike = (
+    ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | DiscreteStateTransition
+)
+type ObservationModelLike = ObservationModel | ObservationCallable
 
 
 class DynamicalModel(eqx.Module):
@@ -83,14 +116,11 @@ class DynamicalModel(eqx.Module):
     """
 
     initial_condition: Distribution
-    state_evolution: (
-        Callable[[State, Control, Time], State]
-        | Callable[[State, Control, Time, Time], State]
-    )
-    observation_model: Callable[[State, Control, Time], Distribution]
+    state_evolution: StateEvolutionLike
+    observation_model: ObservationModelLike
     control_dim: int
     control_model: Any
-    t0: Time | None
+    t0: Real[Array, ""] | None
     state_dim: int
     observation_dim: int
     categorical_state: bool
@@ -98,13 +128,13 @@ class DynamicalModel(eqx.Module):
 
     def __init__(
         self,
-        initial_condition,
-        state_evolution,
-        observation_model,
+        initial_condition: Distribution,
+        state_evolution: StateEvolutionLike,
+        observation_model: ObservationModelLike,
         control_dim: int | None = None,
         control_model=None,
         *,
-        t0: TimeLike | None = None,
+        t0: float | int | Array | None = None,
         state_dim: int | None = None,
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
@@ -151,69 +181,101 @@ class DynamicalModel(eqx.Module):
 
         # Skip shape validation when inside a numpyro plate context, since
         # batched parameters produce shapes that don't match unbatched expectations.
+
+        def _make_probes() -> tuple[
+            Real[Array, " state_dim"] | Real[Array, ""],
+            Real[Array, " control_dim"] | Real[Array, ""] | None,
+            Real[Array, ""],
+        ]:
+            """Build synthetic inputs for validation/metadata resolution."""
+            x_probe = _make_probe_state(
+                initial_condition=initial_condition,
+                state_dim=inferred_state_dim,
+            )
+            u_probe = None if control_dim == 0 else jnp.zeros((control_dim,))
+            t_probe = jnp.array(0.0) if self.t0 is None else self.t0
+            return x_probe, u_probe, t_probe
+
+        x_probe, u_probe, t_probe = _make_probes()
+
+        def _resolve_continuous_state_evolution(
+            current_state_evolution: ContinuousTimeStateEvolution,
+        ) -> (
+            DeterministicContinuousTimeStateEvolution
+            | StochasticContinuousTimeStateEvolution
+        ):
+            """Return either a DeterministicContinuousTimeStateEvolution or a StochasticContinuousTimeStateEvolution.
+            If diffusion is present, lazily build probes to resolve its metadata (e.g., bm_dim).
+            """
+            diffusion = current_state_evolution.diffusion
+            if diffusion is None:
+                if isinstance(
+                    current_state_evolution, DeterministicContinuousTimeStateEvolution
+                ):
+                    return current_state_evolution
+                return DeterministicContinuousTimeStateEvolution(
+                    drift=current_state_evolution.drift,
+                    potential=current_state_evolution.potential,
+                    use_negative_gradient=current_state_evolution.use_negative_gradient,
+                )
+
+            resolved_diffusion = diffusion.resolve_metadata(
+                state_dim=inferred_state_dim,
+                x_probe=x_probe,
+                u_probe=u_probe,
+                t_probe=t_probe,
+            )
+            return StochasticContinuousTimeStateEvolution(
+                drift=current_state_evolution.drift,
+                potential=current_state_evolution.potential,
+                use_negative_gradient=current_state_evolution.use_negative_gradient,
+                diffusion=resolved_diffusion,
+            )
+
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.
             inferred_obs_dim = _infer_observation_dim_in_plate_context(
-                initial_condition=initial_condition,
                 observation_model=observation_model,
-                inferred_state_dim=inferred_state_dim,
-                control_dim=control_dim,
-                t0=self.t0,
+                x_probe=x_probe,
+                u_probe=u_probe,
+                t_probe=t_probe,
                 observation_dim=observation_dim,
             )
-            self.state_dim = int(inferred_state_dim)
-            self.observation_dim = inferred_obs_dim
-            self.control_dim = int(control_dim)
-            self.categorical_state = bool(inferred_categorical_state)
-
-            # Infer bm_dim for continuous-time models
-            if inferred_continuous_time and isinstance(
-                state_evolution, ContinuousTimeStateEvolution
-            ):
-                x0 = jnp.zeros((inferred_state_dim,))
-                u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-                dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
-                inferred_bm_dim = _infer_bm_dim(
-                    state_evolution, inferred_state_dim, x0, u0, dummy_t0
+        else:
+            if self.continuous_time:
+                _validate_continuous_state_evolution(
+                    state_evolution=state_evolution,
+                    state_dim=inferred_state_dim,
+                    x_probe=x_probe,
+                    u_probe=u_probe,
+                    t_probe=t_probe,
                 )
-                if inferred_bm_dim is not None:
-                    if (
-                        state_evolution.bm_dim is not None
-                        and inferred_bm_dim != state_evolution.bm_dim
-                    ):
-                        raise ValueError(
-                            "bm_dim does not match inferred diffusion_coefficient output shape. "
-                            f"Got bm_dim={state_evolution.bm_dim}, inferred={inferred_bm_dim}."
-                        )
-                    object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
-            return
+            else:
+                _validate_discrete_state_evolution_output_shape(
+                    state_evolution=state_evolution,
+                    state_dim=inferred_state_dim,
+                    x_probe=x_probe,
+                    u_probe=u_probe,
+                    t_probe=t_probe,
+                )
 
-        x0 = _make_probe_state(
-            initial_condition=initial_condition, state_dim=inferred_state_dim
-        )
-        u0 = None if control_dim == 0 else jnp.zeros((control_dim,))
-        dummy_t0 = jnp.array(0.0) if self.t0 is None else self.t0
+            obs_dist = observation_model(x_probe, u_probe, t_probe)
+            inferred_obs_dim = _infer_vector_dim_from_distribution(
+                obs_dist, "observation_model(x, u, t)"
+            )
+            _validate_observation_dim(observation_dim, inferred_obs_dim)
 
-        inferred_bm_dim = _validate_state_evolution_output_shape(
-            state_evolution=state_evolution,
-            state_dim=inferred_state_dim,
-            x0=x0,
-            u0=u0,
-            t0=dummy_t0,
-            continuous_time=self.continuous_time,
-        )
-        if self.continuous_time and inferred_bm_dim != state_evolution.bm_dim:
-            object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
-
-        obs_dist = observation_model(x0, u0, dummy_t0)
-        inferred_observation_dim = _infer_vector_dim_from_distribution(
-            obs_dist, "observation_model(x, u, t)"
-        )
-        _validate_observation_dim(observation_dim, inferred_observation_dim)
+        if self.continuous_time:
+            continuous_state_evolution = cast(
+                ContinuousTimeStateEvolution, state_evolution
+            )
+            self.state_evolution = _resolve_continuous_state_evolution(
+                continuous_state_evolution,
+            )
 
         self.state_dim = int(inferred_state_dim)
-        self.observation_dim = int(inferred_observation_dim)
+        self.observation_dim = int(inferred_obs_dim)
         self.control_dim = int(control_dim)
         self.categorical_state = bool(inferred_categorical_state)
 
@@ -253,10 +315,10 @@ class Drift(Protocol):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> dState:
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError()
 
 
@@ -290,10 +352,10 @@ class Potential(Protocol):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t: Time,
-    ) -> jax.Array:
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Shaped[Array, ""]:
         raise NotImplementedError()
 
 
@@ -321,21 +383,22 @@ class ContinuousTimeStateEvolution(eqx.Module):
             At least one of `drift` or `potential` must be non-None.
         use_negative_gradient (bool): If True, use $-\\nabla_x V$ (e.g., gradient descent on potential);
             otherwise use $+\\nabla_x V$. Default is False.
-        diffusion_coefficient (Drift | None): Diffusion coefficient $L(x, u, t)$ mapping to a matrix;
-            multiplies the Brownian increment $dW_t$.
-            Defaults to zero if None (i.e., deterministic ODE).
-        bm_dim (int | None): Dimension of the Brownian motion $W_t$.
-            Inferred automatically from the output shape of `diffusion_coefficient`;
-            if passed by the user, it must match diffusion_coefficient(...).shape[1].
+        diffusion (Diffusion | None): Diffusion coefficient object.
+            Use `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion` to define
+            the stochastic part of the SDE. Pass `None` for deterministic dynamics.
     """
 
     drift: Drift | None = None
     potential: Potential | None = None
     use_negative_gradient: bool = eqx.field(static=True, default=False)
-    diffusion_coefficient: Drift | None = None
-    bm_dim: int | None = eqx.field(static=True, default=None)
+    diffusion: Diffusion | None = None
 
-    def total_drift(self, x: State, u: Control | None, t: Time) -> dState:
+    def total_drift(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         base = self.drift(x, u, t) if self.drift is not None else None
 
         potential = self.potential
@@ -352,6 +415,73 @@ class ContinuousTimeStateEvolution(eqx.Module):
         if base is None:
             return grad_term
         return base + grad_term
+
+
+class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
+    """Continuous-time state evolution with no diffusion term, i.e., describing an ODE.
+
+    This is a refined form of :class:`ContinuousTimeStateEvolution` used when a
+    model has deterministic continuous-time dynamics, i.e. an ODE rather than an
+    SDE. In most user code you should construct
+    :class:`ContinuousTimeStateEvolution` directly and let
+    :class:`DynamicalModel` refine it into this subclass when ``diffusion=None``.
+    Its main semantic guarantee is that ``diffusion`` is always ``None``.
+    """
+
+    diffusion: None = eqx.field(static=True, default=None)
+
+    def __init__(
+        self,
+        drift: Drift | None = None,
+        potential: Potential | None = None,
+        use_negative_gradient: bool = False,
+        diffusion: None = None,
+    ):
+        if diffusion is not None:
+            raise ValueError(
+                "DeterministicContinuousTimeStateEvolution does not accept diffusion."
+            )
+        self.drift = drift
+        self.potential = potential
+        self.use_negative_gradient = use_negative_gradient
+        self.diffusion = None
+
+
+class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
+    """Continuous-time state evolution with resolved stochastic diffusion.
+
+    This is a refined form of :class:`ContinuousTimeStateEvolution` used for SDE
+    models after the diffusion metadata has been resolved. In practice that means
+    the attached :class:`~dynestyx.models.diffusions.Diffusion` has a known
+    ``bm_dim`` and can therefore be used safely by downstream SDE solvers,
+    discretizers, and inference backends.
+    """
+
+    diffusion: Diffusion = eqx.field(kw_only=True)
+
+    def __init__(
+        self,
+        *,
+        drift: Drift | None = None,
+        potential: Potential | None = None,
+        use_negative_gradient: bool = False,
+        diffusion: Diffusion,
+    ):
+        if diffusion.bm_dim is None:
+            raise ValueError(
+                "StochasticContinuousTimeStateEvolution requires diffusion with "
+                "resolved bm_dim."
+            )
+        self.drift = drift
+        self.potential = potential
+        self.use_negative_gradient = use_negative_gradient
+        self.diffusion = diffusion
+
+    @property
+    def bm_dim(self) -> int:
+        bm_dim = self.diffusion.bm_dim
+        assert bm_dim is not None
+        return bm_dim
 
 
 class DiscreteTimeStateEvolution(eqx.Module):
@@ -381,10 +511,10 @@ class DiscreteTimeStateEvolution(eqx.Module):
 
     def __call__(
         self,
-        x: State,
-        u: Control | None,
-        t_now: Time,
-        t_next: Time,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
     ) -> Distribution:
         raise NotImplementedError()
 
@@ -412,8 +542,16 @@ class ObservationModel(eqx.Module):
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
 
+    def __call__(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> Distribution:
+        raise NotImplementedError()
+
     def log_prob(self, y, x=None, u=None, t=None, *args, **kwargs):
-        dist = self(x, u, t)
+        dist = self(x, u, t)  # type: ignore
         return dist.log_prob(y)
 
     def sample(self, x, u, t, *args, **kwargs):

@@ -16,25 +16,33 @@ import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jax import Array
+from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
-from dynestyx.inference.integrations.utils import WeightedParticles
+from dynestyx.inference.plate_utils import (
+    _slice_array_for_plate_member,
+    _slice_dist_for_plate_member,
+)
 from dynestyx.models import (
-    ContinuousTimeStateEvolution,
+    DeterministicContinuousTimeStateEvolution,
+    Diffusion,
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.models.core import DiscreteStateTransition
+from dynestyx.observation_missingness import ObservationLogProb
 from dynestyx.solvers import solve_ode, solve_sde
-from dynestyx.types import FunctionOfTime, State, Time, TimeLike, as_scalar_time_array
+from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (
-    _array_has_plate_dims,
     _build_control_path,
+    _diffusion_coefficient_is_plate_batched,
     _dist_has_plate_batch_dims,
-    _ensure_continuous_bm_dim,
     _get_val_or_None,
     _has_any_batched_plate_source,
+    _is_opaque_plate_leaf,
     _leaf_is_plate_batched,
     _validate_site_sorting,
 )
@@ -91,21 +99,6 @@ def _suspend_numpyro_plate_frames():
         stack[:] = original
 
 
-def _slice_array_for_plate_member(
-    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
-) -> Array | None:
-    """Slice leading plate dims if present; otherwise return unchanged.
-
-    This is used in our Simulator loops for plated dimensions: we choose the times/values
-    for a particular plate member.
-    """
-    if arr is None:
-        return None
-    if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1):
-        return arr[plate_idx]
-    return arr
-
-
 def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
     """Slice plate-batched dynamics leaves for one simulator plate member.
 
@@ -114,10 +107,17 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
     sliced separately by ``_slice_dist_for_plate_member``.
     """
 
-    def _is_distribution_leaf(node) -> bool:
-        return isinstance(node, numpyro.distributions.Distribution)
-
     def _slice_leaf(path, leaf):
+        # Only constant-coefficient diffusions are opaque leaves (see
+        # ``_is_opaque_plate_leaf``), so indexing the coefficient by ``plate_idx``
+        # is well-defined; a callable coefficient is recursed into and its array
+        # fields are sliced generically by the branch below.
+        if isinstance(leaf, Diffusion):
+            if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
+                return eqx.tree_at(
+                    lambda d: d.coefficient, leaf, leaf.coefficient[plate_idx]
+                )
+            return leaf
         if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
             return leaf[plate_idx]
         return leaf
@@ -125,99 +125,8 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
     return jax.tree_util.tree_map_with_path(
         _slice_leaf,
         tree,
-        is_leaf=_is_distribution_leaf,
+        is_leaf=_is_opaque_plate_leaf,
     )
-
-
-def _slice_dist_for_plate_member(
-    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple[int, ...]
-):
-    """Slice plate-batched distribution parameters for one member.
-
-    To obtain distributions for a particular plate member, we must
-    slice the corresponding parameter arrays. This function implements
-    such slicing for:
-    - MixtureSameFamily
-    - MultivariateNormal
-    - Delta
-    - WeightedParticles
-    - Categorical
-    - Independent
-    - TransformedDistribution
-    """
-    if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
-        return dist_obj
-
-    def _slice_required_array(arr_like) -> Array:
-        arr = jnp.asarray(arr_like)
-        sliced = _slice_array_for_plate_member(arr, plate_shapes, plate_idx)
-        if sliced is None:
-            raise ValueError("Expected a concrete array when slicing plate member.")
-        return sliced
-
-    # Rebuild common distributions explicitly so cached/static batch metadata is
-    # consistent after slicing.
-    if isinstance(dist_obj, numpyro.distributions.MixtureSameFamily):
-        mixture = _slice_dist_for_plate_member(
-            dist_obj.mixing_distribution, plate_shapes, plate_idx
-        )
-        components = _slice_dist_for_plate_member(
-            dist_obj.component_distribution, plate_shapes, plate_idx
-        )
-        return numpyro.distributions.MixtureSameFamily(mixture, components)
-
-    if isinstance(dist_obj, numpyro.distributions.MultivariateNormal):
-        loc = _slice_required_array(dist_obj.loc)
-        cov = _slice_required_array(dist_obj.covariance_matrix)
-        return numpyro.distributions.MultivariateNormal(
-            loc=loc,
-            covariance_matrix=cov,
-        )
-
-    if isinstance(dist_obj, numpyro.distributions.Delta):
-        value = _slice_required_array(dist_obj.v)
-        log_density = _slice_required_array(dist_obj.log_density)
-        return numpyro.distributions.Delta(
-            value,
-            log_density=log_density,
-            event_dim=dist_obj.event_dim,
-        )
-
-    if isinstance(dist_obj, WeightedParticles):
-        particles = _slice_required_array(dist_obj.particles)
-        log_weights = _slice_required_array(dist_obj.log_weights)
-        return WeightedParticles(particles=particles, log_weights=log_weights)
-
-    if dist_obj.__class__.__name__.startswith("Categorical"):
-        if dist_obj.logits is not None:
-            logits = _slice_required_array(dist_obj.logits)
-            return numpyro.distributions.Categorical(logits=logits)
-        probs = _slice_required_array(dist_obj.probs)
-        return numpyro.distributions.Categorical(probs=probs)
-
-    if isinstance(dist_obj, numpyro.distributions.Independent):
-        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
-        return numpyro.distributions.Independent(
-            base,
-            dist_obj.reinterpreted_batch_ndims,
-        )
-
-    if isinstance(dist_obj, numpyro.distributions.TransformedDistribution):
-        base = _slice_dist_for_plate_member(dist_obj.base_dist, plate_shapes, plate_idx)
-        transforms = getattr(dist_obj, "transforms")
-        return numpyro.distributions.TransformedDistribution(
-            base,
-            transforms,
-        )
-
-    def _slice_leaf(leaf):
-        if isinstance(leaf, jax.Array) and _array_has_plate_dims(
-            leaf, plate_shapes, min_suffix_ndim=1
-        ):
-            return leaf[plate_idx]
-        return leaf
-
-    return jax.tree.map(_slice_leaf, dist_obj)
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -260,8 +169,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         **kwargs,
     ) -> dict[str, Array] | None:
         """Run simulator logic for one unbatched member and return trajectories."""
-        dynamics = _ensure_continuous_bm_dim(dynamics)
-
         use_smoothed_rollout = smoothed_times is not None or smoothed_dists is not None
         if use_smoothed_rollout and (
             filtered_times is not None or filtered_dists is not None
@@ -274,7 +181,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         rollout_times = smoothed_times if use_smoothed_rollout else filtered_times
         rollout_dists = smoothed_dists if use_smoothed_rollout else filtered_dists
         rollout_label = "smoothed" if use_smoothed_rollout else "filtered"
-
         if (
             rollout_times is not None
             and rollout_dists is None
@@ -294,6 +200,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         posterior_rollout = rollout_times is not None and rollout_dists is not None
 
         if posterior_rollout:
+            assert predict_times is not None
             _validate_site_sorting(rollout_times, name=f"{rollout_label}_times")
 
             def _ctrl_for_segment(sub_times):
@@ -560,11 +467,15 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         plate_shapes=(),
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
         filtered_times=None,
         filtered_dists=None,
         smoothed_times=None,
@@ -636,7 +547,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         ctrl_values=None,
         predict_times=None,
         **kwargs,
-    ) -> dict[str, State]:
+    ) -> dict[str, Array]:
         """Unroll `dynamics` as a NumPyro model.
 
         Implementations are expected to:
@@ -703,6 +614,31 @@ def _emit_observations(
         return observations
 
 
+def _apply_observation_log_prob(
+    name: str,
+    states: Array,
+    times: Array,
+    log_prob: ObservationLogProb,
+    control_path_eval: Callable[[Array], Array | None],
+) -> Array:
+    """Apply observation log-probability terms and preserve NaNs in outputs."""
+    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
+    T = len(times)
+
+    def _step(carry, t_idx):
+        x_t = states[t_idx]
+        t = times[t_idx]
+        u_t = ctrl(t)
+        lp = log_prob.log_prob_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
+        numpyro.factor(f"{name}_y_{t_idx}_lp", lp)
+        return carry, log_prob.observation_step(t_idx)
+
+    _, observations = nscan(_step, None, jnp.arange(T))
+    for t_idx in range(T):
+        numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
+    return observations
+
+
 class SDESimulator(BaseSimulator):
     """Simulator for continuous-time stochastic dynamics (SDEs).
 
@@ -740,7 +676,7 @@ class SDESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Heun(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
-        dt0: TimeLike = 1e-4,
+        dt0: float | int | Array = 1e-4,
         tol_vbt: float | None = None,
         max_steps: int | None = None,
         n_simulations: int = 1,
@@ -791,7 +727,7 @@ class SDESimulator(BaseSimulator):
                 f"got source={self.source!r}."
             )
 
-        self.tol_vbt: Time | None
+        self.tol_vbt: Real[Array, ""] | None
         if self.source == "diffrax":
             if tol_vbt is None:
                 self.tol_vbt = dt0_arr / 2.0
@@ -816,7 +752,7 @@ class SDESimulator(BaseSimulator):
         ctrl_values=None,
         predict_times=None,
         **kwargs,
-    ) -> dict[str, State]:
+    ) -> dict[str, Array]:
         """
         Unroll a continuous-time SDE as a NumPyro model.
 
@@ -832,7 +768,7 @@ class SDESimulator(BaseSimulator):
 
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
-                `ContinuousTimeStateEvolution` with a non-None diffusion coefficient
+                `ContinuousTimeStateEvolution` with a non-None diffusion
                 and inferred `bm_dim` (set during `DynamicalModel` construction).
             obs_times: Times at which to save the latent state and emit observations.
                 Required.
@@ -851,16 +787,12 @@ class SDESimulator(BaseSimulator):
             parameter inference for SDEs, because it introduces an explicit, high-
             dimensional latent path. Prefer filtering (`Filter`) or particle methods.
         """
-        if not isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
+        if not isinstance(
+            dynamics.state_evolution, StochasticContinuousTimeStateEvolution
+        ):
             raise NotImplementedError(
-                f"SDESimulator only works with ContinuousTimeStateEvolution, got {type(dynamics.state_evolution)}"
-            )
-
-        if dynamics.state_evolution.diffusion_coefficient is None:
-            raise ValueError(
-                "SDESimulator requires diffusion_coefficient to be defined "
-                f"(got coeff={dynamics.state_evolution.diffusion_coefficient}). "
-                "Use ODESimulator for deterministic dynamics."
+                "SDESimulator only works with StochasticContinuousTimeStateEvolution, got "
+                f"{type(dynamics.state_evolution)}"
             )
 
         if obs_times is not None:
@@ -877,6 +809,8 @@ class SDESimulator(BaseSimulator):
             )
 
         times = predict_times
+        if times is None:
+            raise ValueError("predict_times must be provided for SDESimulator.")
         n_sim = self.n_simulations
 
         if ctrl_times is not None and ctrl_values is not None:
@@ -959,6 +893,74 @@ class DiscreteTimeSimulator(BaseSimulator):
 
     n_simulations: int = 1
 
+    def _simulate_conditioned_scan(
+        self,
+        name: str,
+        dynamics: DynamicalModel,
+        *,
+        times: Array,
+        ctrl_values: Array | None,
+        obs_values: Array,
+    ) -> dict[str, Array]:
+        """Sequential latent-state scan for conditioned observations via log-probability terms."""
+        state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+        obs_values_for_helper = (
+            obs_values[:, None] if obs_values.ndim == 1 else obs_values
+        )
+        log_prob = ObservationLogProb(
+            dynamics=dynamics,
+            obs_values=obs_values_for_helper,
+        )
+
+        with numpyro.plate(f"{name}_n_simulations", 1):
+            x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
+                f"{name}_x_0", dynamics.initial_condition
+            )
+        x_prev = x_prev_site[0]
+
+        u_0 = _get_val_or_None(ctrl_values, 0)
+        numpyro.factor(
+            f"{name}_y_0_lp",
+            log_prob.log_prob_step(x=x_prev, u=u_0, t=times[0], t_idx=0),
+        )
+        y_0 = log_prob.observation_step(0)
+
+        def _step(x_prev, t_idx):
+            t_now = times[t_idx]
+            t_next = times[t_idx + 1]
+            u_now = _get_val_or_None(ctrl_values, t_idx)
+            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
+            trans_dist = state_transition(x=x_prev, u=u_now, t_now=t_now, t_next=t_next)
+            with numpyro.plate(f"{name}_n_simulations", 1):
+                x_t_site = numpyro.sample(f"{name}_x_{t_idx + 1}", trans_dist)
+            x_t = x_t_site[0]
+            numpyro.factor(
+                f"{name}_y_{t_idx + 1}_lp",
+                log_prob.log_prob_step(
+                    x=x_t,
+                    u=u_next,
+                    t=t_next,
+                    t_idx=t_idx + 1,
+                ),
+            )
+            y_t = log_prob.observation_step(t_idx + 1)
+            return x_t, (x_t, y_t)
+
+        _, scan_outputs = nscan(_step, x_prev, jnp.arange(len(times) - 1))
+        scan_states, scan_observations = scan_outputs
+
+        states = jnp.concatenate([jnp.expand_dims(x_prev, axis=0), scan_states], axis=0)
+        observations = jnp.concatenate(
+            [jnp.expand_dims(y_0, axis=0), scan_observations], axis=0
+        )
+        for t_idx in range(len(times)):
+            numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
+        return {
+            "times": _tile_times(times, 1),
+            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+        }
+
     def _simulate(
         self,
         name: str,
@@ -970,12 +972,17 @@ class DiscreteTimeSimulator(BaseSimulator):
         ctrl_values=None,
         predict_times=None,
         **kwargs,
-    ) -> dict[str, State]:
+    ) -> dict[str, Array]:
         """Unroll a discrete-time model as a NumPyro model.
 
         Creates NumPyro sample sites for the initial condition (`"x_0"`), subsequent
         states (`"x_1"`, ...), and observations (`"y_0"`, ...). If `obs_values` is
-        provided, observation sites are conditioned via `obs=...`.
+        provided for a non-Dirac observation model, conditioning is handled via
+        per-step log-probability factors rather than `obs=...` sample sites. In
+        that path, each time step contributes a scalar
+        `log p(y_observed | x_t, u_t, t)` term through `numpyro.factor(...)`,
+        while deterministic `y_t` sites still record the original observation
+        values in the trace.
 
         Notes:
             - For `DiracIdentityObservation` with provided `obs_values`, the latent
@@ -985,7 +992,12 @@ class DiscreteTimeSimulator(BaseSimulator):
         Args:
             dynamics: Discrete-time `DynamicalModel` to unroll.
             obs_times: Discrete observation indices/times. Required.
-            obs_values: Optional observations for conditioning.
+            obs_values: Optional observations for conditioning. For non-Dirac
+                observation models, missingness-aware conditioning adds
+                per-time-step log-probability factors for the observed portions
+                of each row instead of using `obs=...` directly. For partially
+                observed vector observations, the observation distribution
+                family and event shape must remain fixed across time.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Optional prediction times. If provided, prediction sites are
@@ -1003,12 +1015,36 @@ class DiscreteTimeSimulator(BaseSimulator):
             raise ValueError("obs_times must contain at least one timepoint")
 
         n_sim = self.n_simulations
+        is_dirac_observation = isinstance(
+            dynamics.observation_model, DiracIdentityObservation
+        )
+
+        if (
+            is_dirac_observation
+            and obs_values is not None
+            and np.isnan(np.asarray(obs_values)).any()
+        ):
+            raise ValueError(
+                "NaN-valued obs_values are not currently supported with "
+                "DiracIdentityObservation under DiscreteTimeSimulator. "
+                "Dirac observations are treated as exact latent-state constraints, "
+                "so missingness would require a separate marginalization path."
+            )
+
+        if obs_values is not None and not is_dirac_observation:
+            return self._simulate_conditioned_scan(
+                name,
+                dynamics,
+                times=times,
+                ctrl_values=ctrl_values,
+                obs_values=obs_values,
+            )
+
+        state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
 
         # DiracIdentityObservation with observed values: y_t = x_t, so we use plating
         # instead of scan. state_evolution returns a dist; call it with batched inputs.
-        if isinstance(dynamics.observation_model, DiracIdentityObservation) and (
-            obs_values is not None
-        ):
+        if is_dirac_observation and (obs_values is not None):
             with numpyro.plate(f"{name}_n_simulations", 1):
                 numpyro.sample(
                     f"{name}_x_0",
@@ -1044,7 +1080,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             t_next = times[1:]
 
             def _step_dist(x_prev_t, u_prev_t, t_now_t, t_next_t):
-                return dynamics.state_evolution(x_prev_t, u_prev_t, t_now_t, t_next_t)
+                return state_transition(x_prev_t, u_prev_t, t_now_t, t_next_t)
 
             with numpyro.plate("time", T - 1):
                 if u_prev is None:
@@ -1073,9 +1109,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             t_next = times[t_idx + 1]
             u_now = _get_val_or_None(ctrl_values, t_idx)
             u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-            trans_dist = dynamics.state_evolution(
-                x=x_prev, u=u_now, t_now=t_now, t_next=t_next
-            )
+            trans_dist = state_transition(x=x_prev, u=u_now, t_now=t_now, t_next=t_next)
             return t_next, u_next, trans_dist
 
         # n_simulations > 1: vmapped pure-JAX loop; avoid numpyro.sample in vmap body.
@@ -1122,9 +1156,9 @@ class DiscreteTimeSimulator(BaseSimulator):
                 "observations": _ensure_trailing_dim(observations),
             }
 
-        # Default: scan over time (n_simulations == 1)...allows for obs= conditioning.
+        # Default forward-simulation scan (n_simulations == 1).
         with numpyro.plate(f"{name}_n_simulations", 1):
-            x_prev_site: State = numpyro.sample(  # type: ignore
+            x_prev_site: Real[Array, " state_dim"] | Real[Array, ""] = numpyro.sample(  # type: ignore
                 f"{name}_x_0", dynamics.initial_condition
             )
         x_prev = x_prev_site[0]
@@ -1139,7 +1173,7 @@ class DiscreteTimeSimulator(BaseSimulator):
                 dynamics.observation_model(x_prev, u_0, times[0]),
                 obs=obs_0,
             )
-        y_0_arr = cast(Array, jnp.asarray(y_0_site))
+        y_0_arr = jnp.asarray(y_0_site)
         y_0 = y_0_arr[0]
 
         def _step(x_prev, t_idx):
@@ -1204,7 +1238,7 @@ class ODESimulator(BaseSimulator):
         solver: dfx.AbstractSolver = dfx.Tsit5(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
-        dt0: TimeLike = 1e-3,
+        dt0: float | int | Array = 1e-3,
         max_steps: int = 100_000,
         n_simulations: int = 1,
     ):
@@ -1245,7 +1279,7 @@ class ODESimulator(BaseSimulator):
         ctrl_values=None,
         predict_times=None,
         **kwargs,
-    ) -> dict[str, State]:
+    ) -> dict[str, Array]:
         """Unroll a deterministic continuous-time model as a NumPyro model.
 
         This method:
@@ -1255,10 +1289,16 @@ class ODESimulator(BaseSimulator):
 
         Args:
             dynamics: A `DynamicalModel` whose `state_evolution` is a
-                `ContinuousTimeStateEvolution` with deterministic dynamics.
+                `DeterministicContinuousTimeStateEvolution`.
             obs_times: Times at which to save the latent state and emit observations.
-            obs_values: Optional observation array. If provided, observation sites are
-                conditioned via `obs=obs_values[i]`.
+            obs_values: Optional observation array. If provided for a non-Dirac
+                observation model, conditioning is handled via per-step
+                log-probability factors. Each step adds a scalar
+                `log p(y_observed | x_t, u_t, t)` term with `numpyro.factor(...)`
+                while deterministic `y_t` sites preserve the original
+                observation values in the trace. For partially observed vector
+                observations, the observation distribution family and event
+                shape must remain fixed across time.
             ctrl_times: Optional control times.
             ctrl_values: Optional controls aligned to `ctrl_times`.
             predict_times: Used when obs_times is None (e.g. from Filter).
@@ -1272,6 +1312,9 @@ class ODESimulator(BaseSimulator):
             raise ValueError("obs_times or predict_times must be provided")
 
         n_sim = self.n_simulations
+        is_dirac_observation = isinstance(
+            dynamics.observation_model, DiracIdentityObservation
+        )
 
         if ctrl_times is not None and ctrl_values is not None:
             control_path = _build_control_path(ctrl_times, ctrl_values, times)
@@ -1280,6 +1323,14 @@ class ODESimulator(BaseSimulator):
             control_path_eval = lambda t: None
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
+        log_prob = (
+            ObservationLogProb(
+                dynamics=dynamics,
+                obs_values=obs_values[:, None] if obs_values.ndim == 1 else obs_values,
+            )
+            if obs_values is not None and not is_dirac_observation
+            else None
+        )
 
         def _sim_one_trajectory(x0: Array, *, obs_key=None):
             """Simulate one ODE trajectory and emit observations."""
@@ -1291,20 +1342,28 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-            observations = _emit_observations(
-                name,
-                dynamics,
-                states,
-                times,
-                obs_values,
-                control_path_eval,
-                key=obs_key,
-            )
+            if log_prob is not None:
+                observations = _apply_observation_log_prob(
+                    name,
+                    states,
+                    times,
+                    log_prob,
+                    control_path_eval,
+                )
+            else:
+                observations = _emit_observations(
+                    name,
+                    dynamics,
+                    states,
+                    times,
+                    obs_values,
+                    control_path_eval,
+                    key=obs_key,
+                )
             return states, observations
 
         if obs_values is not None:
             # Conditioning mode (n_sim must be 1 due to guard above).
-            # Uses numpyro.sample per observation site to support obs= conditioning.
             with numpyro.plate(f"{name}_n_simulations", 1):
                 x0 = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
             x0_arr: Array = jnp.asarray(x0)[0]
@@ -1377,13 +1436,16 @@ class Simulator(BaseSimulator):
         ctrl_values=None,
         predict_times=None,
         **kwargs,
-    ) -> dict[str, State]:
+    ) -> dict[str, Array]:
         if self.simulator is None:
-            if isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution):
-                if dynamics.state_evolution.diffusion_coefficient is None:
-                    self.simulator = ODESimulator(*self.args, **self.kwargs)
-                else:
-                    self.simulator = SDESimulator(*self.args, **self.kwargs)
+            if isinstance(
+                dynamics.state_evolution, StochasticContinuousTimeStateEvolution
+            ):
+                self.simulator = SDESimulator(*self.args, **self.kwargs)
+            elif isinstance(
+                dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
+            ):
+                self.simulator = ODESimulator(*self.args, **self.kwargs)
             elif isinstance(dynamics.state_evolution, DiscreteTimeStateEvolution):
                 self.simulator = DiscreteTimeSimulator(*self.args, **self.kwargs)
             else:

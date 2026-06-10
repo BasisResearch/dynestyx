@@ -1,4 +1,6 @@
 import math
+import warnings
+from typing import Literal
 
 import diffrax as dfx
 import equinox as eqx
@@ -8,12 +10,12 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
+from jaxtyping import Real, Shaped
 
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
-from dynestyx.models.checkers import _infer_bm_dim
+from dynestyx.models import Diffusion, DynamicalModel
 
 
-def flatten_draws(arr: Array) -> Array:
+def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
     """Merge the leading ``(num_samples, n_sim)`` axes of a simulator output into one.
 
     Simulators return arrays of shape ``(n_sim, T, ...)``. After wrapping the
@@ -39,6 +41,34 @@ def flatten_draws(arr: Array) -> Array:
 type SSMType = CDNLGSSM | CDNLSSM
 
 _CONTROL_EXTEND_EPSILON = 1e-5
+
+
+def _raise_now_or_error_if(
+    anchor,
+    predicate,
+    message: str,
+    *,
+    action: Literal["raise", "warn"] = "raise",
+) -> None:
+    """Raise or warn when a predicate is true, handling traced predicates safely."""
+    try:
+        should_handle = bool(predicate)
+    except jax.errors.TracerBoolConversionError:
+        if action == "raise":
+            _ = eqx.error_if(anchor, predicate, message)
+        return
+
+    if not should_handle:
+        return
+
+    if action == "warn":
+        warnings.warn(message, stacklevel=2)
+        return
+
+    if action == "raise":
+        raise ValueError(message)
+
+    raise AssertionError(f"Unexpected action for _raise_now_or_error_if: {action!r}")
 
 
 def _array_has_plate_dims(
@@ -97,6 +127,11 @@ def _path_field_names(path) -> tuple[str, ...]:
 def _is_known_vector_field(path) -> bool:
     """Return True for built-in leaves whose final axis is a vector event axis."""
     names = _path_field_names(path)
+    # `Discretizer` wraps the original continuous-time evolution in a `cte` field
+    # of `EulerMaruyamaGaussianStateEvolution`, so a drift bias that lived at
+    # `state_evolution.drift.b` moves to `state_evolution.cte.drift.b`. Drop that
+    # internal wrapper segment so the same whitelist matches discretized models.
+    names = tuple(name for name in names if name != "cte")
     if len(names) >= 2 and names[-2:] in {
         ("state_evolution", "bias"),
         ("observation_model", "bias"),
@@ -124,6 +159,56 @@ def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool
     return suffix_ndim == 0 or suffix_ndim >= 2
 
 
+def _diffusion_coefficient_is_plate_batched(
+    diffusion: Diffusion, plate_shapes: tuple[int, ...]
+) -> bool:
+    """Return True if a diffusion's *constant* coefficient is laid out per-member.
+
+    True means the coefficient is a constant array whose leading axes are exactly
+    ``plate_shapes`` followed by its intrinsic event axes — i.e. it should be
+    sliced (``coefficient[plate_idx]``) or vmapped (``in_axes=0``) as an opaque
+    unit. Classification uses the coefficient's event rank (a static property of
+    the ``Diffusion``) rather than a raw suffix-rank heuristic, so a *shared*
+    matrix/vector coefficient whose shape happens to coincide with the plate sizes
+    (e.g. a ``(state_dim, bm_dim)`` matrix under nested plates ``(state_dim,
+    bm_dim)``) is correctly treated as shared.
+
+    Returns False for a callable coefficient: such a coefficient is not classified
+    as a unit here. The plate consumers instead recurse into a callable
+    ``eqx.Module`` coefficient and slice/vmap its per-member array fields
+    generically (a plain closure that captures per-member parameters remains the
+    unsupported sharp edge; see the ``dsx.plate`` docstring).
+    """
+    event_rank = diffusion.coefficient_event_rank
+    if event_rank is None:
+        return False
+    shape = diffusion._constant_shape()
+    assert shape is not None
+    n_plates = len(plate_shapes)
+    return len(shape) == n_plates + event_rank and tuple(shape[:n_plates]) == tuple(
+        plate_shapes
+    )
+
+
+def _is_opaque_plate_leaf(node) -> bool:
+    """Shared ``is_leaf`` predicate for plate classification, slicing, and vmap.
+
+    A ``Diffusion`` with a *constant* coefficient is an opaque unit (classified by
+    its own ``coefficient_event_rank``, since a path-blind shape check cannot
+    disambiguate it). A *callable* coefficient may be an ``eqx.Module`` carrying
+    per-member array fields, so the tree must recurse into it and handle those
+    fields generically. NumPyro distributions are always opaque. The three
+    consumers (:func:`_has_any_batched_plate_source`,
+    ``inference.plate_utils._make_plate_in_axes``,
+    ``simulators._slice_tree_for_plate_member``) must share this one predicate so
+    a callable diffusion is never seen as batched by the slicer/vmap while being
+    invisible to the alignment guard.
+    """
+    if isinstance(node, Diffusion):
+        return not callable(node.coefficient)
+    return isinstance(node, numpyro.distributions.Distribution)
+
+
 def _dist_has_plate_batch_dims(dist_obj, plate_shapes: tuple[int, ...]) -> bool:
     """Return True when a distribution's leading ``batch_shape`` matches plates."""
     if dist_obj is None or not hasattr(dist_obj, "batch_shape"):
@@ -148,10 +233,17 @@ def _has_any_batched_plate_source(
     """Return True if dynamics, arrays, or distributions carry plate axes."""
     for path, leaf in jax.tree_util.tree_flatten_with_path(
         dynamics,
-        is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+        is_leaf=_is_opaque_plate_leaf,
     )[0]:
         if isinstance(leaf, numpyro.distributions.Distribution):
             if _dist_has_plate_batch_dims(leaf, plate_shapes):
+                return True
+            continue
+        # Only constant-coefficient diffusions are opaque leaves here; a callable
+        # coefficient is recursed into, so its per-member array fields reach the
+        # generic ``_leaf_is_plate_batched`` branch below.
+        if isinstance(leaf, Diffusion):
+            if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
                 return True
             continue
         if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
@@ -168,28 +260,6 @@ def _has_any_batched_plate_source(
         return True
 
     return False
-
-
-def _ensure_continuous_bm_dim(dynamics: DynamicalModel) -> DynamicalModel:
-    """Infer and set bm_dim when continuous dynamics were constructed in plates."""
-    if not dynamics.continuous_time:
-        return dynamics
-
-    state_evolution = dynamics.state_evolution
-    if (
-        not isinstance(state_evolution, ContinuousTimeStateEvolution)
-        or state_evolution.diffusion_coefficient is None
-        or state_evolution.bm_dim is not None
-    ):
-        return dynamics
-
-    x0 = jnp.zeros((dynamics.state_dim,))
-    u0 = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t0 = jnp.array(0.0) if dynamics.t0 is None else jnp.asarray(dynamics.t0)
-    inferred_bm_dim = _infer_bm_dim(state_evolution, dynamics.state_dim, x0, u0, t0)
-    if inferred_bm_dim is not None:
-        object.__setattr__(state_evolution, "bm_dim", inferred_bm_dim)
-    return dynamics
 
 
 def _should_record_field(
@@ -209,7 +279,12 @@ def _should_record_field(
     return math.prod(shape) <= max_elems
 
 
-def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -> None:
+def _validate_control_dim(
+    dynamics: DynamicalModel,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None,
+) -> None:
     """
     Validate that control_dim is set in DynamicalModel when controls are present.
 
@@ -238,10 +313,12 @@ def _validate_control_dim(dynamics: DynamicalModel, ctrl_values: Array | None) -
 
 
 def _validate_controls(
-    obs_times: Array | None,
-    predict_times: Array | None,
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None,
 ) -> None:
     """
     Validate control inputs against model time grids.
@@ -301,7 +378,10 @@ def _validate_controls(
 
 
 def _build_control_path(
-    ctrl_times: Array, ctrl_values: Array, obs_times: Array
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"],
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"],
+    obs_times: Real[Array, "*obs_time_plate obs_time"],
 ) -> dfx.LinearInterpolation:
     """
     Build rectilinear control path for continuous-time simulators.
@@ -317,7 +397,7 @@ def _build_control_path(
     return dfx.LinearInterpolation(ts=_ct, ys=_cv)
 
 
-def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
+def _get_val_or_None(values: Array | None, t_idx: int | Array) -> Array | None:
     """
     Safely get value at index t_idx, returning None if values is None.
 
@@ -332,7 +412,9 @@ def _get_val_or_None(values: Array | None, t_idx: int) -> Array | None:
 
 
 def _get_dynamics_with_t0(
-    dynamics: DynamicalModel, obs_times: Array | None, predict_times: Array | None
+    dynamics: DynamicalModel,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
 ) -> DynamicalModel:
     """Return dynamics with t0 filled in from obs_times[0].
 
@@ -343,7 +425,9 @@ def _get_dynamics_with_t0(
 
     # Use the first time step along the last (time) axis, then reduce across any
     # leading batch/plate dims to a scalar t0.
-    def _infer_t0_from_times(times: Array) -> Array:
+    def _infer_t0_from_times(
+        times: Real[Array, "*time_plate time"],
+    ) -> Real[Array, ""]:
         return jnp.min(times[..., 0])
 
     if obs_times is None:
@@ -379,7 +463,9 @@ def _get_dynamics_with_t0(
         )
 
 
-def _validate_site_sorting(times: Array | None, name: str) -> None:
+def _validate_site_sorting(
+    times: Real[Array, "*time_plate time"] | None, name: str
+) -> None:
     """Validate that times are strictly increasing (along the last axis)."""
     if times is not None and times.shape[-1] > 1:
         # Use slicing on the last axis to support batched time arrays.

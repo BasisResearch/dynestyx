@@ -64,7 +64,6 @@ def hierarchical_ode_model(
             ),
             state_evolution=ContinuousTimeStateEvolution(
                 drift=_DampedNonlinearOscillatorDrift(alpha=alpha),
-                diffusion_coefficient=None,
             ),
             observation_model=LinearGaussianObservation(
                 H=jnp.eye(2), R=(0.05**2) * jnp.eye(2)

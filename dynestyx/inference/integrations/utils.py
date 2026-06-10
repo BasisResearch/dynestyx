@@ -3,10 +3,13 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
+from jaxtyping import Array, Float, Real
 from numpyro.distributions import constraints
 
 
-def covariance_from_cholesky(chol_cov: jax.Array) -> jax.Array:
+def covariance_from_cholesky(
+    chol_cov: Float[Array, "*plate time state_dim state_dim"],
+) -> Float[Array, "*plate time state_dim state_dim"]:
     return jnp.matmul(chol_cov, jnp.swapaxes(chol_cov, -1, -2))
 
 
@@ -62,11 +65,17 @@ class WeightedParticles(dist.Distribution):
     arg_constraints: dict = {}
     support: Any = constraints.real_vector
     pytree_data_fields = ("particles", "log_weights")
-    particles: jax.Array
-    log_weights: jax.Array
+    particles: (
+        Real[Array, "*plate n_particles state_dim"] | Real[Array, "*plate n_particles"]
+    )
+    log_weights: Float[Array, "*plate n_particles"]
 
     def __init__(
-        self, particles: jax.Array, log_weights: jax.Array, validate_args=None
+        self,
+        particles: Real[Array, "*plate n_particles state_dim"]
+        | Real[Array, "*plate n_particles"],
+        log_weights: Float[Array, "*plate n_particles"],
+        validate_args=None,
     ):
         if particles.ndim < 2:
             raise ValueError(
@@ -107,7 +116,9 @@ class WeightedParticles(dist.Distribution):
 
 
 def particles_to_delta_mixtures(
-    particles: jax.Array, log_weights: jax.Array
+    particles: Real[Array, "*plate time n_particles state_dim"]
+    | Real[Array, "*plate time n_particles"],
+    log_weights: Float[Array, "*plate time n_particles"],
 ) -> list[dist.Distribution]:
     """Convert particles and weights to per-time weighted-particle distributions.
 

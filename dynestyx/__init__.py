@@ -16,9 +16,13 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DeterministicContinuousTimeStateEvolution,
+    DiagonalDiffusion,
+    Diffusion,
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    FullDiffusion,
     GaussianObservation,
     GaussianStateEvolution,
     LinearGaussianObservation,
@@ -26,6 +30,8 @@ from dynestyx.models import (
     LTI_continuous,
     LTI_discrete,
     ObservationModel,
+    ScalarDiffusion,
+    StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.simulators import (
     DiscreteTimeSimulator,
@@ -38,6 +44,12 @@ from dynestyx.utils import flatten_draws
 __all__ = [
     "__version__",
     "ContinuousTimeStateEvolution",
+    "DeterministicContinuousTimeStateEvolution",
+    "Diffusion",
+    "FullDiffusion",
+    "DiagonalDiffusion",
+    "ScalarDiffusion",
+    "StochasticContinuousTimeStateEvolution",
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
     "AffineDrift",
