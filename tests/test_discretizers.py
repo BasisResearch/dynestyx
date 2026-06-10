@@ -1,5 +1,7 @@
 """Tests for Euler–Maruyama discretization and Discretizer wrapping."""
 
+from typing import Any
+
 import jax.numpy as jnp
 import jax.random as jr
 import jax.scipy.linalg as jsp_linalg
@@ -27,6 +29,7 @@ from dynestyx.models import (
     FullDiffusion,
     GaussianStateEvolution,
     ScalarDiffusion,
+    StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.solvers import euler_maruyama_loc_cov
@@ -34,7 +37,7 @@ from dynestyx.solvers.sde import _stabilize_covariance
 from tests.models import continuous_time_stochastic_l63_model_dirac_obs
 
 
-def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
+def _ctse_1d_zero_drift_unit_diffusion() -> StochasticContinuousTimeStateEvolution:
     cte = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: jnp.zeros_like(x),
         diffusion=FullDiffusion(lambda x, u, t: jnp.ones((1, 1)), bm_dim=1),
@@ -48,11 +51,11 @@ def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
         ),
         control_dim=0,
     )
-    assert isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution)
+    assert isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution)
     return dynamics.state_evolution
 
 
-def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
+def _ctse_2d_zero_drift(diffusion_form: str) -> StochasticContinuousTimeStateEvolution:
     if diffusion_form == "full":
         cte = ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.zeros_like(x),
@@ -95,7 +98,7 @@ def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
         ),
         control_dim=0,
     )
-    assert isinstance(dynamics.state_evolution, ContinuousTimeStateEvolution)
+    assert isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution)
     return dynamics.state_evolution
 
 
@@ -147,10 +150,9 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
 def test_frozen_jacobian_gaussian_matches_ou_transition_and_improves_over_euler():
     lam = 2.0
     sigma = 0.5
-    cte = ContinuousTimeStateEvolution(
+    cte = StochasticContinuousTimeStateEvolution(
         drift=lambda x, u, t: -lam * x,
-        diffusion_coefficient=lambda x, u, t: sigma * jnp.ones((1, 1)),
-        bm_dim=1,
+        diffusion=ScalarDiffusion(sigma, bm_dim=1),
     )
     x = jnp.array([1.0])
     t0 = jnp.array(0.0)
@@ -161,7 +163,7 @@ def test_frozen_jacobian_gaussian_matches_ou_transition_and_improves_over_euler(
     exact_cov = sigma**2 * (1.0 - jnp.exp(-2.0 * lam * dt)) / (2.0 * lam)
 
     fj_dist = frozen_jacobian_gaussian(cte, jitter=0.0)(x, None, t0, t1)
-    em_dist = euler_maruyama(cte)(x, None, t0, t1)
+    em_dist = euler_maruyama(cte)(x, None, t_now=t0, t_next=t1)
 
     assert jnp.allclose(fj_dist.loc, exact_loc, atol=1e-6)
     assert jnp.allclose(fj_dist.covariance_matrix[0, 0], exact_cov, atol=1e-6)
@@ -177,10 +179,9 @@ def test_frozen_jacobian_gaussian_matches_chapter_6_affine_sde_blocks():
     F = jnp.array([[-0.4, 1.2], [-0.7, -0.3]])
     b = jnp.array([0.2, -0.1])
     L = jnp.array([[0.3, 0.1], [0.0, 0.4]])
-    cte = ContinuousTimeStateEvolution(
+    cte = StochasticContinuousTimeStateEvolution(
         drift=lambda x, u, t: F @ x + b,
-        diffusion_coefficient=lambda x, u, t: L,
-        bm_dim=2,
+        diffusion=FullDiffusion(L, bm_dim=2),
     )
     x = jnp.array([0.8, -0.2])
     t0 = jnp.array(0.1)
@@ -210,10 +211,9 @@ def test_frozen_jacobian_gaussian_matches_chapter_6_affine_sde_blocks():
 
 
 def test_taylor_moment_gaussian_matches_benes_second_order_variance():
-    cte = ContinuousTimeStateEvolution(
+    cte = StochasticContinuousTimeStateEvolution(
         drift=lambda x, u, t: jnp.tanh(x),
-        diffusion_coefficient=lambda x, u, t: jnp.ones((1, 1)),
-        bm_dim=1,
+        diffusion=ScalarDiffusion(1.0, bm_dim=1),
     )
     x = jnp.array([0.5])
     t0 = jnp.array(0.0)
@@ -222,7 +222,7 @@ def test_taylor_moment_gaussian_matches_benes_second_order_variance():
     drift = jnp.tanh(x[0])
 
     taylor_dist = taylor_moment_gaussian(cte, jitter=0.0)(x, None, t0, t1)
-    em_dist = euler_maruyama(cte)(x, None, t0, t1)
+    em_dist = euler_maruyama(cte)(x, None, t_now=t0, t_next=t1)
 
     exact_loc = x + drift * dt
     exact_var = dt + (1.0 - drift**2) * dt**2
@@ -251,21 +251,22 @@ def test_new_gaussian_discretizers_batched_shapes_and_positive_covariance():
     t_next = jnp.array([0.5, 1.5, 2.5])
 
     for discretize in (frozen_jacobian_gaussian, taylor_moment_gaussian):
-        d = discretize(cte)(x, None, t_now, t_next)
+        d = discretize(cte)(x, None, t_now=t_now, t_next=t_next)
         assert d.loc.shape == (3, 1)
         assert d.covariance_matrix.shape == (3, 1, 1)
         assert jnp.all(jnp.linalg.eigvalsh(d.covariance_matrix) > 0.0)
 
 
 def test_simulated_likelihood_mixture_log_prob_sample_and_crn_reproducibility():
-    cte = ContinuousTimeStateEvolution(
+    cte = StochasticContinuousTimeStateEvolution(
         drift=lambda x, u, t: -0.5 * x,
-        diffusion_coefficient=lambda x, u, t: jnp.ones((1, 1)),
-        bm_dim=1,
+        diffusion=ScalarDiffusion(1.0, bm_dim=1),
     )
     x = jnp.array([0.4])
-    kwargs = dict(n_substeps=3, n_simulations=8, seed=123, jitter=1e-6)
-    d1 = simulated_likelihood(cte, **kwargs)(x, None, jnp.array(0.0), jnp.array(1.0))
+    kwargs: dict[str, Any] = dict(n_substeps=3, n_simulations=8, seed=123, jitter=1e-6)
+    d1 = simulated_likelihood(cte, **kwargs)(
+        x, None, t_now=jnp.array(0.0), t_next=jnp.array(1.0)
+    )
     d2 = simulated_likelihood(cte, **kwargs)(x, None, jnp.array(0.0), jnp.array(1.0))
     d3 = simulated_likelihood(cte, **{**kwargs, "seed": 321})(
         x, None, jnp.array(0.0), jnp.array(1.0)

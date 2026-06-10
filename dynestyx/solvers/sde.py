@@ -152,7 +152,9 @@ def _frozen_jacobian_gaussian_single_loc_cov(
 ) -> dict[str, Array]:
     """Single-state frozen-Jacobian affine transition moments."""
     dt = t_next - t_now
-    drift, diffusion = _em_local_terms(state_evolution, x, u, t_now)
+    drift, diffusion = _em_local_terms(
+        state_evolution, state_evolution.diffusion, x, u, t_now
+    )
     drift_jac = jax.jacfwd(lambda z: state_evolution.total_drift(z, u, t_now))(x)
     state_dim = x.shape[-1]
 
@@ -162,7 +164,7 @@ def _frozen_jacobian_gaussian_single_loc_cov(
     mean_exp = jsp_linalg.expm(mean_block * dt)
     loc = x + mean_exp[:state_dim, state_dim]
 
-    diffusion_cov = diffusion @ diffusion.T
+    diffusion_cov = diffusion.gram_matrix(state_dim=state_dim)
     cov_block = jnp.zeros((2 * state_dim, 2 * state_dim), dtype=x.dtype)
     cov_block = cov_block.at[:state_dim, :state_dim].set(drift_jac)
     cov_block = cov_block.at[:state_dim, state_dim:].set(diffusion_cov)
@@ -206,8 +208,10 @@ def _generator_apply_array(
     t: Array,
 ) -> Array:
     """Apply the frozen-time Itô generator to an array-valued test function."""
-    drift, diffusion = _em_local_terms(state_evolution, x, u, t)
-    diffusion_cov = diffusion @ diffusion.T
+    drift, diffusion = _em_local_terms(
+        state_evolution, state_evolution.diffusion, x, u, t
+    )
+    diffusion_cov = diffusion.gram_matrix(state_dim=x.shape[-1])
     phi_x = phi(x)
 
     def flat_phi(z):
@@ -232,12 +236,16 @@ def _taylor_moment_single_loc_cov(
 ) -> dict[str, Array]:
     """Single-state second-order generator/Taylor Gaussian moments."""
     dt = t_next - t_now
-    drift, diffusion = _em_local_terms(state_evolution, x, u, t_now)
-    diffusion_cov = diffusion @ diffusion.T
+    drift, diffusion = _em_local_terms(
+        state_evolution, state_evolution.diffusion, x, u, t_now
+    )
+    diffusion_cov = diffusion.gram_matrix(state_dim=x.shape[-1])
 
     def _second_generator_moment(z):
-        f_z, L_z = _em_local_terms(state_evolution, z, u, t_now)
-        a_z = L_z @ L_z.T
+        f_z, L_z = _em_local_terms(
+            state_evolution, state_evolution.diffusion, z, u, t_now
+        )
+        a_z = L_z.gram_matrix(state_dim=z.shape[-1])
         return f_z[:, None] * z[None, :] + z[:, None] * f_z[None, :] + a_z
 
     A2_x = _generator_apply_array(
@@ -306,7 +314,9 @@ def _simulated_likelihood_single_components(
         particles_curr, t_curr = carry
 
         def _one_particle(x_curr, z):
-            drift, diffusion = _em_local_terms(state_evolution, x_curr, u, t_curr)
+            drift, diffusion = _em_local_terms(
+                state_evolution, state_evolution.diffusion, x_curr, u, t_curr
+            )
             dw = jnp.sqrt(dt) * z
             return x_curr + drift * dt + diffusion.apply(dw, state_dim=x_curr.shape[-1])
 
@@ -320,7 +330,9 @@ def _simulated_likelihood_single_components(
         )
 
     def _kernel(x_penultimate):
-        drift, diffusion = _em_local_terms(state_evolution, x_penultimate, u, t_kernel)
+        drift, diffusion = _em_local_terms(
+            state_evolution, state_evolution.diffusion, x_penultimate, u, t_kernel
+        )
         return _em_moments_from_terms(x_penultimate, dt, drift, diffusion)
 
     loc, cov = vmap(_kernel)(particles)

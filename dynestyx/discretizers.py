@@ -7,7 +7,6 @@ from jaxtyping import Array, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.models import (
-    ContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
     GaussianStateEvolution,
@@ -103,12 +102,12 @@ def euler_maruyama(
 class FrozenJacobianGaussianStateEvolution(GaussianStateEvolution):
     """`GaussianStateEvolution` backed by frozen-Jacobian affine moments."""
 
-    cte: ContinuousTimeStateEvolution
+    cte: StochasticContinuousTimeStateEvolution
     jitter: float
 
     def __init__(
         self,
-        cte: ContinuousTimeStateEvolution,
+        cte: StochasticContinuousTimeStateEvolution,
         jitter: float = 1e-8,
         F=None,
         cov=None,
@@ -116,14 +115,18 @@ class FrozenJacobianGaussianStateEvolution(GaussianStateEvolution):
         del F, cov
         self.cte = cte
         self.jitter = float(jitter)
-        super().__init__(
-            F=lambda x, u, t_now, t_next: frozen_jacobian_gaussian_loc_cov(
+
+        def _loc(x, u, t_now, t_next):
+            return frozen_jacobian_gaussian_loc_cov(
                 cte, x, u, t_now, t_next, jitter=self.jitter
-            )["loc"],
-            cov=lambda x, u, t_now, t_next: frozen_jacobian_gaussian_loc_cov(
+            )["loc"]
+
+        def _cov(x, u, t_now, t_next):
+            return frozen_jacobian_gaussian_loc_cov(
                 cte, x, u, t_now, t_next, jitter=self.jitter
-            )["cov"],
-        )
+            )["cov"]
+
+        super().__init__(F=_loc, cov=_cov)
 
     def __call__(self, x, u, t_now, t_next):
         """Single-pass transition step (or batched time steps)."""
@@ -136,7 +139,7 @@ class FrozenJacobianGaussianStateEvolution(GaussianStateEvolution):
 
 
 def frozen_jacobian_gaussian(
-    cte: ContinuousTimeStateEvolution,
+    cte: StochasticContinuousTimeStateEvolution,
     *,
     jitter: float = 1e-8,
 ) -> GaussianStateEvolution:
@@ -214,12 +217,12 @@ def frozen_jacobian_gaussian(
 class TaylorMomentGaussianStateEvolution(GaussianStateEvolution):
     """`GaussianStateEvolution` backed by second-order generator moments."""
 
-    cte: ContinuousTimeStateEvolution
+    cte: StochasticContinuousTimeStateEvolution
     jitter: float
 
     def __init__(
         self,
-        cte: ContinuousTimeStateEvolution,
+        cte: StochasticContinuousTimeStateEvolution,
         jitter: float = 1e-8,
         F=None,
         cov=None,
@@ -227,14 +230,18 @@ class TaylorMomentGaussianStateEvolution(GaussianStateEvolution):
         del F, cov
         self.cte = cte
         self.jitter = float(jitter)
-        super().__init__(
-            F=lambda x, u, t_now, t_next: taylor_moment_loc_cov(
-                cte, x, u, t_now, t_next, jitter=self.jitter
-            )["loc"],
-            cov=lambda x, u, t_now, t_next: taylor_moment_loc_cov(
-                cte, x, u, t_now, t_next, jitter=self.jitter
-            )["cov"],
-        )
+
+        def _loc(x, u, t_now, t_next):
+            return taylor_moment_loc_cov(cte, x, u, t_now, t_next, jitter=self.jitter)[
+                "loc"
+            ]
+
+        def _cov(x, u, t_now, t_next):
+            return taylor_moment_loc_cov(cte, x, u, t_now, t_next, jitter=self.jitter)[
+                "cov"
+            ]
+
+        super().__init__(F=_loc, cov=_cov)
 
     def __call__(self, x, u, t_now, t_next):
         """Single-pass transition step (or batched time steps)."""
@@ -247,7 +254,7 @@ class TaylorMomentGaussianStateEvolution(GaussianStateEvolution):
 
 
 def taylor_moment_gaussian(
-    cte: ContinuousTimeStateEvolution,
+    cte: StochasticContinuousTimeStateEvolution,
     *,
     jitter: float = 1e-8,
 ) -> GaussianStateEvolution:
@@ -303,7 +310,7 @@ def taylor_moment_gaussian(
 class SimulatedLikelihoodStateEvolution(DiscreteTimeStateEvolution):
     """Discrete transition backed by Pedersen simulated likelihood."""
 
-    cte: ContinuousTimeStateEvolution
+    cte: StochasticContinuousTimeStateEvolution
     n_substeps: int
     n_simulations: int
     seed: int
@@ -312,7 +319,7 @@ class SimulatedLikelihoodStateEvolution(DiscreteTimeStateEvolution):
 
     def __init__(
         self,
-        cte: ContinuousTimeStateEvolution,
+        cte: StochasticContinuousTimeStateEvolution,
         *,
         n_substeps: int = 4,
         n_simulations: int = 32,
@@ -361,7 +368,7 @@ class SimulatedLikelihoodStateEvolution(DiscreteTimeStateEvolution):
 
 
 def simulated_likelihood(
-    cte: ContinuousTimeStateEvolution,
+    cte: StochasticContinuousTimeStateEvolution,
     *,
     n_substeps: int = 4,
     n_simulations: int = 32,
