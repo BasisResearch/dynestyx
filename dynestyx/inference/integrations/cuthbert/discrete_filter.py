@@ -387,14 +387,15 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         y = jnp.atleast_1d(jnp.asarray(mi.y))
 
         if isinstance(obs_model, LinearGaussianObservation):
-            H = jnp.asarray(obs_model.H)
-            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+            obs_params = obs_model.params_at(mi.time)
+            H = jnp.asarray(obs_params.H)
+            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
-                if obs_model.bias is None
-                else jnp.atleast_1d(jnp.asarray(obs_model.bias))
+                if obs_params.bias is None
+                else jnp.atleast_1d(jnp.asarray(obs_params.bias))
             )
-            D = None if obs_model.D is None else jnp.asarray(obs_model.D)
+            D = None if obs_params.D is None else jnp.asarray(obs_params.D)
 
             def observation_fn(x):
                 loc = H @ x + bias
@@ -447,6 +448,95 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     )
 
 
+def _kalman_dynamics_params_builder(
+    evo: LinearGaussianStateEvolution, *, state_dim: int, dtype
+):
+    """Build a per-step ``get_dynamics_params`` for the cuthbert Kalman filter.
+
+    Time-varying (callable) transition parameters are evaluated at each
+    step's ``(mi.time_prev, mi.time)``; the Cholesky of a constant covariance
+    is hoisted out of the per-step path. Outputs are cast to ``dtype`` so the
+    ``lax.cond`` branches agree with the ``_noop`` branch.
+    """
+    chol_Q_const = (
+        None if callable(evo.cov) else jnp.linalg.cholesky(jnp.asarray(evo.cov))
+    )
+
+    def get_dynamics_params(mi: CuthbertInputs):
+        def _noop(mi):
+            return (
+                jnp.eye(state_dim, dtype=dtype),
+                jnp.zeros((state_dim,), dtype=dtype),
+                jnp.zeros((state_dim, state_dim), dtype=dtype),
+            )
+
+        def _evolve(mi):
+            evo_params = evo.params_at(mi.time_prev, mi.time)
+            A = jnp.asarray(evo_params.A)
+            chol_Q = (
+                chol_Q_const
+                if chol_Q_const is not None
+                else jnp.linalg.cholesky(jnp.asarray(evo_params.cov))
+            )
+            c = (
+                jnp.zeros((state_dim,), dtype=dtype)
+                if evo_params.bias is None
+                else jnp.reshape(
+                    jnp.atleast_1d(jnp.asarray(evo_params.bias)), (state_dim,)
+                )
+            )
+            if evo_params.B is not None:
+                c = c + jnp.asarray(evo_params.B) @ jnp.atleast_1d(
+                    jnp.asarray(mi.u_prev)
+                )
+            return (
+                A.astype(dtype),
+                c.astype(dtype),
+                jnp.asarray(chol_Q).astype(dtype),
+            )
+
+        return jax.lax.cond(mi.is_first_step, _noop, _evolve, mi)
+
+    return get_dynamics_params
+
+
+def _kalman_observation_params_builder(
+    obs: LinearGaussianObservation, *, obs_dim: int, dtype
+):
+    """Build a per-step ``get_observation_params`` for the cuthbert Kalman filter.
+
+    Time-varying (callable) observation parameters are evaluated at each
+    step's ``mi.time``; the Cholesky of a constant covariance is hoisted out
+    of the per-step path.
+    """
+    chol_R_const = None if callable(obs.R) else jnp.linalg.cholesky(jnp.asarray(obs.R))
+
+    def get_observation_params(mi: CuthbertInputs):
+        obs_params = obs.params_at(mi.time)
+        H = jnp.asarray(obs_params.H)
+        chol_R = (
+            chol_R_const
+            if chol_R_const is not None
+            else jnp.linalg.cholesky(jnp.asarray(obs_params.R))
+        )
+        d = (
+            jnp.zeros((obs_dim,), dtype=dtype)
+            if obs_params.bias is None
+            else jnp.reshape(jnp.atleast_1d(jnp.asarray(obs_params.bias)), (obs_dim,))
+        )
+        if obs_params.D is not None:
+            d = d + jnp.asarray(obs_params.D) @ jnp.atleast_1d(jnp.asarray(mi.u))
+        y = jnp.atleast_1d(jnp.asarray(mi.y))
+        return (
+            H.astype(dtype),
+            d.astype(dtype),
+            jnp.asarray(chol_R).astype(dtype),
+            y,
+        )
+
+    return get_observation_params
+
+
 def _cuthbert_filter_kalman(
     dynamics: DynamicalModel, filter_kwargs: dict | None = None
 ):
@@ -476,51 +566,15 @@ def _cuthbert_filter_kalman(
     )
     chol_P0 = jnp.linalg.cholesky(squeeze_leading_singletons(ic.covariance_matrix, 2))
 
-    A = jnp.asarray(evo.A)
-    chol_Q = jnp.linalg.cholesky(jnp.asarray(evo.cov))
-
-    H = jnp.asarray(obs.H)
-    chol_R = jnp.linalg.cholesky(jnp.asarray(obs.R))
-
-    evo_bias = (
-        jnp.zeros((state_dim,), dtype=m0.dtype)
-        if evo.bias is None
-        else jnp.reshape(jnp.atleast_1d(jnp.asarray(evo.bias)), (state_dim,))
-    )
-    obs_bias = (
-        jnp.zeros((obs_dim,), dtype=m0.dtype)
-        if obs.bias is None
-        else jnp.reshape(jnp.atleast_1d(jnp.asarray(obs.bias)), (obs_dim,))
-    )
-
-    B = None if evo.B is None else jnp.asarray(evo.B)
-    D = None if obs.D is None else jnp.asarray(obs.D)
-
     def get_init_params(mi: CuthbertInputs):
         return m0, chol_P0
 
-    def get_dynamics_params(mi: CuthbertInputs):
-        def _noop(mi):
-            return (
-                jnp.eye(state_dim, dtype=m0.dtype),
-                jnp.zeros((state_dim,), dtype=m0.dtype),
-                jnp.zeros((state_dim, state_dim), dtype=m0.dtype),
-            )
-
-        def _evolve(mi):
-            c = evo_bias
-            if B is not None:
-                c = c + B @ jnp.atleast_1d(jnp.asarray(mi.u_prev))
-            return A, c, chol_Q
-
-        return jax.lax.cond(mi.is_first_step, _noop, _evolve, mi)
-
-    def get_observation_params(mi: CuthbertInputs):
-        d = obs_bias
-        if D is not None:
-            d = d + D @ jnp.atleast_1d(jnp.asarray(mi.u))
-        y = jnp.atleast_1d(jnp.asarray(mi.y))
-        return H, d, chol_R, y
+    get_dynamics_params = _kalman_dynamics_params_builder(
+        evo, state_dim=state_dim, dtype=m0.dtype
+    )
+    get_observation_params = _kalman_observation_params_builder(
+        obs, obs_dim=obs_dim, dtype=m0.dtype
+    )
 
     return kalman.build_filter(
         get_init_params,  # type: ignore
