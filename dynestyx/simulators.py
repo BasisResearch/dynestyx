@@ -158,6 +158,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        obs_values_safe=None,
+        obs_mask=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -311,6 +313,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            obs_values_safe=obs_values_safe,
+            obs_mask=obs_mask,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -325,6 +329,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         plate_shapes: tuple[int, ...],
         obs_times=None,
         obs_values=None,
+        obs_values_safe=None,
+        obs_mask=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -390,6 +396,12 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             member_obs_values = _slice_array_for_plate_member(
                 obs_values, plate_shapes, plate_idx
             )
+            member_obs_values_safe = _slice_array_for_plate_member(
+                obs_values_safe, plate_shapes, plate_idx
+            )
+            member_obs_mask = _slice_array_for_plate_member(
+                obs_mask, plate_shapes, plate_idx
+            )
             member_ctrl_times = _slice_array_for_plate_member(
                 ctrl_times, plate_shapes, plate_idx
             )
@@ -429,6 +441,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     member_dynamics,
                     obs_times=member_obs_times,
                     obs_values=member_obs_values,
+                    obs_values_safe=member_obs_values_safe,
+                    obs_mask=member_obs_mask,
                     ctrl_times=member_ctrl_times,
                     ctrl_values=member_ctrl_values,
                     predict_times=member_predict_times,
@@ -471,6 +485,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
+        obs_values_safe: Array | None = None,
+        obs_mask: Array | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -492,6 +508,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                obs_values_safe=obs_values_safe,
+                obs_mask=obs_mask,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -508,6 +526,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                obs_values_safe=obs_values_safe,
+                obs_mask=obs_mask,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -530,6 +550,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             plate_shapes=plate_shapes,
             obs_times=obs_times,
             obs_values=obs_values,
+            obs_values_safe=obs_values_safe,
+            obs_mask=obs_mask,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -543,6 +565,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        obs_values_safe=None,
+        obs_mask=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -901,6 +925,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         times: Array,
         ctrl_values: Array | None,
         obs_values: Array,
+        obs_values_safe: Array | None = None,
+        obs_mask: Array | None = None,
     ) -> dict[str, Array]:
         """Sequential latent-state scan for conditioned observations via log-probability terms."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
@@ -910,6 +936,20 @@ class DiscreteTimeSimulator(BaseSimulator):
         log_prob = ObservationLogProb(
             dynamics=dynamics,
             obs_values=obs_values_for_helper,
+            precomputed_safe_obs=(
+                None
+                if obs_values_safe is None
+                else (
+                    obs_values_safe[:, None]
+                    if obs_values.ndim == 1
+                    else obs_values_safe
+                )
+            ),
+            precomputed_obs_mask=(
+                None
+                if obs_mask is None
+                else (obs_mask[:, None] if obs_values.ndim == 1 else obs_mask)
+            ),
         )
 
         with numpyro.plate(f"{name}_n_simulations", 1):
@@ -968,6 +1008,8 @@ class DiscreteTimeSimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        obs_values_safe=None,
+        obs_mask=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -1018,12 +1060,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         is_dirac_observation = isinstance(
             dynamics.observation_model, DiracIdentityObservation
         )
+        obs_has_missing = bool(kwargs.get("_obs_has_missing", False))
 
-        if (
-            is_dirac_observation
-            and obs_values is not None
-            and np.isnan(np.asarray(obs_values)).any()
-        ):
+        if is_dirac_observation and obs_values is not None and obs_has_missing:
             raise ValueError(
                 "NaN-valued obs_values are not currently supported with "
                 "DiracIdentityObservation under DiscreteTimeSimulator. "
@@ -1038,6 +1077,8 @@ class DiscreteTimeSimulator(BaseSimulator):
                 times=times,
                 ctrl_values=ctrl_values,
                 obs_values=obs_values,
+                obs_values_safe=obs_values_safe,
+                obs_mask=obs_mask,
             )
 
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
@@ -1275,6 +1316,8 @@ class ODESimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        obs_values_safe=None,
+        obs_mask=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -1327,6 +1370,20 @@ class ODESimulator(BaseSimulator):
             ObservationLogProb(
                 dynamics=dynamics,
                 obs_values=obs_values[:, None] if obs_values.ndim == 1 else obs_values,
+                precomputed_safe_obs=(
+                    None
+                    if obs_values_safe is None
+                    else (
+                        obs_values_safe[:, None]
+                        if obs_values.ndim == 1
+                        else obs_values_safe
+                    )
+                ),
+                precomputed_obs_mask=(
+                    None
+                    if obs_mask is None
+                    else (obs_mask[:, None] if obs_values.ndim == 1 else obs_mask)
+                ),
             )
             if obs_values is not None and not is_dirac_observation
             else None

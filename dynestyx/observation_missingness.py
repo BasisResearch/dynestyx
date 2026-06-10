@@ -14,9 +14,8 @@ from typing import Literal
 
 import jax.numpy as jnp
 import jax.scipy as jsp
-import numpy as np
 import numpyro.distributions as dist
-from jax.errors import TracerArrayConversionError
+from jax.errors import TracerBoolConversionError
 from jaxtyping import Array, Bool, Float, Shaped
 
 from dynestyx.models.checkers import _make_probe_state
@@ -83,34 +82,59 @@ def prepare_observation_mask(
             "(time, observation_dim)."
         )
 
-    observation_dim = obs_values.shape[-1]
     obs_mask = ~jnp.isnan(obs_values)
     safe_obs = jnp.where(obs_mask, obs_values, jnp.zeros_like(obs_values))
-    row_has_any_observed = jnp.any(obs_mask, axis=-1)
-
-    try:
-        obs_mask_host = np.asarray(obs_mask)
-    except TracerArrayConversionError:
-        obs_mask_host = None
-
-    if obs_mask_host is not None:
-        row_has_any_host = obs_mask_host.any(axis=-1)
-        row_has_all_host = obs_mask_host.all(axis=-1)
-        row_has_any_observed = jnp.asarray(row_has_any_host)
-        has_partial_missing = bool((row_has_any_host & ~row_has_all_host).any())
-        has_fully_missing_rows = bool((~row_has_any_host).any())
-    else:
-        has_partial_missing = observation_dim > 1
-        has_fully_missing_rows = False
-
-    try:
-        has_missing = bool(np.isnan(np.asarray(obs_values)).any())
-    except TracerArrayConversionError:
-        has_missing = False
+    (
+        row_has_any_observed,
+        has_missing,
+        has_partial_missing,
+        has_fully_missing_rows,
+        observation_dim,
+    ) = summarize_observation_mask(obs_mask)
 
     return (
         safe_obs,
         obs_mask,
+        row_has_any_observed,
+        has_missing,
+        has_partial_missing,
+        has_fully_missing_rows,
+        observation_dim,
+    )
+
+
+def summarize_observation_mask(
+    obs_mask: Bool[Array, "time observation_dim"],
+) -> tuple[
+    Bool[Array, " time"],
+    bool,
+    bool,
+    bool,
+    int,
+]:
+    """Summarize row-wise missing-observation metadata from a boolean mask."""
+    if obs_mask.ndim != 2:
+        raise ValueError(
+            "Observation missingness expects obs_mask with shape "
+            "(time, observation_dim)."
+        )
+
+    observation_dim = obs_mask.shape[-1]
+    row_has_any_observed = jnp.any(obs_mask, axis=-1)
+    row_has_all_observed = jnp.all(obs_mask, axis=-1)
+
+    try:
+        has_partial_missing = bool(
+            jnp.any(row_has_any_observed & ~row_has_all_observed)
+        )
+        has_fully_missing_rows = bool(jnp.any(~row_has_any_observed))
+        has_missing = bool(jnp.any(~obs_mask))
+    except TracerBoolConversionError:
+        has_partial_missing = observation_dim > 1
+        has_fully_missing_rows = False
+        has_missing = False
+
+    return (
         row_has_any_observed,
         has_missing,
         has_partial_missing,
@@ -251,6 +275,8 @@ class ObservationLogProb:
 
     dynamics: DynamicalModel
     obs_values: Float[Array, "time observation_dim"]
+    precomputed_safe_obs: Array | None = None
+    precomputed_obs_mask: Bool[Array, "time observation_dim"] | None = None
     distribution_mode: ObservationDistributionMode = dataclasses.field(init=False)
     safe_obs: Float[Array, "time observation_dim"] = dataclasses.field(init=False)
     obs_mask: Bool[Array, "time observation_dim"] = dataclasses.field(init=False)
@@ -265,15 +291,33 @@ class ObservationLogProb:
 
     def __post_init__(self) -> None:
         """Precompute NaN-aware observation summaries once at construction time."""
-        (
-            self.safe_obs,
-            self.obs_mask,
-            self.row_has_any_observed,
-            self.has_missing,
-            self.has_partial_missing,
-            self.has_fully_missing_rows,
-            self.observation_dim,
-        ) = prepare_observation_mask(self.obs_values)
+        if (self.precomputed_safe_obs is None) != (self.precomputed_obs_mask is None):
+            raise ValueError(
+                "ObservationLogProb expects precomputed_safe_obs and "
+                "precomputed_obs_mask to be provided together."
+            )
+
+        if self.precomputed_safe_obs is None:
+            (
+                self.safe_obs,
+                self.obs_mask,
+                self.row_has_any_observed,
+                self.has_missing,
+                self.has_partial_missing,
+                self.has_fully_missing_rows,
+                self.observation_dim,
+            ) = prepare_observation_mask(self.obs_values)
+        else:
+            assert self.precomputed_obs_mask is not None
+            self.safe_obs = self.precomputed_safe_obs
+            self.obs_mask = self.precomputed_obs_mask
+            (
+                self.row_has_any_observed,
+                self.has_missing,
+                self.has_partial_missing,
+                self.has_fully_missing_rows,
+                self.observation_dim,
+            ) = summarize_observation_mask(self.obs_mask)
         self.distribution_mode, self.expected_event_shape = (
             probe_observation_distribution_contract(
                 self.dynamics,

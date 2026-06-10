@@ -2,14 +2,21 @@
 
 from typing import TypeVar
 
+import jax.numpy as jnp
+import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
-from jaxtyping import Array, Real
+from jaxtyping import Array, Bool, Real
 
 from dynestyx.models import (
     DynamicalModel,
+)
+from dynestyx.models.checkers import (
+    _is_categorical_distribution,
+    _make_probe_state,
+    _unwrap_base_distribution,
 )
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
@@ -20,6 +27,83 @@ from dynestyx.utils import (
 )
 
 T = TypeVar("T")
+CATEGORICAL_MISSING_SENTINEL = -1
+
+
+def _probe_observation_distribution(dynamics: DynamicalModel):
+    """Probe the observation model once at a representative state."""
+    x_probe = _make_probe_state(
+        initial_condition=dynamics.initial_condition,
+        state_dim=dynamics.state_dim,
+    )
+    u_probe = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
+    t_probe = jnp.array(0.0) if dynamics.t0 is None else dynamics.t0
+    return dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe)
+
+
+def _categorical_support_size(obs_dist) -> int:
+    """Return the number of categorical labels implied by a probed distribution."""
+    base = _unwrap_base_distribution(obs_dist)
+    probs_or_logits = base.probs if hasattr(base, "probs") else base.logits
+    return int(probs_or_logits.shape[-1])
+
+
+def _prepare_observation_views(
+    dynamics: DynamicalModel,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+) -> tuple[
+    Array | None,
+    Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None,
+]:
+    """Return score-safe observations plus an explicit observed-entry mask."""
+    if obs_values is None:
+        return None, None
+
+    obs_arr = jnp.asarray(obs_values)
+    obs_mask = ~jnp.isnan(obs_arr)
+
+    obs_dist = _probe_observation_distribution(dynamics)
+    if not _is_categorical_distribution(obs_dist):
+        safe_obs = jnp.where(obs_mask, obs_arr, jnp.zeros_like(obs_arr))
+        return safe_obs, obs_mask
+
+    observed = obs_arr[obs_mask]
+
+    if observed.size:
+        integer_mask = jnp.equal(observed, jnp.round(observed))
+        if bool(jnp.any(~integer_mask)):
+            bad = observed[~integer_mask][0]
+            raise ValueError(
+                "Categorical observations must be encoded as zero-based integer "
+                f"labels. Found non-integer observed value {bad!r}."
+            )
+
+        if bool(jnp.any(observed < 0)):
+            bad = observed[observed < 0][0]
+            raise ValueError(
+                "Categorical observations must be encoded as zero-based integer "
+                f"labels 0..K-1; found negative observed value {bad!r}."
+            )
+
+        support_size = _categorical_support_size(obs_dist)
+        if bool(jnp.any(observed >= support_size)):
+            bad = observed[observed >= support_size][0]
+            raise ValueError(
+                "Categorical observations must be encoded as zero-based integer "
+                f"labels 0..K-1 for the probed observation distribution. Found "
+                f"observed value {bad!r} with K={support_size}."
+            )
+
+    safe_obs = jnp.where(
+        obs_mask,
+        obs_arr,
+        jnp.asarray(CATEGORICAL_MISSING_SENTINEL, dtype=obs_arr.dtype),
+    )
+    return safe_obs.astype(jnp.int32), obs_mask
 
 
 def sample(
@@ -107,6 +191,12 @@ def sample(
 
     # Initial dynamics may not have t0, which is then inferred from obs_times
     dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times, predict_times)
+    obs_values_safe, obs_mask = _prepare_observation_views(dynamics_with_t0, obs_values)
+    obs_has_missing = (
+        bool(np.isnan(np.asarray(obs_values)).any())
+        if obs_values is not None
+        else False
+    )
 
     # Pass to interpreted version of `sample` for inference.
     return _sample_intp(
@@ -114,6 +204,9 @@ def sample(
         dynamics_with_t0,
         obs_times=obs_times,
         obs_values=obs_values,
+        obs_values_safe=obs_values_safe,
+        obs_mask=obs_mask,
+        _obs_has_missing=obs_has_missing,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         predict_times=predict_times,
@@ -129,6 +222,10 @@ def _sample_intp(
     obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    obs_values_safe: Array | None = None,
+    obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
     | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]

@@ -243,11 +243,15 @@ def test_hmm_partial_missing_independent_categorical_matches_manual_reference():
     obs_times = jnp.arange(2.0)
     obs_values = jnp.array([[1.0, 0.0], [0.0, 1.0]])
     obs_values = set_partial_row_missing(obs_values, 0, dim_idx=1)
+    obs_values_safe = jnp.array([[1, -1], [0, 1]], dtype=jnp.int32)
+    obs_mask = jnp.array([[True, False], [True, True]])
 
     _, _, log_emit_seq = hmm_log_components(
         _build_hmm_dynamics(_independent_categorical_observation_model),
         obs_times,
         obs_values,
+        obs_values_safe=obs_values_safe,
+        obs_mask=obs_mask,
     )
 
     probs = jnp.array(
@@ -259,6 +263,24 @@ def test_hmm_partial_missing_independent_categorical_matches_manual_reference():
     expected = jnp.array([jnp.log(probs[0, 0, 1]), jnp.log(probs[1, 0, 1])])
 
     assert jnp.allclose(log_emit_seq[0], expected)
+
+
+def test_hmm_partial_missing_independent_categorical_keeps_filter_finite():
+    obs_times = jnp.arange(4.0)
+    obs_values = jnp.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 0.0]])
+    obs_values = set_partial_row_missing(obs_values, 1, dim_idx=0)
+
+    tr = _run_hmm_filter_trace(
+        _build_hmm_dynamics(_independent_categorical_observation_model),
+        obs_times,
+        obs_values,
+    )
+
+    filtered = tr["f_filtered_states"]["value"]
+
+    assert filtered.shape == (len(obs_times), 2)
+    assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
+    assert jnp.allclose(filtered.sum(axis=-1), 1.0)
 
 
 def test_hmm_full_row_missing_scalar_categorical_keeps_filter_finite():
@@ -278,3 +300,48 @@ def test_hmm_full_row_missing_scalar_categorical_keeps_filter_finite():
     assert filtered.shape == (len(obs_times), 2)
     assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
     assert jnp.allclose(filtered.sum(axis=-1), 1.0)
+
+
+def test_hmm_categorical_observations_reject_negative_labels_early():
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.array([0.0, -1.0, 2.0])
+
+    with pytest.raises(
+        ValueError,
+        match="zero-based integer labels 0..K-1; found negative observed value",
+    ):
+        _run_hmm_filter_trace(
+            _build_hmm_dynamics(_joint_categorical_observation_model),
+            obs_times,
+            obs_values,
+        )
+
+
+def test_hmm_categorical_observations_reject_non_integer_labels_early():
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.array([0.0, 1.5, 2.0])
+
+    with pytest.raises(
+        ValueError,
+        match="zero-based integer labels. Found non-integer observed value",
+    ):
+        _run_hmm_filter_trace(
+            _build_hmm_dynamics(_joint_categorical_observation_model),
+            obs_times,
+            obs_values,
+        )
+
+
+def test_hmm_categorical_observations_reject_out_of_range_labels_early():
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.array([0.0, 4.0, 2.0])
+
+    with pytest.raises(
+        ValueError,
+        match="zero-based integer labels 0..K-1.*with K=4",
+    ):
+        _run_hmm_filter_trace(
+            _build_hmm_dynamics(_joint_categorical_observation_model),
+            obs_times,
+            obs_values,
+        )

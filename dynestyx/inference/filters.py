@@ -9,7 +9,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import (
@@ -210,6 +210,10 @@ class Filter(BaseLogFactorAdder):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
+        obs_values_safe: Array | None = None,
+        obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -254,6 +258,8 @@ class Filter(BaseLogFactorAdder):
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                obs_values_safe=obs_values_safe,
+                obs_mask=obs_mask,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
             )
@@ -286,6 +292,8 @@ class Filter(BaseLogFactorAdder):
                     cast(HMMConfig, config),
                     obs_times=obs_times,
                     obs_values=obs_values,
+                    obs_values_safe=obs_values_safe,
+                    obs_mask=obs_mask,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     **kwargs,
@@ -320,6 +328,10 @@ class Filter(BaseLogFactorAdder):
         obs_times: Real[Array, "*obs_time_plate obs_time"],
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"],
+        obs_values_safe: Array | None = None,
+        obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -333,6 +345,7 @@ class Filter(BaseLogFactorAdder):
         """
         # Determine the compute function (dispatch before vmap).
         output_kind: str
+        uses_preprocessed_obs = False
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
@@ -342,7 +355,7 @@ class Filter(BaseLogFactorAdder):
                 )
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ct, cv, k):
+            def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
                 return compute_continuous_filter(
                     dyn,
                     cast(ContinuousTimeFilterConfig, config),
@@ -355,12 +368,15 @@ class Filter(BaseLogFactorAdder):
 
         elif isinstance(config, HMMConfigs):
             output_kind = "hmm"
+            uses_preprocessed_obs = True
 
-            def compute_output(dyn, ot, ov, ct, cv, k):
+            def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
                 return compute_hmm_filter(
                     dyn,
                     obs_times=ot,
                     obs_values=ov,
+                    obs_values_safe=ovs,
+                    obs_mask=om,
                     ctrl_values=cv,
                 )
 
@@ -368,7 +384,7 @@ class Filter(BaseLogFactorAdder):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ct, cv, k):
+                def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
                     return compute_cuthbert_filter(
                         dyn,
                         config,
@@ -382,7 +398,7 @@ class Filter(BaseLogFactorAdder):
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
-                def compute_output(dyn, ot, ov, ct, cv, k):
+                def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
@@ -426,7 +442,24 @@ class Filter(BaseLogFactorAdder):
             ctrl_values=ctrl_values,
         )
         k_axis = 0 if keys is not None else None
-        base_axes = (dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis)
+        if uses_preprocessed_obs:
+            ovs_axis = _array_plate_axis(obs_values_safe, plate_shapes)
+            om_axis = _array_plate_axis(obs_mask, plate_shapes)
+        else:
+            ovs_axis = None
+            om_axis = None
+            obs_values_safe = None
+            obs_mask = None
+        base_axes = (
+            dyn_axes,
+            ot_axis,
+            ov_axis,
+            ovs_axis,
+            om_axis,
+            ct_axis,
+            cv_axis,
+            k_axis,
+        )
 
         # A plate-batched ``initial_condition`` cannot be sliced by vmap: numpyro
         # keeps ``batch_shape`` in static aux-data, so a vmap-sliced distribution
@@ -443,7 +476,7 @@ class Filter(BaseLogFactorAdder):
         if ic_batched:
             orig_ic = dynamics.initial_condition
 
-            def compute_output_member(dyn, ot, ov, ct, cv, k, *idxs):
+            def compute_output_member(dyn, ot, ov, ovs, om, ct, cv, k, *idxs):
                 member_ic = _slice_dist_for_plate_member(
                     orig_ic, plate_shapes, tuple(idxs)
                 )
@@ -453,13 +486,11 @@ class Filter(BaseLogFactorAdder):
                     member_ic,
                     is_leaf=lambda x: x is None,
                 )
-                return compute_output(dyn, ot, ov, ct, cv, k)
+                return compute_output(dyn, ot, ov, ovs, om, ct, cv, k)
 
             idx_arrays = [jnp.arange(s) for s in plate_shapes]
             n_plates = len(plate_shapes)
             vmapped = compute_output_member
-            # Wrap w (innermost-first) maps plate dim d = n_plates - 1 - w, so the
-            # index array for that dim is mapped on axis 0 only at that level.
             for w in range(n_plates):
                 d = n_plates - 1 - w
                 idx_axes = tuple(0 if j == d else None for j in range(n_plates))
@@ -468,6 +499,8 @@ class Filter(BaseLogFactorAdder):
                 dynamics,
                 obs_times,
                 obs_values,
+                obs_values_safe,
+                obs_mask,
                 ctrl_times,
                 ctrl_values,
                 keys,
@@ -481,6 +514,8 @@ class Filter(BaseLogFactorAdder):
                 dynamics,
                 obs_times,
                 obs_values,
+                obs_values_safe,
+                obs_mask,
                 ctrl_times,
                 ctrl_values,
                 keys,
