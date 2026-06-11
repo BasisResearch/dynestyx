@@ -83,7 +83,7 @@ def hmm_log_emission_probs_masked(
     expected_event_shape,
     u=None,
 ) -> Float[Array, " n_states"]:
-    """log p(y_t,observed | x_t, u_t) for each latent state."""
+    """log p(y_t, observed entries | x_t, u_t) for each latent state."""
 
     def lp(x):
         obs_dist = dynamics.observation_model(x=x, u=u, t=t)
@@ -106,8 +106,8 @@ def hmm_log_components(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    obs_values_safe: Array | None = None,
-    obs_mask: Array | None = None,
+    _obs_values_safe: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[
     Float[Array, " n_states"],
@@ -127,23 +127,24 @@ def hmm_log_components(
     log_pi = hmm_log_initial_probs(dynamics, xs)
 
     # Emissions
-    if obs_values_safe is None and obs_mask is None:
-        obs_values_safe, obs_mask = _prepare_observation_views(dynamics, obs_values)
-    if obs_values_safe is None or obs_mask is None:
-        raise ValueError(
-            "HMM missingness scoring expects obs_values_safe and obs_mask to be "
-            "provided together."
+    if _obs_values_safe is None or _obs_mask is None:
+        _obs_values_safe, _obs_mask, _ = _prepare_observation_views(
+            dynamics, obs_values
         )
+    if _obs_values_safe is None or _obs_mask is None:
+        raise ValueError("HMM observation scoring expects prepared observations.")
 
-    safe_obs = obs_values_safe[:, None] if obs_values.ndim == 1 else obs_values_safe
-    obs_mask_2d = obs_mask[:, None] if obs_values.ndim == 1 else obs_mask
+    obs_values_safe = (
+        _obs_values_safe[:, None] if obs_values.ndim == 1 else _obs_values_safe
+    )
+    obs_mask = _obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask
     (
         row_has_any_observed,
         _has_missing,
         has_partial_missing,
         _has_fully_missing_rows,
         observation_dim,
-    ) = summarize_observation_mask(obs_mask_2d)
+    ) = summarize_observation_mask(obs_mask)
     expected_mode, expected_event_shape = probe_observation_distribution_contract(
         dynamics,
         observation_dim=observation_dim,
@@ -165,8 +166,8 @@ def hmm_log_components(
                 u=u,
             )
         )(
-            safe_obs,
-            obs_mask_2d,
+            obs_values_safe,
+            obs_mask,
             row_has_any_observed,
             obs_times,
             ctrl_values,
@@ -187,8 +188,8 @@ def hmm_log_components(
                 u=None,
             )
         )(
-            safe_obs,
-            obs_mask_2d,
+            obs_values_safe,
+            obs_mask,
             row_has_any_observed,
             obs_times,
         )
@@ -265,8 +266,8 @@ def compute_hmm_filter(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    obs_values_safe: Array | None = None,
-    obs_mask: Array | None = None,
+    _obs_values_safe: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
     """Pure-JAX HMM filter computation (no numpyro side-effects).
@@ -279,8 +280,8 @@ def compute_hmm_filter(
         dynamics,
         obs_times,
         obs_values,
-        obs_values_safe=obs_values_safe,
-        obs_mask=obs_mask,
+        _obs_values_safe=_obs_values_safe,
+        _obs_mask=_obs_mask,
         ctrl_values=ctrl_values,
     )
 
@@ -299,8 +300,8 @@ def _filter_hmm(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    obs_values_safe: Array | None = None,
-    obs_mask: Array | None = None,
+    _obs_values_safe: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,
@@ -324,8 +325,8 @@ def _filter_hmm(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
-        obs_values_safe=obs_values_safe,
-        obs_mask=obs_mask,
+        _obs_values_safe=_obs_values_safe,
+        _obs_mask=_obs_mask,
         ctrl_values=ctrl_values,
     )
 

@@ -9,7 +9,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jaxtyping import Array, Bool, PRNGKeyArray, Real
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _sample_intp
 from dynestyx.inference.checkers import (
@@ -64,7 +64,7 @@ from dynestyx.inference.plate_utils import (
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
-from dynestyx.utils import _dist_has_plate_batch_dims
+from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -210,10 +210,9 @@ class Filter(BaseLogFactorAdder):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        obs_values_safe: Array | None = None,
-        obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
-        | Bool[Array, "*obs_value_plate obs_time"]
-        | None = None,
+        _obs_values_safe: Array | None = None,
+        _obs_mask: Array | None = None,
+        _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -258,8 +257,9 @@ class Filter(BaseLogFactorAdder):
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
-                obs_values_safe=obs_values_safe,
-                obs_mask=obs_mask,
+                _obs_values_safe=_obs_values_safe,
+                _obs_mask=_obs_mask,
+                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
             )
@@ -292,8 +292,8 @@ class Filter(BaseLogFactorAdder):
                     cast(HMMConfig, config),
                     obs_times=obs_times,
                     obs_values=obs_values,
-                    obs_values_safe=obs_values_safe,
-                    obs_mask=obs_mask,
+                    _obs_values_safe=_obs_values_safe,
+                    _obs_mask=_obs_mask,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     **kwargs,
@@ -328,10 +328,9 @@ class Filter(BaseLogFactorAdder):
         obs_times: Real[Array, "*obs_time_plate obs_time"],
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"],
-        obs_values_safe: Array | None = None,
-        obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
-        | Bool[Array, "*obs_value_plate obs_time"]
-        | None = None,
+        _obs_values_safe: Array | None = None,
+        _obs_mask: Array | None = None,
+        _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -375,8 +374,8 @@ class Filter(BaseLogFactorAdder):
                     dyn,
                     obs_times=ot,
                     obs_values=ov,
-                    obs_values_safe=ovs,
-                    obs_mask=om,
+                    _obs_values_safe=ovs,
+                    _obs_mask=om,
                     ctrl_values=cv,
                 )
 
@@ -443,13 +442,13 @@ class Filter(BaseLogFactorAdder):
         )
         k_axis = 0 if keys is not None else None
         if uses_preprocessed_obs:
-            ovs_axis = _array_plate_axis(obs_values_safe, plate_shapes)
-            om_axis = _array_plate_axis(obs_mask, plate_shapes)
+            ovs_axis = _array_plate_axis(_obs_values_safe, plate_shapes)
+            om_axis = _array_plate_axis(_obs_mask, plate_shapes)
         else:
             ovs_axis = None
             om_axis = None
-            obs_values_safe = None
-            obs_mask = None
+            _obs_values_safe = None
+            _obs_mask = None
         base_axes = (
             dyn_axes,
             ot_axis,
@@ -499,8 +498,8 @@ class Filter(BaseLogFactorAdder):
                 dynamics,
                 obs_times,
                 obs_values,
-                obs_values_safe,
-                obs_mask,
+                _obs_values_safe,
+                _obs_mask,
                 ctrl_times,
                 ctrl_values,
                 keys,
@@ -514,8 +513,8 @@ class Filter(BaseLogFactorAdder):
                 dynamics,
                 obs_times,
                 obs_values,
-                obs_values_safe,
-                obs_mask,
+                _obs_values_safe,
+                _obs_mask,
                 ctrl_times,
                 ctrl_values,
                 keys,
@@ -557,6 +556,23 @@ class Filter(BaseLogFactorAdder):
                 ),
             )
         if output_kind == "hmm":
+            hmm_config = cast(HMMConfig, config)
+            record_max_elems = hmm_config.record_max_elems
+            if _should_record_field(
+                hmm_config.record_log_filtered,
+                log_filt_seq.shape,
+                record_max_elems,
+            ):
+                numpyro.deterministic(f"{name}_log_filtered_states", log_filt_seq)
+            if _should_record_field(
+                hmm_config.record_filtered,
+                log_filt_seq.shape,
+                record_max_elems,
+            ):
+                numpyro.deterministic(
+                    f"{name}_filtered_states",
+                    jnp.exp(log_filt_seq),
+                )
             return _categorical_log_probs_to_dists(
                 log_filt_seq,
                 plate_shapes=plate_shapes,

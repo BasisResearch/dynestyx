@@ -3,11 +3,11 @@
 from typing import TypeVar
 
 import jax.numpy as jnp
-import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
+from jax.errors import TracerBoolConversionError
 from jaxtyping import Array, Bool, Real
 
 from dynestyx.models import (
@@ -58,18 +58,23 @@ def _prepare_observation_views(
     Bool[Array, "*obs_value_plate obs_time observation_dim"]
     | Bool[Array, "*obs_value_plate obs_time"]
     | None,
+    bool | None,
 ]:
     """Return score-safe observations plus an explicit observed-entry mask."""
     if obs_values is None:
-        return None, None
+        return None, None, False
 
     obs_arr = jnp.asarray(obs_values)
     obs_mask = ~jnp.isnan(obs_arr)
+    try:
+        has_missing = bool(jnp.any(~obs_mask))
+    except TracerBoolConversionError:
+        has_missing = None
 
     obs_dist = _probe_observation_distribution(dynamics)
     if not _is_categorical_distribution(obs_dist):
         safe_obs = jnp.where(obs_mask, obs_arr, jnp.zeros_like(obs_arr))
-        return safe_obs, obs_mask
+        return safe_obs, obs_mask, has_missing
 
     observed = obs_arr[obs_mask]
 
@@ -103,7 +108,7 @@ def _prepare_observation_views(
         obs_arr,
         jnp.asarray(CATEGORICAL_MISSING_SENTINEL, dtype=obs_arr.dtype),
     )
-    return safe_obs.astype(jnp.int32), obs_mask
+    return safe_obs.astype(jnp.int32), obs_mask, has_missing
 
 
 def sample(
@@ -191,11 +196,8 @@ def sample(
 
     # Initial dynamics may not have t0, which is then inferred from obs_times
     dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times, predict_times)
-    obs_values_safe, obs_mask = _prepare_observation_views(dynamics_with_t0, obs_values)
-    obs_has_missing = (
-        bool(np.isnan(np.asarray(obs_values)).any())
-        if obs_values is not None
-        else False
+    obs_values_safe, obs_mask, obs_has_missing = _prepare_observation_views(
+        dynamics_with_t0, obs_values
     )
 
     # Pass to interpreted version of `sample` for inference.
@@ -204,8 +206,8 @@ def sample(
         dynamics_with_t0,
         obs_times=obs_times,
         obs_values=obs_values,
-        obs_values_safe=obs_values_safe,
-        obs_mask=obs_mask,
+        _obs_values_safe=obs_values_safe,
+        _obs_mask=obs_mask,
         _obs_has_missing=obs_has_missing,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
@@ -223,10 +225,11 @@ def _sample_intp(
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
-    obs_values_safe: Array | None = None,
-    obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    _obs_values_safe: Array | None = None,
+    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
     | Bool[Array, "*obs_value_plate obs_time"]
     | None = None,
+    _obs_has_missing: bool | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]

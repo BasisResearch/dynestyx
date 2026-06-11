@@ -6,7 +6,7 @@ from numpyro.handlers import trace
 import dynestyx as dsx
 from dynestyx import Filter
 from dynestyx.inference.filter_configs import HMMConfig
-from dynestyx.inference.hmm_filters import hmm_log_components
+from dynestyx.inference.hmm_filters import compute_hmm_filter, hmm_log_components
 from dynestyx.models import DynamicalModel
 from tests.missingness.models import GAUSSIAN_R, INDEPENDENT_SCALE
 from tests.missingness.utils import (
@@ -79,6 +79,21 @@ def _run_hmm_filter_trace(dynamics, obs_times, obs_values):
         ):
             dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
     return tr
+
+
+def _run_plated_hmm_filter_trace(model, *, obs_times, obs_values, M=2):
+    with trace() as tr:
+        with Filter(
+            filter_config=HMMConfig(record_filtered=True, record_log_filtered=True)
+        ):
+            model(obs_times=obs_times, obs_values=obs_values, M=M)
+    return tr
+
+
+def _plated_hmm_model(observation_model, *, obs_times=None, obs_values=None, M=2):
+    dynamics = _build_hmm_dynamics(observation_model)
+    with dsx.plate("trajectories", M):
+        dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
 
 def test_hmm_full_row_missing_rows_zero_emission_scores():
@@ -243,15 +258,13 @@ def test_hmm_partial_missing_independent_categorical_matches_manual_reference():
     obs_times = jnp.arange(2.0)
     obs_values = jnp.array([[1.0, 0.0], [0.0, 1.0]])
     obs_values = set_partial_row_missing(obs_values, 0, dim_idx=1)
-    obs_values_safe = jnp.array([[1, -1], [0, 1]], dtype=jnp.int32)
-    obs_mask = jnp.array([[True, False], [True, True]])
 
     _, _, log_emit_seq = hmm_log_components(
         _build_hmm_dynamics(_independent_categorical_observation_model),
         obs_times,
         obs_values,
-        obs_values_safe=obs_values_safe,
-        obs_mask=obs_mask,
+        _obs_values_safe=jnp.array([[1, -1], [0, 1]], dtype=jnp.int32),
+        _obs_mask=jnp.array([[True, False], [True, True]]),
     )
 
     probs = jnp.array(
@@ -263,6 +276,101 @@ def test_hmm_partial_missing_independent_categorical_matches_manual_reference():
     expected = jnp.array([jnp.log(probs[0, 0, 1]), jnp.log(probs[1, 0, 1])])
 
     assert jnp.allclose(log_emit_seq[0], expected)
+
+
+def test_plated_hmm_gaussian_missingness_matches_memberwise_filter():
+    M = 2
+    obs_times = jnp.arange(5.0)
+    obs_values = jnp.array(
+        [
+            [
+                [-0.8, 0.3],
+                [0.2, -0.2],
+                [1.0, -0.5],
+                [0.7, -0.3],
+                [-0.6, 0.2],
+            ],
+            [
+                [-0.9, 0.4],
+                [1.2, -0.6],
+                [0.1, 0.3],
+                [0.9, -0.2],
+                [1.1, -0.4],
+            ],
+        ]
+    )
+    obs_values = set_full_row_missing(obs_values, 1, member_idx=0)
+    obs_values = set_partial_row_missing(obs_values, 3, dim_idx=0, member_idx=1)
+
+    tr = _run_plated_hmm_filter_trace(
+        lambda **kwargs: _plated_hmm_model(_mvn_observation_model, **kwargs),
+        obs_times=obs_times,
+        obs_values=obs_values,
+        M=M,
+    )
+
+    actual_log_filtered = tr["f_log_filtered_states"]["value"]
+    actual_filtered = tr["f_filtered_states"]["value"]
+
+    dynamics = _build_hmm_dynamics(_mvn_observation_model)
+    expected_log_filtered = []
+    for member_idx in range(M):
+        loglik, log_filtered = compute_hmm_filter(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values[member_idx],
+        )
+        assert jnp.isfinite(loglik)
+        expected_log_filtered.append(log_filtered)
+
+    expected_log_filtered = jnp.stack(expected_log_filtered, axis=0)
+    assert actual_log_filtered.shape == (M, len(obs_times), 2)
+    assert actual_filtered.shape == (M, len(obs_times), 2)
+    assert jnp.allclose(actual_log_filtered, expected_log_filtered)
+    assert jnp.allclose(actual_filtered, jnp.exp(expected_log_filtered))
+
+
+def test_plated_hmm_independent_categorical_missingness_matches_memberwise_filter():
+    M = 2
+    obs_times = jnp.arange(4.0)
+    obs_values = jnp.array(
+        [
+            [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 0.0]],
+            [[0.0, 1.0], [1.0, 0.0], [0.0, 0.0], [1.0, 1.0]],
+        ]
+    )
+    obs_values = set_partial_row_missing(obs_values, 1, dim_idx=0, member_idx=0)
+    obs_values = set_full_row_missing(obs_values, 2, member_idx=1)
+
+    tr = _run_plated_hmm_filter_trace(
+        lambda **kwargs: _plated_hmm_model(
+            _independent_categorical_observation_model,
+            **kwargs,
+        ),
+        obs_times=obs_times,
+        obs_values=obs_values,
+        M=M,
+    )
+
+    actual_log_filtered = tr["f_log_filtered_states"]["value"]
+    actual_filtered = tr["f_filtered_states"]["value"]
+
+    dynamics = _build_hmm_dynamics(_independent_categorical_observation_model)
+    expected_log_filtered = []
+    for member_idx in range(M):
+        loglik, log_filtered = compute_hmm_filter(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values[member_idx],
+        )
+        assert jnp.isfinite(loglik)
+        expected_log_filtered.append(log_filtered)
+
+    expected_log_filtered = jnp.stack(expected_log_filtered, axis=0)
+    assert actual_log_filtered.shape == (M, len(obs_times), 2)
+    assert actual_filtered.shape == (M, len(obs_times), 2)
+    assert jnp.allclose(actual_log_filtered, expected_log_filtered)
+    assert jnp.allclose(actual_filtered, jnp.exp(expected_log_filtered))
 
 
 def test_hmm_partial_missing_independent_categorical_keeps_filter_finite():
