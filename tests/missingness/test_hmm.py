@@ -441,6 +441,33 @@ def test_hmm_full_row_missing_scalar_categorical_keeps_filter_finite():
     assert jnp.allclose(filtered.sum(axis=-1), 1.0)
 
 
+def test_hmm_fully_observed_scalar_categorical_integer_labels_match_float_path():
+    obs_times = jnp.arange(5.0)
+    obs_values_int = jnp.array([0, 1, 3, 2, 1], dtype=jnp.int32)
+    obs_values_float = obs_values_int.astype(jnp.float32)
+
+    tr_int = _run_hmm_filter_trace(
+        _build_hmm_dynamics(_joint_categorical_observation_model),
+        obs_times,
+        obs_values_int,
+    )
+    tr_float = _run_hmm_filter_trace(
+        _build_hmm_dynamics(_joint_categorical_observation_model),
+        obs_times,
+        obs_values_float,
+    )
+
+    assert jnp.isfinite(tr_int["f_marginal_loglik"]["value"])
+    assert jnp.allclose(
+        tr_int["f_marginal_loglik"]["value"],
+        tr_float["f_marginal_loglik"]["value"],
+    )
+    assert jnp.allclose(
+        tr_int["f_filtered_states"]["value"],
+        tr_float["f_filtered_states"]["value"],
+    )
+
+
 def test_hmm_scalar_categorical_filter_mcmc_runs_under_tracing():
     obs_times = jnp.arange(20.0)
     true_A = jnp.array([[0.95, 0.05], [0.1, 0.9]])

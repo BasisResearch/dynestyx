@@ -66,7 +66,10 @@ def _prepare_observation_views(
         return None, None, False
 
     obs_arr = jnp.asarray(obs_values)
-    obs_mask = ~jnp.isnan(obs_arr)
+    if jnp.issubdtype(obs_arr.dtype, jnp.inexact):
+        obs_mask = ~jnp.isnan(obs_arr)
+    else:
+        obs_mask = jnp.ones(obs_arr.shape, dtype=bool)
     try:
         has_missing = bool(jnp.any(~obs_mask))
     except TracerBoolConversionError:
