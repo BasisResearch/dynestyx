@@ -1,6 +1,6 @@
 import warnings
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -183,6 +183,36 @@ def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
     )
 
 
+def _require_constant_linear_gaussian_fields(
+    component: Any,
+    field_names: tuple[str, ...],
+    *,
+    where: str,
+    suggestion: str = (
+        "Use fixed arrays, or choose the cuthbert backend (e.g. "
+        "KFConfig(filter_source='cuthbert') / "
+        "KFSmootherConfig(filter_source='cuthbert')), which supports "
+        "time-varying linear-Gaussian models."
+    ),
+) -> None:
+    """Reject callable (time-varying) linear-Gaussian model parameters.
+
+    cd_dynamax filters/smoothers consume constant parameter arrays;
+    time-varying (callable) `LinearGaussianStateEvolution` /
+    `LinearGaussianObservation` parameters are only supported by the
+    cuthbert backend.
+    """
+    callable_fields = [
+        name for name in field_names if callable(getattr(component, name))
+    ]
+    if callable_fields:
+        raise TypeError(
+            f"{where} requires constant (array-valued) parameters. Received "
+            f"callable field(s): {', '.join(callable_fields)} on "
+            f"{type(component).__name__}. {suggestion}"
+        )
+
+
 def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     """Build ParamsCDLGSSM for CD-Dynamax's continuous-discrete KF.
 
@@ -232,6 +262,16 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     obs = dsx_model.observation_model
     if not isinstance(obs, LinearGaussianObservation):
         raise TypeError("dsx_to_cdlgssm_params requires LinearGaussianObservation.")
+    _require_constant_linear_gaussian_fields(
+        obs,
+        ("H", "D", "bias", "R"),
+        where="The continuous-time cd_dynamax Kalman filter",
+        suggestion=(
+            "Use fixed arrays, or discretize the model (e.g. with "
+            "Discretizer) and run a discrete-time cuthbert Kalman filter, "
+            "which supports time-varying linear-Gaussian models."
+        ),
+    )
 
     B = (
         drift.B
@@ -346,15 +386,29 @@ def dsx_to_cd_dynamax(
     non_gaussian_flag = False
 
     if isinstance(obs, LinearGaussianObservation):
+        _require_constant_linear_gaussian_fields(
+            obs,
+            ("H", "D", "bias", "R"),
+            where="The continuous-time cd_dynamax filter path",
+            suggestion=(
+                "Use fixed arrays, or discretize the model (e.g. with "
+                "Discretizer) and run a discrete-time cuthbert filter, "
+                "which supports time-varying linear-Gaussian models."
+            ),
+        )
+
+        # The guard above ensures the parameters are constant arrays.
+        H_matrix = cast(jnp.ndarray, obs.H)
+        D_matrix = None if obs.D is None else cast(jnp.ndarray, obs.D)
 
         def emission_function(x, u, t):
             if x.ndim > 1:
-                return x @ obs.H.T + (
-                    obs.D @ u if obs.D is not None and u is not None else 0
+                return x @ H_matrix.T + (
+                    D_matrix @ u if D_matrix is not None and u is not None else 0
                 )
             else:
-                return obs.H @ x + (
-                    obs.D @ u if obs.D is not None and u is not None else 0
+                return H_matrix @ x + (
+                    D_matrix @ u if D_matrix is not None and u is not None else 0
                 )
 
         if uses_nonlinear_non_gaussian_api:
@@ -476,9 +530,23 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
 
     # ----- Dynamics function -----
     if isinstance(evo, LinearGaussianStateEvolution):
-        F = evo.A
-        b = evo.bias if evo.bias is not None else jnp.zeros(state_dim)
-        B = evo.B if evo.B is not None else jnp.zeros((state_dim, control_dim))
+        _require_constant_linear_gaussian_fields(
+            evo,
+            ("A", "B", "bias", "cov"),
+            where="The cd_dynamax discrete EKF/UKF",
+        )
+        # The guard above ensures the parameters are constant arrays.
+        F = cast(jnp.ndarray, evo.A)
+        b = (
+            cast(jnp.ndarray, evo.bias)
+            if evo.bias is not None
+            else jnp.zeros(state_dim)
+        )
+        B = (
+            cast(jnp.ndarray, evo.B)
+            if evo.B is not None
+            else jnp.zeros((state_dim, control_dim))
+        )
 
         def dynamics_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
             out = F @ x + b
@@ -496,10 +564,20 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
 
     # ----- Emission function -----
     if isinstance(obs, LinearGaussianObservation):
-        H = obs.H
-        d = obs.bias if obs.bias is not None else jnp.zeros(dynamics.observation_dim)
+        _require_constant_linear_gaussian_fields(
+            obs,
+            ("H", "D", "bias", "R"),
+            where="The cd_dynamax discrete EKF/UKF",
+        )
+        # The guard above ensures the parameters are constant arrays.
+        H = cast(jnp.ndarray, obs.H)
+        d = (
+            cast(jnp.ndarray, obs.bias)
+            if obs.bias is not None
+            else jnp.zeros(dynamics.observation_dim)
+        )
         D = (
-            obs.D
+            cast(jnp.ndarray, obs.D)
             if obs.D is not None
             else jnp.zeros((dynamics.observation_dim, control_dim))
         )

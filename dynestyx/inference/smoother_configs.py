@@ -83,6 +83,12 @@ class KFSmootherConfig(KFConfig, BaseSmootherConfig):
 
     Supports missing observations via NaNs when `filter_source="cuthbert"`. Does not support missing observations (data cannot have NaNs) when `filter_source="cd_dynamax"`.
 
+    Time-varying linear-Gaussian models (callable `(t_now, t_next)` / `(t,)`
+    parameters on `LinearGaussianStateEvolution` /
+    `LinearGaussianObservation`) are supported only with
+    `filter_source="cuthbert"`; `filter_source="cd_dynamax"` raises
+    `TypeError` for callable parameters.
+
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
         associative (bool | None): Whether to enable cuthbert's associative

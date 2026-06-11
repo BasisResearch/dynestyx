@@ -4,7 +4,7 @@
 
 `dynestyx` is a library for Bayesian modeling and inference of dynamical systems. It extends [NumPyro](https://num.pyro.ai/en/stable/) to provide state-of-the-art inference methods for state space models—with a clear separation between *what* the model is and *how* you simulate or infer it.
 
-Why `dynestyx`? It seamlessly wraps our favorite ways to learn dynamics from messy time-series data (and there are many!) in a principled NumPyro Bayesian workflow. The engines under-the-hood address noise, partial observations, irregular samples, uncertainties, and just about any model class you want to try out! Support for multiple trajectories and hierarchical inference coming soon! Don't see your favorite methods? Tell us about it---or better, contribute by submitting a Pull Request!
+Why `dynestyx`? It seamlessly wraps our favorite ways to learn dynamics from messy time-series data (and there are many!) in a principled NumPyro Bayesian workflow. The engines under-the-hood address noise, partial observations, irregular samples, uncertainties, hierarchical/mixed-effect/multiple-trajectory SSMs, and just about any model class you want to try out! Don't see your favorite methods? Tell us about it---or better, contribute by submitting a Pull Request!
 
 ## Features
 

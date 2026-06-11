@@ -19,6 +19,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
     _drop_cuthbert_dummy_step,
+    _kalman_dynamics_params_builder,
     compute_cuthbert_filter,
 )
 from dynestyx.inference.integrations.utils import (
@@ -61,34 +62,7 @@ def _kalman_get_dynamics_params(dynamics: DynamicalModel):
         jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1)), (state_dim,)
     )
 
-    A = jnp.asarray(evo.A)
-    chol_Q = jnp.linalg.cholesky(jnp.asarray(evo.cov))
-
-    evo_bias = (
-        jnp.zeros((state_dim,), dtype=m0.dtype)
-        if evo.bias is None
-        else jnp.reshape(jnp.atleast_1d(jnp.asarray(evo.bias)), (state_dim,))
-    )
-
-    B = None if evo.B is None else jnp.asarray(evo.B)
-
-    def get_dynamics_params(mi: CuthbertInputs):
-        def _noop(mi):
-            return (
-                jnp.eye(state_dim, dtype=m0.dtype),
-                jnp.zeros((state_dim,), dtype=m0.dtype),
-                jnp.zeros((state_dim, state_dim), dtype=m0.dtype),
-            )
-
-        def _evolve(mi):
-            c = evo_bias
-            if B is not None:
-                c = c + B @ jnp.atleast_1d(jnp.asarray(mi.u_prev))
-            return A, c, chol_Q
-
-        return jax.lax.cond(mi.is_first_step, _noop, _evolve, mi)
-
-    return get_dynamics_params
+    return _kalman_dynamics_params_builder(evo, state_dim=state_dim, dtype=m0.dtype)
 
 
 def _taylor_get_dynamics_log_density(dynamics: DynamicalModel):

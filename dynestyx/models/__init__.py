@@ -23,10 +23,12 @@ from dynestyx.models.observations import (
     DiracIdentityObservation,
     GaussianObservation,
     LinearGaussianObservation,
+    LinearGaussianObservationParams,
 )
 from dynestyx.models.state_evolution import (
     AffineDrift,
     GaussianStateEvolution,
+    LinearGaussianParams,
     LinearGaussianStateEvolution,
 )
 
@@ -44,6 +46,8 @@ __all__ = [
     "GaussianObservation",
     "GaussianStateEvolution",
     "LinearGaussianObservation",
+    "LinearGaussianObservationParams",
+    "LinearGaussianParams",
     "LinearGaussianStateEvolution",
     "ObservationModel",
     "StochasticContinuousTimeStateEvolution",
