@@ -704,9 +704,8 @@ class HMMConfig(BaseFilterConfig):
     exact-marginalizable observation families such as `MultivariateNormal` and
     factorizable `Independent(..., 1)` observations.
 
-    For categorical observations, pass `obs_values` as floating-point arrays so
-    missing entries can be written as `NaN`, while keeping observed entries
-    encoded as zero-based integer labels `0..K-1`.
+    For categorical observations, encode observed entries as zero-based integer
+    labels `0..K-1` and represent missing entries with `NaN`.
 
     Attributes:
         record_filtered (bool | None): Save the filtered state probabilities
