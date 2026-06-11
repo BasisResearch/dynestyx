@@ -19,7 +19,7 @@ from jax import Array
 from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
-from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
@@ -460,7 +460,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
         return stacked
 
-    @implements(_sample_intp)
+    @implements(_condition_intp)
     def _sample_ds(
         self,
         name: str,

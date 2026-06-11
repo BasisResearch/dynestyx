@@ -4,7 +4,6 @@ from typing import cast
 
 import jax
 import jax.numpy as jnp
-import numpyro
 import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
@@ -13,7 +12,6 @@ from jaxtyping import Array, Float, Int, Real, Shaped
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
-from dynestyx.utils import _should_record_field
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> Int[Array, " n_states"]:
@@ -222,7 +220,7 @@ def _filter_hmm(
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,
-) -> list[dist.Distribution]:
+) -> tuple[jax.Array, Float[Array, "*plate time n_states"], list[dist.Distribution]]:
     """Exact HMM marginal likelihood via forward filtering.
 
     Args:
@@ -235,8 +233,12 @@ def _filter_hmm(
         ctrl_values: Control values (optional).
 
     Returns:
-        List of Categorical distributions p(x_t | y_{1:t}) at each obs time,
-        for use with Filter + DiscreteTimeSimulator rollout.
+        tuple of:
+            - loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - log_filt_seq: log filtering probabilities log p(x_t | y_{1:t}),
+              shape (time, n_states).
+            - filtered_dists: list of Categorical distributions p(x_t | y_{1:t})
+              at each obs time, for use with Filter + DiscreteTimeSimulator rollout.
     """
     loglik, log_filt_seq = compute_hmm_filter(
         dynamics,
@@ -245,29 +247,8 @@ def _filter_hmm(
         ctrl_values=ctrl_values,
     )
 
-    numpyro.factor(f"{name}_marginal_log_likelihood", loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", loglik)
-
-    record_max_elems = filter_config.record_max_elems
-
-    if _should_record_field(
-        filter_config.record_log_filtered, log_filt_seq.shape, record_max_elems
-    ):
-        numpyro.deterministic(
-            f"{name}_log_filtered_states",
-            log_filt_seq,  # (T, K)
-        )
-
-    if _should_record_field(
-        filter_config.record_filtered, log_filt_seq.shape, record_max_elems
-    ):
-        numpyro.deterministic(
-            f"{name}_filtered_states",
-            jnp.exp(log_filt_seq),  # (T, K)
-        )
-
-    # Return filtered distributions for Filter + DiscreteTimeSimulator rollout
-    return [
+    filtered_dists = [
         dist.Categorical(probs=jnp.exp(log_filt_seq[i]))
         for i in range(log_filt_seq.shape[0])
     ]
+    return loglik, log_filt_seq, filtered_dists
