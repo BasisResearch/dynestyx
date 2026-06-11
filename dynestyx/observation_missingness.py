@@ -20,6 +20,7 @@ from jaxtyping import Array, Bool, Float, Shaped
 
 from dynestyx.models.checkers import _make_probe_state
 from dynestyx.models.core import DynamicalModel
+from dynestyx.utils import _raise_now_or_error_if
 
 LOG_2PI = jnp.log(2.0 * jnp.pi)
 ObservationDistributionMode = Literal["masked", "multivariate_normal", "independent"]
@@ -130,7 +131,10 @@ def summarize_observation_mask(
         has_fully_missing_rows = bool(jnp.any(~row_has_any_observed))
         has_missing = bool(jnp.any(~obs_mask))
     except TracerBoolConversionError:
-        has_partial_missing = observation_dim > 1
+        # Traced callers still carry the row-wise boolean mask tensors. Keep the
+        # summary booleans conservative here and let per-step scoring raise if an
+        # unsupported masked-mode observation row turns out to be partially missing.
+        has_partial_missing = False
         has_fully_missing_rows = False
         has_missing = False
 
@@ -245,6 +249,14 @@ def masked_observation_log_prob(
             )
 
     if expected_mode == "masked":
+        row_is_partial = row_has_any_observed & ~jnp.all(obs_mask)
+        _raise_now_or_error_if(
+            y,
+            row_is_partial,
+            "Partial missingness currently requires marginalizable "
+            "MultivariateNormal observations or factorizable "
+            "Independent(..., 1) observations.",
+        )
         return obs_dist.mask(row_has_any_observed).log_prob(y)
 
     if expected_mode == "independent":

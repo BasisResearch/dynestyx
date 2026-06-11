@@ -21,6 +21,7 @@ from dynestyx.models.checkers import (
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _get_dynamics_with_t0,
+    _raise_now_or_error_if,
     _validate_control_dim,
     _validate_controls,
     _validate_site_sorting,
@@ -76,32 +77,49 @@ def _prepare_observation_views(
         safe_obs = jnp.where(obs_mask, obs_arr, jnp.zeros_like(obs_arr))
         return safe_obs, obs_mask, has_missing
 
-    observed = obs_arr[obs_mask]
+    def _raise_categorical_validation_error(
+        invalid_mask, concrete_message, traced_message
+    ):
+        try:
+            has_invalid = bool(jnp.any(invalid_mask))
+        except TracerBoolConversionError:
+            _raise_now_or_error_if(obs_arr, jnp.any(invalid_mask), traced_message)
+            return
 
-    if observed.size:
-        integer_mask = jnp.equal(observed, jnp.round(observed))
-        if bool(jnp.any(~integer_mask)):
-            bad = observed[~integer_mask][0]
-            raise ValueError(
-                "Categorical observations must be encoded as zero-based integer "
-                f"labels. Found non-integer observed value {bad!r}."
-            )
+        if not has_invalid:
+            return
 
-        if bool(jnp.any(observed < 0)):
-            bad = observed[observed < 0][0]
-            raise ValueError(
-                "Categorical observations must be encoded as zero-based integer "
-                f"labels 0..K-1; found negative observed value {bad!r}."
-            )
+        bad = obs_arr[invalid_mask][0]
+        raise ValueError(concrete_message(bad))
 
-        support_size = _categorical_support_size(obs_dist)
-        if bool(jnp.any(observed >= support_size)):
-            bad = observed[observed >= support_size][0]
-            raise ValueError(
-                "Categorical observations must be encoded as zero-based integer "
-                f"labels 0..K-1 for the probed observation distribution. Found "
-                f"observed value {bad!r} with K={support_size}."
-            )
+    _raise_categorical_validation_error(
+        obs_mask & ~jnp.equal(obs_arr, jnp.round(obs_arr)),
+        lambda bad: (
+            "Categorical observations must be encoded as zero-based integer "
+            f"labels. Found non-integer observed value {bad!r}."
+        ),
+        "Categorical observations must be encoded as zero-based integer labels.",
+    )
+    _raise_categorical_validation_error(
+        obs_mask & (obs_arr < 0),
+        lambda bad: (
+            "Categorical observations must be encoded as zero-based integer "
+            f"labels 0..K-1; found negative observed value {bad!r}."
+        ),
+        "Categorical observations must be encoded as zero-based integer labels 0..K-1.",
+    )
+
+    support_size = _categorical_support_size(obs_dist)
+    _raise_categorical_validation_error(
+        obs_mask & (obs_arr >= support_size),
+        lambda bad: (
+            "Categorical observations must be encoded as zero-based integer "
+            f"labels 0..K-1 for the probed observation distribution. Found "
+            f"observed value {bad!r} with K={support_size}."
+        ),
+        "Categorical observations must be encoded as zero-based integer labels "
+        f"0..K-1 for the probed observation distribution with K={support_size}.",
+    )
 
     safe_obs = jnp.where(
         obs_mask,

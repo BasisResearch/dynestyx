@@ -19,7 +19,7 @@ from jax import Array
 from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
-from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.handlers import HandlesSelf, _probe_observation_distribution, _sample_intp
 from dynestyx.inference.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
@@ -32,6 +32,7 @@ from dynestyx.models import (
     DynamicalModel,
     StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.models.checkers import _is_categorical_distribution
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.observation_missingness import (
     ObservationLogProb,
@@ -1073,6 +1074,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         is_dirac_observation = isinstance(
             dynamics.observation_model, DiracIdentityObservation
         )
+        is_categorical_observation = _is_categorical_distribution(
+            _probe_observation_distribution(dynamics)
+        )
 
         if is_dirac_observation and obs_values is not None and _obs_mask is not None:
             missing_message = (
@@ -1089,6 +1093,13 @@ class DiscreteTimeSimulator(BaseSimulator):
                 )
             elif _obs_has_missing:
                 raise ValueError(missing_message)
+
+        if obs_values is not None and is_categorical_observation:
+            raise ValueError(
+                "Categorical observation conditioning is not supported under "
+                "DiscreteTimeSimulator. Forward simulation still works. For HMM "
+                "inference, use Filter(HMMConfig()) instead."
+            )
 
         if obs_values is not None and not is_dirac_observation:
             return self._simulate_conditioned_scan(

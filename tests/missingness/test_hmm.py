@@ -1,10 +1,13 @@
 import jax.numpy as jnp
+import jax.random as jr
+import numpyro
 import numpyro.distributions as dist
 import pytest
 from numpyro.handlers import trace
+from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx import Filter
+from dynestyx import DiscreteTimeSimulator, Filter
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.inference.hmm_filters import compute_hmm_filter, hmm_log_components
 from dynestyx.models import DynamicalModel
@@ -70,6 +73,34 @@ def _joint_categorical_observation_model(x, u, t):
 
 def _delta_observation_model(x, u, t):
     return dist.Delta(HMM_OBS_LOC[x], event_dim=1)
+
+
+def _scalar_categorical_hmm_model(
+    A=None,
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+):
+    A = numpyro.sample(
+        "A",
+        dist.Dirichlet(jnp.ones(2)).expand([2]).to_event(1),
+        obs=A,
+    )
+
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Categorical(probs=jnp.ones(2) / 2),
+        state_evolution=lambda x, u, t_now, t_next: dist.Categorical(probs=A[x]),
+        observation_model=_joint_categorical_observation_model,
+    )
+
+    return dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
 
 
 def _run_hmm_filter_trace(dynamics, obs_times, obs_values):
@@ -408,6 +439,98 @@ def test_hmm_full_row_missing_scalar_categorical_keeps_filter_finite():
     assert filtered.shape == (len(obs_times), 2)
     assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
     assert jnp.allclose(filtered.sum(axis=-1), 1.0)
+
+
+def test_hmm_scalar_categorical_filter_mcmc_runs_under_tracing():
+    obs_times = jnp.arange(20.0)
+    true_A = jnp.array([[0.95, 0.05], [0.1, 0.9]])
+
+    with DiscreteTimeSimulator():
+        synthetic = Predictive(_scalar_categorical_hmm_model, num_samples=1)(
+            jr.PRNGKey(0),
+            A=true_A,
+            predict_times=obs_times,
+        )
+
+    obs_values = jnp.asarray(synthetic["f_observations"])[0, 0, :, 0]
+
+    with Filter(filter_config=HMMConfig()):
+        mcmc = MCMC(
+            NUTS(_scalar_categorical_hmm_model),
+            num_warmup=1,
+            num_samples=1,
+            progress_bar=False,
+        )
+        mcmc.run(jr.PRNGKey(1), obs_times=obs_times, obs_values=obs_values)
+
+    posterior = mcmc.get_samples()
+    assert posterior["A"].shape == (1, 2, 2)
+
+
+def test_hmm_independent_categorical_missing_filter_mcmc_runs_under_tracing():
+    obs_times = jnp.arange(10.0)
+    true_A = jnp.array([[0.92, 0.08], [0.12, 0.88]])
+
+    def model(A=None, obs_times=None, obs_values=None, predict_times=None):
+        A = numpyro.sample(
+            "A",
+            dist.Dirichlet(jnp.ones(2)).expand([2]).to_event(1),
+            obs=A,
+        )
+
+        dynamics = DynamicalModel(
+            control_dim=0,
+            initial_condition=dist.Categorical(probs=jnp.array([0.5, 0.5])),
+            state_evolution=lambda x, u, t_now, t_next: dist.Categorical(probs=A[x]),
+            observation_model=_independent_categorical_observation_model,
+        )
+
+        return dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+        )
+
+    with DiscreteTimeSimulator():
+        synthetic = Predictive(
+            model,
+            num_samples=1,
+            exclude_deterministic=False,
+        )(jr.PRNGKey(2), A=true_A, predict_times=obs_times)
+
+    obs_values = jnp.asarray(synthetic["f_observations"])[0, 0].astype(float)
+    obs_values = set_full_row_missing(obs_values, 2)
+    obs_values = set_full_row_missing(obs_values, 3)
+    obs_values = set_partial_row_missing(obs_values, 6, dim_idx=1)
+
+    with Filter(filter_config=HMMConfig(record_filtered=True)):
+        mcmc = MCMC(
+            NUTS(model),
+            num_warmup=1,
+            num_samples=1,
+            progress_bar=False,
+        )
+        mcmc.run(jr.PRNGKey(3), obs_times=obs_times, obs_values=obs_values)
+        posterior = mcmc.get_samples()
+
+        predictive = Predictive(
+            model,
+            params={"A": posterior["A"].mean(axis=0)},
+            num_samples=1,
+            exclude_deterministic=False,
+        )
+        filtered = predictive(
+            jr.PRNGKey(4),
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+
+    # This covers the traced NUTS/Predictive path that previously hit
+    # NonConcreteBooleanIndexError for categorical observation masks.
+    assert posterior["A"].shape == (1, 2, 2)
+    assert jnp.asarray(filtered["f_filtered_states"]).shape[-2:] == (len(obs_times), 2)
 
 
 def test_hmm_categorical_observations_reject_negative_labels_early():
