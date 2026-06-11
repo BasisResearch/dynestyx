@@ -2003,6 +2003,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.models.observations.LinearGaussianObservation.is_time_invariant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_time_invariant
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.models.observations.LinearGaussianObservation.__init__" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2014,10 +2025,32 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.models.observations.LinearGaussianObservation.params_at" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        params_at
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#example" class="md-nav__link">
     <span class="md-ellipsis">
       
         Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lineargaussianobservationparams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LinearGaussianObservationParams
       
     </span>
   </a>
@@ -3976,7 +4009,27 @@ y_t \sim \mathcal{N}(H x_t + D u_t + b, R).
 <p>Here, <span class="arithmatex">\(H\)</span> is the observation matrix, <span class="arithmatex">\(D\)</span> is an optional control-input
 matrix, <span class="arithmatex">\(b\)</span> is an optional observation bias, and <span class="arithmatex">\(R\)</span> is the observation
 noise covariance.</p>
+<p>Each parameter may be a constant array (time-invariant) or a callable
+<code>(t,) -&gt; value</code> evaluated at each observation time (time-varying);
+constant and callable parameters may be mixed freely. The single time
+argument mirrors the observation model contract <span class="arithmatex">\(p(y_t | x_t, u_t, t)\)</span>
+(transitions span an interval; observations happen at one time).</p>
 
+
+<details class="note" open>
+  <summary>Note</summary>
+  <ul>
+<li>Callable parameters receive only the observation time <code>t</code>; they
+  must not depend on state or controls (use <code>GaussianObservation</code>
+  for nonlinear measurement functions).</li>
+<li>Callables must be pure, JAX-traceable functions returning a fixed
+  shape.</li>
+<li>Backend support: time-varying parameters work with the simulators
+  and the <code>filter_source="cuthbert"</code> filters/smoothers; the
+  cd_dynamax backend requires constant arrays and raises <code>TypeError</code>
+  otherwise.</li>
+</ul>
+</details>
 
 
 
@@ -3995,6 +4048,28 @@ noise covariance.</p>
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynestyx.models.observations.LinearGaussianObservation.is_time_invariant" class="doc doc-heading">
+            <code class=" language-python"><span class="n">is_time_invariant</span><span class="p">:</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#dynestyx.models.observations.LinearGaussianObservation.is_time_invariant" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>True iff every parameter is a constant array (no callables).</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -4002,7 +4077,7 @@ noise covariance.</p>
 
 
 <h2 id="dynestyx.models.observations.LinearGaussianObservation.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">H</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*h_plate observation_dim state_dim&#39;</span><span class="p">],</span> <span class="n">R</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*r_plate observation_dim observation_dim&#39;</span><span class="p">],</span> <span class="n">D</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*d_matrix_plate observation_dim control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">bias</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*bias_plate observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">H</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*h_plate observation_dim state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*h_plate observation_dim state_dim&#39;</span><span class="p">]],</span> <span class="n">R</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*r_plate observation_dim observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*r_plate observation_dim observation_dim&#39;</span><span class="p">]],</span> <span class="n">D</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*d_matrix_plate observation_dim control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*d_matrix_plate observation_dim control_dim&#39;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">bias</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*bias_plate observation_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;*bias_plate observation_dim&#39;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#dynestyx.models.observations.LinearGaussianObservation.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4027,12 +4102,12 @@ noise covariance.</p>
                 <code>H</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
                 <p>Observation matrix with shape
-<span class="arithmatex">\((d_y, d_x)\)</span>.</p>
+<span class="arithmatex">\((d_y, d_x)\)</span>, or a callable <code>(t,)</code> returning it.</p>
               </div>
             </td>
             <td>
@@ -4044,12 +4119,12 @@ noise covariance.</p>
                 <code>R</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
                 <p>Observation noise covariance with shape
-<span class="arithmatex">\((d_y, d_y)\)</span>.</p>
+<span class="arithmatex">\((d_y, d_y)\)</span>, or a callable <code>(t,)</code> returning it.</p>
               </div>
             </td>
             <td>
@@ -4061,12 +4136,13 @@ noise covariance.</p>
                 <code>D</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional control matrix with shape
-<span class="arithmatex">\((d_y, d_u)\)</span>. If None, no control contribution is used.</p>
+                <p>Optional control matrix with
+shape <span class="arithmatex">\((d_y, d_u)\)</span>, or a callable <code>(t,)</code> returning it. If
+None, no control contribution is used.</p>
               </div>
             </td>
             <td>
@@ -4078,12 +4154,12 @@ noise covariance.</p>
                 <code>bias</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional additive bias with shape
-<span class="arithmatex">\((d_y,)\)</span>.</p>
+                <p>Optional additive bias with
+shape <span class="arithmatex">\((d_y,)\)</span>, or a callable <code>(t,)</code> returning it.</p>
               </div>
             </td>
             <td>
@@ -4092,6 +4168,26 @@ noise covariance.</p>
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.models.observations.LinearGaussianObservation.params_at" class="doc doc-heading">
+            <code class=" language-python"><span class="n">params_at</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">LinearGaussianObservationParams</span></code>
+
+<a href="#dynestyx.models.observations.LinearGaussianObservation.params_at" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Resolve <code>(H, D, bias, R)</code> at one observation time.</p>
+<p>Constant parameters are returned unchanged; callable parameters are
+evaluated at <code>t</code>.</p>
 
 
     </div>
@@ -4134,6 +4230,74 @@ related particle methods), which are typically slower.</p>
 <span class="n">dist_y</span> <span class="o">=</span> <span class="n">observation</span><span class="p">(</span><span class="n">x_t</span><span class="p">,</span> <span class="n">u_t</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># p(y_t | x_t, u_t, t)</span>
 </code></pre></div>
 </details>
+<details class="example">
+<summary>Time-varying observation model</summary>
+<p>Each parameter may instead be a callable <code>(t,) -&gt; value</code> evaluated at the
+observation time. Time-varying models are supported by the simulators and
+by <code>KFConfig(filter_source="cuthbert")</code> /
+<code>KFSmootherConfig(filter_source="cuthbert")</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearGaussianObservation</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">observation_matrix</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="n">t</span><span class="p">)</span>
+
+
+<span class="n">observation</span> <span class="o">=</span> <span class="n">LinearGaussianObservation</span><span class="p">(</span><span class="n">H</span><span class="o">=</span><span class="n">observation_matrix</span><span class="p">,</span> <span class="n">R</span><span class="o">=</span><span class="mf">0.1</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="n">params</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">params_at</span><span class="p">(</span><span class="mf">2.5</span><span class="p">)</span>  <span class="c1"># LinearGaussianObservationParams(H=..., ...)</span>
+</code></pre></div>
+</details>
+<h2 id="lineargaussianobservationparams">LinearGaussianObservationParams<a class="headerlink" href="#lineargaussianobservationparams" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>Linear-Gaussian observation parameters resolved at one time.</p>
+<p>Returned by <code>LinearGaussianObservation.params_at</code>: any callable
+(time-varying) parameter has been evaluated at the requested time, so
+every entry is a plain array (or <code>None</code> for an absent optional term).</p>
+<p>Expected shapes match the <code>LinearGaussianObservation</code> fields; they are
+deliberately not enforced here because plate slicing can legally hand a
+member-sliced (reduced-rank) parameter to <code>__call__</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 

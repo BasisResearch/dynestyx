@@ -4631,6 +4631,11 @@ models. Use this when your model was built with <code>LTI_discrete</code> or wit
 save smoothed means, covariances, or covariance diagonals in the NumPyro
 trace.</p>
 <p>Supports missing observations via NaNs when <code>filter_source="cuthbert"</code>. Does not support missing observations (data cannot have NaNs) when <code>filter_source="cd_dynamax"</code>.</p>
+<p>Time-varying linear-Gaussian models (callable <code>(t_now, t_next)</code> / <code>(t,)</code>
+parameters on <code>LinearGaussianStateEvolution</code> /
+<code>LinearGaussianObservation</code>) are supported only with
+<code>filter_source="cuthbert"</code>; <code>filter_source="cd_dynamax"</code> raises
+<code>TypeError</code> for callable parameters.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
