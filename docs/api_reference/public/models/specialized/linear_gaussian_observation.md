@@ -36,3 +36,29 @@
     dist_y = observation(x_t, u_t, t=0.0)  # p(y_t | x_t, u_t, t)
     ```
 
+??? example "Time-varying observation model"
+    Each parameter may instead be a callable `(t,) -> value` evaluated at the
+    observation time. Time-varying models are supported by the simulators and
+    by `KFConfig(filter_source="cuthbert")` /
+    `KFSmootherConfig(filter_source="cuthbert")`.
+
+    ```python
+    import jax.numpy as jnp
+    from dynestyx import LinearGaussianObservation
+
+
+    def observation_matrix(t):
+        return jnp.eye(2) * (1.0 + 0.1 * t)
+
+
+    observation = LinearGaussianObservation(H=observation_matrix, R=0.1 * jnp.eye(2))
+    params = observation.params_at(2.5)  # LinearGaussianObservationParams(H=..., ...)
+    ```
+
+## LinearGaussianObservationParams
+
+::: dynestyx.models.observations.LinearGaussianObservationParams
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+

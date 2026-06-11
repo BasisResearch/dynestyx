@@ -5,7 +5,7 @@ extension to LTI factories, Neural SDEs, etc.
 """
 
 from collections.abc import Callable
-from typing import cast
+from typing import NamedTuple, cast
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -13,6 +13,24 @@ import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
+
+
+class LinearGaussianParams(NamedTuple):
+    """Linear-Gaussian transition parameters resolved at one time interval.
+
+    Returned by `LinearGaussianStateEvolution.params_at`: any callable
+    (time-varying) parameter has been evaluated at the requested interval, so
+    every entry is a plain array (or `None` for an absent optional term).
+
+    Expected shapes match the `LinearGaussianStateEvolution` fields; they are
+    deliberately not enforced here because plate slicing can legally hand a
+    member-sliced (reduced-rank) parameter to `__call__`.
+    """
+
+    A: Float[Array, "..."]
+    B: Float[Array, "..."] | None
+    bias: Float[Array, "..."] | None
+    cov: Float[Array, "..."]
 
 
 class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
@@ -28,44 +46,145 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     where $A$ is the state transition matrix, $B$ is an optional control-input
     matrix, $b$ is an optional transition bias, and $Q$ is the process-noise
     covariance.
+
+    Each parameter may be a constant array (time-invariant) or a callable
+    `(t_now, t_next) -> value` evaluated per transition interval
+    (time-varying); constant and callable parameters may be mixed freely.
+
+    Note:
+        - Callable parameters receive only the interval endpoints
+          `(t_now, t_next)`; they must not depend on state or controls (use
+          `GaussianStateEvolution` for nonlinear transitions).
+        - Callables must be pure, JAX-traceable functions returning a fixed
+          shape.
+        - Backend support: time-varying parameters work with the simulators
+          and the `filter_source="cuthbert"` filters/smoothers; the
+          cd_dynamax backend requires constant arrays and raises `TypeError`
+          otherwise.
     """
 
-    A: Float[Array, "*a_plate state_dim state_dim"]
-    cov: Float[Array, "*cov_plate state_dim state_dim"]
-    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None
-    bias: Float[Array, "*bias_plate state_dim"] | None = None
+    A: (
+        Float[Array, "*a_plate state_dim state_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*a_plate state_dim state_dim"],
+        ]
+    )
+    cov: (
+        Float[Array, "*cov_plate state_dim state_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*cov_plate state_dim state_dim"],
+        ]
+    )
+    B: (
+        Float[Array, "*b_matrix_plate state_dim control_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*b_matrix_plate state_dim control_dim"],
+        ]
+        | None
+    ) = None
+    bias: (
+        Float[Array, "*bias_plate state_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*bias_plate state_dim"],
+        ]
+        | None
+    ) = None
 
     def __init__(
         self,
-        A: Float[Array, "*a_plate state_dim state_dim"],
-        cov: Float[Array, "*cov_plate state_dim state_dim"],
-        B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
-        bias: Float[Array, "*bias_plate state_dim"] | None = None,
+        A: Float[Array, "*a_plate state_dim state_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*a_plate state_dim state_dim"],
+        ],
+        cov: Float[Array, "*cov_plate state_dim state_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*cov_plate state_dim state_dim"],
+        ],
+        B: Float[Array, "*b_matrix_plate state_dim control_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*b_matrix_plate state_dim control_dim"],
+        ]
+        | None = None,
+        bias: Float[Array, "*bias_plate state_dim"]
+        | Callable[
+            [float | int | Real[Array, ""], float | int | Real[Array, ""]],
+            Float[Array, "*bias_plate state_dim"],
+        ]
+        | None = None,
     ):
         """
         Args:
-            A (jax.Array): State transition matrix with shape
-                $(d_x, d_x)$.
-            cov (jax.Array): Process-noise covariance with shape
-                $(d_x, d_x)$.
-            B (jax.Array | None): Optional control matrix with shape
-                $(d_x, d_u)$.
-            bias (jax.Array | None): Optional additive bias with shape
-                $(d_x,)$.
+            A (jax.Array | Callable): State transition matrix with shape
+                $(d_x, d_x)$, or a callable `(t_now, t_next)` returning it.
+            cov (jax.Array | Callable): Process-noise covariance with shape
+                $(d_x, d_x)$, or a callable `(t_now, t_next)` returning it.
+            B (jax.Array | Callable | None): Optional control matrix with
+                shape $(d_x, d_u)$, or a callable `(t_now, t_next)`
+                returning it.
+            bias (jax.Array | Callable | None): Optional additive bias with
+                shape $(d_x,)$, or a callable `(t_now, t_next)` returning it.
         """
         self.A = A
         self.B = B
         self.bias = bias
         self.cov = cov
 
-    def __call__(self, x, u, t_now, t_next):
-        loc = jnp.dot(self.A, x)
-        if self.bias is not None:
-            loc += self.bias
-        if self.B is not None and u is not None:
-            loc += jnp.dot(self.B, u)
+    @property
+    def is_time_invariant(self) -> bool:
+        """True iff every parameter is a constant array (no callables)."""
+        return not any(
+            callable(field) for field in (self.A, self.B, self.bias, self.cov)
+        )
 
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.cov)
+    def params_at(
+        self,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> LinearGaussianParams:
+        """Resolve `(A, B, bias, cov)` at one transition interval.
+
+        Constant parameters are returned unchanged; callable parameters are
+        evaluated at `(t_now, t_next)`.
+        """
+
+        def _resolve(field):
+            if field is None or not callable(field):
+                return field
+            fn = cast(
+                Callable[
+                    [
+                        float | int | Real[Array, ""],
+                        float | int | Real[Array, ""],
+                    ],
+                    Array,
+                ],
+                field,
+            )
+            return jnp.asarray(fn(t_now, t_next))
+
+        return LinearGaussianParams(
+            A=_resolve(self.A),
+            B=_resolve(self.B),
+            bias=_resolve(self.bias),
+            cov=_resolve(self.cov),
+        )
+
+    def __call__(self, x, u, t_now, t_next):
+        A, B, bias, cov = self.params_at(t_now, t_next)
+        loc = jnp.dot(A, x)
+        if bias is not None:
+            loc = loc + bias
+        if B is not None and u is not None:
+            loc = loc + jnp.dot(B, u)
+
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
 
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):

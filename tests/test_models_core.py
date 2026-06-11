@@ -642,3 +642,164 @@ def test_ctrl_times_strictly_increasing_validation() -> None:
             ctrl_values=ctrl_values,
             predict_times=predict_times,
         )
+
+
+def test_linear_gaussian_state_evolution_callable_fields_match_constant() -> None:
+    A = jnp.array([[0.9, 0.1], [0.0, 0.8]])
+    Q = 0.1 * jnp.eye(2)
+    B = jnp.array([[0.1], [0.3]])
+    bias = jnp.array([0.05, -0.02])
+
+    def A_fn(t_now, t_next):
+        del t_now, t_next
+        return A
+
+    def cov_fn(t_now, t_next):
+        del t_now, t_next
+        return Q
+
+    def B_fn(t_now, t_next):
+        del t_now, t_next
+        return B
+
+    def bias_fn(t_now, t_next):
+        del t_now, t_next
+        return bias
+
+    constant_evo = dsx.LinearGaussianStateEvolution(A=A, cov=Q, B=B, bias=bias)
+    callable_evo = dsx.LinearGaussianStateEvolution(
+        A=A_fn, cov=cov_fn, B=B_fn, bias=bias_fn
+    )
+    assert constant_evo.is_time_invariant
+    assert not callable_evo.is_time_invariant
+
+    x = jnp.array([0.5, -0.2])
+    u = jnp.array([0.3])
+    t_now, t_next = jnp.array(0.0), jnp.array(1.7)
+    constant_dist = constant_evo(x, u, t_now, t_next)
+    callable_dist = callable_evo(x, u, t_now, t_next)
+    assert jnp.array_equal(constant_dist.mean, callable_dist.mean)
+    assert jnp.array_equal(
+        constant_dist.covariance_matrix, callable_dist.covariance_matrix
+    )
+
+    params = callable_evo.params_at(t_now, t_next)
+    resolved_B = params.B
+    resolved_bias = params.bias
+    assert resolved_B is not None and resolved_bias is not None
+    assert jnp.array_equal(params.A, A)
+    assert jnp.array_equal(resolved_B, B)
+    assert jnp.array_equal(resolved_bias, bias)
+    assert jnp.array_equal(params.cov, Q)
+
+
+def test_linear_gaussian_observation_callable_fields_match_constant() -> None:
+    H = jnp.array([[1.0, 0.0], [0.5, 1.0]])
+    R = 0.1 * jnp.eye(2)
+    D = jnp.array([[0.02], [0.01]])
+    bias = jnp.array([0.01, 0.02])
+
+    def H_fn(t):
+        del t
+        return H
+
+    def R_fn(t):
+        del t
+        return R
+
+    def D_fn(t):
+        del t
+        return D
+
+    def bias_fn(t):
+        del t
+        return bias
+
+    constant_obs = dsx.LinearGaussianObservation(H=H, R=R, D=D, bias=bias)
+    callable_obs = dsx.LinearGaussianObservation(H=H_fn, R=R_fn, D=D_fn, bias=bias_fn)
+    assert constant_obs.is_time_invariant
+    assert not callable_obs.is_time_invariant
+
+    x = jnp.array([1.2, -0.3])
+    u = jnp.array([0.8])
+    t = jnp.array(2.5)
+    constant_dist = constant_obs(x, u, t)
+    callable_dist = callable_obs(x, u, t)
+    assert jnp.array_equal(constant_dist.mean, callable_dist.mean)
+    assert jnp.array_equal(
+        constant_dist.covariance_matrix, callable_dist.covariance_matrix
+    )
+
+    params = callable_obs.params_at(t)
+    resolved_D = params.D
+    resolved_bias = params.bias
+    assert resolved_D is not None and resolved_bias is not None
+    assert jnp.array_equal(params.H, H)
+    assert jnp.array_equal(resolved_D, D)
+    assert jnp.array_equal(resolved_bias, bias)
+    assert jnp.array_equal(params.R, R)
+
+
+def test_linear_gaussian_params_at_time_dependence() -> None:
+    A = jnp.array([[0.9, 0.0], [0.0, 0.8]])
+    B = jnp.array([[0.1], [0.3]])
+
+    def A_fn(t_now, t_next):
+        return A * (t_next - t_now)
+
+    # Mixed: callable A with constant B works, and the interval is respected.
+    evo = dsx.LinearGaussianStateEvolution(A=A_fn, cov=0.1 * jnp.eye(2), B=B)
+    assert not evo.is_time_invariant
+    x = jnp.array([1.0, 1.0])
+    u = jnp.array([0.0])
+    mean_short = evo(x, u, jnp.array(0.0), jnp.array(1.0)).mean
+    mean_long = evo(x, u, jnp.array(0.0), jnp.array(2.0)).mean
+    assert not jnp.allclose(mean_short, mean_long)
+    assert jnp.allclose(2.0 * mean_short, mean_long)
+
+    def H_fn(t):
+        return jnp.eye(2) * (1.0 + t)
+
+    obs = dsx.LinearGaussianObservation(H=H_fn, R=0.1 * jnp.eye(2))
+    assert not obs.is_time_invariant
+    mean_early = obs(x, None, jnp.array(0.0)).mean
+    mean_late = obs(x, None, jnp.array(1.0)).mean
+    assert jnp.allclose(2.0 * mean_early, mean_late)
+
+
+def test_dynamical_model_infers_dims_with_callable_linear_gaussian_fields() -> None:
+    def A_fn(t_now, t_next):
+        return jnp.eye(2) * jnp.exp(-(t_next - t_now))
+
+    def cov_fn(t_now, t_next):
+        return 0.1 * jnp.eye(2) * (1.0 + t_next - t_now)
+
+    def H_fn(t):
+        return jnp.eye(2) * (1.0 + t)
+
+    model = DynamicalModel(
+        initial_condition=_initial_condition_2d(),
+        state_evolution=dsx.LinearGaussianStateEvolution(A=A_fn, cov=cov_fn),
+        observation_model=dsx.LinearGaussianObservation(H=H_fn, R=jnp.eye(2)),
+    )
+    assert model.state_dim == 2
+    assert model.observation_dim == 2
+
+    # A wrong-shape callable is exercised (and rejected) by the
+    # construction-time probe.
+    def bad_A_fn(t_now, t_next):
+        del t_now, t_next
+        return jnp.zeros((3, 2))
+
+    def bad_cov_fn(t_now, t_next):
+        del t_now, t_next
+        return jnp.eye(3)
+
+    with pytest.raises(ValueError, match="State transition shape is inconsistent"):
+        DynamicalModel(
+            initial_condition=_initial_condition_2d(),
+            state_evolution=dsx.LinearGaussianStateEvolution(
+                A=bad_A_fn, cov=bad_cov_fn
+            ),
+            observation_model=dsx.LinearGaussianObservation(H=jnp.eye(2), R=jnp.eye(2)),
+        )
