@@ -374,6 +374,16 @@ class plate(ObjectInterpretation):
         ...         dynamics = DynamicalModel(...)  # built from alpha
         ...         dsx.sample("f", dynamics, obs_times=t, obs_values=y)
 
+    Sharp edges:
+        - **Drift/diffusion must be sliceable pytrees.** Plated parameters must be
+          stored as array fields of an ``eqx.Module``, not captured in a Python
+          closure. A closure-captured variable is invisible to pytree munging,
+          and can introduce shape errors. The built-in components (``AffineDrift``,
+          ``LTI_continuous``, ``FullDiffusion``, etc.) follow this rule. See the
+          hierarchical inference tutorial (``08_hierarchical_inference.ipynb``) for
+          the full sharp-edges list including event-shape vs. sample-shape rules and
+          the rank-1 shared/batched ambiguity.
+
     Note:
         The `dim` argument is not currently supported for dynestyx plates.
     """

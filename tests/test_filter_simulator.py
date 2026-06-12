@@ -28,6 +28,10 @@ from tests.fixtures import (
     data_conditioned_jumpy_controls_ode,
     data_conditioned_jumpy_controls_sde,
 )
+from tests.test_utils import (
+    assert_trace_sites_exist_and_field_all_finite,
+    assert_tree_all_finite,
+)
 
 
 def test_filter_sdesimulator_known_params():
@@ -84,8 +88,12 @@ def test_filter_simulator_sde_explicit(source):
     with SDESimulator(source=source):
         with trace() as tr, seed(rng_seed=rng_key):
             data_conditioned_model()
-    assert "f_filtered_states_mean" in tr
-    assert "f_marginal_loglik" in tr
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_filtered_states_mean",
+        "f_marginal_loglik",
+        where="explicit SDE filter trace",
+    )
 
 
 def test_filter_simulator_ode_explicit():
@@ -95,8 +103,12 @@ def test_filter_simulator_ode_explicit():
     with Simulator():
         with trace() as tr, seed(rng_seed=rng_key):
             data_conditioned_model()
-    assert "f_filtered_states_mean" in tr
-    assert "f_marginal_loglik" in tr
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_filtered_states_mean",
+        "f_marginal_loglik",
+        where="explicit ODE filter trace",
+    )
 
 
 @pytest.mark.parametrize("source", ["diffrax", "em_scan"])
@@ -140,10 +152,14 @@ def test_filter_sdesimulator_predict_times_n_simulations(source):
                     predict_times=predict_times,
                 )
 
-    assert "f_predicted_states" in tr
-    assert "f_predicted_times" in tr
-    assert "f_predicted_observations" in tr
-    assert "f_filtered_states_mean" in tr
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_predicted_states",
+        "f_predicted_times",
+        "f_predicted_observations",
+        "f_filtered_states_mean",
+        where="SDE filter + simulator trace",
+    )
     pred_states = tr["f_predicted_states"]["value"]
     assert pred_states.shape == (n_sim, len(predict_times), 3)
 
@@ -189,10 +205,14 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
                     predict_times=predict_times,
                 )
 
-    assert "f_predicted_states" in tr
-    assert "f_predicted_times" in tr
-    assert "f_predicted_observations" in tr
-    assert "f_filtered_states_mean" in tr
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_predicted_states",
+        "f_predicted_times",
+        "f_predicted_observations",
+        "f_filtered_states_mean",
+        where="discrete filter + simulator trace",
+    )
     pred_states = tr["f_predicted_states"]["value"]
     assert pred_states.shape == (n_sim, len(predict_times), 2), pred_states.shape
 
@@ -239,5 +259,12 @@ def test_filter_discretetimesimulator_pf_predict_times_particle_sampling():
     x0_keys = [k for k in tr if k.startswith("f_") and k.endswith("_x_0")]
     assert x0_keys, "Expected rollout segment initial-state sites."
     x0 = tr[x0_keys[0]]["value"]
+    assert_tree_all_finite(
+        {
+            "predicted_states": pred_states,
+            "segment_initial_state": x0,
+        },
+        where="PF rollout trace",
+    )
     assert x0.shape[0] == n_sim
     assert not jnp.allclose(x0[0], x0[1])

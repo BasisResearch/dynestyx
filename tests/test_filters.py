@@ -30,6 +30,10 @@ from tests.fixtures import (
     data_conditioned_jumpy_controls_sde,
 )
 from tests.models import discrete_time_l63_model, discrete_time_lti_simplified_model
+from tests.test_utils import (
+    assert_trace_sites_exist_and_field_all_finite,
+    assert_tree_all_finite,
+)
 
 
 @pytest.mark.parametrize(
@@ -166,13 +170,30 @@ def test_compute_cuthbert_filter_returns_observation_aligned_states(filter_confi
     )
 
     assert jnp.ndim(marginal_loglik) == 0
+    assert_tree_all_finite({"marginal_loglik": marginal_loglik}, where="filter output")
     assert states.log_normalizing_constant.shape[0] == len(obs_times)
     assert states.model_inputs.y.shape[0] == len(obs_times)
 
     if isinstance(filter_config, PFConfig):
+        assert_tree_all_finite(
+            {
+                "particles": states.particles,
+                "log_weights": states.log_weights,
+                "log_normalizing_constant": states.log_normalizing_constant,
+            },
+            where="PF filter states",
+        )
         assert states.particles.shape[0] == len(obs_times)
         assert states.log_weights.shape[0] == len(obs_times)
     else:
+        assert_tree_all_finite(
+            {
+                "mean": states.mean,
+                "chol_cov": states.chol_cov,
+                "log_normalizing_constant": states.log_normalizing_constant,
+            },
+            where="Gaussian filter states",
+        )
         assert states.mean.shape[0] == len(obs_times)
         assert states.chol_cov.shape[0] == len(obs_times)
 
@@ -193,6 +214,14 @@ def test_compute_cuthbert_filter_can_return_raw_cuthbert_states():
     assert states.model_inputs.y.shape[0] == len(obs_times) + 1
     assert states.mean.shape[0] == len(obs_times) + 1
     assert states.chol_cov.shape[0] == len(obs_times) + 1
+    assert_tree_all_finite(
+        {
+            "log_normalizing_constant": states.log_normalizing_constant,
+            "mean": states.mean,
+            "chol_cov": states.chol_cov,
+        },
+        where="raw cuthbert filter states",
+    )
 
 
 @pytest.mark.parametrize(
@@ -223,12 +252,26 @@ def test_cuthbert_filtered_distribution_shapes_match_observations(filter_config)
         assert filtered_dist.event_shape == (dynamics.state_dim,)
 
         if isinstance(filter_config, PFConfig):
+            assert_tree_all_finite(
+                {
+                    "particles": filtered_dist.particles,
+                    "log_weights": filtered_dist.log_weights,
+                },
+                where="filtered distribution",
+            )
             assert filtered_dist.particles.shape == (
                 filter_config.n_particles,
                 dynamics.state_dim,
             )
             assert filtered_dist.log_weights.shape == (filter_config.n_particles,)
         else:
+            assert_tree_all_finite(
+                {
+                    "mean": filtered_dist.mean,
+                    "covariance_matrix": filtered_dist.covariance_matrix,
+                },
+                where="filtered distribution",
+            )
             assert filtered_dist.mean.shape == (dynamics.state_dim,)
             assert filtered_dist.covariance_matrix.shape == (
                 dynamics.state_dim,
@@ -350,7 +393,15 @@ def test_cuthbert_enkf_records_filtered_gaussian_sites():
         with Filter(filter_config=filter_config):
             substituted(obs_times=obs_times, obs_values=obs_values)
 
-    assert "f_marginal_loglik" in tr
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_marginal_loglik",
+        "f_filtered_states_mean",
+        "f_filtered_states_cov",
+        "f_filtered_states_cov_diag",
+        "f_filtered_states_chol_cov",
+        where="recorded filter trace",
+    )
     assert tr["f_filtered_states_mean"]["value"].shape == (len(obs_times), 2)
     assert tr["f_filtered_states_cov"]["value"].shape == (len(obs_times), 2, 2)
     assert tr["f_filtered_states_cov_diag"]["value"].shape == (len(obs_times), 2)

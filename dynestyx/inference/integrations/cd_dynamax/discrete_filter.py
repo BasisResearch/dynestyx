@@ -22,7 +22,10 @@ from dynestyx.inference.filter_configs import (
     KFConfig,
     UKFConfig,
 )
-from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.integrations.cd_dynamax.utils import (
+    _require_constant_linear_gaussian_fields,
+    gaussian_to_nlgssm_params,
+)
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     DynamicalModel,
@@ -45,6 +48,16 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
         evo = dynamics.state_evolution
         obs = dynamics.observation_model
         ic = dynamics.initial_condition
+        _require_constant_linear_gaussian_fields(
+            evo,
+            ("A", "B", "bias", "cov"),
+            where="The cd_dynamax discrete Kalman filter",
+        )
+        _require_constant_linear_gaussian_fields(
+            obs,
+            ("H", "D", "bias", "R"),
+            where="The cd_dynamax discrete Kalman filter",
+        )
         model = LinearGaussianSSM(
             state_dim=state_dim,
             emission_dim=emission_dim,
