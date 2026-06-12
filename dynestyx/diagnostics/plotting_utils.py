@@ -60,10 +60,10 @@ def plot_hmm_states_and_observations(
         edges = np.concatenate(([left], mids, [right]))
 
     # ---- Color maps ----
-    cmap_states = plt.cm.get_cmap(state_cmap, K)
+    cmap_states = plt.get_cmap(state_cmap, K)
     state_colors = [cmap_states(k) for k in range(K)]
 
-    cmap_obs = plt.cm.get_cmap(obs_cmap, N_obs)
+    cmap_obs = plt.get_cmap(obs_cmap, N_obs)
     obs_colors = [cmap_obs(i) for i in range(N_obs)]
 
     fig, ax = plt.subplots(figsize=(10, 4))
