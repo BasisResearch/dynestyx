@@ -2,7 +2,7 @@
 
 import jax
 import jax.numpy as jnp
-import numpyro
+import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
@@ -19,14 +19,12 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
-    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -109,41 +107,6 @@ def _config_to_cd_dynamax_filter_kwargs(
             **config.extra_filter_kwargs,
         }
     return base
-
-
-def _add_filter_sites(
-    name: str,
-    filter_config: ContinuousTimeFilterConfig,
-    filtered,
-) -> None:
-    """Add marginal log-likelihood factor and filtered state deterministic sites."""
-    record_kwargs = _config_to_record_kwargs(filter_config)
-    numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
-
-    max_elems = record_kwargs["record_max_elems"]
-    means_shape = filtered.filtered_means.shape
-    cov_shape = filtered.filtered_covariances.shape
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], means_shape, max_elems
-    )
-    add_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"], cov_shape, max_elems
-    )
-    add_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"],
-        (cov_shape[0], cov_shape[1]),
-        max_elems,
-    )
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
-    if add_cov:
-        numpyro.deterministic(
-            f"{name}_filtered_states_cov", filtered.filtered_covariances
-        )
-    if add_cov_diag:
-        diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
 
 
 def _run_linear_kf(
@@ -240,8 +203,20 @@ def run_continuous_filter(
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
-) -> list[numpyro.distributions.Distribution]:
-    """Run continuous-time filter via CD-Dynamax."""
+) -> tuple[jax.Array, object, list[dist.Distribution]]:
+    """Run continuous-time filter via CD-Dynamax.
+
+    Pure computation — no numpyro side-effects. Callers are responsible for
+    registering numpyro.factor / numpyro.deterministic if needed.
+
+    Returns:
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - filtered_posterior: CD-Dynamax posterior object with filtered_means,
+              filtered_covariances, and marginal_loglik attributes.
+            - filtered_dists: list of MultivariateNormal distributions p(x_t | y_{1:t})
+              at each obs time, for posterior rollout.
+    """
     filtered = compute_continuous_filter(
         dynamics,
         filter_config,
@@ -252,15 +227,14 @@ def run_continuous_filter(
         ctrl_values=ctrl_values,
     )
 
-    _add_filter_sites(name, filter_config, filtered)
-
-    return _posterior_sequence_to_dists(
+    filtered_dists = _posterior_sequence_to_dists(
         filtered,
         means_attr="filtered_means",
         covariances_attr="filtered_covariances",
         particle_mode=isinstance(filter_config, ContinuousTimeDPFConfig),
         missing_message="Filtered means/covariances unexpectedly None for non-DPF config",
     )
+    return filtered.marginal_loglik, filtered, filtered_dists
 
 
 __all__ = [
