@@ -1,7 +1,10 @@
 """Shared typing helpers for dynamical systems."""
 
+import dataclasses
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Real
 
@@ -12,6 +15,30 @@ class FunctionOfTime(Protocol):
         self, t: float | int | Real[Array, ""]
     ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class ConditionedResult:
+    """Result of dsx.condition — the numpyro-free conditioning primitive.
+
+    Carries all outputs from the handler stack (Filter, Smoother, etc.)
+    without registering any numpyro sites.
+    """
+
+    marginal_loglik: jax.Array | None = None
+    states: object = None
+    dists: list | None = None
+    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
+        default=None, repr=False
+    )
+
+    def __call__(
+        self, t: float | int | Real[Array, ""]
+    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
+        raise NotImplementedError(
+            "ConditionedResult is not callable as a FunctionOfTime. "
+            "Access .marginal_loglik, .states, or .dists instead."
+        )
 
 
 def as_scalar_time_array(
