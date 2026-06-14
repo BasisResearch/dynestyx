@@ -22,8 +22,12 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.plate_utils import _slice_time_axis, _time_len_from_array
 from dynestyx.inference.scoring import (
+    DawidSebastianiScore,
+    EnergyScore,
+    GaussianLogProbScore,
     ObservationScoreArray,
     ObservationScoringConfig,
+    ObservationWiseCRPSScore,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
@@ -88,12 +92,12 @@ def _sample_data_predictive_ensemble(
 def _observation_control_values(
     dynamics: DynamicalModel,
     *,
-    obs_times: Real[Array, "*plate time"],
-    ctrl_values: Real[Array, "*plate time control_dim"]
-    | Real[Array, "*plate time"]
+    obs_times: Real[Array, "... time"],
+    ctrl_values: Real[Array, "... control_time control_dim"]
+    | Real[Array, "... control_time"]
     | None,
     plate_shapes: tuple[int, ...],
-) -> Real[Array, "*plate time control_dim"] | None:
+) -> Real[Array, "... control_time control_dim"] | None:
     if dynamics.control_dim == 0:
         return None
     if ctrl_values is None:
@@ -111,8 +115,8 @@ def _observation_control_values(
 def _observation_noise_covariance_sequence(
     dynamics: DynamicalModel,
     *,
-    obs_times: Real[Array, "*plate time"],
-    ctrl_values: Real[Array, "*plate time control_dim"] | None,
+    obs_times: Real[Array, "... time"],
+    ctrl_values: Real[Array, "... control_time control_dim"] | None,
     plate_shapes: tuple[int, ...],
 ) -> Float[Array, "*plate time observation_dim observation_dim"]:
     t_len = _time_len_from_array(obs_times, plate_shapes)
@@ -179,9 +183,9 @@ def _build_prediction_outputs(
     *,
     dynamics: DynamicalModel,
     filter_config: SupportedObservationPredictionConfig,
-    obs_times: Real[Array, "*plate time"],
-    ctrl_values: Real[Array, "*plate time control_dim"]
-    | Real[Array, "*plate time"]
+    obs_times: Real[Array, "... time"],
+    ctrl_values: Real[Array, "... control_time control_dim"]
+    | Real[Array, "... control_time"]
     | None,
     plate_shapes: tuple[int, ...] = (),
 ) -> PredictedObservationOutputs:
@@ -275,10 +279,10 @@ def enrich_continuous_filter_output(
     *,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    obs_times: Real[Array, "*plate time"],
-    obs_values: Real[Array, "*plate time observation_dim"] | Real[Array, "*plate time"],
-    ctrl_values: Real[Array, "*plate time control_dim"]
-    | Real[Array, "*plate time"]
+    obs_times: Real[Array, "... time"],
+    obs_values: Real[Array, "... time observation_dim"] | Real[Array, "... time"],
+    ctrl_values: Real[Array, "... control_time control_dim"]
+    | Real[Array, "... control_time"]
     | None,
     scoring_config: ObservationScoringConfig | None = None,
     plate_shapes: tuple[int, ...] = (),
@@ -335,12 +339,30 @@ def enrich_continuous_filter_output(
         )
         for rule in scoring_config.rules:
             try:
-                score_arrays[rule.site_name] = rule.compute(
-                    obs_values=obs_arr,
-                    pred_mean=score_mean,
-                    pred_cov=score_cov,
-                    pred_ensemble=score_ensemble,
-                )
+                if isinstance(
+                    rule,
+                    (
+                        GaussianLogProbScore,
+                        DawidSebastianiScore,
+                        ObservationWiseCRPSScore,
+                    ),
+                ):
+                    score_arrays[rule.site_name] = rule.compute(
+                        obs_values=obs_arr,
+                        pred_mean=score_mean,
+                        pred_cov=score_cov,
+                    )
+                elif isinstance(rule, EnergyScore):
+                    score_arrays[rule.site_name] = rule.compute(
+                        obs_values=obs_arr,
+                        pred_mean=score_mean,
+                        pred_cov=score_cov,
+                        pred_ensemble=score_ensemble,
+                    )
+                else:
+                    raise NotImplementedError(
+                        f"Unsupported observation scoring rule type: {type(rule).__name__}."
+                    )
             except NotImplementedError:
                 if scoring_config.unsupported == "skip":
                     continue

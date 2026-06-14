@@ -71,6 +71,9 @@ class BaseObservationScore(abc.ABC):
         self,
         *,
         obs_values: Float[Array, ...],
+        pred_mean: Float[Array, ...] | None = None,
+        pred_cov: Float[Array, ...] | None = None,
+        pred_ensemble: Float[Array, ...] | None = None,
         **kwargs,
     ) -> ObservationScoreArray:
         raise NotImplementedError()
@@ -91,10 +94,14 @@ class GaussianLogProbScore(BaseObservationScore):
         self,
         *,
         obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...],
-        pred_cov: Float[Array, ...],
+        pred_mean: Float[Array, ...] | None = None,
+        pred_cov: Float[Array, ...] | None = None,
         **kwargs,
     ) -> ScalarObservationScoreArray:
+        if pred_mean is None or pred_cov is None:
+            raise ValueError(
+                "GaussianLogProbScore requires Gaussian predictive mean and covariance."
+            )
         lp = dist.MultivariateNormal(
             loc=pred_mean,
             covariance_matrix=pred_cov,
@@ -117,10 +124,14 @@ class DawidSebastianiScore(BaseObservationScore):
         self,
         *,
         obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...],
-        pred_cov: Float[Array, ...],
+        pred_mean: Float[Array, ...] | None = None,
+        pred_cov: Float[Array, ...] | None = None,
         **kwargs,
     ) -> ScalarObservationScoreArray:
+        if pred_mean is None or pred_cov is None:
+            raise ValueError(
+                "DawidSebastianiScore requires Gaussian predictive mean and covariance."
+            )
         innovation = obs_values - pred_mean
         solved = jnp.linalg.solve(pred_cov, innovation[..., None])[..., 0]
         mahal = jnp.sum(innovation * solved, axis=-1)
@@ -145,10 +156,14 @@ class ObservationWiseCRPSScore(BaseObservationScore):
         self,
         *,
         obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...],
-        pred_cov: Float[Array, ...],
+        pred_mean: Float[Array, ...] | None = None,
+        pred_cov: Float[Array, ...] | None = None,
         **kwargs,
     ) -> ComponentObservationScoreArray:
+        if pred_mean is None or pred_cov is None:
+            raise ValueError(
+                "ObservationWiseCRPSScore requires Gaussian predictive mean and covariance."
+            )
         variances = jnp.diagonal(pred_cov, axis1=-2, axis2=-1)
         scales = jnp.sqrt(jnp.maximum(variances, self.min_variance))
         z = (obs_values - pred_mean) / scales

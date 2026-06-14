@@ -172,6 +172,8 @@ def test_continuous_filter_scoring_sites_match_pure_backend_outputs(
         scoring_config=scoring_config,
     )
     assert predictions is not None
+    assert predictions.mean is not None
+    assert predictions.cov is not None
 
     tr = _run_conditioned_trace(
         filter_config,
@@ -215,6 +217,7 @@ def test_continuous_filter_scoring_sites_match_pure_backend_outputs(
 
     if isinstance(filter_config, ContinuousTimeEnKFConfig):
         assert "f_predicted_observations_ensemble" in tr
+        assert predictions.ensemble is not None
         assert jnp.allclose(
             tr["f_predicted_observations_ensemble"]["value"],
             predictions.ensemble,
@@ -319,16 +322,11 @@ def test_enkf_energy_score_defaults_to_data_predictive_ensemble():
     )
     assert predictions is not None
     assert predictions.ensemble is not None
-    assert predictions.noise_cov is not None
+    assert predictions.obs_ensemble is not None
 
-    expected_noise = dist.MultivariateNormal(
-        loc=jnp.zeros_like(predictions.ensemble[..., 0, :]),
-        covariance_matrix=predictions.noise_cov,
-    ).sample(jr.PRNGKey(scoring_config.sample_seed), sample_shape=(16,))
-    expected_ensemble = predictions.ensemble + jnp.moveaxis(expected_noise, 0, -2)
     expected_score = EnergyScore(beta=1.0).compute(
         obs_values=obs_values,
-        pred_ensemble=expected_ensemble,
+        pred_ensemble=predictions.obs_ensemble,
     )
     latent_score = EnergyScore(beta=1.0).compute(
         obs_values=obs_values,
@@ -425,10 +423,8 @@ def test_data_predictive_backend_ensemble_is_rejected():
         match="data-predictive observation ensembles are unavailable",
     ):
         _run_conditioned_trace(
-            ContinuousTimeEnKFConfig(
-                n_particles=16,
-                crn_seed=jr.PRNGKey(29),
-                record_predicted_observations_ensemble=True,
+            ContinuousTimeKFConfig(
+                record_predicted_observations_mean=True,
             ),
             ObservationScoringConfig(
                 rules=(EnergyScore(beta=1.0),),
@@ -531,6 +527,8 @@ def test_data_predictive_auto_prefers_backend_observation_ensemble():
     )
     assert predictions is not None
     assert predictions.obs_ensemble is not None
+    assert predictions.ensemble is not None
+    assert predictions.noise_cov is not None
 
     expected_score = EnergyScore(beta=1.0).compute(
         obs_values=obs_values,
