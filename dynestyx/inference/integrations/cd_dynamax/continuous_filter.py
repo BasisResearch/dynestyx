@@ -25,6 +25,12 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.observation_predictions import (
+    PredictedObservationOutputs,
+    add_observation_prediction_and_score_sites,
+    enrich_continuous_filter_output,
+)
+from dynestyx.inference.scoring import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
 
@@ -115,6 +121,10 @@ def _add_filter_sites(
     name: str,
     filter_config: ContinuousTimeFilterConfig,
     filtered,
+    *,
+    scoring_config: ObservationScoringConfig | None = None,
+    predictions: PredictedObservationOutputs | None = None,
+    score_arrays: dict | None = None,
 ) -> None:
     """Add marginal log-likelihood factor and filtered state deterministic sites."""
     record_kwargs = _config_to_record_kwargs(filter_config)
@@ -144,6 +154,14 @@ def _add_filter_sites(
     if add_cov_diag:
         diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+
+    add_observation_prediction_and_score_sites(
+        name,
+        filter_config=filter_config,
+        scoring_config=scoring_config,
+        predictions=predictions,
+        score_arrays={} if score_arrays is None else score_arrays,
+    )
 
 
 def _run_linear_kf(
@@ -239,6 +257,7 @@ def run_continuous_filter(
     obs_values: jax.Array,
     ctrl_times=None,
     ctrl_values=None,
+    scoring_config: ObservationScoringConfig | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Run continuous-time filter via CD-Dynamax."""
@@ -252,7 +271,24 @@ def run_continuous_filter(
         ctrl_values=ctrl_values,
     )
 
-    _add_filter_sites(name, filter_config, filtered)
+    filtered, predictions, score_arrays = enrich_continuous_filter_output(
+        filtered,
+        dynamics=dynamics,
+        filter_config=filter_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
+    )
+
+    _add_filter_sites(
+        name,
+        filter_config,
+        filtered,
+        scoring_config=scoring_config,
+        predictions=predictions,
+        score_arrays=score_arrays,
+    )
 
     return _posterior_sequence_to_dists(
         filtered,

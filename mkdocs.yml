@@ -16,6 +16,7 @@ nav:
   - Welcome: index.md
   - Tutorials: 
     - "Quickstart: Writing dynestyx models": tutorials/quickstart.ipynb
+    - Observation scoring with filters: tutorials/observation_scoring_with_filters.ipynb
     - A Mathematical Introduction: math_intro.md
     - A Gentle Introduction:
       - tutorials/gentle_intro/00_index.ipynb

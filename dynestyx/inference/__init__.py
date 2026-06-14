@@ -5,6 +5,7 @@ __all__ = [
     "integrations",
     "mcmc",
     "mcmc_configs",
+    "scoring",
     "smoother_configs",
     "smoothers",
 ]

@@ -57,11 +57,16 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
+from dynestyx.inference.observation_predictions import (
+    add_observation_prediction_and_score_sites,
+    enrich_continuous_filter_output,
+)
 from dynestyx.inference.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
 )
+from dynestyx.inference.scoring import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import _dist_has_plate_batch_dims
@@ -144,6 +149,21 @@ def _default_filter_config(dynamics: DynamicalModel):
     return EnKFConfig()
 
 
+def _has_observation_prediction_requests(config: BaseFilterConfig) -> bool:
+    return any(
+        flag is True
+        for flag in (
+            config.record_predicted_observations_mean,
+            config.record_predicted_observations_cov,
+            config.record_predicted_observations_ensemble,
+        )
+    )
+
+
+def _has_scoring_requests(scoring_config: ObservationScoringConfig | None) -> bool:
+    return scoring_config is not None and len(scoring_config.rules) > 0
+
+
 @dataclasses.dataclass
 class Filter(BaseLogFactorAdder):
     r"""Performs Bayesian filtering to compute the filtering distribution $p(x_t | y_{1:t})$ and the marginal likelihood $\log p(y_{1:T})$.
@@ -199,6 +219,7 @@ class Filter(BaseLogFactorAdder):
     """
 
     filter_config: BaseFilterConfig | None = None
+    scoring_config: ObservationScoringConfig | None = None
 
     def _add_log_factors(
         self,
@@ -236,6 +257,16 @@ class Filter(BaseLogFactorAdder):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
+        wants_prediction_diagnostics = _has_observation_prediction_requests(config)
+        wants_scoring = _has_scoring_requests(self.scoring_config)
+        if (
+            wants_prediction_diagnostics or wants_scoring
+        ) and not dynamics.continuous_time:
+            raise NotImplementedError(
+                "Predicted observation summaries and observation scoring rules are "
+                "currently supported only for continuous-time cd_dynamax Gaussian "
+                "filters (KF, EKF, UKF, EnKF)."
+            )
         if isinstance(config, BaseFilterConfig):
             _validate_missing_observation_support(
                 config,
@@ -256,6 +287,7 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                scoring_config=self.scoring_config,
             )
 
         if dynamics.continuous_time:
@@ -276,6 +308,7 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                scoring_config=self.scoring_config,
                 **kwargs,
             )
         else:
@@ -324,6 +357,7 @@ class Filter(BaseLogFactorAdder):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        scoring_config: ObservationScoringConfig | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
@@ -486,6 +520,25 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
+        if output_kind == "continuous":
+            outputs, predictions, score_arrays = enrich_continuous_filter_output(
+                outputs,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_values=ctrl_values,
+                scoring_config=scoring_config,
+                plate_shapes=plate_shapes,
+            )
+            add_observation_prediction_and_score_sites(
+                name,
+                filter_config=config,
+                scoring_config=scoring_config,
+                predictions=predictions,
+                score_arrays=score_arrays,
+            )
+
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
         elif output_kind == "hmm":
@@ -606,6 +659,7 @@ def _filter_continuous_time(
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
+    scoring_config: ObservationScoringConfig | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.
@@ -630,6 +684,7 @@ def _filter_continuous_time(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
         **kwargs,
     )
 
