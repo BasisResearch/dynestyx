@@ -5884,7 +5884,12 @@ SDE model without requiring gradients.</p>
 discrete regime model). The forward algorithm computes the exact marginal
 log-likelihood and filtered belief over states at each time step.</p>
 <p>For continuous latent-state models, use any other filter config.</p>
-<p>Does not support missing observations (data cannot have NaNs).</p>
+<p>Supports missing observations via NaNs. Fully missing rows are skipped by
+neutralizing the observation term, and partial missing rows are supported for
+exact-marginalizable observation families such as <code>MultivariateNormal</code> and
+factorizable <code>Independent(..., 1)</code> observations.</p>
+<p>For categorical observations, encode observed entries as zero-based integer
+labels <code>0..K-1</code> and represent missing entries with <code>NaN</code>.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
