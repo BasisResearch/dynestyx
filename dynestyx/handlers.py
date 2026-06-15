@@ -6,11 +6,12 @@ import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
-from jaxtyping import Array, Real
+from jaxtyping import Array, Bool, Real
 
 from dynestyx.models import (
     DynamicalModel,
 )
+from dynestyx.observation_missingness import prepare_observation_views
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _get_dynamics_with_t0,
@@ -107,6 +108,9 @@ def sample(
 
     # Initial dynamics may not have t0, which is then inferred from obs_times
     dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times, predict_times)
+    obs_values_filled, obs_mask, obs_has_missing = prepare_observation_views(
+        dynamics_with_t0, obs_values
+    )
 
     # Pass to interpreted version of `sample` for inference.
     return _sample_intp(
@@ -114,6 +118,9 @@ def sample(
         dynamics_with_t0,
         obs_times=obs_times,
         obs_values=obs_values,
+        _obs_values_filled=obs_values_filled,
+        _obs_mask=obs_mask,
+        _obs_has_missing=obs_has_missing,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         predict_times=predict_times,
@@ -130,6 +137,11 @@ def _sample_intp(
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    _obs_has_missing: bool | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -150,6 +162,12 @@ def _sample_intp(
         dynamics: Dynamical model to sample from.
         obs_times: Times at which to sample the observations.
         obs_values: Values of the observations at the given times.
+        _obs_values_filled: Internal mask-aware version of ``obs_values`` with
+            missing entries replaced by neutral fillers while preserving shape.
+        _obs_mask: Internal boolean mask marking which observation entries are
+            truly observed.
+        _obs_has_missing: Internal precomputed flag indicating whether any
+            observation entries are missing.
         ctrl_times: Times at which to sample the controls.
         ctrl_values: Values of the controls at the given times.
         predict_times: Times at which to predict the observations.

@@ -8,11 +8,17 @@ import numpyro
 import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
-from jaxtyping import Array, Float, Int, Real, Shaped
+from jaxtyping import Array, Bool, Float, Int, Real, Shaped
 
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
+from dynestyx.observation_missingness import (
+    masked_observation_log_prob,
+    prepare_observation_views,
+    probe_observation_distribution_contract,
+    summarize_observation_mask,
+)
 from dynestyx.utils import _should_record_field
 
 
@@ -64,22 +70,33 @@ def hmm_log_transition_matrix(
     return jax.vmap(row)(xs)
 
 
-def hmm_log_emission_probs(
+def hmm_log_emission_probs_masked(
     dynamics: DynamicalModel,
     xs: Int[Array, " n_states"],
-    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    y: Shaped[Array, " observation_dim"],
+    obs_mask: Bool[Array, " observation_dim"],
+    row_has_any_observed: Bool[Array, ""],
     t: float | int | Real[Array, ""],
+    observation_dim: int,
+    has_partial_missing: bool,
+    expected_mode,
+    expected_event_shape,
     u=None,
 ) -> Float[Array, " n_states"]:
-    """
-    log p(y_t | x_t, u_t)
-    shape: (K,)
-    """
+    """log p(y_t, observed entries | x_t, u_t) for each latent state."""
 
     def lp(x):
-        dist = dynamics.observation_model(x=x, u=u, t=t)
-        lp = dist.log_prob(y)
-        return jnp.sum(lp)  # critical for vector-valued observations
+        obs_dist = dynamics.observation_model(x=x, u=u, t=t)
+        return masked_observation_log_prob(
+            obs_dist,
+            y=y,
+            obs_mask=obs_mask,
+            row_has_any_observed=row_has_any_observed,
+            observation_dim=observation_dim,
+            has_partial_missing=has_partial_missing,
+            expected_mode=expected_mode,
+            expected_event_shape=expected_event_shape,
+        )
 
     return jax.vmap(lp)(xs)
 
@@ -89,6 +106,8 @@ def hmm_log_components(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[
     Float[Array, " n_states"],
@@ -108,14 +127,72 @@ def hmm_log_components(
     log_pi = hmm_log_initial_probs(dynamics, xs)
 
     # Emissions
+    if _obs_values_filled is None or _obs_mask is None:
+        _obs_values_filled, _obs_mask, _ = prepare_observation_views(
+            dynamics, obs_values
+        )
+    if _obs_values_filled is None or _obs_mask is None:
+        raise ValueError("HMM observation scoring expects prepared observations.")
+
+    obs_values_filled = (
+        _obs_values_filled[:, None] if obs_values.ndim == 1 else _obs_values_filled
+    )
+    obs_mask = _obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask
+    (
+        row_has_any_observed,
+        _has_missing,
+        has_partial_missing,
+        _has_fully_missing_rows,
+        observation_dim,
+    ) = summarize_observation_mask(obs_mask)
+    expected_mode, expected_event_shape = probe_observation_distribution_contract(
+        dynamics,
+        observation_dim=observation_dim,
+        has_partial_missing=has_partial_missing,
+    )
     if ctrl_values is not None:
         log_emit_seq = jax.vmap(
-            lambda y, t, u: hmm_log_emission_probs(dynamics, xs, y, t, u=u)
-        )(obs_values, obs_times, ctrl_values)
+            lambda y, obs_mask_t, row_has_any, t, u: hmm_log_emission_probs_masked(
+                dynamics,
+                xs,
+                y,
+                obs_mask_t,
+                row_has_any,
+                t,
+                observation_dim,
+                has_partial_missing,
+                expected_mode,
+                expected_event_shape,
+                u=u,
+            )
+        )(
+            obs_values_filled,
+            obs_mask,
+            row_has_any_observed,
+            obs_times,
+            ctrl_values,
+        )
     else:
         log_emit_seq = jax.vmap(
-            lambda y, t: hmm_log_emission_probs(dynamics, xs, y, t, u=None)
-        )(obs_values, obs_times)
+            lambda y, obs_mask_t, row_has_any, t: hmm_log_emission_probs_masked(
+                dynamics,
+                xs,
+                y,
+                obs_mask_t,
+                row_has_any,
+                t,
+                observation_dim,
+                has_partial_missing,
+                expected_mode,
+                expected_event_shape,
+                u=None,
+            )
+        )(
+            obs_values_filled,
+            obs_mask,
+            row_has_any_observed,
+            obs_times,
+        )
 
     # Transitions
     # Note: Controls affect state evolution, use u_now for transitions from t_now to t_next
@@ -189,6 +266,8 @@ def compute_hmm_filter(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
     """Pure-JAX HMM filter computation (no numpyro side-effects).
@@ -201,6 +280,8 @@ def compute_hmm_filter(
         dynamics,
         obs_times,
         obs_values,
+        _obs_values_filled=_obs_values_filled,
+        _obs_mask=_obs_mask,
         ctrl_values=ctrl_values,
     )
 
@@ -219,6 +300,8 @@ def _filter_hmm(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,
@@ -242,6 +325,8 @@ def _filter_hmm(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
+        _obs_values_filled=_obs_values_filled,
+        _obs_mask=_obs_mask,
         ctrl_values=ctrl_values,
     )
 
