@@ -16,12 +16,17 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 import numpyro.distributions as dist
 from jax.errors import TracerBoolConversionError
-from jaxtyping import Array, Bool, Float, Shaped
+from jaxtyping import Array, Bool, Float, Real, Shaped
 
-from dynestyx.models.checkers import _make_probe_state
+from dynestyx.models.checkers import (
+    _is_categorical_distribution,
+    _make_probe_state,
+    _unwrap_base_distribution,
+)
 from dynestyx.models.core import DynamicalModel
 from dynestyx.utils import _raise_now_or_error_if
 
+CATEGORICAL_MISSING_SENTINEL = -1
 LOG_2PI = jnp.log(2.0 * jnp.pi)
 ObservationDistributionMode = Literal["masked", "multivariate_normal", "independent"]
 
@@ -65,6 +70,115 @@ def _lift_scalar_observation_distribution(
     )
 
 
+def _probe_observation_distribution(dynamics: DynamicalModel) -> dist.Distribution:
+    """Probe the observation model once at a representative state."""
+    x_probe = _make_probe_state(
+        initial_condition=dynamics.initial_condition,
+        state_dim=dynamics.state_dim,
+    )
+    u_probe = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
+    t_probe = jnp.array(0.0) if dynamics.t0 is None else dynamics.t0
+    return dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe)
+
+
+def _categorical_support_size(obs_dist: dist.Distribution) -> int:
+    """Return the number of categorical labels implied by a probed distribution."""
+    base = _unwrap_base_distribution(obs_dist)
+    probs_or_logits = base.probs if hasattr(base, "probs") else base.logits
+    return int(probs_or_logits.shape[-1])
+
+
+def prepare_observation_views(
+    dynamics: DynamicalModel,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+) -> tuple[
+    Array | None,
+    Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None,
+    bool | None,
+]:
+    """Return mask-aware observation views for downstream scoring.
+
+    Returns ``(obs_values_filled, obs_mask, has_missing)``. ``obs_values_filled``
+    preserves the original array shape but replaces missing entries with
+    neutral fillers so downstream scoring can keep static shapes while
+    consulting ``obs_mask`` to decide which entries were actually observed.
+    """
+    if obs_values is None:
+        return None, None, False
+
+    obs_arr = jnp.asarray(obs_values)
+    if jnp.issubdtype(obs_arr.dtype, jnp.inexact):
+        obs_mask = ~jnp.isnan(obs_arr)
+    else:
+        obs_mask = jnp.ones(obs_arr.shape, dtype=bool)
+    try:
+        has_missing = bool(jnp.any(~obs_mask))
+    except TracerBoolConversionError:
+        has_missing = None
+
+    obs_dist = _probe_observation_distribution(dynamics)
+    if not _is_categorical_distribution(obs_dist):
+        obs_values_filled = jnp.where(obs_mask, obs_arr, jnp.zeros_like(obs_arr))
+        return obs_values_filled, obs_mask, has_missing
+
+    def _raise_categorical_validation_error(
+        invalid_mask,
+        concrete_message,
+        traced_message,
+    ) -> None:
+        try:
+            has_invalid = bool(jnp.any(invalid_mask))
+        except TracerBoolConversionError:
+            _raise_now_or_error_if(obs_arr, jnp.any(invalid_mask), traced_message)
+            return
+
+        if not has_invalid:
+            return
+
+        bad = obs_arr[invalid_mask][0]
+        raise ValueError(concrete_message(bad))
+
+    _raise_categorical_validation_error(
+        obs_mask & ~jnp.equal(obs_arr, jnp.round(obs_arr)),
+        lambda bad: (
+            "Categorical observations must be encoded as zero-based integer "
+            f"labels. Found non-integer observed value {bad!r}."
+        ),
+        "Categorical observations must be encoded as zero-based integer labels.",
+    )
+    _raise_categorical_validation_error(
+        obs_mask & (obs_arr < 0),
+        lambda bad: (
+            "Categorical observations must be encoded as zero-based integer "
+            f"labels 0..K-1; found negative observed value {bad!r}."
+        ),
+        "Categorical observations must be encoded as zero-based integer labels 0..K-1.",
+    )
+
+    support_size = _categorical_support_size(obs_dist)
+    _raise_categorical_validation_error(
+        obs_mask & (obs_arr >= support_size),
+        lambda bad: (
+            "Categorical observations must be encoded as zero-based integer "
+            f"labels 0..K-1 for the probed observation distribution. Found "
+            f"observed value {bad!r} with K={support_size}."
+        ),
+        "Categorical observations must be encoded as zero-based integer labels "
+        f"0..K-1 for the probed observation distribution with K={support_size}.",
+    )
+
+    obs_values_filled = jnp.where(
+        obs_mask,
+        obs_arr,
+        jnp.asarray(CATEGORICAL_MISSING_SENTINEL, dtype=obs_arr.dtype),
+    )
+    return obs_values_filled.astype(jnp.int32), obs_mask, has_missing
+
+
 def prepare_observation_mask(
     obs_values: Float[Array, "time observation_dim"],
 ) -> tuple[
@@ -84,7 +198,7 @@ def prepare_observation_mask(
         )
 
     obs_mask = ~jnp.isnan(obs_values)
-    safe_obs = jnp.where(obs_mask, obs_values, jnp.zeros_like(obs_values))
+    filled_obs = jnp.where(obs_mask, obs_values, jnp.zeros_like(obs_values))
     (
         row_has_any_observed,
         has_missing,
@@ -94,7 +208,7 @@ def prepare_observation_mask(
     ) = summarize_observation_mask(obs_mask)
 
     return (
-        safe_obs,
+        filled_obs,
         obs_mask,
         row_has_any_observed,
         has_missing,
@@ -113,7 +227,22 @@ def summarize_observation_mask(
     bool,
     int,
 ]:
-    """Summarize row-wise missing-observation metadata from a boolean mask."""
+    """Summarize row-wise missing-observation metadata from a boolean mask.
+
+    Returns:
+        row_has_any_observed: Boolean vector of shape ``(time,)`` marking rows
+            with at least one observed coordinate.
+        has_missing: True when any entry of ``obs_mask`` is False.
+        has_partial_missing: True when at least one row mixes observed and
+            missing coordinates.
+        has_fully_missing_rows: True when at least one row has no observed
+            coordinates at all.
+        observation_dim: Size of the trailing observation-event dimension.
+
+    For traced callers that cannot convert these summaries to Python bools, the
+    three scalar flags fall back to ``False`` while the row-wise
+    tensor summary remains available for downstream runtime checks.
+    """
     if obs_mask.ndim != 2:
         raise ValueError(
             "Observation missingness expects obs_mask with shape "
@@ -193,14 +322,8 @@ def probe_observation_distribution_contract(
     has_partial_missing: bool,
 ) -> tuple[ObservationDistributionMode, tuple[int, ...]]:
     """Probe a dynamics object's observation model and choose the masked mode once."""
-    x_probe = _make_probe_state(
-        initial_condition=dynamics.initial_condition,
-        state_dim=dynamics.state_dim,
-    )
-    u_probe = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t_probe = jnp.array(0.0) if dynamics.t0 is None else dynamics.t0
     obs_dist = _canonicalize_observation_distribution(
-        dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe),
+        _probe_observation_distribution(dynamics),
         observation_dim=observation_dim,
     )
     return (
@@ -273,7 +396,7 @@ class ObservationLogProb:
     simple `numpyro.sample(..., obs=obs_values[t])` call, typically because
     `obs_values` contains missing entries. It expects a single trajectory's
     observation array with shape `(time, observation_dim)`, preprocesses that
-    array once, keeps both a NaN-preserving view and a zero-filled safe view,
+    array once, keeps both a NaN-preserving view and a filled scoring view,
     and then provides per-time-step scalar log-probability contributions of the
     form `log p(y_observed | x_t, u_t, t)`.
 
@@ -287,10 +410,10 @@ class ObservationLogProb:
 
     dynamics: DynamicalModel
     obs_values: Float[Array, "time observation_dim"]
-    precomputed_safe_obs: Array | None = None
+    precomputed_filled_obs: Array | None = None
     precomputed_obs_mask: Bool[Array, "time observation_dim"] | None = None
     distribution_mode: ObservationDistributionMode = dataclasses.field(init=False)
-    safe_obs: Float[Array, "time observation_dim"] = dataclasses.field(init=False)
+    filled_obs: Float[Array, "time observation_dim"] = dataclasses.field(init=False)
     obs_mask: Bool[Array, "time observation_dim"] = dataclasses.field(init=False)
     row_has_any_observed: Bool[Array, " time"] = dataclasses.field(init=False)
     has_missing: bool = dataclasses.field(init=False)
@@ -303,15 +426,15 @@ class ObservationLogProb:
 
     def __post_init__(self) -> None:
         """Precompute NaN-aware observation summaries once at construction time."""
-        if (self.precomputed_safe_obs is None) != (self.precomputed_obs_mask is None):
+        if (self.precomputed_filled_obs is None) != (self.precomputed_obs_mask is None):
             raise ValueError(
-                "ObservationLogProb expects precomputed_safe_obs and "
+                "ObservationLogProb expects precomputed_filled_obs and "
                 "precomputed_obs_mask to be provided together."
             )
 
-        if self.precomputed_safe_obs is None:
+        if self.precomputed_filled_obs is None:
             (
-                self.safe_obs,
+                self.filled_obs,
                 self.obs_mask,
                 self.row_has_any_observed,
                 self.has_missing,
@@ -321,7 +444,7 @@ class ObservationLogProb:
             ) = prepare_observation_mask(self.obs_values)
         else:
             assert self.precomputed_obs_mask is not None
-            self.safe_obs = self.precomputed_safe_obs
+            self.filled_obs = self.precomputed_filled_obs
             self.obs_mask = self.precomputed_obs_mask
             (
                 self.row_has_any_observed,
@@ -348,7 +471,7 @@ class ObservationLogProb:
         """
         return masked_observation_log_prob(
             self.dynamics.observation_model(x=x, u=u, t=t),
-            y=self.safe_obs[t_idx],
+            y=self.filled_obs[t_idx],
             obs_mask=self.obs_mask[t_idx],
             row_has_any_observed=self.row_has_any_observed[t_idx],
             observation_dim=self.observation_dim,

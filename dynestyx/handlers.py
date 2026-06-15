@@ -2,134 +2,25 @@
 
 from typing import TypeVar
 
-import jax.numpy as jnp
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
-from jax.errors import TracerBoolConversionError
 from jaxtyping import Array, Bool, Real
 
 from dynestyx.models import (
     DynamicalModel,
 )
-from dynestyx.models.checkers import (
-    _is_categorical_distribution,
-    _make_probe_state,
-    _unwrap_base_distribution,
-)
+from dynestyx.observation_missingness import prepare_observation_views
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _get_dynamics_with_t0,
-    _raise_now_or_error_if,
     _validate_control_dim,
     _validate_controls,
     _validate_site_sorting,
 )
 
 T = TypeVar("T")
-CATEGORICAL_MISSING_SENTINEL = -1
-
-
-def _probe_observation_distribution(dynamics: DynamicalModel):
-    """Probe the observation model once at a representative state."""
-    x_probe = _make_probe_state(
-        initial_condition=dynamics.initial_condition,
-        state_dim=dynamics.state_dim,
-    )
-    u_probe = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
-    t_probe = jnp.array(0.0) if dynamics.t0 is None else dynamics.t0
-    return dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe)
-
-
-def _categorical_support_size(obs_dist) -> int:
-    """Return the number of categorical labels implied by a probed distribution."""
-    base = _unwrap_base_distribution(obs_dist)
-    probs_or_logits = base.probs if hasattr(base, "probs") else base.logits
-    return int(probs_or_logits.shape[-1])
-
-
-def _prepare_observation_views(
-    dynamics: DynamicalModel,
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
-    | None,
-) -> tuple[
-    Array | None,
-    Bool[Array, "*obs_value_plate obs_time observation_dim"]
-    | Bool[Array, "*obs_value_plate obs_time"]
-    | None,
-    bool | None,
-]:
-    """Return score-safe observations plus an explicit observed-entry mask."""
-    if obs_values is None:
-        return None, None, False
-
-    obs_arr = jnp.asarray(obs_values)
-    if jnp.issubdtype(obs_arr.dtype, jnp.inexact):
-        obs_mask = ~jnp.isnan(obs_arr)
-    else:
-        obs_mask = jnp.ones(obs_arr.shape, dtype=bool)
-    try:
-        has_missing = bool(jnp.any(~obs_mask))
-    except TracerBoolConversionError:
-        has_missing = None
-
-    obs_dist = _probe_observation_distribution(dynamics)
-    if not _is_categorical_distribution(obs_dist):
-        safe_obs = jnp.where(obs_mask, obs_arr, jnp.zeros_like(obs_arr))
-        return safe_obs, obs_mask, has_missing
-
-    def _raise_categorical_validation_error(
-        invalid_mask, concrete_message, traced_message
-    ):
-        try:
-            has_invalid = bool(jnp.any(invalid_mask))
-        except TracerBoolConversionError:
-            _raise_now_or_error_if(obs_arr, jnp.any(invalid_mask), traced_message)
-            return
-
-        if not has_invalid:
-            return
-
-        bad = obs_arr[invalid_mask][0]
-        raise ValueError(concrete_message(bad))
-
-    _raise_categorical_validation_error(
-        obs_mask & ~jnp.equal(obs_arr, jnp.round(obs_arr)),
-        lambda bad: (
-            "Categorical observations must be encoded as zero-based integer "
-            f"labels. Found non-integer observed value {bad!r}."
-        ),
-        "Categorical observations must be encoded as zero-based integer labels.",
-    )
-    _raise_categorical_validation_error(
-        obs_mask & (obs_arr < 0),
-        lambda bad: (
-            "Categorical observations must be encoded as zero-based integer "
-            f"labels 0..K-1; found negative observed value {bad!r}."
-        ),
-        "Categorical observations must be encoded as zero-based integer labels 0..K-1.",
-    )
-
-    support_size = _categorical_support_size(obs_dist)
-    _raise_categorical_validation_error(
-        obs_mask & (obs_arr >= support_size),
-        lambda bad: (
-            "Categorical observations must be encoded as zero-based integer "
-            f"labels 0..K-1 for the probed observation distribution. Found "
-            f"observed value {bad!r} with K={support_size}."
-        ),
-        "Categorical observations must be encoded as zero-based integer labels "
-        f"0..K-1 for the probed observation distribution with K={support_size}.",
-    )
-
-    safe_obs = jnp.where(
-        obs_mask,
-        obs_arr,
-        jnp.asarray(CATEGORICAL_MISSING_SENTINEL, dtype=obs_arr.dtype),
-    )
-    return safe_obs.astype(jnp.int32), obs_mask, has_missing
 
 
 def sample(
@@ -217,7 +108,7 @@ def sample(
 
     # Initial dynamics may not have t0, which is then inferred from obs_times
     dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times, predict_times)
-    obs_values_safe, obs_mask, obs_has_missing = _prepare_observation_views(
+    obs_values_filled, obs_mask, obs_has_missing = prepare_observation_views(
         dynamics_with_t0, obs_values
     )
 
@@ -227,7 +118,7 @@ def sample(
         dynamics_with_t0,
         obs_times=obs_times,
         obs_values=obs_values,
-        _obs_values_safe=obs_values_safe,
+        _obs_values_filled=obs_values_filled,
         _obs_mask=obs_mask,
         _obs_has_missing=obs_has_missing,
         ctrl_times=ctrl_times,
@@ -246,7 +137,7 @@ def _sample_intp(
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
-    _obs_values_safe: Array | None = None,
+    _obs_values_filled: Array | None = None,
     _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
     | Bool[Array, "*obs_value_plate obs_time"]
     | None = None,
@@ -271,6 +162,12 @@ def _sample_intp(
         dynamics: Dynamical model to sample from.
         obs_times: Times at which to sample the observations.
         obs_values: Values of the observations at the given times.
+        _obs_values_filled: Internal mask-aware version of ``obs_values`` with
+            missing entries replaced by neutral fillers while preserving shape.
+        _obs_mask: Internal boolean mask marking which observation entries are
+            truly observed.
+        _obs_has_missing: Internal precomputed flag indicating whether any
+            observation entries are missing.
         ctrl_times: Times at which to sample the controls.
         ctrl_values: Values of the controls at the given times.
         predict_times: Times at which to predict the observations.

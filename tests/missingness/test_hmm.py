@@ -294,7 +294,7 @@ def test_hmm_partial_missing_independent_categorical_matches_manual_reference():
         _build_hmm_dynamics(_independent_categorical_observation_model),
         obs_times,
         obs_values,
-        _obs_values_safe=jnp.array([[1, -1], [0, 1]], dtype=jnp.int32),
+        _obs_values_filled=jnp.array([[1, -1], [0, 1]], dtype=jnp.int32),
         _obs_mask=jnp.array([[True, False], [True, True]]),
     )
 

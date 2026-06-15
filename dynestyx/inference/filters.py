@@ -210,7 +210,7 @@ class Filter(BaseLogFactorAdder):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_safe: Array | None = None,
+        _obs_values_filled: Array | None = None,
         _obs_mask: Array | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
@@ -228,6 +228,13 @@ class Filter(BaseLogFactorAdder):
             plate_shapes: Tuple of plate sizes from enclosing dsx.plate contexts.
             obs_times: Observation times.
             obs_values: Observed values.
+            _obs_values_filled: Internal mask-aware version of ``obs_values``
+                with missing entries replaced by neutral fillers while
+                preserving array shape for scoring.
+            _obs_mask: Internal boolean mask marking which observation entries
+                are actually observed.
+            _obs_has_missing: Internal precomputed flag for whether
+                ``obs_values`` contains any missing entries.
             ctrl_times: Control times (optional).
             ctrl_values: Control values (optional).
         """
@@ -257,7 +264,7 @@ class Filter(BaseLogFactorAdder):
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
-                _obs_values_safe=_obs_values_safe,
+                _obs_values_filled=_obs_values_filled,
                 _obs_mask=_obs_mask,
                 _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
@@ -292,7 +299,7 @@ class Filter(BaseLogFactorAdder):
                     cast(HMMConfig, config),
                     obs_times=obs_times,
                     obs_values=obs_values,
-                    _obs_values_safe=_obs_values_safe,
+                    _obs_values_filled=_obs_values_filled,
                     _obs_mask=_obs_mask,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
@@ -328,7 +335,7 @@ class Filter(BaseLogFactorAdder):
         obs_times: Real[Array, "*obs_time_plate obs_time"],
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"],
-        _obs_values_safe: Array | None = None,
+        _obs_values_filled: Array | None = None,
         _obs_mask: Array | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
@@ -374,7 +381,7 @@ class Filter(BaseLogFactorAdder):
                     dyn,
                     obs_times=ot,
                     obs_values=ov,
-                    _obs_values_safe=ovs,
+                    _obs_values_filled=ovs,
                     _obs_mask=om,
                     ctrl_values=cv,
                 )
@@ -442,12 +449,12 @@ class Filter(BaseLogFactorAdder):
         )
         k_axis = 0 if keys is not None else None
         if uses_preprocessed_obs:
-            ovs_axis = _array_plate_axis(_obs_values_safe, plate_shapes)
+            ovs_axis = _array_plate_axis(_obs_values_filled, plate_shapes)
             om_axis = _array_plate_axis(_obs_mask, plate_shapes)
         else:
             ovs_axis = None
             om_axis = None
-            _obs_values_safe = None
+            _obs_values_filled = None
             _obs_mask = None
         base_axes = (
             dyn_axes,
@@ -492,13 +499,17 @@ class Filter(BaseLogFactorAdder):
             vmapped = compute_output_member
             for w in range(n_plates):
                 d = n_plates - 1 - w
+                # Wrap w (innermost-first) maps plate dim d = n_plates - 1 - w,
+                # so the index array for that dim is mapped on axis 0 only at
+                # that level while the other per-dimension index arrays stay
+                # broadcasted scalars.
                 idx_axes = tuple(0 if j == d else None for j in range(n_plates))
                 vmapped = jax.vmap(vmapped, in_axes=(*base_axes, *idx_axes))
             outputs = vmapped(
                 dynamics,
                 obs_times,
                 obs_values,
-                _obs_values_safe,
+                _obs_values_filled,
                 _obs_mask,
                 ctrl_times,
                 ctrl_values,
@@ -513,7 +524,7 @@ class Filter(BaseLogFactorAdder):
                 dynamics,
                 obs_times,
                 obs_values,
-                _obs_values_safe,
+                _obs_values_filled,
                 _obs_mask,
                 ctrl_times,
                 ctrl_values,

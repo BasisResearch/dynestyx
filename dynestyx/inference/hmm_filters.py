@@ -10,12 +10,12 @@ from jax import lax
 from jax.scipy.special import logsumexp
 from jaxtyping import Array, Bool, Float, Int, Real, Shaped
 
-from dynestyx.handlers import _prepare_observation_views
 from dynestyx.inference.filter_configs import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.observation_missingness import (
     masked_observation_log_prob,
+    prepare_observation_views,
     probe_observation_distribution_contract,
     summarize_observation_mask,
 )
@@ -106,7 +106,7 @@ def hmm_log_components(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_safe: Array | None = None,
+    _obs_values_filled: Array | None = None,
     _obs_mask: Array | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[
@@ -127,15 +127,15 @@ def hmm_log_components(
     log_pi = hmm_log_initial_probs(dynamics, xs)
 
     # Emissions
-    if _obs_values_safe is None or _obs_mask is None:
-        _obs_values_safe, _obs_mask, _ = _prepare_observation_views(
+    if _obs_values_filled is None or _obs_mask is None:
+        _obs_values_filled, _obs_mask, _ = prepare_observation_views(
             dynamics, obs_values
         )
-    if _obs_values_safe is None or _obs_mask is None:
+    if _obs_values_filled is None or _obs_mask is None:
         raise ValueError("HMM observation scoring expects prepared observations.")
 
-    obs_values_safe = (
-        _obs_values_safe[:, None] if obs_values.ndim == 1 else _obs_values_safe
+    obs_values_filled = (
+        _obs_values_filled[:, None] if obs_values.ndim == 1 else _obs_values_filled
     )
     obs_mask = _obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask
     (
@@ -166,7 +166,7 @@ def hmm_log_components(
                 u=u,
             )
         )(
-            obs_values_safe,
+            obs_values_filled,
             obs_mask,
             row_has_any_observed,
             obs_times,
@@ -188,7 +188,7 @@ def hmm_log_components(
                 u=None,
             )
         )(
-            obs_values_safe,
+            obs_values_filled,
             obs_mask,
             row_has_any_observed,
             obs_times,
@@ -266,7 +266,7 @@ def compute_hmm_filter(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_safe: Array | None = None,
+    _obs_values_filled: Array | None = None,
     _obs_mask: Array | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
@@ -280,7 +280,7 @@ def compute_hmm_filter(
         dynamics,
         obs_times,
         obs_values,
-        _obs_values_safe=_obs_values_safe,
+        _obs_values_filled=_obs_values_filled,
         _obs_mask=_obs_mask,
         ctrl_values=ctrl_values,
     )
@@ -300,7 +300,7 @@ def _filter_hmm(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_safe: Array | None = None,
+    _obs_values_filled: Array | None = None,
     _obs_mask: Array | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
@@ -325,7 +325,7 @@ def _filter_hmm(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
-        _obs_values_safe=_obs_values_safe,
+        _obs_values_filled=_obs_values_filled,
         _obs_mask=_obs_mask,
         ctrl_values=ctrl_values,
     )
