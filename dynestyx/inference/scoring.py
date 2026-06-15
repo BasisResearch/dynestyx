@@ -238,10 +238,6 @@ class EnergyScore(BaseObservationScore):
         return jnp.expand_dims(first_term - second_term, axis=-1)
 
 
-# Friendly alias for the common typo.
-DawadiScore = DawidSebastianiScore
-
-
 @dataclasses.dataclass(frozen=True)
 class ObservationScoringConfig:
     """Configuration for proper scoring rules of predicted observations."""
@@ -257,7 +253,6 @@ class ObservationScoringConfig:
 __all__ = [
     "BaseObservationScore",
     "ComponentObservationScoreArray",
-    "DawadiScore",
     "DawidSebastianiScore",
     "EnergyScore",
     "GaussianLogProbScore",

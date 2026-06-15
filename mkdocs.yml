@@ -16,7 +16,6 @@ nav:
   - Welcome: index.md
   - Tutorials: 
     - "Quickstart: Writing dynestyx models": tutorials/quickstart.ipynb
-    - Observation scoring with filters: tutorials/observation_scoring_with_filters.ipynb
     - A Mathematical Introduction: math_intro.md
     - A Gentle Introduction:
       - tutorials/gentle_intro/00_index.ipynb
@@ -32,6 +31,9 @@ nav:
       - Discrete-time smoothing: tutorials/gentle_intro/09_discrete_smoothing.ipynb
       - Continuous-time smoothing: tutorials/gentle_intro/10_continuous_smoothing.ipynb
       - Missing observations: tutorials/gentle_intro/11_missing_observations.ipynb
+      - Missing observations with `Simulator` + MCMC: tutorials/gentle_intro/11b_missing_observations_simulator_mcmc.ipynb
+      - Missing observations in HMMs: tutorials/gentle_intro/11c_missing_observations_hmms.ipynb
+      - Observation scoring with filters: tutorials/gentle_intro/12_observation_scoring_with_filters.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:

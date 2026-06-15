@@ -5,7 +5,6 @@ Welcome to the `dynestyx` examples page
 ## Getting Started
 
 - [Quickstart](tutorials/quickstart.ipynb) - Minimal introduction to building models in `dynestyx` and performing inference
-- [Observation scoring with filters](tutorials/observation_scoring_with_filters.ipynb) - Use filter-predicted observation distributions to compute Gaussian log-probs, Dawid-Sebastiani scores, CRPS, and energy scores
 - [A Gentle Introduction to Dynestyx](tutorials/gentle_intro/00_index.ipynb) - Multi-part tutorials: NumPyro and Bayesian workflow → discrete-time dynestyx → filtering and MLL → pseudomarginal inference → SVI → continuous-time (SDE, L63) → HMMs → hierarchical / mixed-effect inference with `plate`. These have tons of examples!
 
 ## Gallery
