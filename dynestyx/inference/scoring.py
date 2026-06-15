@@ -1,4 +1,10 @@
-"""Observation-prediction summaries and proper scoring rules for filters."""
+"""Proper scoring rules for predicted observations produced by ``Filter``.
+
+Scoring is configured through :class:`ObservationScoringConfig` and is
+currently supported for continuous-time CD-Dynamax Gaussian filters
+(``ContinuousTimeKFConfig``, ``ContinuousTimeEKFConfig``,
+``ContinuousTimeUKFConfig``, and ``ContinuousTimeEnKFConfig``).
+"""
 
 from __future__ import annotations
 
@@ -53,7 +59,11 @@ def _sample_gaussian_predictive_ensemble(
 
 @dataclasses.dataclass(frozen=True)
 class BaseObservationScore(abc.ABC):
-    """Base class for proper scoring rule configurations."""
+    """Base class for proper scoring rule configurations.
+
+    Subclasses define a per-time score array and the site suffix used when the
+    score is recorded into the NumPyro trace.
+    """
 
     name: str | None = None
 
@@ -83,7 +93,8 @@ class BaseObservationScore(abc.ABC):
 class GaussianLogProbScore(BaseObservationScore):
     """Per-time multivariate Gaussian log-probability score.
 
-    Returns a score array of shape ``(*plate, time, 1)``.
+    Uses predictive Gaussian moments and returns a score array of shape
+    ``(*plate, time, 1)``. Higher values are better.
     """
 
     @property
@@ -113,7 +124,8 @@ class GaussianLogProbScore(BaseObservationScore):
 class DawidSebastianiScore(BaseObservationScore):
     """Per-time Dawid-Sebastiani score under Gaussian predictive moments.
 
-    Returns a score array of shape ``(*plate, time, 1)``.
+    Uses predictive Gaussian moments and returns a score array of shape
+    ``(*plate, time, 1)``. Lower values are better.
     """
 
     @property
@@ -143,7 +155,9 @@ class DawidSebastianiScore(BaseObservationScore):
 class ObservationWiseCRPSScore(BaseObservationScore):
     """Per-observation-component CRPS under Gaussian predictive marginals.
 
-    Returns a score array of shape ``(*plate, time, observation_dim)``.
+    Applies the scalar Gaussian CRPS to each observation component separately
+    and returns a score array of shape ``(*plate, time, observation_dim)``.
+    Lower values are better.
     """
 
     min_variance: float = 1e-12
@@ -181,6 +195,7 @@ class EnergyScore(BaseObservationScore):
     If an explicit predictive observation ensemble is unavailable, this score
     can approximate one by drawing ``n_samples`` observations from the Gaussian
     predictive moments. Returns a score array of shape ``(*plate, time, 1)``.
+    Lower values are better.
     """
 
     beta: float = 1.0
@@ -240,7 +255,36 @@ class EnergyScore(BaseObservationScore):
 
 @dataclasses.dataclass(frozen=True)
 class ObservationScoringConfig:
-    """Configuration for proper scoring rules of predicted observations."""
+    """Configuration for predicted-observation diagnostics and scoring rules.
+
+    Attach an instance to ``Filter(..., scoring_config=...)`` to request
+    per-time score arrays for the one-step-ahead predictive observation
+    distributions produced by the filter.
+
+    Scoring currently supports only continuous-time CD-Dynamax Gaussian
+    filters (`ContinuousTimeKFConfig`, `ContinuousTimeEKFConfig`,
+    `ContinuousTimeUKFConfig`, and `ContinuousTimeEnKFConfig`).
+
+    Attributes:
+        rules: Ordered tuple of score definitions to evaluate at each
+            observation time.
+        record_as_numpyro_sites: If `True`, record each computed score array
+            as a `numpyro.deterministic` site named
+            ``{sample_name}_{rule.site_name}``.
+        unsupported: Policy for requested score rules or sampling modes that
+            are unavailable for the active filter backend. `"raise"` fails
+            immediately; `"skip"` silently omits unsupported rules.
+        target: Whether scores should evaluate the latent predictive
+            distribution or the full data-predictive distribution that also
+            includes observation noise.
+        sample_source: Strategy for obtaining predictive ensembles when a rule
+            needs samples. `"auto"` prefers a backend-provided observation
+            ensemble, then falls back to adding observation noise to a latent
+            ensemble, and finally to Gaussian moments if the rule supports
+            that path.
+        sample_seed: PRNG seed used when Dynestyx needs to synthesize
+            predictive ensembles from moments or latent ensembles plus noise.
+    """
 
     rules: tuple[BaseObservationScore, ...] = dataclasses.field(default_factory=tuple)
     record_as_numpyro_sites: bool = True

@@ -26,9 +26,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cdlgssm_params,
 )
 from dynestyx.inference.observation_predictions import (
-    PredictedObservationOutputs,
-    add_observation_prediction_and_score_sites,
-    enrich_continuous_filter_output,
+    enrich_and_record_continuous_filter_output,
 )
 from dynestyx.inference.scoring import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
@@ -121,10 +119,6 @@ def _add_filter_sites(
     name: str,
     filter_config: ContinuousTimeFilterConfig,
     filtered,
-    *,
-    scoring_config: ObservationScoringConfig | None = None,
-    predictions: PredictedObservationOutputs | None = None,
-    score_arrays: dict | None = None,
 ) -> None:
     """Add marginal log-likelihood factor and filtered state deterministic sites."""
     record_kwargs = _config_to_record_kwargs(filter_config)
@@ -154,14 +148,6 @@ def _add_filter_sites(
     if add_cov_diag:
         diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
-
-    add_observation_prediction_and_score_sites(
-        name,
-        filter_config=filter_config,
-        scoring_config=scoring_config,
-        predictions=predictions,
-        score_arrays={} if score_arrays is None else score_arrays,
-    )
 
 
 def _run_linear_kf(
@@ -271,7 +257,8 @@ def run_continuous_filter(
         ctrl_values=ctrl_values,
     )
 
-    filtered, predictions, score_arrays = enrich_continuous_filter_output(
+    filtered = enrich_and_record_continuous_filter_output(
+        name,
         filtered,
         dynamics=dynamics,
         filter_config=filter_config,
@@ -281,14 +268,7 @@ def run_continuous_filter(
         scoring_config=scoring_config,
     )
 
-    _add_filter_sites(
-        name,
-        filter_config,
-        filtered,
-        scoring_config=scoring_config,
-        predictions=predictions,
-        score_arrays=score_arrays,
-    )
+    _add_filter_sites(name, filter_config, filtered)
 
     return _posterior_sequence_to_dists(
         filtered,

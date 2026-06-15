@@ -58,8 +58,8 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
 from dynestyx.inference.observation_predictions import (
-    add_observation_prediction_and_score_sites,
-    enrich_continuous_filter_output,
+    enrich_and_record_continuous_filter_output,
+    wants_observation_prediction_diagnostics,
 )
 from dynestyx.inference.plate_utils import (
     _array_plate_axis,
@@ -149,21 +149,6 @@ def _default_filter_config(dynamics: DynamicalModel):
     return EnKFConfig()
 
 
-def _has_observation_prediction_requests(config: BaseFilterConfig) -> bool:
-    return any(
-        flag is True
-        for flag in (
-            config.record_predicted_observations_mean,
-            config.record_predicted_observations_cov,
-            config.record_predicted_observations_ensemble,
-        )
-    )
-
-
-def _has_scoring_requests(scoring_config: ObservationScoringConfig | None) -> bool:
-    return scoring_config is not None and len(scoring_config.rules) > 0
-
-
 @dataclasses.dataclass
 class Filter(BaseLogFactorAdder):
     r"""Performs Bayesian filtering to compute the filtering distribution $p(x_t | y_{1:t})$ and the marginal likelihood $\log p(y_{1:T})$.
@@ -198,7 +183,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](../filter_configs.md).
+    [Available filter configurations](filter_configs.md).
 
     Defaults
     --------
@@ -211,11 +196,28 @@ class Filter(BaseLogFactorAdder):
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
         - What gets recorded to the trace (means/covariances, particles/weights,
         etc.) depends on `filter_config.record_*` and the backend implementation.
+        - Predicted-observation summaries and scoring rules are configured
+        through `filter_config.record_predicted_observations_*` and
+        `scoring_config`.
+        - Observation scoring currently supports only continuous-time
+        CD-Dynamax Gaussian filters:
+        `ContinuousTimeKFConfig`, `ContinuousTimeEKFConfig`,
+        `ContinuousTimeUKFConfig`, and `ContinuousTimeEnKFConfig`.
+        - Scoring is defined on the one-step-ahead predictive observation
+        distributions \(p(y_t \mid y_{1:t-1}, \theta)\), not on the filtered
+        state posterior itself.
 
     Attributes:
         filter_config: Selects the filtering algorithm and its hyperparameters.
             If `None`, a reasonable default is chosen based on whether the model
             is continuous-time or discrete-time.
+        scoring_config: Optional configuration for predicted-observation
+            diagnostics and proper scoring rules. When provided, Dynestyx
+            computes one score array per requested rule at the observation
+            times and can record those arrays as `numpyro.deterministic`
+            sites. Use the `record_predicted_observations_*` fields on the
+            filter config to also record predictive means, covariances, or
+            ensembles.
     """
 
     filter_config: BaseFilterConfig | None = None
@@ -267,11 +269,13 @@ class Filter(BaseLogFactorAdder):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
-        wants_prediction_diagnostics = _has_observation_prediction_requests(config)
-        wants_scoring = _has_scoring_requests(self.scoring_config)
         if (
-            wants_prediction_diagnostics or wants_scoring
-        ) and not dynamics.continuous_time:
+            wants_observation_prediction_diagnostics(
+                config,
+                scoring_config=self.scoring_config,
+            )
+            and not dynamics.continuous_time
+        ):
             raise NotImplementedError(
                 "Predicted observation summaries and observation scoring rules are "
                 "currently supported only for continuous-time cd_dynamax Gaussian "
@@ -566,7 +570,8 @@ class Filter(BaseLogFactorAdder):
             )
 
         if output_kind == "continuous":
-            outputs, predictions, score_arrays = enrich_continuous_filter_output(
+            outputs = enrich_and_record_continuous_filter_output(
+                name,
                 outputs,
                 dynamics=dynamics,
                 filter_config=config,
@@ -575,13 +580,6 @@ class Filter(BaseLogFactorAdder):
                 ctrl_values=ctrl_values,
                 scoring_config=scoring_config,
                 plate_shapes=plate_shapes,
-            )
-            add_observation_prediction_and_score_sites(
-                name,
-                filter_config=config,
-                scoring_config=scoring_config,
-                predictions=predictions,
-                score_arrays=score_arrays,
             )
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:

@@ -1,4 +1,10 @@
-"""Canonical predicted-observation summaries and scoring helpers."""
+"""Canonical predicted-observation summaries and scoring helpers.
+
+These utilities translate backend-specific predictive-observation fields into a
+small Dynestyx-level representation used for scoring and trace recording. They
+intentionally do not extend ``posterior.posterior_extras`` with Dynestyx-owned
+keys, so backend storage details do not become a second public API surface.
+"""
 
 from __future__ import annotations
 
@@ -157,25 +163,15 @@ def _filter_requests_scoring(
     return scoring_config is not None and len(scoring_config.rules) > 0
 
 
-def _merge_posterior_extras(
-    posterior: Any,
+def wants_observation_prediction_diagnostics(
+    filter_config: BaseFilterConfig,
     *,
-    predictions: PredictedObservationOutputs | None,
-    scores: Mapping[str, ObservationScoreArray] | None,
-) -> Any:
-    extras = dict(posterior.posterior_extras or {})
-    if predictions is not None:
-        extras["dynestyx_predicted_observations"] = {
-            "mean": predictions.mean,
-            "cov": predictions.cov,
-            "obs_cov": predictions.obs_cov,
-            "ensemble": predictions.ensemble,
-            "obs_ensemble": predictions.obs_ensemble,
-            "noise_cov": predictions.noise_cov,
-        }
-    if scores:
-        extras["dynestyx_scores"] = dict(scores)
-    return posterior._replace(posterior_extras=extras)
+    scoring_config: ObservationScoringConfig | None = None,
+) -> bool:
+    """Return whether predictive-observation enrichment work is needed."""
+    return _filter_requests_observation_predictions(
+        filter_config
+    ) or _filter_requests_scoring(scoring_config)
 
 
 def _build_prediction_outputs(
@@ -291,7 +287,12 @@ def enrich_continuous_filter_output(
     PredictedObservationOutputs | None,
     dict[str, ObservationScoreArray],
 ]:
-    """Compute canonical predicted-observation outputs and scores."""
+    """Compute canonical predicted-observation outputs and score arrays.
+
+    The returned ``posterior`` is the original backend object. Canonical
+    predicted-observation summaries and score arrays are returned separately
+    instead of being written back into ``posterior.posterior_extras``.
+    """
     wants_predictions = _filter_requests_observation_predictions(filter_config)
     wants_scores = _filter_requests_scoring(scoring_config)
     if not wants_predictions and not wants_scores:
@@ -368,15 +369,7 @@ def enrich_continuous_filter_output(
                     continue
                 raise
 
-    return (
-        _merge_posterior_extras(
-            posterior,
-            predictions=predictions,
-            scores=score_arrays,
-        ),
-        predictions,
-        score_arrays,
-    )
+    return posterior, predictions, score_arrays
 
 
 def _select_scoring_inputs(
@@ -529,9 +522,46 @@ def add_observation_prediction_and_score_sites(
             numpyro.deterministic(f"{name}_{site_name}", score_arr)
 
 
+def enrich_and_record_continuous_filter_output(
+    name: str,
+    posterior: Any,
+    *,
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    obs_times: Real[Array, "... time"],
+    obs_values: Real[Array, "... time observation_dim"] | Real[Array, "... time"],
+    ctrl_values: Real[Array, "... control_time control_dim"]
+    | Real[Array, "... control_time"]
+    | None,
+    scoring_config: ObservationScoringConfig | None = None,
+    plate_shapes: tuple[int, ...] = (),
+) -> Any:
+    """Enrich a continuous filter result and record requested trace sites."""
+    posterior, predictions, score_arrays = enrich_continuous_filter_output(
+        posterior,
+        dynamics=dynamics,
+        filter_config=filter_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
+        plate_shapes=plate_shapes,
+    )
+    add_observation_prediction_and_score_sites(
+        name,
+        filter_config=filter_config,
+        scoring_config=scoring_config,
+        predictions=predictions,
+        score_arrays=score_arrays,
+    )
+    return posterior
+
+
 __all__ = [
     "PredictedObservationOutputs",
     "SupportedObservationPredictionConfig",
     "add_observation_prediction_and_score_sites",
     "enrich_continuous_filter_output",
+    "enrich_and_record_continuous_filter_output",
+    "wants_observation_prediction_diagnostics",
 ]

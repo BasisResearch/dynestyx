@@ -72,6 +72,7 @@ nav:
       - Inference:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/filter_configs.md
+        - Scoring: api_reference/public/inference/scoring.md
         - Smoothers: api_reference/public/inference/smoothers.md
         - SmootherOptions: api_reference/public/inference/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
@@ -101,6 +102,7 @@ nav:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
+        - Scoring: api_reference/developer/inference/scoring.md
         - Smoothers: api_reference/developer/inference/smoothers.md
         - SmootherOptions: api_reference/developer/inference/smoother_configs.md
         - Smoothing Handoff: smoothing_handoff.md

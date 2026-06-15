@@ -2,6 +2,8 @@
 
 The single `Filter()` handler is directed to the appropriate filtering algorithm via the provided `FilterConfig`. We provide a summary below, as well as an exhaustive list of classes.
 
+The shared `record_predicted_observations_*` fields on filter configs control whether predictive observation means, covariances, or ensembles are recorded to the NumPyro trace. Those recordings are also the main inputs for observation scoring; see the [Scoring](scoring.md) page for details.
+
 ## Available filter configurations
 
 | Config class               | Time domain         | When it fits best |
