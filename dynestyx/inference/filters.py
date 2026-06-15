@@ -361,7 +361,7 @@ class Filter(BaseLogFactorAdder):
                 )
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
+            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_continuous_filter(
                     dyn,
                     cast(ContinuousTimeFilterConfig, config),
@@ -376,12 +376,12 @@ class Filter(BaseLogFactorAdder):
             output_kind = "hmm"
             uses_preprocessed_obs = True
 
-            def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
+            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_hmm_filter(
                     dyn,
                     obs_times=ot,
                     obs_values=ov,
-                    _obs_values_filled=ovs,
+                    _obs_values_filled=ovf,
                     _obs_mask=om,
                     ctrl_values=cv,
                 )
@@ -390,7 +390,7 @@ class Filter(BaseLogFactorAdder):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
+                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cuthbert_filter(
                         dyn,
                         config,
@@ -404,7 +404,7 @@ class Filter(BaseLogFactorAdder):
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
-                def compute_output(dyn, ot, ov, ovs, om, ct, cv, k):
+                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
@@ -449,10 +449,10 @@ class Filter(BaseLogFactorAdder):
         )
         k_axis = 0 if keys is not None else None
         if uses_preprocessed_obs:
-            ovs_axis = _array_plate_axis(_obs_values_filled, plate_shapes)
+            ovf_axis = _array_plate_axis(_obs_values_filled, plate_shapes)
             om_axis = _array_plate_axis(_obs_mask, plate_shapes)
         else:
-            ovs_axis = None
+            ovf_axis = None
             om_axis = None
             _obs_values_filled = None
             _obs_mask = None
@@ -460,7 +460,7 @@ class Filter(BaseLogFactorAdder):
             dyn_axes,
             ot_axis,
             ov_axis,
-            ovs_axis,
+            ovf_axis,
             om_axis,
             ct_axis,
             cv_axis,
@@ -482,7 +482,7 @@ class Filter(BaseLogFactorAdder):
         if ic_batched:
             orig_ic = dynamics.initial_condition
 
-            def compute_output_member(dyn, ot, ov, ovs, om, ct, cv, k, *idxs):
+            def compute_output_member(dyn, ot, ov, ovf, om, ct, cv, k, *idxs):
                 member_ic = _slice_dist_for_plate_member(
                     orig_ic, plate_shapes, tuple(idxs)
                 )
@@ -492,7 +492,7 @@ class Filter(BaseLogFactorAdder):
                     member_ic,
                     is_leaf=lambda x: x is None,
                 )
-                return compute_output(dyn, ot, ov, ovs, om, ct, cv, k)
+                return compute_output(dyn, ot, ov, ovf, om, ct, cv, k)
 
             idx_arrays = [jnp.arange(s) for s in plate_shapes]
             n_plates = len(plate_shapes)
