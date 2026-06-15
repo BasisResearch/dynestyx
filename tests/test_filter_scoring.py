@@ -104,35 +104,14 @@ def _run_conditioned_trace(
 @pytest.mark.parametrize(
     ("config_name", "filter_config"),
     [
-        (
-            "kf",
-            ContinuousTimeKFConfig(
-                record_predicted_observations_mean=True,
-                record_predicted_observations_cov=True,
-            ),
-        ),
-        (
-            "ekf",
-            ContinuousTimeEKFConfig(
-                record_predicted_observations_mean=True,
-                record_predicted_observations_cov=True,
-            ),
-        ),
-        (
-            "ukf",
-            ContinuousTimeUKFConfig(
-                record_predicted_observations_mean=True,
-                record_predicted_observations_cov=True,
-            ),
-        ),
+        ("kf", ContinuousTimeKFConfig()),
+        ("ekf", ContinuousTimeEKFConfig()),
+        ("ukf", ContinuousTimeUKFConfig()),
         (
             "enkf",
             ContinuousTimeEnKFConfig(
                 n_particles=16,
                 crn_seed=jr.PRNGKey(7),
-                record_predicted_observations_mean=True,
-                record_predicted_observations_cov=True,
-                record_predicted_observations_ensemble=True,
             ),
         ),
     ],
@@ -186,21 +165,11 @@ def test_continuous_filter_scoring_sites_match_pure_backend_outputs(
 
     assert_tree_all_finite(
         {
-            "pred_mean": tr["f_predicted_observations_mean"]["value"],
-            "pred_cov": tr["f_predicted_observations_cov"]["value"],
             "gaussian_log_prob": tr["f_gaussian_log_prob"]["value"],
             "dawid_sebastiani": tr["f_dawid_sebastiani"]["value"],
             "observation_wise_crps": tr["f_observation_wise_crps"]["value"],
         },
         where=f"{config_name} scoring outputs",
-    )
-    assert jnp.allclose(
-        tr["f_predicted_observations_mean"]["value"],
-        predictions.mean,
-    )
-    assert jnp.allclose(
-        tr["f_predicted_observations_cov"]["value"],
-        predictions.cov,
     )
     assert jnp.allclose(
         tr["f_gaussian_log_prob"]["value"],
@@ -215,6 +184,104 @@ def test_continuous_filter_scoring_sites_match_pure_backend_outputs(
         score_arrays["observation_wise_crps"],
     )
 
+    assert "f_predicted_observations_mean" not in tr
+    assert "f_predicted_observations_cov" not in tr
+    assert "f_predicted_observations_ensemble" not in tr
+
+
+@pytest.mark.parametrize(
+    ("config_name", "filter_config"),
+    [
+        (
+            "kf",
+            ContinuousTimeKFConfig(
+                record_predicted_observations_mean=True,
+                record_predicted_observations_cov=True,
+            ),
+        ),
+        (
+            "ekf",
+            ContinuousTimeEKFConfig(
+                record_predicted_observations_mean=True,
+                record_predicted_observations_cov=True,
+            ),
+        ),
+        (
+            "ukf",
+            ContinuousTimeUKFConfig(
+                record_predicted_observations_mean=True,
+                record_predicted_observations_cov=True,
+            ),
+        ),
+        (
+            "enkf",
+            ContinuousTimeEnKFConfig(
+                n_particles=16,
+                crn_seed=jr.PRNGKey(7),
+                record_predicted_observations_mean=True,
+                record_predicted_observations_cov=True,
+                record_predicted_observations_ensemble=True,
+            ),
+        ),
+    ],
+)
+def test_continuous_filter_predicted_observation_recording_sites_match_backend_outputs(
+    config_name,
+    filter_config,
+):
+    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
+    dynamics = _make_continuous_lti_dynamics(TRUE_RHO)
+    key = (
+        filter_config.crn_seed if filter_config.crn_seed is not None else jr.PRNGKey(3)
+    )
+    filtered = compute_continuous_filter(
+        dynamics,
+        filter_config,
+        key=key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    _, predictions, score_arrays = enrich_continuous_filter_output(
+        filtered,
+        dynamics=dynamics,
+        filter_config=filter_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_values=ctrl_values,
+        scoring_config=None,
+    )
+    assert predictions is not None
+    assert score_arrays == {}
+    assert predictions.mean is not None
+    assert predictions.cov is not None
+
+    tr = _run_conditioned_trace(
+        filter_config,
+        None,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
+    assert_tree_all_finite(
+        {
+            "pred_mean": tr["f_predicted_observations_mean"]["value"],
+            "pred_cov": tr["f_predicted_observations_cov"]["value"],
+        },
+        where=f"{config_name} predicted observation recordings",
+    )
+    assert jnp.allclose(
+        tr["f_predicted_observations_mean"]["value"],
+        predictions.mean,
+    )
+    assert jnp.allclose(
+        tr["f_predicted_observations_cov"]["value"],
+        predictions.cov,
+    )
+
     if isinstance(filter_config, ContinuousTimeEnKFConfig):
         assert "f_predicted_observations_ensemble" in tr
         assert predictions.ensemble is not None
@@ -226,7 +293,7 @@ def test_continuous_filter_scoring_sites_match_pure_backend_outputs(
 
 def test_scoring_config_can_compute_without_recording_sites():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
-    filter_config = ContinuousTimeKFConfig(record_predicted_observations_mean=True)
+    filter_config = ContinuousTimeKFConfig()
     scoring_config = ObservationScoringConfig(
         rules=(GaussianLogProbScore(),),
         record_as_numpyro_sites=False,
@@ -239,8 +306,27 @@ def test_scoring_config_can_compute_without_recording_sites():
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
-    assert "f_predicted_observations_mean" in tr
     assert "f_gaussian_log_prob" not in tr
+
+
+def test_scoring_does_not_require_predicted_observation_recording():
+    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
+    filter_config = ContinuousTimeKFConfig()
+    scoring_config = ObservationScoringConfig(
+        rules=(GaussianLogProbScore(),),
+        record_as_numpyro_sites=True,
+    )
+    tr = _run_conditioned_trace(
+        filter_config,
+        scoring_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    assert "f_gaussian_log_prob" in tr
+    assert "f_predicted_observations_mean" not in tr
+    assert "f_predicted_observations_cov" not in tr
 
 
 def test_energy_score_records_for_enkf():
@@ -248,7 +334,6 @@ def test_energy_score_records_for_enkf():
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,
         crn_seed=jr.PRNGKey(11),
-        record_predicted_observations_ensemble=True,
     )
     scoring_config = ObservationScoringConfig(
         rules=(EnergyScore(beta=1.0), EnergyScore(beta=1.5)),
@@ -295,7 +380,6 @@ def test_enkf_energy_score_defaults_to_data_predictive_ensemble():
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,
         crn_seed=jr.PRNGKey(17),
-        record_predicted_observations_ensemble=True,
     )
     scoring_config = ObservationScoringConfig(
         rules=(EnergyScore(beta=1.0),),
@@ -342,7 +426,6 @@ def test_enkf_energy_score_can_target_latent_predictive_ensemble():
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,
         crn_seed=jr.PRNGKey(19),
-        record_predicted_observations_ensemble=True,
     )
     scoring_config = ObservationScoringConfig(
         rules=(EnergyScore(beta=1.0),),
@@ -380,7 +463,7 @@ def test_enkf_energy_score_can_target_latent_predictive_ensemble():
 
 def test_kf_gaussian_scores_can_target_latent_predictive_distribution():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
-    filter_config = ContinuousTimeKFConfig(record_predicted_observations_mean=True)
+    filter_config = ContinuousTimeKFConfig()
     scoring_config = ObservationScoringConfig(
         rules=(GaussianLogProbScore(),),
         target="latent_predictive",
@@ -423,9 +506,7 @@ def test_data_predictive_backend_ensemble_is_rejected():
         match="data-predictive observation ensembles are unavailable",
     ):
         _run_conditioned_trace(
-            ContinuousTimeKFConfig(
-                record_predicted_observations_mean=True,
-            ),
+            ContinuousTimeKFConfig(),
             ObservationScoringConfig(
                 rules=(EnergyScore(beta=1.0),),
                 target="data_predictive",
@@ -443,7 +524,6 @@ def test_data_predictive_backend_ensemble_is_used_when_available():
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,
         crn_seed=jr.PRNGKey(31),
-        record_predicted_observations_ensemble=True,
     )
     scoring_config = ObservationScoringConfig(
         rules=(EnergyScore(beta=1.0),),
@@ -552,7 +632,7 @@ def test_data_predictive_auto_prefers_backend_observation_ensemble():
 
 def test_energy_score_can_sample_gaussian_ensemble_for_kf():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
-    filter_config = ContinuousTimeKFConfig(record_predicted_observations_mean=True)
+    filter_config = ContinuousTimeKFConfig()
     scoring_config = ObservationScoringConfig(
         rules=(
             GaussianLogProbScore(),
@@ -598,7 +678,7 @@ def test_energy_score_requires_n_samples_without_ensemble():
         match="together with `n_samples`",
     ):
         _run_conditioned_trace(
-            ContinuousTimeKFConfig(record_predicted_observations_mean=True),
+            ContinuousTimeKFConfig(),
             ObservationScoringConfig(rules=(EnergyScore(beta=1.0),)),
             obs_times=obs_times,
             obs_values=obs_values,
@@ -614,10 +694,7 @@ def test_continuous_dpf_scoring_is_not_supported_yet():
         match="ContinuousTimeDPFConfig",
     ):
         _run_conditioned_trace(
-            ContinuousTimeDPFConfig(
-                n_particles=16,
-                record_predicted_observations_mean=True,
-            ),
+            ContinuousTimeDPFConfig(n_particles=16),
             ObservationScoringConfig(rules=(GaussianLogProbScore(),)),
             obs_times=obs_times,
             obs_values=obs_values,

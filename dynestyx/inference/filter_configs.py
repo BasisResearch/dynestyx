@@ -48,15 +48,16 @@ class BaseFilterConfig(abc.ABC):
             at each step (particle-based filters only).
         record_filtered_log_weights (bool | None): Save the log importance
             weights at each step (particle-based filters only).
-        record_predicted_observations_mean (bool | None): Save the predicted
+        record_predicted_observations_mean (bool): Save the predicted
             observation mean at each observation time, before conditioning on
-            that observation.
-        record_predicted_observations_cov (bool | None): Save the predicted
+            that observation. Defaults to `False`, and scoring can be used
+            without automatically recording predictive summaries.
+        record_predicted_observations_cov (bool): Save the predicted
             observation covariance at each observation time, before
-            conditioning on that observation.
-        record_predicted_observations_ensemble (bool | None): Save the
+            conditioning on that observation. Defaults to `False`.
+        record_predicted_observations_ensemble (bool): Save the
             predicted observation ensemble at each observation time
-            (ensemble-based filters only).
+            (ensemble-based filters only). Defaults to `False`.
         record_max_elems (int): Hard cap on total scalar elements saved across
             all `record_*` sites. Prevents accidentally filling device memory
             for long sequences or large state spaces. Defaults to `100_000`.
@@ -84,9 +85,9 @@ class BaseFilterConfig(abc.ABC):
     record_filtered_particles: bool | None = None
     record_filtered_log_weights: bool | None = None
     record_filtered_states_chol_cov: bool | None = None
-    record_predicted_observations_mean: bool | None = None
-    record_predicted_observations_cov: bool | None = None
-    record_predicted_observations_ensemble: bool | None = None
+    record_predicted_observations_mean: bool = False
+    record_predicted_observations_cov: bool = False
+    record_predicted_observations_ensemble: bool = False
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
     cov_rescaling: float | None = None

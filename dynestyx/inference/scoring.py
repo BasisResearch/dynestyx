@@ -270,7 +270,9 @@ class ObservationScoringConfig:
             observation time.
         record_as_numpyro_sites: If `True`, record each computed score array
             as a `numpyro.deterministic` site named
-            ``{sample_name}_{rule.site_name}``.
+            ``{sample_name}_{rule.site_name}``. This is independent of the
+            `record_predicted_observations_*` fields on the filter config:
+            score recording does not require predictive summary recording.
         unsupported: Policy for requested score rules or sampling modes that
             are unavailable for the active filter backend. `"raise"` fails
             immediately; `"skip"` silently omits unsupported rules.

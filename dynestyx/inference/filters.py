@@ -215,9 +215,11 @@ class Filter(BaseLogFactorAdder):
             diagnostics and proper scoring rules. When provided, Dynestyx
             computes one score array per requested rule at the observation
             times and can record those arrays as `numpyro.deterministic`
-            sites. Use the `record_predicted_observations_*` fields on the
-            filter config to also record predictive means, covariances, or
-            ensembles.
+            sites. This does not require recording predictive means,
+            covariances, or ensembles. Use the
+            `record_predicted_observations_*` fields on the filter config only
+            when you also want those predictive summaries returned explicitly
+            in the trace.
     """
 
     filter_config: BaseFilterConfig | None = None
