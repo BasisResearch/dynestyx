@@ -12,6 +12,7 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -26,7 +27,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
 )
-from dynestyx.inference.plate_utils import _slice_time_axis, _time_len_from_array
+from dynestyx.inference.plate_utils import _time_len_from_array
 from dynestyx.inference.scoring import (
     DawidSebastianiScore,
     EnergyScore,
@@ -127,22 +128,27 @@ def _observation_noise_covariance_sequence(
     t_len = _time_len_from_array(obs_times, plate_shapes)
     state_shape = (*plate_shapes, dynamics.state_dim)
     x_probe = jnp.zeros(state_shape, dtype=jnp.asarray(obs_times).dtype)
-    covs = []
-    for t_idx in range(t_len):
-        t = _slice_time_axis(obs_times, t_idx, plate_shapes)
-        u_t = (
-            None
-            if ctrl_values is None
-            else _slice_time_axis(ctrl_values, t_idx, plate_shapes)
-        )
+
+    obs_times_time_major = jnp.moveaxis(obs_times, len(plate_shapes), 0)
+    ctrl_values_time_major = (
+        None if ctrl_values is None else jnp.moveaxis(ctrl_values, len(plate_shapes), 0)
+    )
+
+    def covariance_at_time(
+        t_idx: Array,
+    ) -> Float[Array, "*plate observation_dim observation_dim"]:
+        t = obs_times_time_major[t_idx]
+        u_t = None if ctrl_values_time_major is None else ctrl_values_time_major[t_idx]
         obs_dist = dynamics.observation_model(x_probe, u_t, t)
         if not isinstance(obs_dist, dist.MultivariateNormal):
             raise NotImplementedError(
                 "Predicted observation scoring currently requires Gaussian "
                 "observation models that produce MultivariateNormal distributions."
             )
-        covs.append(jnp.asarray(obs_dist.covariance_matrix))
-    return jnp.stack(covs, axis=len(plate_shapes))
+        return jnp.asarray(obs_dist.covariance_matrix)
+
+    covs_time_major = jax.lax.map(covariance_at_time, jnp.arange(t_len))
+    return jnp.moveaxis(covs_time_major, 0, len(plate_shapes))
 
 
 def _filter_requests_observation_predictions(filter_config: BaseFilterConfig) -> bool:
@@ -339,9 +345,8 @@ def enrich_continuous_filter_output(
         obs_arr = _canonicalize_observations(
             jnp.asarray(obs_values), plate_shapes=plate_shapes
         )
-        score_mean, score_cov, score_ensemble = _select_scoring_inputs(
+        score_mean, score_cov = _select_scoring_inputs(
             predictions,
-            scoring_config=scoring_config,
         )
         for rule in scoring_config.rules:
             try:
@@ -359,6 +364,10 @@ def enrich_continuous_filter_output(
                         pred_cov=score_cov,
                     )
                 elif isinstance(rule, EnergyScore):
+                    score_ensemble = _select_scoring_ensemble(
+                        predictions,
+                        scoring_config=scoring_config,
+                    )
                     score_arrays[rule.site_name] = rule.compute(
                         obs_values=obs_arr,
                         pred_mean=score_mean,
@@ -379,12 +388,9 @@ def enrich_continuous_filter_output(
 
 def _select_scoring_inputs(
     predictions: PredictedObservationOutputs,
-    *,
-    scoring_config: ObservationScoringConfig,
 ) -> tuple[
     Float[Array, "*plate time observation_dim"],
     Float[Array, "*plate time observation_dim observation_dim"],
-    Float[Array, "*plate time n_members observation_dim"] | None,
 ]:
     assert predictions.mean is not None
     if predictions.obs_cov is None:
@@ -394,10 +400,6 @@ def _select_scoring_inputs(
     return (
         predictions.mean,
         predictions.obs_cov,
-        _select_scoring_ensemble(
-            predictions,
-            scoring_config=scoring_config,
-        ),
     )
 
 

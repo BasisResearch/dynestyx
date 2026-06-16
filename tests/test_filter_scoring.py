@@ -508,6 +508,44 @@ def test_kf_gaussian_scores_use_predictive_observation_covariance():
     assert not jnp.allclose(score_arrays["gaussian_log_prob"], latent_score)
 
 
+def test_gaussian_scores_ignore_ensemble_sample_source_when_unused():
+    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
+    filter_config = ContinuousTimeKFConfig()
+    scoring_config = ObservationScoringConfig(
+        rules=(GaussianLogProbScore(),),
+        sample_source="backend_ensemble",
+    )
+    tr = _run_conditioned_trace(
+        filter_config,
+        scoring_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    assert "f_gaussian_log_prob" in tr
+
+
+def test_unsupported_skip_can_keep_gaussian_scores_without_ensemble_source():
+    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
+    filter_config = ContinuousTimeKFConfig()
+    scoring_config = ObservationScoringConfig(
+        rules=(GaussianLogProbScore(), EnergyScore(beta=1.0)),
+        sample_source="backend_ensemble",
+        unsupported="skip",
+    )
+    tr = _run_conditioned_trace(
+        filter_config,
+        scoring_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    assert "f_gaussian_log_prob" in tr
+    assert "f_energy_score" not in tr
+
+
 def test_backend_observation_ensemble_source_is_rejected_when_unavailable():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     with pytest.raises(
