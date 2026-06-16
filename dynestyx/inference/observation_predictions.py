@@ -384,6 +384,7 @@ def enrich_continuous_filter_output(
                         pred_mean=score_mean,
                         pred_cov=score_cov,
                         pred_ensemble=score_ensemble,
+                        sample_seed=scoring_config.sample_seed,
                     )
                 else:
                     raise NotImplementedError(

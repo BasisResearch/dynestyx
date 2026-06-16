@@ -733,8 +733,9 @@ def test_energy_score_can_sample_gaussian_ensemble_for_kf():
     scoring_config = ObservationScoringConfig(
         rules=(
             GaussianLogProbScore(),
-            EnergyScore(beta=1.0, n_samples=64, sample_seed=5),
+            EnergyScore(beta=1.0, n_samples=64),
         ),
+        sample_seed=5,
     )
     dynamics = _make_continuous_lti_dynamics(TRUE_RHO)
     filtered = compute_continuous_filter(

@@ -196,6 +196,9 @@ class EnergyScore(BaseObservationScore):
     predictive observation moments. Returns a score array of shape
     ``(*plate, time, 1)``. Lower values are better.
 
+    Under `Filter(..., scoring_config=...)`, any synthetic sampling needed by
+    this score uses `ObservationScoringConfig.sample_seed`.
+
     `vectorized_pairwise=True` is faster for moderate ensemble sizes but
     materializes the full pairwise distance tensor. Setting it to `False`
     uses a lower-memory `lax.scan` path at the cost of extra compute.
@@ -203,7 +206,6 @@ class EnergyScore(BaseObservationScore):
 
     beta: float = 1.0
     n_samples: int | None = None
-    sample_seed: int = 0
     vectorized_pairwise: bool = True
 
     def __post_init__(self) -> None:
@@ -227,6 +229,7 @@ class EnergyScore(BaseObservationScore):
         pred_mean: Float[Array, "*plate time observation_dim"] | None = None,
         pred_cov: Float[Array, "*plate time observation_dim observation_dim"]
         | None = None,
+        sample_seed: int = 0,
         **kwargs,
     ) -> Float[Array, "*plate time 1"]:
         if pred_ensemble is None:
@@ -244,7 +247,7 @@ class EnergyScore(BaseObservationScore):
                 pred_mean=pred_mean,
                 pred_cov=pred_cov,
                 n_samples=self.n_samples,
-                sample_seed=self.sample_seed,
+                sample_seed=sample_seed,
             )
         obs_expanded = obs_values[..., None, :]
         first_term = jnp.mean(
@@ -308,8 +311,10 @@ class ObservationScoringConfig:
             backend-provided predictive observation ensemble, then falls back
             to adding observation noise to a latent predictive ensemble, and
             finally to Gaussian moments if the rule supports that path.
-        sample_seed: PRNG seed used when Dynestyx needs to synthesize
-            predictive ensembles from moments or latent ensembles plus noise.
+        sample_seed: PRNG seed used whenever Dynestyx needs to synthesize
+            predictive observation samples during scoring, whether by adding
+            observation noise to a latent predictive ensemble or by drawing
+            from Gaussian predictive moments for a rule such as `EnergyScore`.
     """
 
     rules: tuple[BaseObservationScore, ...] = dataclasses.field(default_factory=tuple)
