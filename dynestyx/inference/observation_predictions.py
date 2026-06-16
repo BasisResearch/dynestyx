@@ -36,6 +36,7 @@ from dynestyx.inference.scoring import (
     ObservationWiseCRPSScore,
 )
 from dynestyx.models import DynamicalModel
+from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.utils import _should_record_field
 
 type SupportedObservationPredictionConfig = (
@@ -126,6 +127,16 @@ def _observation_noise_covariance_sequence(
     plate_shapes: tuple[int, ...],
 ) -> Float[Array, "*plate time observation_dim observation_dim"]:
     t_len = _time_len_from_array(obs_times, plate_shapes)
+    obs_model = dynamics.observation_model
+    if isinstance(
+        obs_model, (LinearGaussianObservation, GaussianObservation)
+    ) and not callable(obs_model.R):
+        noise_cov = jnp.asarray(obs_model.R)
+        return jnp.broadcast_to(
+            noise_cov[..., None, :, :],
+            (*plate_shapes, t_len, *noise_cov.shape[-2:]),
+        )
+
     state_shape = (*plate_shapes, dynamics.state_dim)
     x_probe = jnp.zeros(state_shape, dtype=jnp.asarray(obs_times).dtype)
 

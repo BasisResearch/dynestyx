@@ -33,7 +33,7 @@ dependencies = [
     "effectful>=0.2.0",
     "cuthbert>=0.0.10",
     "cuthbertlib>=0.0.10",
-    "cd-dynamax @ git+https://github.com/hd-UQ/cd_dynamax.git@ml-return-ypreds",
+    "cd-dynamax @ git+https://github.com/hd-UQ/cd_dynamax.git@0fd1bbf9dba5154af70d9dae9b925e572c023368",
     "matplotlib>=3.10.7",
     "numpyro>=0.19.0",
     "pytest>=9.0.1",

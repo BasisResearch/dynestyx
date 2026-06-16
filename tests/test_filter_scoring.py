@@ -19,6 +19,7 @@ from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
     compute_continuous_filter,
 )
 from dynestyx.inference.observation_predictions import (
+    _observation_noise_covariance_sequence,
     enrich_continuous_filter_output,
 )
 from dynestyx.inference.scoring import (
@@ -28,6 +29,7 @@ from dynestyx.inference.scoring import (
     ObservationScoringConfig,
     ObservationWiseCRPSScore,
 )
+from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.simulators import SDESimulator
 from tests.test_utils import assert_tree_all_finite
 
@@ -81,6 +83,56 @@ def _make_observations():
             ctrl_values=ctrl_values,
         )
     return obs_times, samples["f_observations"][0, 0], ctrl_times, ctrl_values
+
+
+def test_observation_noise_covariance_sequence_uses_constant_structured_R():
+    obs_times = jnp.linspace(0.0, 0.5, 6)
+    R = jnp.array([[1.0]])
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -0.5 * x,
+            diffusion=dsx.ScalarDiffusion(0.1, bm_dim=1),
+        ),
+        observation_model=GaussianObservation(
+            h=lambda x, u, t: x,
+            R=R,
+        ),
+    )
+
+    covs = _observation_noise_covariance_sequence(
+        dynamics,
+        obs_times=obs_times,
+        ctrl_values=None,
+        plate_shapes=(),
+    )
+    assert jnp.allclose(covs, jnp.broadcast_to(R[None, :, :], covs.shape))
+
+
+def test_observation_noise_covariance_sequence_falls_back_for_callable_R():
+    obs_times = jnp.linspace(0.0, 0.5, 6)
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -0.5 * x,
+            diffusion=dsx.ScalarDiffusion(0.1, bm_dim=1),
+        ),
+        observation_model=LinearGaussianObservation(
+            H=jnp.eye(1),
+            R=lambda t: jnp.array([[1.0 + t]]),
+        ),
+    )
+
+    covs = _observation_noise_covariance_sequence(
+        dynamics,
+        obs_times=obs_times,
+        ctrl_values=None,
+        plate_shapes=(),
+    )
+    expected = (1.0 + obs_times)[:, None, None]
+    assert jnp.allclose(covs, expected)
 
 
 def _run_conditioned_trace(
