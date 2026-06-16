@@ -31,7 +31,6 @@ from dynestyx.inference.scoring import (
     DawidSebastianiScore,
     EnergyScore,
     GaussianLogProbScore,
-    ObservationScoreArray,
     ObservationScoringConfig,
     ObservationWiseCRPSScore,
 )
@@ -285,7 +284,10 @@ def enrich_continuous_filter_output(
 ) -> tuple[
     Any,
     PredictedObservationOutputs | None,
-    dict[str, ObservationScoreArray],
+    dict[
+        str,
+        Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"],
+    ],
 ]:
     """Compute canonical predicted-observation outputs and score arrays.
 
@@ -328,7 +330,10 @@ def enrich_continuous_filter_output(
         plate_shapes=plate_shapes,
     )
 
-    score_arrays: dict[str, ObservationScoreArray] = {}
+    score_arrays: dict[
+        str,
+        Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"],
+    ] = {}
     if wants_scores:
         assert scoring_config is not None
         obs_arr = _canonicalize_observations(
@@ -382,23 +387,9 @@ def _select_scoring_inputs(
     Float[Array, "*plate time n_members observation_dim"] | None,
 ]:
     assert predictions.mean is not None
-    if scoring_config.target == "latent_predictive":
-        if predictions.cov is None:
-            raise NotImplementedError(
-                "Latent-predictive scoring requires predictive observation covariance."
-            )
-        return (
-            predictions.mean,
-            predictions.cov,
-            _select_scoring_ensemble(
-                predictions,
-                scoring_config=scoring_config,
-            ),
-        )
-
     if predictions.obs_cov is None:
         raise NotImplementedError(
-            "Data-predictive scoring requires predictive observation covariance."
+            "Observation scoring requires predictive observation covariance."
         )
     return (
         predictions.mean,
@@ -418,30 +409,11 @@ def _select_scoring_ensemble(
     if scoring_config.sample_source == "gaussian_moments":
         return None
 
-    if scoring_config.target == "latent_predictive":
-        if scoring_config.sample_source in {"auto", "backend_ensemble"}:
-            return predictions.ensemble
-        if scoring_config.sample_source == "latent_ensemble_plus_noise":
-            if predictions.ensemble is None or predictions.noise_cov is None:
-                raise NotImplementedError(
-                    "Sampling a data-predictive ensemble from a latent ensemble "
-                    "requires both a latent predictive ensemble and observation "
-                    "noise covariance."
-                )
-            return _sample_data_predictive_ensemble(
-                predictions.ensemble,
-                predictions.noise_cov,
-                sample_seed=scoring_config.sample_seed,
-            )
-        raise NotImplementedError(
-            f"Unsupported scoring sample source: {scoring_config.sample_source}."
-        )
-
     if scoring_config.sample_source == "backend_ensemble":
         if predictions.obs_ensemble is not None:
             return predictions.obs_ensemble
         raise NotImplementedError(
-            "Backend data-predictive observation ensembles are unavailable. "
+            "Backend predictive observation ensembles are unavailable. "
             "Use `sample_source='latent_ensemble_plus_noise'` or "
             "`sample_source='gaussian_moments'`."
         )
@@ -449,9 +421,9 @@ def _select_scoring_ensemble(
     if scoring_config.sample_source == "latent_ensemble_plus_noise":
         if predictions.ensemble is None or predictions.noise_cov is None:
             raise NotImplementedError(
-                "Sampling a data-predictive ensemble from a latent ensemble "
-                "requires both a latent predictive ensemble and observation "
-                "noise covariance."
+                "Synthesizing predictive observation ensembles from a latent "
+                "ensemble requires both a latent predictive ensemble and "
+                "observation noise covariance."
             )
         return _sample_data_predictive_ensemble(
             predictions.ensemble,
@@ -481,7 +453,10 @@ def add_observation_prediction_and_score_sites(
     filter_config: BaseFilterConfig,
     scoring_config: ObservationScoringConfig | None,
     predictions: PredictedObservationOutputs | None,
-    score_arrays: Mapping[str, ObservationScoreArray],
+    score_arrays: Mapping[
+        str,
+        Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"],
+    ],
 ) -> None:
     """Record canonical predicted observations and score arrays to the trace."""
     if predictions is None:

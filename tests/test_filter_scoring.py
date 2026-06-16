@@ -375,7 +375,52 @@ def test_energy_score_records_for_enkf():
     )
 
 
-def test_enkf_energy_score_defaults_to_data_predictive_ensemble():
+def test_energy_score_vectorized_and_scan_match():
+    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
+    filter_config = ContinuousTimeEnKFConfig(
+        n_particles=16,
+        crn_seed=jr.PRNGKey(13),
+    )
+    dynamics = _make_continuous_lti_dynamics(TRUE_RHO)
+    filtered = compute_continuous_filter(
+        dynamics,
+        filter_config,
+        key=filter_config.crn_seed,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    _, predictions, _ = enrich_continuous_filter_output(
+        filtered,
+        dynamics=dynamics,
+        filter_config=filter_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_values=ctrl_values,
+        scoring_config=ObservationScoringConfig(rules=(EnergyScore(beta=1.5),)),
+    )
+    assert predictions is not None
+    assert predictions.obs_ensemble is not None
+
+    vectorized_score = EnergyScore(
+        beta=1.5,
+        vectorized_pairwise=True,
+    ).compute(
+        obs_values=obs_values,
+        pred_ensemble=predictions.obs_ensemble,
+    )
+    scan_score = EnergyScore(
+        beta=1.5,
+        vectorized_pairwise=False,
+    ).compute(
+        obs_values=obs_values,
+        pred_ensemble=predictions.obs_ensemble,
+    )
+    assert jnp.allclose(vectorized_score, scan_score)
+
+
+def test_enkf_energy_score_defaults_to_predictive_observation_ensemble():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,
@@ -421,53 +466,10 @@ def test_enkf_energy_score_defaults_to_data_predictive_ensemble():
     assert not jnp.allclose(score_arrays["energy_score"], latent_score)
 
 
-def test_enkf_energy_score_can_target_latent_predictive_ensemble():
-    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
-    filter_config = ContinuousTimeEnKFConfig(
-        n_particles=16,
-        crn_seed=jr.PRNGKey(19),
-    )
-    scoring_config = ObservationScoringConfig(
-        rules=(EnergyScore(beta=1.0),),
-        target="latent_predictive",
-        sample_source="backend_ensemble",
-    )
-    dynamics = _make_continuous_lti_dynamics(TRUE_RHO)
-    filtered = compute_continuous_filter(
-        dynamics,
-        filter_config,
-        key=filter_config.crn_seed,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-    )
-    _, predictions, score_arrays = enrich_continuous_filter_output(
-        filtered,
-        dynamics=dynamics,
-        filter_config=filter_config,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_values=ctrl_values,
-        scoring_config=scoring_config,
-    )
-    assert predictions is not None
-    assert predictions.ensemble is not None
-
-    expected_score = EnergyScore(beta=1.0).compute(
-        obs_values=obs_values,
-        pred_ensemble=predictions.ensemble,
-    )
-    assert jnp.allclose(score_arrays["energy_score"], expected_score)
-
-
-def test_kf_gaussian_scores_can_target_latent_predictive_distribution():
+def test_kf_gaussian_scores_use_predictive_observation_covariance():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     filter_config = ContinuousTimeKFConfig()
-    scoring_config = ObservationScoringConfig(
-        rules=(GaussianLogProbScore(),),
-        target="latent_predictive",
-    )
+    scoring_config = ObservationScoringConfig(rules=(GaussianLogProbScore(),))
     dynamics = _make_continuous_lti_dynamics(TRUE_RHO)
     filtered = compute_continuous_filter(
         dynamics,
@@ -490,26 +492,32 @@ def test_kf_gaussian_scores_can_target_latent_predictive_distribution():
     assert predictions is not None
     assert predictions.mean is not None
     assert predictions.cov is not None
+    assert predictions.obs_cov is not None
 
     expected_score = GaussianLogProbScore().compute(
+        obs_values=obs_values,
+        pred_mean=predictions.mean,
+        pred_cov=predictions.obs_cov,
+    )
+    latent_score = GaussianLogProbScore().compute(
         obs_values=obs_values,
         pred_mean=predictions.mean,
         pred_cov=predictions.cov,
     )
     assert jnp.allclose(score_arrays["gaussian_log_prob"], expected_score)
+    assert not jnp.allclose(score_arrays["gaussian_log_prob"], latent_score)
 
 
-def test_data_predictive_backend_ensemble_is_rejected():
+def test_backend_observation_ensemble_source_is_rejected_when_unavailable():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     with pytest.raises(
         NotImplementedError,
-        match="data-predictive observation ensembles are unavailable",
+        match="predictive observation ensembles are unavailable",
     ):
         _run_conditioned_trace(
             ContinuousTimeKFConfig(),
             ObservationScoringConfig(
                 rules=(EnergyScore(beta=1.0),),
-                target="data_predictive",
                 sample_source="backend_ensemble",
             ),
             obs_times=obs_times,
@@ -519,7 +527,7 @@ def test_data_predictive_backend_ensemble_is_rejected():
         )
 
 
-def test_data_predictive_backend_ensemble_is_used_when_available():
+def test_backend_observation_ensemble_source_is_used_when_available():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,
@@ -527,7 +535,6 @@ def test_data_predictive_backend_ensemble_is_used_when_available():
     )
     scoring_config = ObservationScoringConfig(
         rules=(EnergyScore(beta=1.0),),
-        target="data_predictive",
         sample_source="backend_ensemble",
     )
     dynamics = _make_continuous_lti_dynamics(TRUE_RHO)
@@ -568,7 +575,7 @@ def test_data_predictive_backend_ensemble_is_used_when_available():
     assert jnp.allclose(score_arrays["energy_score"], expected_score)
 
 
-def test_data_predictive_auto_prefers_backend_observation_ensemble():
+def test_auto_prefers_backend_observation_ensemble():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     filter_config = ContinuousTimeEnKFConfig(
         n_particles=16,

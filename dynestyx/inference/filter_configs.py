@@ -48,16 +48,21 @@ class BaseFilterConfig(abc.ABC):
             at each step (particle-based filters only).
         record_filtered_log_weights (bool | None): Save the log importance
             weights at each step (particle-based filters only).
-        record_predicted_observations_mean (bool): Save the predicted
-            observation mean at each observation time, before conditioning on
-            that observation. Defaults to `False`, and scoring can be used
-            without automatically recording predictive summaries.
-        record_predicted_observations_cov (bool): Save the predicted
+        record_predicted_observations_mean (bool): Save the one-step-ahead
+            predicted observation mean at each observation time, before
+            conditioning on that observation. Defaults to `False`, and
+            scoring can be used without automatically recording predictive
+            summaries.
+        record_predicted_observations_cov (bool): Save the backend predicted
             observation covariance at each observation time, before
-            conditioning on that observation. Defaults to `False`.
-        record_predicted_observations_ensemble (bool): Save the
+            conditioning on that observation. For the current continuous-time
+            Gaussian filters this is the covariance before adding
+            observation noise. Defaults to `False`.
+        record_predicted_observations_ensemble (bool): Save the backend
             predicted observation ensemble at each observation time
-            (ensemble-based filters only). Defaults to `False`.
+            (ensemble-based filters only). For the current continuous-time
+            EnKF path this is the ensemble before adding observation noise.
+            Defaults to `False`.
         record_max_elems (int): Hard cap on total scalar elements saved across
             all `record_*` sites. Prevents accidentally filling device memory
             for long sequences or large state spaces. Defaults to `100_000`.

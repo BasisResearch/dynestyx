@@ -13,20 +13,14 @@ import dataclasses
 import math
 from typing import Literal
 
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import jax.scipy as jsp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float
 
-type ScalarObservationScoreArray = Float[Array, "*plate time 1"]
-type ComponentObservationScoreArray = Float[Array, "*plate time observation_dim"]
-type ObservationScoreArray = (
-    ScalarObservationScoreArray | ComponentObservationScoreArray
-)
-
 UnsupportedScoringPolicy = Literal["raise", "skip"]
-ObservationScoringTarget = Literal["data_predictive", "latent_predictive"]
 ObservationEnsembleSampleSource = Literal[
     "auto",
     "backend_ensemble",
@@ -35,21 +29,21 @@ ObservationEnsembleSampleSource = Literal[
 ]
 
 
-def _normal_cdf(x):
+def _normal_cdf(x: Float[Array, ...]) -> Float[Array, ...]:
     return 0.5 * (1.0 + jsp.special.erf(x / jnp.sqrt(2.0)))
 
 
-def _normal_pdf(x):
+def _normal_pdf(x: Float[Array, ...]) -> Float[Array, ...]:
     return jnp.exp(-0.5 * jnp.square(x)) / jnp.sqrt(2.0 * jnp.pi)
 
 
 def _sample_gaussian_predictive_ensemble(
     *,
-    pred_mean: Float[Array, ...],
-    pred_cov: Float[Array, ...],
+    pred_mean: Float[Array, "*plate time observation_dim"],
+    pred_cov: Float[Array, "*plate time observation_dim observation_dim"],
     n_samples: int,
     sample_seed: int,
-) -> Float[Array, "... time n_samples observation_dim"]:
+) -> Float[Array, "*plate time n_samples observation_dim"]:
     sampled = dist.MultivariateNormal(
         loc=pred_mean,
         covariance_matrix=pred_cov,
@@ -80,12 +74,14 @@ class BaseObservationScore(abc.ABC):
     def compute(
         self,
         *,
-        obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...] | None = None,
-        pred_cov: Float[Array, ...] | None = None,
-        pred_ensemble: Float[Array, ...] | None = None,
+        obs_values: Float[Array, "*plate time observation_dim"],
+        pred_mean: Float[Array, "*plate time observation_dim"] | None = None,
+        pred_cov: Float[Array, "*plate time observation_dim observation_dim"]
+        | None = None,
+        pred_ensemble: Float[Array, "*plate time n_members observation_dim"]
+        | None = None,
         **kwargs,
-    ) -> ObservationScoreArray:
+    ) -> Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"]:
         raise NotImplementedError()
 
 
@@ -104,11 +100,12 @@ class GaussianLogProbScore(BaseObservationScore):
     def compute(
         self,
         *,
-        obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...] | None = None,
-        pred_cov: Float[Array, ...] | None = None,
+        obs_values: Float[Array, "*plate time observation_dim"],
+        pred_mean: Float[Array, "*plate time observation_dim"] | None = None,
+        pred_cov: Float[Array, "*plate time observation_dim observation_dim"]
+        | None = None,
         **kwargs,
-    ) -> ScalarObservationScoreArray:
+    ) -> Float[Array, "*plate time 1"]:
         if pred_mean is None or pred_cov is None:
             raise ValueError(
                 "GaussianLogProbScore requires Gaussian predictive mean and covariance."
@@ -135,11 +132,12 @@ class DawidSebastianiScore(BaseObservationScore):
     def compute(
         self,
         *,
-        obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...] | None = None,
-        pred_cov: Float[Array, ...] | None = None,
+        obs_values: Float[Array, "*plate time observation_dim"],
+        pred_mean: Float[Array, "*plate time observation_dim"] | None = None,
+        pred_cov: Float[Array, "*plate time observation_dim observation_dim"]
+        | None = None,
         **kwargs,
-    ) -> ScalarObservationScoreArray:
+    ) -> Float[Array, "*plate time 1"]:
         if pred_mean is None or pred_cov is None:
             raise ValueError(
                 "DawidSebastianiScore requires Gaussian predictive mean and covariance."
@@ -169,11 +167,12 @@ class ObservationWiseCRPSScore(BaseObservationScore):
     def compute(
         self,
         *,
-        obs_values: Float[Array, ...],
-        pred_mean: Float[Array, ...] | None = None,
-        pred_cov: Float[Array, ...] | None = None,
+        obs_values: Float[Array, "*plate time observation_dim"],
+        pred_mean: Float[Array, "*plate time observation_dim"] | None = None,
+        pred_cov: Float[Array, "*plate time observation_dim observation_dim"]
+        | None = None,
         **kwargs,
-    ) -> ComponentObservationScoreArray:
+    ) -> Float[Array, "*plate time observation_dim"]:
         if pred_mean is None or pred_cov is None:
             raise ValueError(
                 "ObservationWiseCRPSScore requires Gaussian predictive mean and covariance."
@@ -194,13 +193,18 @@ class EnergyScore(BaseObservationScore):
 
     If an explicit predictive observation ensemble is unavailable, this score
     can approximate one by drawing ``n_samples`` observations from the Gaussian
-    predictive moments. Returns a score array of shape ``(*plate, time, 1)``.
-    Lower values are better.
+    predictive observation moments. Returns a score array of shape
+    ``(*plate, time, 1)``. Lower values are better.
+
+    `vectorized_pairwise=True` is faster for moderate ensemble sizes but
+    materializes the full pairwise distance tensor. Setting it to `False`
+    uses a lower-memory `lax.scan` path at the cost of extra compute.
     """
 
     beta: float = 1.0
     n_samples: int | None = None
     sample_seed: int = 0
+    vectorized_pairwise: bool = True
 
     def __post_init__(self) -> None:
         if not (0.0 < self.beta < 2.0):
@@ -217,12 +221,14 @@ class EnergyScore(BaseObservationScore):
     def compute(
         self,
         *,
-        obs_values: Float[Array, ...],
-        pred_ensemble: Float[Array, ...] | None = None,
-        pred_mean: Float[Array, ...] | None = None,
-        pred_cov: Float[Array, ...] | None = None,
+        obs_values: Float[Array, "*plate time observation_dim"],
+        pred_ensemble: Float[Array, "*plate time n_members observation_dim"]
+        | None = None,
+        pred_mean: Float[Array, "*plate time observation_dim"] | None = None,
+        pred_cov: Float[Array, "*plate time observation_dim observation_dim"]
+        | None = None,
         **kwargs,
-    ) -> ScalarObservationScoreArray:
+    ) -> Float[Array, "*plate time 1"]:
         if pred_ensemble is None:
             if self.n_samples is None:
                 raise NotImplementedError(
@@ -245,11 +251,32 @@ class EnergyScore(BaseObservationScore):
             jnp.linalg.norm(pred_ensemble - obs_expanded, axis=-1) ** self.beta,
             axis=-1,
         )
-        pairwise = pred_ensemble[..., :, None, :] - pred_ensemble[..., None, :, :]
-        second_term = 0.5 * jnp.mean(
-            jnp.linalg.norm(pairwise, axis=-1) ** self.beta,
-            axis=(-2, -1),
-        )
+        if self.vectorized_pairwise:
+            pairwise = pred_ensemble[..., :, None, :] - pred_ensemble[..., None, :, :]
+            second_term = 0.5 * jnp.mean(
+                jnp.linalg.norm(pairwise, axis=-1) ** self.beta,
+                axis=(-2, -1),
+            )
+        else:
+            n_members = pred_ensemble.shape[-2]
+            members_first = jnp.moveaxis(pred_ensemble, -2, 0)
+
+            def scan_step(
+                total: Float[Array, "*plate time"],
+                member: Float[Array, "*plate time observation_dim"],
+            ) -> tuple[Float[Array, "*plate time"], None]:
+                distances = (
+                    jnp.linalg.norm(
+                        pred_ensemble - member[..., None, :],
+                        axis=-1,
+                    )
+                    ** self.beta
+                )
+                return total + jnp.sum(distances, axis=-1), None
+
+            total0 = jnp.zeros(pred_ensemble.shape[:-2], dtype=pred_ensemble.dtype)
+            total, _ = jax.lax.scan(scan_step, total0, members_first)
+            second_term = 0.5 * total / float(n_members * n_members)
         return jnp.expand_dims(first_term - second_term, axis=-1)
 
 
@@ -276,14 +303,11 @@ class ObservationScoringConfig:
         unsupported: Policy for requested score rules or sampling modes that
             are unavailable for the active filter backend. `"raise"` fails
             immediately; `"skip"` silently omits unsupported rules.
-        target: Whether scores should evaluate the latent predictive
-            distribution or the full data-predictive distribution that also
-            includes observation noise.
-        sample_source: Strategy for obtaining predictive ensembles when a rule
-            needs samples. `"auto"` prefers a backend-provided observation
-            ensemble, then falls back to adding observation noise to a latent
-            ensemble, and finally to Gaussian moments if the rule supports
-            that path.
+        sample_source: Strategy for obtaining predictive observation
+            ensembles when a rule needs samples. `"auto"` prefers a
+            backend-provided predictive observation ensemble, then falls back
+            to adding observation noise to a latent predictive ensemble, and
+            finally to Gaussian moments if the rule supports that path.
         sample_seed: PRNG seed used when Dynestyx needs to synthesize
             predictive ensembles from moments or latent ensembles plus noise.
     """
@@ -291,22 +315,17 @@ class ObservationScoringConfig:
     rules: tuple[BaseObservationScore, ...] = dataclasses.field(default_factory=tuple)
     record_as_numpyro_sites: bool = True
     unsupported: UnsupportedScoringPolicy = "raise"
-    target: ObservationScoringTarget = "data_predictive"
     sample_source: ObservationEnsembleSampleSource = "auto"
     sample_seed: int = 0
 
 
 __all__ = [
     "BaseObservationScore",
-    "ComponentObservationScoreArray",
     "DawidSebastianiScore",
     "EnergyScore",
     "GaussianLogProbScore",
-    "ObservationScoreArray",
     "ObservationScoringConfig",
     "ObservationEnsembleSampleSource",
-    "ObservationScoringTarget",
     "ObservationWiseCRPSScore",
-    "ScalarObservationScoreArray",
     "UnsupportedScoringPolicy",
 ]
