@@ -361,6 +361,25 @@ def test_scoring_config_can_compute_without_recording_sites():
     assert "f_gaussian_log_prob" not in tr
 
 
+def test_scoring_is_skipped_entirely_when_score_sites_are_disabled():
+    obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
+    filter_config = ContinuousTimeKFConfig()
+    scoring_config = ObservationScoringConfig(
+        rules=(EnergyScore(beta=1.0),),
+        record_as_numpyro_sites=False,
+        sample_source="backend_ensemble",
+    )
+    tr = _run_conditioned_trace(
+        filter_config,
+        scoring_config,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    assert "f_energy_score" not in tr
+
+
 def test_scoring_does_not_require_predicted_observation_recording():
     obs_times, obs_values, ctrl_times, ctrl_values = _make_observations()
     filter_config = ContinuousTimeKFConfig()

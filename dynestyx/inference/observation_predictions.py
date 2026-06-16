@@ -525,7 +525,18 @@ def enrich_and_record_continuous_filter_output(
     scoring_config: ObservationScoringConfig | None = None,
     plate_shapes: tuple[int, ...] = (),
 ) -> Any:
-    """Enrich a continuous filter result and record requested trace sites."""
+    """Enrich a continuous filter result and record requested trace sites.
+
+    This wrapper is used by the filter handler path, which only needs score
+    arrays when they will actually be written to the NumPyro trace. If
+    ``record_as_numpyro_sites=False``, callers that need the score arrays
+    themselves should use ``enrich_continuous_filter_output`` directly.
+    """
+    scoring_config_for_recording = (
+        scoring_config
+        if scoring_config is not None and scoring_config.record_as_numpyro_sites
+        else None
+    )
     posterior, predictions, score_arrays = enrich_continuous_filter_output(
         posterior,
         dynamics=dynamics,
@@ -533,13 +544,13 @@ def enrich_and_record_continuous_filter_output(
         obs_times=obs_times,
         obs_values=obs_values,
         ctrl_values=ctrl_values,
-        scoring_config=scoring_config,
+        scoring_config=scoring_config_for_recording,
         plate_shapes=plate_shapes,
     )
     add_observation_prediction_and_score_sites(
         name,
         filter_config=filter_config,
-        scoring_config=scoring_config,
+        scoring_config=scoring_config_for_recording,
         predictions=predictions,
         score_arrays=score_arrays,
     )
