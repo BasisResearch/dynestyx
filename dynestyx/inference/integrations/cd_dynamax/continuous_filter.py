@@ -28,7 +28,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
 from dynestyx.inference.observation_predictions import (
     enrich_and_record_continuous_filter_output,
 )
-from dynestyx.inference.scoring import ObservationScoringConfig
+from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.utils import _should_record_field
 

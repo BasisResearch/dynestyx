@@ -7,6 +7,12 @@ from numpyro.handlers import seed, substitute, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
+from dynestyx.evaluation.scoring import (
+    DawidSebastianiScore,
+    EnergyScore,
+    GaussianLogProbScore,
+    ObservationWiseCRPSScore,
+)
 from dynestyx.inference.filter_configs import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -22,13 +28,7 @@ from dynestyx.inference.observation_predictions import (
     _observation_noise_covariance_sequence,
     enrich_continuous_filter_output,
 )
-from dynestyx.inference.scoring import (
-    DawidSebastianiScore,
-    EnergyScore,
-    GaussianLogProbScore,
-    ObservationScoringConfig,
-    ObservationWiseCRPSScore,
-)
+from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.simulators import SDESimulator
 from tests.test_utils import assert_tree_all_finite

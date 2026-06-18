@@ -1,10 +1,4 @@
-"""Proper scoring rules for predicted observations produced by ``Filter``.
-
-Scoring is configured through :class:`ObservationScoringConfig` and is
-currently supported for continuous-time CD-Dynamax Gaussian filters
-(``ContinuousTimeKFConfig``, ``ContinuousTimeEKFConfig``,
-``ContinuousTimeUKFConfig``, and ``ContinuousTimeEnKFConfig``).
-"""
+"""Scoring rules for predictive observation distributions."""
 
 from __future__ import annotations
 
@@ -53,10 +47,10 @@ def _sample_gaussian_predictive_ensemble(
 
 @dataclasses.dataclass(frozen=True)
 class BaseObservationScore(abc.ABC):
-    """Base class for proper scoring rule configurations.
+    """Base class for predictive-observation scoring rules.
 
-    Subclasses define a per-time score array and the site suffix used when the
-    score is recorded into the NumPyro trace.
+    Subclasses define a per-time score array. `site_name` is available for
+    integrations that want to record score arrays into named trace sites.
     """
 
     name: str | None = None
@@ -196,8 +190,7 @@ class EnergyScore(BaseObservationScore):
     predictive observation moments. Returns a score array of shape
     ``(*plate, time, 1)``. Lower values are better.
 
-    Under `Filter(..., scoring_config=...)`, any synthetic sampling needed by
-    this score uses `ObservationScoringConfig.sample_seed`.
+    When synthetic sampling is needed, pass `sample_seed` to `compute`.
 
     `vectorized_pairwise=True` is faster for moderate ensemble sizes but
     materializes the full pairwise distance tensor. Setting it to `False`
@@ -283,53 +276,11 @@ class EnergyScore(BaseObservationScore):
         return jnp.expand_dims(first_term - second_term, axis=-1)
 
 
-@dataclasses.dataclass(frozen=True)
-class ObservationScoringConfig:
-    """Configuration for predicted-observation diagnostics and scoring rules.
-
-    Attach an instance to ``Filter(..., scoring_config=...)`` to request
-    per-time score arrays for the one-step-ahead predictive observation
-    distributions produced by the filter.
-
-    Scoring currently supports only continuous-time CD-Dynamax Gaussian
-    filters (`ContinuousTimeKFConfig`, `ContinuousTimeEKFConfig`,
-    `ContinuousTimeUKFConfig`, and `ContinuousTimeEnKFConfig`).
-
-    Attributes:
-        rules: Ordered tuple of score definitions to evaluate at each
-            observation time.
-        record_as_numpyro_sites: If `True`, record each computed score array
-            as a `numpyro.deterministic` site named
-            ``{sample_name}_{rule.site_name}``. This is independent of the
-            `record_predicted_observations_*` fields on the filter config:
-            score recording does not require predictive summary recording.
-        unsupported: Policy for requested score rules or sampling modes that
-            are unavailable for the active filter backend. `"raise"` fails
-            immediately; `"skip"` silently omits unsupported rules.
-        sample_source: Strategy for obtaining predictive observation
-            ensembles when a rule needs samples. `"auto"` prefers a
-            backend-provided predictive observation ensemble, then falls back
-            to adding observation noise to a latent predictive ensemble, and
-            finally to Gaussian moments if the rule supports that path.
-        sample_seed: PRNG seed used whenever Dynestyx needs to synthesize
-            predictive observation samples during scoring, whether by adding
-            observation noise to a latent predictive ensemble or by drawing
-            from Gaussian predictive moments for a rule such as `EnergyScore`.
-    """
-
-    rules: tuple[BaseObservationScore, ...] = dataclasses.field(default_factory=tuple)
-    record_as_numpyro_sites: bool = True
-    unsupported: UnsupportedScoringPolicy = "raise"
-    sample_source: ObservationEnsembleSampleSource = "auto"
-    sample_seed: int = 0
-
-
 __all__ = [
     "BaseObservationScore",
     "DawidSebastianiScore",
     "EnergyScore",
     "GaussianLogProbScore",
-    "ObservationScoringConfig",
     "ObservationEnsembleSampleSource",
     "ObservationWiseCRPSScore",
     "UnsupportedScoringPolicy",

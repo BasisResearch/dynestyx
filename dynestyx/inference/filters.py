@@ -66,7 +66,7 @@ from dynestyx.inference.plate_utils import (
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
 )
-from dynestyx.inference.scoring import ObservationScoringConfig
+from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field

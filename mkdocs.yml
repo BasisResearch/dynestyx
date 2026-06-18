@@ -72,7 +72,7 @@ nav:
       - Inference:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/filter_configs.md
-        - Scoring: api_reference/public/inference/scoring.md
+        - ScoringConfigs: api_reference/public/inference/scoring_configs.md
         - Smoothers: api_reference/public/inference/smoothers.md
         - SmootherOptions: api_reference/public/inference/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
@@ -89,8 +89,9 @@ nav:
           - DiscreteTimeSimulator: api_reference/public/simulators/discrete_time_simulator.md
           - ODESimulator: api_reference/public/simulators/ode_simulator.md
           - SDESimulator: api_reference/public/simulators/sde_simulator.md
-      - Diagnostics:
-        - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
+      - Evaluation:
+        - Scoring: api_reference/public/evaluation/scoring.md
+        - Plotting Utilities: api_reference/public/evaluation/plotting_utils.md
     - Developer API:
       - Overview: api_reference/developer/index.md
       - Models:
@@ -102,7 +103,7 @@ nav:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
         - FilterConfigs: api_reference/developer/inference/filter_configs.md
-        - Scoring: api_reference/developer/inference/scoring.md
+        - ScoringConfigs: api_reference/developer/inference/scoring_configs.md
         - Smoothers: api_reference/developer/inference/smoothers.md
         - SmootherOptions: api_reference/developer/inference/smoother_configs.md
         - Smoothing Handoff: smoothing_handoff.md
@@ -115,8 +116,9 @@ nav:
         - Simulators: api_reference/developer/simulators.md
       - Handlers: api_reference/developer/handlers.md
       - Utils: api_reference/developer/utils.md
-      - Diagnostics:
-        - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
+      - Evaluation:
+        - Scoring: api_reference/developer/evaluation/scoring.md
+        - Plotting Utilities: api_reference/developer/evaluation/plotting_utils.md
   - FAQ: faq.md
 
 theme:

@@ -1,9 +1,7 @@
 """Canonical predicted-observation summaries and scoring helpers.
 
 These utilities translate backend-specific predictive-observation fields into a
-small Dynestyx-level representation used for scoring and trace recording. They
-intentionally do not extend ``posterior.posterior_extras`` with Dynestyx-owned
-keys, so backend storage details do not become a second public API surface.
+small Dynestyx-level representation used for scoring and trace recording.
 """
 
 from __future__ import annotations
@@ -19,6 +17,12 @@ import numpyro
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
+from dynestyx.evaluation.scoring import (
+    DawidSebastianiScore,
+    EnergyScore,
+    GaussianLogProbScore,
+    ObservationWiseCRPSScore,
+)
 from dynestyx.inference.filter_configs import (
     BaseFilterConfig,
     ContinuousTimeDPFConfig,
@@ -28,13 +32,7 @@ from dynestyx.inference.filter_configs import (
     ContinuousTimeUKFConfig,
 )
 from dynestyx.inference.plate_utils import _time_len_from_array
-from dynestyx.inference.scoring import (
-    DawidSebastianiScore,
-    EnergyScore,
-    GaussianLogProbScore,
-    ObservationScoringConfig,
-    ObservationWiseCRPSScore,
-)
+from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.utils import _should_record_field
