@@ -7,8 +7,10 @@ from typing import Any, Literal
 
 import diffrax as dfx
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.random as jr
+import jax.scipy.linalg as jsp_linalg
 from jax import Array, lax, vmap
 from jaxtyping import Real
 
@@ -71,6 +73,299 @@ def _em_moments_from_terms(
     loc = x + drift * dt
     cov = diffusion.gram_matrix(state_dim=x.shape[-1]) * dt
     return loc, cov
+
+
+def _stabilize_covariance(cov: Array, jitter: float | Array) -> Array:
+    """Symmetrize and project a covariance matrix to the PSD cone.
+
+    A diagonal shift based on the most negative eigenvalue is enough for
+    Cholesky, but it can inflate every variance when a local approximation
+    produces one strongly negative eigenvalue. Eigenvalue clipping is the
+    nearest PSD projection in Frobenius norm and preserves well-behaved
+    positive directions.
+    """
+    cov = 0.5 * (cov + jnp.swapaxes(cov, -1, -2))
+    eigvals, eigvecs = jnp.linalg.eigh(cov)
+    jitter_arr = jnp.asarray(jitter, dtype=cov.dtype)
+    eigvals = jnp.maximum(eigvals, jitter_arr)
+    return (eigvecs * eigvals[..., None, :]) @ jnp.swapaxes(eigvecs, -1, -2)
+
+
+def _map_transition_outputs(
+    single_fn: Callable[[Array, Array | None, Array, Array], Any],
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+) -> Any:
+    """Apply a single-state transition helper over optional leading batch axes."""
+    x_arr = jnp.asarray(x)
+    if x_arr.ndim == 1:
+        return single_fn(x_arr, u, jnp.asarray(t_now), jnp.asarray(t_next))
+
+    batch_shape = x_arr.shape[:-1]
+
+    if u is None:
+        u_arr = None
+    else:
+        u_arr = jnp.asarray(u)
+        if u_arr.ndim == 1 or u_arr.shape[:-1] != batch_shape:
+            raise ValueError(
+                "For batched x, u must be None or have leading dimensions matching x."
+            )
+
+    t_now_arr = jnp.asarray(t_now)
+    if t_now_arr.ndim == 0:
+        t_now_arr = jnp.broadcast_to(t_now_arr, batch_shape)
+    elif t_now_arr.shape != batch_shape:
+        raise ValueError(
+            "t_now must be scalar or have shape matching x leading dimensions."
+        )
+
+    t_next_arr = jnp.asarray(t_next)
+    if t_next_arr.ndim == 0:
+        t_next_arr = jnp.broadcast_to(t_next_arr, batch_shape)
+    elif t_next_arr.shape != batch_shape:
+        raise ValueError(
+            "t_next must be scalar or have shape matching x leading dimensions."
+        )
+
+    def _batched_step(_x, _u, _t_now, _t_next):
+        if _x.ndim == 1:
+            return single_fn(_x, _u, _t_now, _t_next)
+        in_axes_u = None if _u is None else 0
+        return vmap(_batched_step, in_axes=(0, in_axes_u, 0, 0))(
+            _x, _u, _t_now, _t_next
+        )
+
+    return _batched_step(x_arr, u_arr, t_now_arr, t_next_arr)
+
+
+def _frozen_jacobian_gaussian_single_loc_cov(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+    *,
+    jitter: float,
+) -> dict[str, Array]:
+    """Single-state frozen-Jacobian affine transition moments."""
+    dt = t_next - t_now
+    drift, diffusion = _em_local_terms(
+        state_evolution, state_evolution.diffusion, x, u, t_now
+    )
+    drift_jac = jax.jacfwd(lambda z: state_evolution.total_drift(z, u, t_now))(x)
+    state_dim = x.shape[-1]
+
+    mean_block = jnp.zeros((state_dim + 1, state_dim + 1), dtype=x.dtype)
+    mean_block = mean_block.at[:state_dim, :state_dim].set(drift_jac)
+    mean_block = mean_block.at[:state_dim, state_dim].set(drift)
+    mean_exp = jsp_linalg.expm(mean_block * dt)
+    loc = x + mean_exp[:state_dim, state_dim]
+
+    diffusion_cov = diffusion.gram_matrix(state_dim=state_dim)
+    cov_block = jnp.zeros((2 * state_dim, 2 * state_dim), dtype=x.dtype)
+    cov_block = cov_block.at[:state_dim, :state_dim].set(drift_jac)
+    cov_block = cov_block.at[:state_dim, state_dim:].set(diffusion_cov)
+    cov_block = cov_block.at[state_dim:, state_dim:].set(-drift_jac.T)
+    cov_exp = jsp_linalg.expm(cov_block * dt)
+    transition_matrix = cov_exp[:state_dim, :state_dim]
+    cov = cov_exp[:state_dim, state_dim:] @ transition_matrix.T
+    cov = _stabilize_covariance(cov, jitter)
+    return {"loc": loc, "cov": cov}
+
+
+def frozen_jacobian_gaussian_loc_cov(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+    *,
+    jitter: float = 1e-8,
+) -> dict[str, Array]:
+    """Compute frozen-Jacobian affine Gaussian transition moments."""
+
+    def _single(_x, _u, _t_now, _t_next):
+        return _frozen_jacobian_gaussian_single_loc_cov(
+            state_evolution,
+            _x,
+            _u,
+            _t_now,
+            _t_next,
+            jitter=jitter,
+        )
+
+    return _map_transition_outputs(_single, x, u, t_now, t_next)
+
+
+def _generator_apply_array(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    phi: Callable[[Array], Array],
+    x: Array,
+    u: Array | None,
+    t: Array,
+) -> Array:
+    """Apply the frozen-time Itô generator to an array-valued test function."""
+    drift, diffusion = _em_local_terms(
+        state_evolution, state_evolution.diffusion, x, u, t
+    )
+    diffusion_cov = diffusion.gram_matrix(state_dim=x.shape[-1])
+    phi_x = phi(x)
+
+    def flat_phi(z):
+        return jnp.ravel(phi(z))
+
+    jac_phi = jax.jacfwd(flat_phi)(x)
+    hess_phi = jax.jacfwd(jax.jacfwd(flat_phi))(x)
+    generator_phi = jac_phi @ drift + 0.5 * jnp.einsum(
+        "ij,oij->o", diffusion_cov, hess_phi
+    )
+    return jnp.reshape(generator_phi, phi_x.shape)
+
+
+def _taylor_moment_single_loc_cov(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+    *,
+    jitter: float,
+) -> dict[str, Array]:
+    """Single-state second-order generator/Taylor Gaussian moments."""
+    dt = t_next - t_now
+    drift, diffusion = _em_local_terms(
+        state_evolution, state_evolution.diffusion, x, u, t_now
+    )
+    diffusion_cov = diffusion.gram_matrix(state_dim=x.shape[-1])
+
+    def _second_generator_moment(z):
+        f_z, L_z = _em_local_terms(
+            state_evolution, state_evolution.diffusion, z, u, t_now
+        )
+        a_z = L_z.gram_matrix(state_dim=z.shape[-1])
+        return f_z[:, None] * z[None, :] + z[:, None] * f_z[None, :] + a_z
+
+    A2_x = _generator_apply_array(
+        state_evolution,
+        lambda z: state_evolution.total_drift(z, u, t_now),
+        x,
+        u,
+        t_now,
+    )
+    A_xx = drift[:, None] * x[None, :] + x[:, None] * drift[None, :] + diffusion_cov
+    A2_xx = _generator_apply_array(
+        state_evolution, _second_generator_moment, x, u, t_now
+    )
+
+    loc = x + drift * dt + 0.5 * A2_x * dt**2
+    second_moment = jnp.outer(x, x) + A_xx * dt + 0.5 * A2_xx * dt**2
+    cov = second_moment - jnp.outer(loc, loc)
+    cov = _stabilize_covariance(cov, jitter)
+    return {"loc": loc, "cov": cov}
+
+
+def taylor_moment_loc_cov(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+    *,
+    jitter: float = 1e-8,
+) -> dict[str, Array]:
+    """Compute second-order generator/Taylor Gaussian transition moments."""
+
+    def _single(_x, _u, _t_now, _t_next):
+        return _taylor_moment_single_loc_cov(
+            state_evolution,
+            _x,
+            _u,
+            _t_now,
+            _t_next,
+            jitter=jitter,
+        )
+
+    return _map_transition_outputs(_single, x, u, t_now, t_next)
+
+
+def _simulated_likelihood_single_components(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+    *,
+    n_substeps: int,
+    standard_normals: Array,
+    jitter: float,
+) -> dict[str, Array]:
+    """Single-state Pedersen simulated-likelihood mixture components."""
+    if n_substeps < 1:
+        raise ValueError("n_substeps must be >= 1.")
+    dt = (t_next - t_now) / n_substeps
+    n_simulations = standard_normals.shape[0]
+    particles = jnp.broadcast_to(x, (n_simulations,) + x.shape)
+    t_kernel = t_now
+
+    def _scan_step(carry, z_step):
+        particles_curr, t_curr = carry
+
+        def _one_particle(x_curr, z):
+            drift, diffusion = _em_local_terms(
+                state_evolution, state_evolution.diffusion, x_curr, u, t_curr
+            )
+            dw = jnp.sqrt(dt) * z
+            return x_curr + drift * dt + diffusion.apply(dw, state_dim=x_curr.shape[-1])
+
+        particles_next = vmap(_one_particle)(particles_curr, z_step)
+        return (particles_next, t_curr + dt), None
+
+    if n_substeps > 1:
+        normals_by_step = jnp.swapaxes(standard_normals[:, : n_substeps - 1, :], 0, 1)
+        (particles, t_kernel), _ = lax.scan(
+            _scan_step, (particles, t_now), normals_by_step
+        )
+
+    def _kernel(x_penultimate):
+        drift, diffusion = _em_local_terms(
+            state_evolution, state_evolution.diffusion, x_penultimate, u, t_kernel
+        )
+        return _em_moments_from_terms(x_penultimate, dt, drift, diffusion)
+
+    loc, cov = vmap(_kernel)(particles)
+    cov = _stabilize_covariance(cov, jitter)
+    return {"loc": loc, "cov": cov}
+
+
+def simulated_likelihood_components(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    x: Array,
+    u: Array | None,
+    t_now: Array,
+    t_next: Array,
+    *,
+    n_substeps: int,
+    standard_normals: Array,
+    jitter: float = 1e-8,
+) -> dict[str, Array]:
+    """Compute Gaussian-mixture components for Pedersen simulated likelihood."""
+
+    def _single(_x, _u, _t_now, _t_next):
+        return _simulated_likelihood_single_components(
+            state_evolution,
+            _x,
+            _u,
+            _t_now,
+            _t_next,
+            n_substeps=n_substeps,
+            standard_normals=standard_normals,
+            jitter=jitter,
+        )
+
+    return _map_transition_outputs(_single, x, u, t_now, t_next)
 
 
 def _em_sample_from_terms(

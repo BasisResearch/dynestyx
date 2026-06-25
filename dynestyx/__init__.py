@@ -4,7 +4,13 @@ from importlib.metadata import version
 
 __version__ = version("dynestyx")
 
-from dynestyx.discretizers import Discretizer, euler_maruyama
+from dynestyx.discretizers import (
+    Discretizer,
+    euler_maruyama,
+    frozen_jacobian_gaussian,
+    simulated_likelihood,
+    taylor_moment_gaussian,
+)
 from dynestyx.handlers import plate, sample
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.smoothers import Smoother
@@ -70,4 +76,7 @@ __all__ = [
     "SDESimulator",
     "Simulator",
     "euler_maruyama",
+    "frozen_jacobian_gaussian",
+    "taylor_moment_gaussian",
+    "simulated_likelihood",
 ]
