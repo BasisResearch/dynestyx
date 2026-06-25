@@ -192,6 +192,7 @@ def test_continuous_filter_scoring_sites_match_pure_backend_outputs(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -294,6 +295,7 @@ def test_continuous_filter_predicted_observation_recording_sites_match_backend_o
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=None,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -418,6 +420,7 @@ def test_energy_score_records_for_enkf():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -461,6 +464,7 @@ def test_energy_score_vectorized_and_scan_match():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=ObservationScoringConfig(rules=(EnergyScore(beta=1.5),)),
     )
     _, predictions, _ = enrich_continuous_filter_output(
         filtered,
@@ -510,6 +514,7 @@ def test_enkf_energy_score_defaults_to_predictive_observation_ensemble():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -550,6 +555,7 @@ def test_kf_gaussian_scores_use_predictive_observation_covariance():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -655,14 +661,12 @@ def test_backend_observation_ensemble_source_is_used_when_available():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
-    latent_ensemble = jnp.asarray(filtered.posterior_extras["y_ens_pred"])
+    latent_ensemble = jnp.asarray(filtered.y_ens_pred)
     backend_obs_ensemble = latent_ensemble + 0.25
     filtered = filtered._replace(
-        posterior_extras={
-            **filtered.posterior_extras,
-            "y_obs_ens_pred": backend_obs_ensemble,
-        }
+        y_obs_ens_pred=backend_obs_ensemble,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -703,14 +707,12 @@ def test_auto_prefers_backend_observation_ensemble():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
-    latent_ensemble = jnp.asarray(filtered.posterior_extras["y_ens_pred"])
+    latent_ensemble = jnp.asarray(filtered.y_ens_pred)
     backend_obs_ensemble = latent_ensemble + 0.5
     filtered = filtered._replace(
-        posterior_extras={
-            **filtered.posterior_extras,
-            "y_obs_ens_pred": backend_obs_ensemble,
-        }
+        y_obs_ens_pred=backend_obs_ensemble,
     )
     _, predictions, score_arrays = enrich_continuous_filter_output(
         filtered,
@@ -765,6 +767,7 @@ def test_energy_score_can_sample_gaussian_ensemble_for_kf():
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
     )
     _, _, score_arrays = enrich_continuous_filter_output(
         filtered,

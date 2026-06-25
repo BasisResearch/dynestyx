@@ -199,22 +199,22 @@ def _build_prediction_outputs(
     | None,
     plate_shapes: tuple[int, ...] = (),
 ) -> PredictedObservationOutputs:
-    extras = posterior.posterior_extras or {}
-
     if isinstance(
         filter_config,
         (ContinuousTimeKFConfig, ContinuousTimeEKFConfig, ContinuousTimeUKFConfig),
     ):
-        if "y_pred_mean" not in extras or "y_pred_cov" not in extras:
+        pred_mean_raw = getattr(posterior, "y_pred_mean", None)
+        pred_cov_raw = getattr(posterior, "y_pred_cov", None)
+        if pred_mean_raw is None or pred_cov_raw is None:
             raise ValueError(
                 f"{type(filter_config).__name__} did not return the expected "
-                "predictive observation moments in posterior_extras."
+                "predictive observation fields."
             )
         pred_mean = _canonicalize_observations(
-            jnp.asarray(extras["y_pred_mean"]),
+            jnp.asarray(pred_mean_raw),
             plate_shapes=plate_shapes,
         )
-        pred_cov = jnp.asarray(extras["y_pred_cov"])
+        pred_cov = jnp.asarray(pred_cov_raw)
         noise_cov = _observation_noise_covariance_sequence(
             dynamics,
             obs_times=obs_times,
@@ -226,9 +226,10 @@ def _build_prediction_outputs(
             ),
             plate_shapes=plate_shapes,
         )
+        obs_cov_raw = getattr(posterior, "y_obs_pred_cov", None)
         obs_cov = (
-            jnp.asarray(extras["y_obs_pred_cov"])
-            if "y_obs_pred_cov" in extras
+            jnp.asarray(obs_cov_raw)
+            if obs_cov_raw is not None
             else pred_cov + noise_cov
         )
         return PredictedObservationOutputs(
@@ -239,25 +240,34 @@ def _build_prediction_outputs(
         )
 
     if isinstance(filter_config, ContinuousTimeEnKFConfig):
-        if "y_ens_pred" not in extras:
-            raise ValueError(
-                "ContinuousTimeEnKFConfig did not return `y_ens_pred` in "
-                "posterior_extras."
-            )
+        ensemble_raw = getattr(posterior, "y_ens_pred", None)
+        if ensemble_raw is None:
+            raise ValueError("ContinuousTimeEnKFConfig did not return `y_ens_pred`. ")
         ensemble = _canonicalize_observations(
-            jnp.asarray(extras["y_ens_pred"]),
+            jnp.asarray(ensemble_raw),
             plate_shapes=plate_shapes,
         )
+        pred_mean_raw = getattr(posterior, "y_pred_mean", None)
+        pred_cov_raw = getattr(posterior, "y_pred_cov", None)
+        if pred_mean_raw is None or pred_cov_raw is None:
+            raise ValueError(
+                "ContinuousTimeEnKFConfig did not return `y_pred_mean` and "
+                "`y_pred_cov`."
+            )
+        obs_ensemble_raw = getattr(posterior, "y_obs_ens_pred", None)
         obs_ensemble = (
             _canonicalize_observations(
-                jnp.asarray(extras["y_obs_ens_pred"]),
+                jnp.asarray(obs_ensemble_raw),
                 plate_shapes=plate_shapes,
             )
-            if "y_obs_ens_pred" in extras
+            if obs_ensemble_raw is not None
             else None
         )
-        pred_mean = jnp.mean(ensemble, axis=-2)
-        pred_cov = _compute_sample_covariance(ensemble)
+        pred_mean = _canonicalize_observations(
+            jnp.asarray(pred_mean_raw),
+            plate_shapes=plate_shapes,
+        )
+        pred_cov = jnp.asarray(pred_cov_raw)
         noise_cov = _observation_noise_covariance_sequence(
             dynamics,
             obs_times=obs_times,
@@ -269,7 +279,12 @@ def _build_prediction_outputs(
             ),
             plate_shapes=plate_shapes,
         )
-        obs_cov = pred_cov + noise_cov
+        obs_cov_raw = getattr(posterior, "y_obs_pred_cov", None)
+        obs_cov = (
+            jnp.asarray(obs_cov_raw)
+            if obs_cov_raw is not None
+            else pred_cov + noise_cov
+        )
         return PredictedObservationOutputs(
             mean=pred_mean,
             cov=pred_cov,

@@ -410,6 +410,7 @@ class Filter(BaseLogFactorAdder):
                     obs_values=ov,
                     ctrl_times=ct,
                     ctrl_values=cv,
+                    scoring_config=scoring_config,
                 )
 
         elif isinstance(config, HMMConfigs):
