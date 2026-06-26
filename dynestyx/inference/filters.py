@@ -57,11 +57,16 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
+from dynestyx.inference.observation_predictions import (
+    enrich_and_record_continuous_filter_output,
+    wants_observation_prediction_diagnostics,
+)
 from dynestyx.inference.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
 )
+from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
@@ -178,7 +183,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](../filter_configs.md).
+    [Available filter configurations](filter_configs.md).
 
     Defaults
     --------
@@ -191,14 +196,34 @@ class Filter(BaseLogFactorAdder):
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
         - What gets recorded to the trace (means/covariances, particles/weights,
         etc.) depends on `filter_config.record_*` and the backend implementation.
+        - Predicted-observation summaries and scoring rules are configured
+        through `filter_config.record_predicted_observations_*` and
+        `scoring_config`.
+        - Observation scoring currently supports only continuous-time
+        CD-Dynamax Gaussian filters:
+        `ContinuousTimeKFConfig`, `ContinuousTimeEKFConfig`,
+        `ContinuousTimeUKFConfig`, and `ContinuousTimeEnKFConfig`.
+        - Scoring is defined on the one-step-ahead predictive observation
+        distributions \(p(y_t \mid y_{1:t-1}, \theta)\), not on the filtered
+        state posterior itself.
 
     Attributes:
         filter_config: Selects the filtering algorithm and its hyperparameters.
             If `None`, a reasonable default is chosen based on whether the model
             is continuous-time or discrete-time.
+        scoring_config: Optional configuration for predicted-observation
+            diagnostics and proper scoring rules. When provided, Dynestyx
+            computes one score array per requested rule at the observation
+            times and can record those arrays as `numpyro.deterministic`
+            sites. This does not require recording predictive means,
+            covariances, or ensembles. Use the
+            `record_predicted_observations_*` fields on the filter config only
+            when you also want those predictive summaries returned explicitly
+            in the trace.
     """
 
     filter_config: BaseFilterConfig | None = None
+    scoring_config: ObservationScoringConfig | None = None
 
     def _add_log_factors(
         self,
@@ -246,6 +271,18 @@ class Filter(BaseLogFactorAdder):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
+        if (
+            wants_observation_prediction_diagnostics(
+                config,
+                scoring_config=self.scoring_config,
+            )
+            and not dynamics.continuous_time
+        ):
+            raise NotImplementedError(
+                "Predicted observation summaries and observation scoring rules are "
+                "currently supported only for continuous-time cd_dynamax Gaussian "
+                "filters (KF, EKF, UKF, EnKF)."
+            )
         if isinstance(config, BaseFilterConfig):
             _validate_missing_observation_support(
                 config,
@@ -269,6 +306,7 @@ class Filter(BaseLogFactorAdder):
                 _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                scoring_config=self.scoring_config,
             )
 
         if dynamics.continuous_time:
@@ -289,6 +327,7 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                scoring_config=self.scoring_config,
                 **kwargs,
             )
         else:
@@ -342,6 +381,7 @@ class Filter(BaseLogFactorAdder):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        scoring_config: ObservationScoringConfig | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
@@ -370,6 +410,7 @@ class Filter(BaseLogFactorAdder):
                     obs_values=ov,
                     ctrl_times=ct,
                     ctrl_values=cv,
+                    scoring_config=scoring_config,
                 )
 
         elif isinstance(config, HMMConfigs):
@@ -531,6 +572,19 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
+        if output_kind == "continuous":
+            outputs = enrich_and_record_continuous_filter_output(
+                name,
+                outputs,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_values=ctrl_values,
+                scoring_config=scoring_config,
+                plate_shapes=plate_shapes,
+            )
+
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
         elif output_kind == "hmm":
@@ -668,6 +722,7 @@ def _filter_continuous_time(
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
+    scoring_config: ObservationScoringConfig | None = None,
     **kwargs,
 ) -> list[numpyro.distributions.Distribution]:
     """Continuous-time marginal likelihood via CD-Dynamax.
@@ -692,6 +747,7 @@ def _filter_continuous_time(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
         **kwargs,
     )
 
