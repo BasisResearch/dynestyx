@@ -32,8 +32,13 @@ from dynestyx.models import (
     DynamicalModel,
     StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.models.checkers import _is_categorical_distribution
 from dynestyx.models.core import DiscreteStateTransition
-from dynestyx.observation_missingness import ObservationLogProb
+from dynestyx.observation_missingness import (
+    ObservationLogProb,
+    _probe_observation_distribution,
+    prepare_observation_views,
+)
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (
@@ -44,6 +49,7 @@ from dynestyx.utils import (
     _has_any_batched_plate_source,
     _is_opaque_plate_leaf,
     _leaf_is_plate_batched,
+    _raise_now_or_error_if,
     _validate_site_sorting,
 )
 
@@ -133,8 +139,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for simulator/unroller handlers.
 
     Interprets `dsx.sample(name, dynamics, obs_times=..., obs_values=..., ...)` by
-    unrolling `dynamics` into NumPyro sample sites (latent states and emissions) on
-    the provided time grid.
+    unrolling `dynamics` into NumPyro sample sites (latent states and observations)
+    on the provided time grid.
 
     When the simulator runs, it records the solved trajectories as deterministic
     sites (conventionally `"times"`, `"states"`, and `"observations"`).
@@ -158,6 +164,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        _obs_values_filled=None,
+        _obs_mask=None,
+        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -311,6 +320,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            _obs_values_filled=_obs_values_filled,
+            _obs_mask=_obs_mask,
+            _obs_has_missing=_obs_has_missing,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -325,6 +337,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         plate_shapes: tuple[int, ...],
         obs_times=None,
         obs_values=None,
+        _obs_values_filled=None,
+        _obs_mask=None,
+        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -390,6 +405,12 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             member_obs_values = _slice_array_for_plate_member(
                 obs_values, plate_shapes, plate_idx
             )
+            member_obs_values_filled = _slice_array_for_plate_member(
+                _obs_values_filled, plate_shapes, plate_idx
+            )
+            member_obs_mask = _slice_array_for_plate_member(
+                _obs_mask, plate_shapes, plate_idx
+            )
             member_ctrl_times = _slice_array_for_plate_member(
                 ctrl_times, plate_shapes, plate_idx
             )
@@ -429,6 +450,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     member_dynamics,
                     obs_times=member_obs_times,
                     obs_values=member_obs_values,
+                    _obs_values_filled=member_obs_values_filled,
+                    _obs_mask=member_obs_mask,
+                    _obs_has_missing=_obs_has_missing,
                     ctrl_times=member_ctrl_times,
                     ctrl_values=member_ctrl_values,
                     predict_times=member_predict_times,
@@ -471,6 +495,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
+        _obs_values_filled: Array | None = None,
+        _obs_mask: Array | None = None,
+        _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -485,6 +512,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
+        if obs_values is not None and (
+            _obs_values_filled is None or _obs_mask is None
+        ):
+            _obs_values_filled, _obs_mask, _obs_has_missing = (
+                prepare_observation_views(dynamics, obs_values)
+            )
+
         if plate_shapes:
             results = self._run_plated_simulation(
                 name,
@@ -492,6 +526,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                _obs_values_filled=_obs_values_filled,
+                _obs_mask=_obs_mask,
+                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -508,6 +545,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                _obs_values_filled=_obs_values_filled,
+                _obs_mask=_obs_mask,
+                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -530,6 +570,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             plate_shapes=plate_shapes,
             obs_times=obs_times,
             obs_values=obs_values,
+            _obs_values_filled=_obs_values_filled,
+            _obs_mask=_obs_mask,
+            _obs_has_missing=_obs_has_missing,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -543,6 +586,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         obs_times=None,
         obs_values=None,
+        _obs_values_filled=None,
+        _obs_mask=None,
+        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -824,7 +870,7 @@ class SDESimulator(BaseSimulator):
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
 
         def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
-            """Simulate one SDE trajectory and its emissions."""
+            """Simulate one SDE trajectory and its observations."""
             k_solve, k_obs = jr.split(key, 2)
             states_sol = solve_sde(
                 source=self.source,
@@ -901,15 +947,33 @@ class DiscreteTimeSimulator(BaseSimulator):
         times: Array,
         ctrl_values: Array | None,
         obs_values: Array,
+        _obs_values_filled: Array | None = None,
+        _obs_mask: Array | None = None,
     ) -> dict[str, Array]:
         """Sequential latent-state scan for conditioned observations via log-probability terms."""
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
         obs_values_for_helper = (
             obs_values[:, None] if obs_values.ndim == 1 else obs_values
         )
+        filled_obs_for_helper = (
+            None
+            if _obs_values_filled is None
+            else (
+                _obs_values_filled[:, None]
+                if obs_values.ndim == 1
+                else _obs_values_filled
+            )
+        )
+        obs_mask_for_helper = (
+            None
+            if _obs_mask is None
+            else (_obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask)
+        )
         log_prob = ObservationLogProb(
             dynamics=dynamics,
             obs_values=obs_values_for_helper,
+            precomputed_filled_obs=filled_obs_for_helper,
+            precomputed_obs_mask=obs_mask_for_helper,
         )
 
         with numpyro.plate(f"{name}_n_simulations", 1):
@@ -968,6 +1032,9 @@ class DiscreteTimeSimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        _obs_values_filled=None,
+        _obs_mask=None,
+        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -1018,17 +1085,31 @@ class DiscreteTimeSimulator(BaseSimulator):
         is_dirac_observation = isinstance(
             dynamics.observation_model, DiracIdentityObservation
         )
+        is_categorical_observation = _is_categorical_distribution(
+            _probe_observation_distribution(dynamics)
+        )
 
-        if (
-            is_dirac_observation
-            and obs_values is not None
-            and np.isnan(np.asarray(obs_values)).any()
-        ):
-            raise ValueError(
+        if is_dirac_observation and obs_values is not None and _obs_mask is not None:
+            missing_message = (
                 "NaN-valued obs_values are not currently supported with "
                 "DiracIdentityObservation under DiscreteTimeSimulator. "
                 "Dirac observations are treated as exact latent-state constraints, "
                 "so missingness would require a separate marginalization path."
+            )
+            if _obs_has_missing is None:
+                _raise_now_or_error_if(
+                    obs_values,
+                    jnp.any(jnp.isnan(obs_values)),
+                    missing_message,
+                )
+            elif _obs_has_missing:
+                raise ValueError(missing_message)
+
+        if obs_values is not None and is_categorical_observation:
+            raise ValueError(
+                "Categorical observation conditioning is not supported under "
+                "DiscreteTimeSimulator. Forward simulation still works. For HMM "
+                "inference, use Filter(HMMConfig()) instead."
             )
 
         if obs_values is not None and not is_dirac_observation:
@@ -1038,6 +1119,8 @@ class DiscreteTimeSimulator(BaseSimulator):
                 times=times,
                 ctrl_values=ctrl_values,
                 obs_values=obs_values,
+                _obs_values_filled=_obs_values_filled,
+                _obs_mask=_obs_mask,
             )
 
         state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
@@ -1125,7 +1208,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             keys = jr.split(prng_key, n_sim)
 
             def _sim_one_trajectory(key, x0):
-                """Simulate one discrete trajectory and its emissions."""
+                """Simulate one discrete trajectory and its observations."""
                 keys_t = jr.split(key, T)
 
                 def _step(carry, t_idx):
@@ -1275,6 +1358,9 @@ class ODESimulator(BaseSimulator):
         *,
         obs_times=None,
         obs_values=None,
+        _obs_values_filled=None,
+        _obs_mask=None,
+        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -1327,6 +1413,20 @@ class ODESimulator(BaseSimulator):
             ObservationLogProb(
                 dynamics=dynamics,
                 obs_values=obs_values[:, None] if obs_values.ndim == 1 else obs_values,
+                precomputed_filled_obs=(
+                    None
+                    if _obs_values_filled is None
+                    else (
+                        _obs_values_filled[:, None]
+                        if obs_values.ndim == 1
+                        else _obs_values_filled
+                    )
+                ),
+                precomputed_obs_mask=(
+                    None
+                    if _obs_mask is None
+                    else (_obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask)
+                ),
             )
             if obs_values is not None and not is_dirac_observation
             else None
