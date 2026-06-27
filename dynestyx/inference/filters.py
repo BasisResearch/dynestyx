@@ -408,7 +408,9 @@ class Filter(BaseLogFactorAdder):
         k_axis = 0 if keys is not None else None
         base_axes = (dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis)
 
-        ic_batched = _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes)
+        ic_batched = _dist_has_plate_batch_dims(
+            dynamics.initial_condition, plate_shapes
+        )
 
         if ic_batched:
             orig_ic = dynamics.initial_condition

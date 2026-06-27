@@ -512,11 +512,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
-        if obs_values is not None and (
-            _obs_values_filled is None or _obs_mask is None
-        ):
-            _obs_values_filled, _obs_mask, _obs_has_missing = (
-                prepare_observation_views(dynamics, obs_values)
+        if obs_values is not None and (_obs_values_filled is None or _obs_mask is None):
+            _obs_values_filled, _obs_mask, _obs_has_missing = prepare_observation_views(
+                dynamics, obs_values
             )
 
         if plate_shapes:
