@@ -84,14 +84,18 @@ See the [Lorenz 63 notebook](quick_example.ipynb) for a full SDE example with pa
 
 ## Citation
 
-If you use dynestyx in your research, please cite:
+If you are considering citing `dynestyx`, please cite
+["Dynestyx: A Probabilistic Programming Library for Dynamical Systems"](https://arxiv.org/abs/2606.16985):
 
 ```bibtex
-@software{dynestyx,
-  author = {{Basis Research Institute}},
-  title = {dynestyx: Bayesian inference for dynamical systems},
-  year = {2025},
-  url = {https://github.com/BasisResearch/dynestyx},
+@misc{waxman2026dynestyxprobabilisticprogramminglibrary,
+      title={Dynestyx: A Probabilistic Programming Library for Dynamical Systems},
+      author={Daniel Waxman and Dmitry Batenkov and John Feser and Andy Zane and Eli Bingham and Youssef Marzouk and Matthew E. Levine},
+      year={2026},
+      eprint={2606.16985},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/2606.16985}
 }
 ```
 

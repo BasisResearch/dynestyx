@@ -1,10 +1,13 @@
 import jax.numpy as jnp
 import jax.random as jr
+import numpyro
+import numpyro.distributions as dist
 import pytest
 from numpyro.handlers import condition, seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
 
-from dynestyx import DiscreteTimeSimulator
+import dynestyx as dsx
+from dynestyx import DiscreteTimeSimulator, DynamicalModel, LinearGaussianStateEvolution
 from tests.missingness.models import (
     GAUSSIAN_R,
     INDEPENDENT_SCALE,
@@ -36,6 +39,74 @@ def _run_discrete_trace(model, *, obs_times=None, obs_values=None, predict_times
                 predict_times=predict_times,
             )
     return tr
+
+
+def _correlated_student_t_model(
+    alpha=None,
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+):
+    alpha = numpyro.sample("alpha", dist.Uniform(-0.7, 0.7), obs=alpha)
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.MultivariateNormal(jnp.zeros(2), jnp.eye(2)),
+        state_evolution=LinearGaussianStateEvolution(
+            A=jnp.array([[alpha, 0.2], [-0.1, 0.8]]),
+            cov=0.05 * jnp.eye(2),
+        ),
+        observation_model=lambda x, u, t: dist.MultivariateStudentT(
+            df=5.0,
+            loc=x,
+            scale_tril=jnp.array([[0.4, 0.0], [0.15, 0.5]]),
+        ),
+    )
+    return dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
+
+
+def _scalar_categorical_hmm_like_model(
+    A=None,
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+):
+    A = numpyro.sample(
+        "A",
+        dist.Dirichlet(jnp.ones(2)).expand([2]).to_event(1),
+        obs=A,
+    )
+
+    def state_evolution(x, u, t_now, t_next):
+        return dist.Categorical(probs=A[x])
+
+    def observation_model(x, u, t):
+        probs = jnp.array(
+            [
+                [1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6],
+                [1 / 10, 1 / 10, 1 / 10, 1 / 10, 1 / 10, 1 / 2],
+            ]
+        )
+        return dist.Categorical(probs=probs[x])
+
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Categorical(probs=jnp.ones(2) / 2),
+        state_evolution=state_evolution,
+        observation_model=observation_model,
+    )
+    return dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
 
 
 def test_discrete_no_missing_conditioning_uses_log_prob_path():
@@ -173,6 +244,57 @@ def test_discrete_missingness_mcmc_smoke():
         mcmc.run(jr.PRNGKey(2), obs_times=times, obs_values=obs_values)
 
     assert "alpha" in mcmc.get_samples()
+
+
+def test_discrete_full_row_missing_correlated_student_t_mcmc_smoke():
+    times = jnp.arange(8.0)
+    with DiscreteTimeSimulator():
+        generated = Predictive(
+            _correlated_student_t_model,
+            params={"alpha": jnp.array(0.3)},
+            num_samples=1,
+            exclude_deterministic=False,
+        )(jr.PRNGKey(3), predict_times=times)
+    obs_values = generated["f_observations"][0, 0]
+    obs_values = set_full_row_missing(obs_values, 2)
+    obs_values = set_full_row_missing(obs_values, 3)
+    obs_values = set_full_row_missing(obs_values, 4)
+
+    with DiscreteTimeSimulator():
+        mcmc = MCMC(
+            NUTS(_correlated_student_t_model),
+            num_samples=1,
+            num_warmup=1,
+            progress_bar=False,
+        )
+        mcmc.run(jr.PRNGKey(4), obs_times=times, obs_values=obs_values)
+
+    assert "alpha" in mcmc.get_samples()
+
+
+def test_discrete_categorical_conditioning_raises_clear_error():
+    times = jnp.arange(6.0)
+    true_A = jnp.array([[0.95, 0.05], [0.1, 0.9]])
+    with DiscreteTimeSimulator():
+        generated = Predictive(_scalar_categorical_hmm_like_model, num_samples=1)(
+            jr.PRNGKey(5),
+            A=true_A,
+            predict_times=times,
+        )
+    obs_values = jnp.asarray(generated["f_observations"])[0, 0, :, 0]
+
+    with pytest.raises(
+        ValueError,
+        match="Categorical observation conditioning is not supported under "
+        "DiscreteTimeSimulator",
+    ):
+        with DiscreteTimeSimulator():
+            with seed(rng_seed=jr.PRNGKey(6)):
+                _scalar_categorical_hmm_like_model(
+                    A=true_A,
+                    obs_times=times,
+                    obs_values=obs_values,
+                )
 
 
 def test_discrete_dirac_missingness_raises_clear_error():

@@ -60,8 +60,8 @@ def test_observation_log_prob_init_tracks_partial_and_full_row_missingness():
         log_prob.obs_mask,
         jnp.array([[True, True], [False, True], [False, False]]),
     )
-    assert jnp.allclose(log_prob.safe_obs[0], obs_values[0])
-    assert jnp.allclose(log_prob.safe_obs[1], jnp.array([0.0, 3.0]))
+    assert jnp.allclose(log_prob.filled_obs[0], obs_values[0])
+    assert jnp.allclose(log_prob.filled_obs[1], jnp.array([0.0, 3.0]))
 
 
 def test_masked_multivariate_normal_log_prob_matches_manual_subset_formula():
