@@ -13,6 +13,7 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
+from dynestyx import LatentStateBuilder
 from dynestyx.models import DynamicalModel, GaussianStateEvolution
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.simulators import DiscreteTimeSimulator
@@ -70,7 +71,7 @@ def hierarchical_nonlinear_multitraj_model(
 
 @pytest.mark.parametrize("num_samples", [250])
 def test_hierarchical_discrete_simulator_science(num_samples: int):
-    """Recover hierarchical params using DiscreteTimeSimulator conditioning."""
+    """Recover hierarchical params using LatentStateBuilder conditioning."""
     rng_key = jr.PRNGKey(0)
     data_key, mcmc_key = jr.split(rng_key, 2)
 
@@ -107,7 +108,7 @@ def test_hierarchical_discrete_simulator_science(num_samples: int):
     obs_values = synthetic["f_observations"][0, :, 0]
 
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with LatentStateBuilder():
             return hierarchical_nonlinear_multitraj_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
