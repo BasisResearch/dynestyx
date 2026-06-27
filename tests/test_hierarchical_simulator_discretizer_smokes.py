@@ -15,6 +15,7 @@ from dynestyx import (
     DiscreteTimeSimulator,
     Discretizer,
     Filter,
+    LatentStateBuilder,
     ODESimulator,
     SDESimulator,
 )
@@ -84,9 +85,9 @@ def _nested_plate_discrete_lti_model(
         with dsx.plate("trajectories", M):
             alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
             A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
-            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
-            A = A.at[:, :, 0, 0].set(alpha)
-            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
+            A = jnp.broadcast_to(A_base, (G, M, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(alpha.T)
+            A = A.at[:, :, 1, 1].set(0.8 + beta[:, None])
             dynamics = LTI_discrete(A=A, Q=Q, H=H, R=R)
             dsx.sample(
                 "f",
@@ -277,7 +278,7 @@ def test_plate_conditioning_discrete_single_and_nested():
     obs_single = _make_obs_values((2, len(t), 1))
     obs_nested = _make_obs_values((2, 2, len(t), 1))
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(3)):
             _plate_discrete_lti_model(obs_times=t, obs_values=obs_single, M=2)
     assert_trace_sites_exist_and_field_all_finite(
@@ -289,11 +290,17 @@ def test_plate_conditioning_discrete_single_and_nested():
     assert tr["f_times"]["value"].shape == (2, 1, len(t))
     assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(4)):
             _nested_plate_discrete_lti_model(
                 obs_times=t, obs_values=obs_nested, G=2, M=2
             )
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_times",
+        "f_states",
+        where="nested plate discrete conditioning trace",
+    )
     assert tr["f_times"]["value"].shape == (2, 2, 1, len(t))
     assert tr["f_states"]["value"].shape[:4] == (2, 2, 1, len(t))
 
@@ -301,7 +308,7 @@ def test_plate_conditioning_discrete_single_and_nested():
 def test_plate_conditioning_ode_single():
     t = jnp.linspace(0.0, 0.4, 5)
     obs = _make_obs_values((2, len(t), 1))
-    with ODESimulator():
+    with LatentStateBuilder():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(5)):
             _plate_continuous_ode_model(obs_times=t, obs_values=obs, M=2)
     assert_trace_sites_exist_and_field_all_finite(
@@ -355,7 +362,7 @@ def test_plate_sde_conditioning_policy_unchanged():
     t = jnp.linspace(0.0, 0.4, 5)
     obs = _make_obs_values((2, len(t), 1))
     with SDESimulator():
-        with pytest.raises(ValueError, match="obs_times must not be provided"):
+        with pytest.raises(ValueError, match="Simulator handlers are generation-only"):
             with trace(), seed(rng_seed=jr.PRNGKey(6)):
                 _plate_continuous_sde_model(obs_times=t, obs_values=obs, M=2)
 
@@ -528,9 +535,9 @@ def _nested_plate_continuous_for_discretizer_model(
         with dsx.plate("trajectories", M):
             alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
             A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
-            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
-            A = A.at[:, :, 0, 0].set(-alpha)
-            A = A.at[:, :, 1, 1].set(-(0.6 + beta[None, :]))
+            A = jnp.broadcast_to(A_base, (G, M, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(-alpha.T)
+            A = A.at[:, :, 1, 1].set(-(0.6 + beta[:, None]))
             L = 0.2 * jnp.eye(2)
             H = jnp.array([[1.0, 0.0]])
             R = jnp.array([[0.25]])
@@ -591,9 +598,9 @@ def _nested_plate_discrete_dirac_model(
         with dsx.plate("trajectories", M):
             alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
             A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
-            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
-            A = A.at[:, :, 0, 0].set(alpha)
-            A = A.at[:, :, 1, 1].set(0.8 + beta[None, :])
+            A = jnp.broadcast_to(A_base, (G, M, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(alpha.T)
+            A = A.at[:, :, 1, 1].set(0.8 + beta[:, None])
             dynamics = DynamicalModel(
                 control_dim=0,
                 initial_condition=dist.MultivariateNormal(
@@ -655,9 +662,9 @@ def _nested_plate_continuous_dirac_for_discretizer_model(
         with dsx.plate("trajectories", M):
             alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
             A_base = jnp.array([[0.0, 0.1], [-0.05, -0.6]])
-            A = jnp.broadcast_to(A_base, (M, G, 2, 2)).copy()
-            A = A.at[:, :, 0, 0].set(-alpha)
-            A = A.at[:, :, 1, 1].set(-(0.6 + beta[None, :]))
+            A = jnp.broadcast_to(A_base, (G, M, 2, 2)).copy()
+            A = A.at[:, :, 0, 0].set(-alpha.T)
+            A = A.at[:, :, 1, 1].set(-(0.6 + beta[:, None]))
             L = 0.2 * jnp.eye(2)
             dynamics = DynamicalModel(
                 control_dim=0,
@@ -836,16 +843,12 @@ def test_plate_discrete_dirac_forward_and_conditioning_shapes():
     _assert_hierarchical_dirac_shapes_and_finite(tr, (2,), t, state_dim=2)
     obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=1)
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(23)):
             _plate_discrete_dirac_model(obs_times=t, obs_values=obs, M=2)
     _assert_hierarchical_dirac_shapes_and_finite(tr, (2,), t, state_dim=2)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Nested plate discrete Dirac rollout currently emits NaNs in states.",
-)
 def test_nested_plate_discrete_dirac_forward_and_conditioning_shapes():
     t = jnp.arange(4.0)
 
@@ -855,7 +858,7 @@ def test_nested_plate_discrete_dirac_forward_and_conditioning_shapes():
     _assert_hierarchical_dirac_shapes_and_finite(tr, (2, 2), t, state_dim=2)
     obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=2)
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(25)):
             _nested_plate_discrete_dirac_model(obs_times=t, obs_values=obs, G=2, M=2)
     _assert_hierarchical_dirac_shapes_and_finite(tr, (2, 2), t, state_dim=2)
@@ -871,7 +874,7 @@ def test_plate_discretized_dirac_forward_and_conditioning_shapes():
     _assert_hierarchical_dirac_shapes_and_finite(tr, (2,), t, state_dim=2)
     obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=1)
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         with Discretizer():
             with trace() as tr, seed(rng_seed=jr.PRNGKey(27)):
                 _plate_continuous_dirac_for_discretizer_model(
@@ -892,7 +895,7 @@ def test_nested_plate_discretized_dirac_forward_and_conditioning_shapes():
     _assert_hierarchical_dirac_shapes_and_finite(tr, (2, 2), t, state_dim=2)
     obs = _squeeze_n_sim_axis(tr["f_observations"]["value"], plate_ndim=2)
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         with Discretizer():
             with trace() as tr, seed(rng_seed=jr.PRNGKey(29)):
                 _nested_plate_continuous_dirac_for_discretizer_model(
@@ -917,12 +920,12 @@ def test_sample_site_parity_plate_and_non_plate():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(14)):
             _non_plate_discrete_model(predict_times=t)
     assert "f_x_0" in tr
-    assert "f_y_0" in tr
+    assert "f_y_0" not in tr
+    assert "f_observations" in tr
 
     with DiscreteTimeSimulator():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(15)):
             _plate_discrete_lti_model(predict_times=t, M=2)
     member_x0_sites = [k for k in tr if re.fullmatch(r"f_p\d+_x_0", k)]
-    member_y0_sites = [k for k in tr if re.fullmatch(r"f_p\d+_y_0", k)]
     assert len(member_x0_sites) == 2
-    assert len(member_y0_sites) == 2
+    assert "f_observations" in tr
