@@ -110,52 +110,69 @@ def _path_field_names(path) -> tuple[str, ...]:
     return tuple(names)
 
 
-# Whitelist of built-in model fields whose trailing axis is a vector event axis.
+# Whitelist of built-in model fields whose trailing axes are event axes.
 #
-# A shared vector whose length happens to equal a plate size is otherwise
-# ambiguous (is `(N,)` a per-member scalar or a shared length-N vector?). The
-# conservative read is "shared," and `_leaf_is_plate_batched` skips rank-1
-# suffixes by default. This whitelist opts specific built-in fields back in:
-# for these paths, a rank-1 suffix is *known* to be a vector event axis, so
-# `(N, d)` should be treated as plate-batched even when `d == 1`.
+# Shared model parameters can accidentally look plate-batched when their raw
+# shape happens to equal the active ``plate_shapes``. The classic example is a
+# shared vector with shape ``(N,)`` under a length-``N`` plate; nested plates add
+# the analogous matrix case, e.g. a shared ``(G, M)`` covariance under
+# ``plate_shapes == (G, M)``. For built-in model fields we know the expected
+# event rank statically, so we only treat them as plate-batched when the leaf has
+# at least that many non-plate axes after the plate prefix.
 #
 # Pinned by:
 #   tests/test_hierarchical_smokes.py::test_unbatched_vector_fields_matching_plate_size_remain_shared
 #
 # To extend: add the (parent_field, ..., leaf_field) tuple here and add a
 # matching smoke test exercising both the shared and plate-batched cases.
-def _is_known_vector_field(path) -> bool:
-    """Return True for built-in leaves whose final axis is a vector event axis."""
+def _known_field_min_suffix_ndim(path) -> int | None:
+    """Return the minimum non-plate suffix rank for built-in event-valued fields."""
     names = _path_field_names(path)
     # `Discretizer` wraps the original continuous-time evolution in a `cte` field
     # of `EulerMaruyamaGaussianStateEvolution`, so a drift bias that lived at
     # `state_evolution.drift.b` moves to `state_evolution.cte.drift.b`. Drop that
     # internal wrapper segment so the same whitelist matches discretized models.
     names = tuple(name for name in names if name != "cte")
-    if len(names) >= 2 and names[-2:] in {
-        ("state_evolution", "bias"),
-        ("observation_model", "bias"),
-    }:
-        return True
-    return len(names) >= 3 and names[-3:] == ("state_evolution", "drift", "b")
+    known_suffix_ranks = {
+        ("state_evolution", "A"): 2,
+        ("state_evolution", "B"): 2,
+        ("state_evolution", "cov"): 2,
+        ("state_evolution", "bias"): 1,
+        ("state_evolution", "drift", "A"): 2,
+        ("state_evolution", "drift", "B"): 2,
+        ("state_evolution", "drift", "b"): 1,
+        ("observation_model", "H"): 2,
+        ("observation_model", "D"): 2,
+        ("observation_model", "R"): 2,
+        ("observation_model", "bias"): 1,
+    }
+    for suffix, min_suffix_ndim in known_suffix_ranks.items():
+        if len(names) >= len(suffix) and names[-len(suffix) :] == suffix:
+            return min_suffix_ndim
+    return None
+
+
+def _is_known_vector_field(path) -> bool:
+    """Return True for built-in leaves whose final axis is a vector event axis."""
+    return _known_field_min_suffix_ndim(path) == 1
 
 
 def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool:
     """Return True if a pytree leaf should be sliced or vmapped over plates.
 
     Scalars with shape ``plate_shapes`` and tensors with explicit event axes are
-    accepted. Rank-1 suffixes are accepted only for known vector-valued model
-    fields, which protects shared vectors whose length equals a plate size.
+    accepted. Built-in event-valued model fields are only sliced when they retain
+    their expected non-plate suffix rank, which protects shared vectors and
+    matrices whose shape happens to equal the active plate sizes.
     """
     if not isinstance(leaf, jax.Array):
         return False
     if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
         return False
     suffix_ndim = leaf.ndim - len(plate_shapes)
-    if suffix_ndim == 1 and _is_known_vector_field(path):
-        return True
-    if suffix_ndim == 0 and _is_known_vector_field(path):
-        return False
+    known_min_suffix_ndim = _known_field_min_suffix_ndim(path)
+    if known_min_suffix_ndim is not None:
+        return suffix_ndim >= known_min_suffix_ndim
     return suffix_ndim == 0 or suffix_ndim >= 2
 
 
@@ -444,7 +461,12 @@ def _get_dynamics_with_t0(
     if dynamics.t0 is not None:
         t0_display = dynamics.t0
         if isinstance(t0_display, Array) and t0_display.ndim == 0:
-            t0_display = t0_display.item()
+            try:
+                t0_display = t0_display.item()
+            except jax.errors.ConcretizationTypeError:
+                # Keep traced scalar ``t0`` values as JAX arrays so this helper
+                # remains usable under JIT / HMC tracing.
+                pass
         # JIT-safe validation against user-provided t0.
         _ = eqx.error_if(
             inferred_t0,

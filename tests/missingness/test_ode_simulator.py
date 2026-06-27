@@ -4,7 +4,7 @@ import pytest
 from numpyro.handlers import condition, seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
 
-from dynestyx import ODESimulator
+from dynestyx import LatentStateBuilder, ODESimulator
 from tests.missingness.models import (
     GAUSSIAN_R,
     INDEPENDENT_SCALE,
@@ -27,7 +27,12 @@ from tests.missingness.utils import (
 
 
 def _run_ode_trace(model, *, obs_times=None, obs_values=None, predict_times=None):
-    with ODESimulator():
+    context = (
+        LatentStateBuilder()
+        if obs_times is not None or obs_values is not None
+        else ODESimulator()
+    )
+    with context:
         with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
             model(
                 obs_times=obs_times,
@@ -159,7 +164,7 @@ def test_ode_missingness_mcmc_smoke():
     obs_values = set_full_row_missing(obs_values, 1)
     obs_values = set_partial_row_missing(obs_values, 3, dim_idx=1)
 
-    with ODESimulator():
+    with LatentStateBuilder():
         mcmc = MCMC(
             NUTS(sampled_ode_linear_gaussian_model),
             num_samples=1,

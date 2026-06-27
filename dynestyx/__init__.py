@@ -8,6 +8,7 @@ from dynestyx.discretizers import Discretizer, euler_maruyama
 from dynestyx.handlers import condition, plate, sample
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.smoothers import Smoother
+from dynestyx.latent_state_builder import LatentStateBuilder
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
@@ -28,6 +29,13 @@ from dynestyx.models import (
     ObservationModel,
     ScalarDiffusion,
     StochasticContinuousTimeStateEvolution,
+)
+from dynestyx.path_log_prob import path_log_prob
+from dynestyx.simulation import SimulationResult, simulate
+from dynestyx.simulator_configs import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+    SimulatorConfig,
 )
 from dynestyx.simulators import (
     DiscreteTimeSimulator,
@@ -62,8 +70,15 @@ __all__ = [
     "flatten_draws",
     "condition",
     "ConditionedResult",
+    "SimulationResult",
+    "SimulatorConfig",
+    "ODESimulatorConfig",
+    "SDESimulatorConfig",
+    "LatentStateBuilder",
     "plate",
     "sample",
+    "simulate",
+    "path_log_prob",
     "DiracIdentityObservation",
     "LinearGaussianObservation",
     "LinearGaussianObservationParams",

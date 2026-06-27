@@ -1,4 +1,4 @@
-"""Smoke tests for hierarchical plate-aware simulator-based inference."""
+"""Smoke tests for hierarchical plate-aware latent-state-builder inference."""
 
 import equinox as eqx
 import jax.nn as jnn
@@ -10,7 +10,7 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import init_to_value
 
 import dynestyx as dsx
-from dynestyx import DiscreteTimeSimulator, ODESimulator
+from dynestyx import DiscreteTimeSimulator, LatentStateBuilder, ODESimulator
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.inference.mcmc_configs import NUTSConfig
 from dynestyx.models import (
@@ -62,8 +62,8 @@ def _hierarchical_nonlinear_discrete_model(
         )
 
 
-def test_hierarchical_discrete_simulator_inference_smoke():
-    """DiscreteTimeSimulator conditioning works under plate for MCMC."""
+def test_hierarchical_discrete_latent_state_builder_inference_smoke():
+    """LatentStateBuilder conditioning works under plate for MCMC."""
     M = 3
     T = 20
     t = jnp.arange(T, dtype=jnp.float32)
@@ -78,7 +78,7 @@ def test_hierarchical_discrete_simulator_inference_smoke():
         "beta_raw": jnp.zeros(M),
     }
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         inference = MCMCInference(
             mcmc_config=NUTSConfig(
                 num_samples=1,
@@ -103,7 +103,7 @@ def test_hierarchical_discrete_simulator_inference_smoke():
 
 
 # ---------------------------------------------------------------------------
-# ODE model for simulator-based inference
+# ODE model for explicit latent-state inference
 # ---------------------------------------------------------------------------
 
 
@@ -137,8 +137,8 @@ def _hierarchical_ode_model(
         )
 
 
-def test_hierarchical_ode_simulator_inference_smoke():
-    """ODESimulator conditioning works under plate for MCMC."""
+def test_hierarchical_ode_latent_state_builder_inference_smoke():
+    """LatentStateBuilder conditioning works under plate for ODE MCMC."""
     M = 3
     t = jnp.linspace(0.0, 1.0, 10)
 
@@ -152,7 +152,7 @@ def test_hierarchical_ode_simulator_inference_smoke():
         "rho_raw": 0.5 * jnp.ones(M),
     }
 
-    with ODESimulator():
+    with LatentStateBuilder():
         inference = MCMCInference(
             mcmc_config=NUTSConfig(
                 num_samples=1,

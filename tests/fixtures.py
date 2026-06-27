@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import jax.random as jr
 import pytest
 
+import dynestyx as dsx
+
 # Global fixture profile switch:
 # - Fast mode (default): minimize data length and particle cost for CI/dev loops.
 # - Science mode: preserve longer trajectories used by science-grade tests.
@@ -230,7 +232,7 @@ def data_conditioned_discrete_time_l63(request):
     # Build conditioned model
     # ---------------------------------------------------------
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with dsx.LatentStateBuilder():
             return discrete_time_l63_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -661,7 +663,7 @@ def data_conditioned_stochastic_volatility(request):
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with dsx.LatentStateBuilder():
             return stochastic_volatility(
                 identity_observation=identity_observation,
                 obs_times=obs_times,
@@ -847,7 +849,7 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with dsx.LatentStateBuilder():
             with Discretizer():
                 return continuous_time_stochastic_l63_model_dirac_obs(
                     obs_times=obs_times,
@@ -906,7 +908,7 @@ def data_conditioned_discrete_time_l63_auto(request):
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        with Simulator():
+        with dsx.LatentStateBuilder():
             with Discretizer():
                 return continuous_time_stochastic_l63_model(
                     obs_times=obs_times,

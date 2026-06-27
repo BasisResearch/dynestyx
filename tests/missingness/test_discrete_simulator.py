@@ -7,7 +7,12 @@ from numpyro.handlers import condition, seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx import DiscreteTimeSimulator, DynamicalModel, LinearGaussianStateEvolution
+from dynestyx import (
+    DiscreteTimeSimulator,
+    DynamicalModel,
+    LatentStateBuilder,
+    LinearGaussianStateEvolution,
+)
 from tests.missingness.models import (
     GAUSSIAN_R,
     INDEPENDENT_SCALE,
@@ -31,7 +36,12 @@ from tests.missingness.utils import (
 
 
 def _run_discrete_trace(model, *, obs_times=None, obs_values=None, predict_times=None):
-    with DiscreteTimeSimulator():
+    context = (
+        LatentStateBuilder()
+        if obs_times is not None or obs_values is not None
+        else DiscreteTimeSimulator()
+    )
+    with context:
         with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
             model(
                 obs_times=obs_times,
@@ -234,7 +244,7 @@ def test_discrete_missingness_mcmc_smoke():
     obs_values = set_full_row_missing(obs_values, 1)
     obs_values = set_partial_row_missing(obs_values, 3, dim_idx=0)
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         mcmc = MCMC(
             NUTS(sampled_discrete_linear_gaussian_model),
             num_samples=1,
@@ -260,7 +270,7 @@ def test_discrete_full_row_missing_correlated_student_t_mcmc_smoke():
     obs_values = set_full_row_missing(obs_values, 3)
     obs_values = set_full_row_missing(obs_values, 4)
 
-    with DiscreteTimeSimulator():
+    with LatentStateBuilder():
         mcmc = MCMC(
             NUTS(_correlated_student_t_model),
             num_samples=1,
@@ -285,8 +295,7 @@ def test_discrete_categorical_conditioning_raises_clear_error():
 
     with pytest.raises(
         ValueError,
-        match="Categorical observation conditioning is not supported under "
-        "DiscreteTimeSimulator",
+        match="Simulator handlers are generation-only",
     ):
         with DiscreteTimeSimulator():
             with seed(rng_seed=jr.PRNGKey(6)):
@@ -297,17 +306,14 @@ def test_discrete_categorical_conditioning_raises_clear_error():
                 )
 
 
-def test_discrete_dirac_missingness_raises_clear_error():
+def test_discrete_dirac_missingness_uses_latent_state_builder_path():
     times = jnp.arange(5.0)
     forward = _run_discrete_trace(discrete_dirac_model, predict_times=times)
     obs_values = forward["f_observations"]["value"][0]
     obs_values = set_full_row_missing(obs_values, 2)
 
-    with pytest.raises(
-        ValueError,
-        match="NaN-valued obs_values are not currently supported with "
-        "DiracIdentityObservation under DiscreteTimeSimulator",
-    ):
-        _run_discrete_trace(
-            discrete_dirac_model, obs_times=times, obs_values=obs_values
-        )
+    conditioned = _run_discrete_trace(
+        discrete_dirac_model, obs_times=times, obs_values=obs_values
+    )
+    assert "f_x_2" in conditioned
+    assert conditioned["f_x_2"]["is_observed"] is False

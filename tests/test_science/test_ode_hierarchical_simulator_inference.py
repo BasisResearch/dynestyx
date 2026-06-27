@@ -13,6 +13,7 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
+from dynestyx import LatentStateBuilder
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.simulators import ODESimulator
@@ -124,7 +125,7 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
     obs_values = synthetic["f_observations"][0, :, 0]
 
     def data_conditioned_model():
-        with ODESimulator(dt0=5e-2):
+        with LatentStateBuilder():
             return hierarchical_ode_model(
                 obs_times=obs_times,
                 obs_values=obs_values,

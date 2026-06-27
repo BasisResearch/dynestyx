@@ -8,8 +8,8 @@ Matrix of expected behavior across three handler contexts:
 
 | Input Provided | Case 1: Simulator | Case 2: Sim+Filter | Case 3: Filter |
 |----------------|-------------------|--------------------|-----------------|
-| obs_times, obs_values, predict_times | Solve on union | Filter consumes; Simulator runs | Runs |
-| obs_times, obs_values | ODE/Discrete: runs; SDE: Error | Filter consumes; Simulator no-ops | Runs |
+| obs_times, obs_values, predict_times | Error | Filter consumes; Simulator runs | Runs |
+| obs_times, obs_values | Error | Filter consumes; Simulator no-ops | Runs |
 | obs_times, predict_times (no obs_values) | Error | Error | Error |
 | predict_times only | Runs | No-op → Case 1 | No-op |
 | obs_times only | Error | Error | Error |
@@ -20,7 +20,13 @@ import jax.random as jr
 import pytest
 from numpyro.handlers import seed, trace
 
-from dynestyx import DiscreteTimeSimulator, Filter, SDESimulator, Simulator
+from dynestyx import (
+    DiscreteTimeSimulator,
+    Filter,
+    LatentStateBuilder,
+    SDESimulator,
+    Simulator,
+)
 from dynestyx.inference.filter_configs import ContinuousTimeEKFConfig, EKFConfig
 from tests.models import (
     jumpy_controls_model,
@@ -116,19 +122,18 @@ def test_error_neither_obs_times_nor_predict_times():
 # -----------------------------------------------------------------------------
 
 
-def test_case1_simulator_all_three_runs():
-    """Case 1: obs_times + obs_values + predict_times → Simulator runs on union of times."""
-    # Use DiscreteTimeSimulator (SDE rejects obs_times; ODE/Discrete accept)
-    tr = _run_model(
-        jumpy_controls_model,
-        obs_times=_TIMES,
-        obs_values=_OBS_VALUES,
-        predict_times=_TIMES,
-        ctrl_times=_CTRL_TIMES,
-        ctrl_values=_CTRL_VALUES,
-        context=DiscreteTimeSimulator(),
-    )
-    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
+def test_case1_simulator_all_three_errors():
+    """Case 1: obs_times + obs_values + predict_times → generation-only Simulator errors."""
+    with pytest.raises(ValueError, match="Simulator handlers are generation-only"):
+        _run_model(
+            jumpy_controls_model,
+            obs_times=_TIMES,
+            obs_values=_OBS_VALUES,
+            predict_times=_TIMES,
+            ctrl_times=_CTRL_TIMES,
+            ctrl_values=_CTRL_VALUES,
+            context=DiscreteTimeSimulator(),
+        )
 
 
 def test_case1_simulator_predict_times_only_runs():
@@ -143,38 +148,35 @@ def test_case1_simulator_predict_times_only_runs():
     assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
 
 
-def test_case1_simulator_obs_times_obs_values_only_discrete_runs():
-    """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → runs."""
-    tr = _run_model(
-        jumpy_controls_model,
-        obs_times=_TIMES,
-        obs_values=_OBS_VALUES,
-        ctrl_times=_CTRL_TIMES,
-        ctrl_values=_CTRL_VALUES,
-        context=DiscreteTimeSimulator(),
-    )
-    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
+def test_case1_simulator_obs_times_obs_values_only_discrete_errors():
+    """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → error."""
+    with pytest.raises(ValueError, match="Simulator handlers are generation-only"):
+        _run_model(
+            jumpy_controls_model,
+            obs_times=_TIMES,
+            obs_values=_OBS_VALUES,
+            ctrl_times=_CTRL_TIMES,
+            ctrl_values=_CTRL_VALUES,
+            context=DiscreteTimeSimulator(),
+        )
 
 
-def test_case1_simulator_obs_times_obs_values_only_ode_runs():
-    """Case 1: obs_times + obs_values (no predict_times), ODESimulator → runs."""
-    tr = _run_model(
-        jumpy_controls_model_ode,
-        obs_times=_TIMES,
-        obs_values=_OBS_VALUES,
-        ctrl_times=_CTRL_TIMES,
-        ctrl_values=_CTRL_VALUES,
-        context=Simulator(),
-    )
-    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
+def test_case1_simulator_obs_times_obs_values_only_ode_errors():
+    """Case 1: obs_times + obs_values (no predict_times), ODESimulator → error."""
+    with pytest.raises(ValueError, match="Simulator handlers are generation-only"):
+        _run_model(
+            jumpy_controls_model_ode,
+            obs_times=_TIMES,
+            obs_values=_OBS_VALUES,
+            ctrl_times=_CTRL_TIMES,
+            ctrl_values=_CTRL_VALUES,
+            context=Simulator(),
+        )
 
 
 def test_case1_simulator_obs_times_obs_values_only_sde_errors():
-    """Case 1: obs_times + obs_values (no predict_times), SDESimulator → Error (per matrix)."""
-    # SDESimulator rejects obs_times; requires predict_times for SDE rollout
-    with pytest.raises(
-        ValueError, match="obs_times must not be provided|predict_times"
-    ):
+    """Case 1: obs_times + obs_values (no predict_times), SDESimulator → error."""
+    with pytest.raises(ValueError, match="Simulator handlers are generation-only"):
         _run_model(
             jumpy_controls_model_sde,
             obs_times=_TIMES,
@@ -183,6 +185,19 @@ def test_case1_simulator_obs_times_obs_values_only_sde_errors():
             ctrl_values=_CTRL_VALUES,
             context=SDESimulator(),
         )
+
+
+def test_latent_state_builder_obs_only_discrete_runs():
+    """LatentStateBuilder accepts explicit conditioning for discrete models."""
+    tr = _run_model(
+        jumpy_controls_model,
+        obs_times=_TIMES,
+        obs_values=_OBS_VALUES,
+        ctrl_times=_CTRL_TIMES,
+        ctrl_values=_CTRL_VALUES,
+        context=LatentStateBuilder(),
+    )
+    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
 
 
 # -----------------------------------------------------------------------------

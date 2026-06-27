@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from numpyro.handlers import condition, seed, trace
 
-from dynestyx import DiscreteTimeSimulator, ODESimulator
+from dynestyx import DiscreteTimeSimulator, LatentStateBuilder, ODESimulator
 from tests.missingness.models import (
     GAUSSIAN_R,
     plated_discrete_linear_gaussian_model,
@@ -18,7 +18,10 @@ from tests.missingness.utils import (
 
 
 def _run_plated_discrete_trace(model, *, times, obs_values=None, M=2):
-    with DiscreteTimeSimulator():
+    context = (
+        LatentStateBuilder() if obs_values is not None else DiscreteTimeSimulator()
+    )
+    with context:
         with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
             model(
                 obs_times=times if obs_values is not None else None,
@@ -30,7 +33,8 @@ def _run_plated_discrete_trace(model, *, times, obs_values=None, M=2):
 
 
 def _run_plated_ode_trace(model, *, times, obs_values=None, M=2):
-    with ODESimulator():
+    context = LatentStateBuilder() if obs_values is not None else ODESimulator()
+    with context:
         with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
             model(
                 obs_times=times if obs_values is not None else None,
