@@ -26,12 +26,16 @@ from dynestyx.inference.plate_utils import (
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     Diffusion,
-    DiscreteTimeStateEvolution,
     DynamicalModel,
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.simulation_utils import _ensure_trailing_dim, _tile_times
+from dynestyx.simulator_configs import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+    SimulatorConfig,
+)
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import FunctionOfTime, as_scalar_time_array
 from dynestyx.utils import (
@@ -654,7 +658,7 @@ class SDESimulator(BaseSimulator):
         stepsize_controller: dfx.AbstractStepSizeController = dfx.ConstantStepSize(),
         adjoint: dfx.AbstractAdjoint = dfx.RecursiveCheckpointAdjoint(),
         dt0: float | int | Array = 1e-4,
-        tol_vbt: float | None = None,
+        tol_vbt: float | int | Array | None = None,
         max_steps: int | None = None,
         n_simulations: int = 1,
         source: Literal["diffrax", "em_scan"] = "em_scan",
@@ -1030,6 +1034,61 @@ class ODESimulator(BaseSimulator):
         }
 
 
+def build_simulator_for_dynamics(
+    dynamics: DynamicalModel,
+    *,
+    n_simulations: int = 1,
+    simulator_config: SimulatorConfig | None = None,
+) -> BaseSimulator:
+    """Construct the concrete simulator implied by dynamics and config."""
+    if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
+        if isinstance(simulator_config, ODESimulatorConfig):
+            raise ValueError(
+                "ODESimulatorConfig is incompatible with stochastic continuous-time dynamics."
+            )
+        if isinstance(simulator_config, SDESimulatorConfig):
+            return SDESimulator(
+                solver=simulator_config.solver,
+                stepsize_controller=simulator_config.stepsize_controller,
+                adjoint=simulator_config.adjoint,
+                dt0=simulator_config.dt0,
+                tol_vbt=simulator_config.tol_vbt,
+                max_steps=simulator_config.max_steps,
+                n_simulations=n_simulations,
+                source=simulator_config.source,
+            )
+        return SDESimulator(n_simulations=n_simulations)
+
+    if isinstance(dynamics.state_evolution, DeterministicContinuousTimeStateEvolution):
+        if isinstance(simulator_config, SDESimulatorConfig):
+            raise ValueError(
+                "SDESimulatorConfig is incompatible with deterministic continuous-time dynamics."
+            )
+        if isinstance(simulator_config, ODESimulatorConfig):
+            return ODESimulator(
+                solver=simulator_config.solver,
+                adjoint=simulator_config.adjoint,
+                stepsize_controller=simulator_config.stepsize_controller,
+                dt0=simulator_config.dt0,
+                max_steps=simulator_config.max_steps,
+                n_simulations=n_simulations,
+            )
+        return ODESimulator(n_simulations=n_simulations)
+
+    if not dynamics.continuous_time:
+        if isinstance(simulator_config, (ODESimulatorConfig, SDESimulatorConfig)):
+            raise ValueError(
+                "Continuous-time simulator configs are incompatible with discrete-time dynamics."
+            )
+        return DiscreteTimeSimulator(n_simulations=n_simulations)
+
+    raise ValueError(
+        f"Unsupported state evolution type: {type(dynamics.state_evolution)}. "
+        "If using a generic function as a state evolution, you must specify the "
+        "concrete simulator class manually."
+    )
+
+
 class Simulator(BaseSimulator):
     """Auto-selecting simulator wrapper.
 
@@ -1040,9 +1099,6 @@ class Simulator(BaseSimulator):
     - `DiscreteTimeStateEvolution` -> `DiscreteTimeSimulator`
 
     Note:
-        - Any `*args` / `**kwargs` are forwarded to the routed simulator
-          constructor, so Diffrax settings can be supplied here when routing to
-          `ODESimulator` / `SDESimulator`.
         - Auto-routing depends on structured model metadata (for example,
           `ContinuousTimeStateEvolution` vs. `DiscreteTimeStateEvolution`, and
           diffusion presence for continuous-time models).
@@ -1058,9 +1114,13 @@ class Simulator(BaseSimulator):
         need to switch model types, create a new ``Simulator()`` instance.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
+    def __init__(
+        self,
+        n_simulations: int = 1,
+        simulator_config: SimulatorConfig | None = None,
+    ):
+        self.n_simulations = n_simulations
+        self.simulator_config = simulator_config
 
         self.simulator: BaseSimulator | None = None
 
@@ -1077,21 +1137,11 @@ class Simulator(BaseSimulator):
         **kwargs,
     ) -> dict[str, Array]:
         if self.simulator is None:
-            if isinstance(
-                dynamics.state_evolution, StochasticContinuousTimeStateEvolution
-            ):
-                self.simulator = SDESimulator(*self.args, **self.kwargs)
-            elif isinstance(
-                dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
-            ):
-                self.simulator = ODESimulator(*self.args, **self.kwargs)
-            elif isinstance(dynamics.state_evolution, DiscreteTimeStateEvolution):
-                self.simulator = DiscreteTimeSimulator(*self.args, **self.kwargs)
-            else:
-                raise ValueError(
-                    f"Unsupported state evolution type: {type(dynamics.state_evolution)}."
-                    + "If using a generic function as a state evolution, you must specify the type of simulator manually."
-                )
+            self.simulator = build_simulator_for_dynamics(
+                dynamics,
+                n_simulations=self.n_simulations,
+                simulator_config=self.simulator_config,
+            )
 
         return self.simulator._simulate(
             name,

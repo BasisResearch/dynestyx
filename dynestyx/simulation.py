@@ -14,12 +14,17 @@ from jax import Array
 from jaxtyping import PRNGKeyArray, Real
 
 from dynestyx.models import (
-    DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
-    StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.simulation_utils import _ensure_trailing_dim, _tile_times
+from dynestyx.simulator_configs import SimulatorConfig
+from dynestyx.simulators import (
+    DiscreteTimeSimulator,
+    ODESimulator,
+    SDESimulator,
+    build_simulator_for_dynamics,
+)
 from dynestyx.solvers import solve_ode, solve_sde
 from dynestyx.types import as_scalar_time_array
 from dynestyx.utils import (
@@ -246,20 +251,21 @@ def simulate(
     *,
     predict_times: Real[Array, "*predict_time_plate predict_time"],
     rng_key: PRNGKeyArray,
+    n_simulations: int = 1,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
-    n_simulations: int = 1,
-    source: Literal["diffrax", "em_scan"] = "em_scan",
-    solver: dfx.AbstractSolver | None = None,
-    stepsize_controller: dfx.AbstractStepSizeController | None = None,
-    adjoint: dfx.AbstractAdjoint | None = None,
-    dt0: float | int | Array | None = None,
-    tol_vbt: float | int | Array | None = None,
-    max_steps: int | None = None,
+    simulator_config: SimulatorConfig | None = None,
 ) -> SimulationResult:
-    """Simulate a dynamical model without entering a NumPyro trace."""
+    """Simulate a dynamical model without entering a NumPyro trace.
+
+    `n_simulations` stays on the high-level API because it is commonly varied
+    across all simulator types. Pass a `simulator_config` to choose less-common
+    solver/backend settings explicitly. If `simulator_config` is omitted, the
+    function auto-detects the model type and uses the same defaults as
+    `Simulator()`, `ODESimulator()`, and `SDESimulator()`.
+    """
     _validate_site_sorting(predict_times, name="predict_times")
     _validate_controls(None, predict_times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
@@ -271,63 +277,52 @@ def simulate(
             "simulate currently expects a single prediction grid with shape (time,)."
         )
 
-    if not dynamics.continuous_time:
+    simulator = build_simulator_for_dynamics(
+        dynamics,
+        n_simulations=n_simulations,
+        simulator_config=simulator_config,
+    )
+
+    if isinstance(simulator, DiscreteTimeSimulator):
         return _simulate_discrete(
             dynamics,
             predict_times=predict_times,
             ctrl_values=None if ctrl_values is None else jnp.asarray(ctrl_values),
-            n_simulations=n_simulations,
+            n_simulations=simulator.n_simulations,
             rng_key=rng_key,
         )
 
-    if isinstance(dynamics.state_evolution, DeterministicContinuousTimeStateEvolution):
-        ode_solver = solver if solver is not None else dfx.Tsit5()
-        ode_adjoint = (
-            adjoint if adjoint is not None else dfx.RecursiveCheckpointAdjoint()
-        )
-        ode_controller = (
-            stepsize_controller
-            if stepsize_controller is not None
-            else dfx.ConstantStepSize()
-        )
-        ode_dt0 = as_scalar_time_array(
-            1e-3 if dt0 is None else dt0,
-            name="dt0",
-            dtype=predict_times.dtype,
-        )
+    if isinstance(simulator, ODESimulator):
+        ode_settings = simulator.diffeqsolve_settings
         return _simulate_ode(
             dynamics,
             predict_times=predict_times,
             ctrl_times=None if ctrl_times is None else jnp.asarray(ctrl_times),
             ctrl_values=None if ctrl_values is None else jnp.asarray(ctrl_values),
-            n_simulations=n_simulations,
+            n_simulations=simulator.n_simulations,
             rng_key=rng_key,
-            solver=ode_solver,
-            adjoint=ode_adjoint,
-            stepsize_controller=ode_controller,
-            dt0=ode_dt0,
-            max_steps=100_000 if max_steps is None else max_steps,
+            solver=ode_settings["solver"],
+            adjoint=ode_settings["adjoint"],
+            stepsize_controller=ode_settings["stepsize_controller"],
+            dt0=as_scalar_time_array(
+                ode_settings["dt0"],
+                name="dt0",
+                dtype=predict_times.dtype,
+            ),
+            max_steps=ode_settings["max_steps"],
         )
 
-    if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-        sde_solver = solver if solver is not None else dfx.Heun()
-        sde_adjoint = (
-            adjoint if adjoint is not None else dfx.RecursiveCheckpointAdjoint()
-        )
-        sde_controller = (
-            stepsize_controller
-            if stepsize_controller is not None
-            else dfx.ConstantStepSize()
-        )
+    if isinstance(simulator, SDESimulator):
+        sde_settings = simulator.diffeqsolve_settings
         sde_dt0 = as_scalar_time_array(
-            1e-4 if dt0 is None else dt0,
+            sde_settings["dt0"],
             name="dt0",
             dtype=predict_times.dtype,
         )
         tol_vbt_arr = None
-        if source == "diffrax":
+        if simulator.source == "diffrax":
             tol_vbt_arr = as_scalar_time_array(
-                sde_dt0 / 2 if tol_vbt is None else tol_vbt,
+                sde_dt0 / 2 if simulator.tol_vbt is None else simulator.tol_vbt,
                 name="tol_vbt",
                 dtype=predict_times.dtype,
             )
@@ -336,20 +331,18 @@ def simulate(
             predict_times=predict_times,
             ctrl_times=None if ctrl_times is None else jnp.asarray(ctrl_times),
             ctrl_values=None if ctrl_values is None else jnp.asarray(ctrl_values),
-            n_simulations=n_simulations,
+            n_simulations=simulator.n_simulations,
             rng_key=rng_key,
-            source=source,
-            solver=sde_solver,
-            adjoint=sde_adjoint,
-            stepsize_controller=sde_controller,
+            source=simulator.source,
+            solver=sde_settings["solver"],
+            adjoint=sde_settings["adjoint"],
+            stepsize_controller=sde_settings["stepsize_controller"],
             dt0=sde_dt0,
             tol_vbt=tol_vbt_arr,
-            max_steps=max_steps,
+            max_steps=sde_settings["max_steps"],
         )
 
-    raise ValueError(
-        f"Unsupported state evolution type for simulate: {type(dynamics.state_evolution)}"
-    )
+    raise ValueError(f"Unsupported simulator instance for simulate: {type(simulator)}")
 
 
 __all__ = ["SimulationResult", "simulate"]

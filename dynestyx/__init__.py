@@ -32,6 +32,11 @@ from dynestyx.models import (
 )
 from dynestyx.path_log_prob import path_log_prob
 from dynestyx.simulation import SimulationResult, simulate
+from dynestyx.simulator_configs import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+    SimulatorConfig,
+)
 from dynestyx.simulators import (
     DiscreteTimeSimulator,
     ODESimulator,
@@ -66,6 +71,9 @@ __all__ = [
     "condition",
     "ConditionedResult",
     "SimulationResult",
+    "SimulatorConfig",
+    "ODESimulatorConfig",
+    "SDESimulatorConfig",
     "LatentStateBuilder",
     "plate",
     "sample",
