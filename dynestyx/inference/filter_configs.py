@@ -699,7 +699,13 @@ class HMMConfig(BaseFilterConfig):
 
     For continuous latent-state models, use any other filter config.
 
-    Does not support missing observations (data cannot have NaNs).
+    Supports missing observations via NaNs. Fully missing rows are skipped by
+    neutralizing the observation term, and partial missing rows are supported for
+    exact-marginalizable observation families such as `MultivariateNormal` and
+    factorizable `Independent(..., 1)` observations.
+
+    For categorical observations, encode observed entries as zero-based integer
+    labels `0..K-1` and represent missing entries with `NaN`.
 
     Attributes:
         record_filtered (bool | None): Save the filtered state probabilities
