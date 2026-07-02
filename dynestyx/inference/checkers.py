@@ -149,11 +149,6 @@ def _validate_missing_observation_support(
         return
 
     if mode == "filter" and isinstance(config, HMMConfigs):
-        _raise_now_or_error_if(
-            obs_values,
-            has_missing,
-            "HMM filtering does not support NaNs in obs_values.",
-        )
         return
 
     if isinstance(config, discrete_types):

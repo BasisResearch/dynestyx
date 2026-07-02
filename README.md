@@ -39,3 +39,20 @@ We provide a more mathematical introduction in the [Introduction](docs/math_intr
 ## Contributing
 
 Contributions are welcome. See [Contributing Guidelines](CONTRIBUTING.md) for development setup, testing expectations, and the pull request workflow.
+
+## Citing Dynestyx
+
+If you are considering citing `dynestyx`, please cite the paper
+["Dynestyx: A Probabilistic Programming Library for Dynamical Systems"](https://arxiv.org/abs/2606.16985):
+
+```bibtex
+@misc{waxman2026dynestyxprobabilisticprogramminglibrary,
+      title={Dynestyx: A Probabilistic Programming Library for Dynamical Systems},
+      author={Daniel Waxman and Dmitry Batenkov and John Feser and Andy Zane and Eli Bingham and Youssef Marzouk and Matthew E. Levine},
+      year={2026},
+      eprint={2606.16985},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/2606.16985}
+}
+```
