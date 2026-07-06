@@ -3,6 +3,8 @@
 Internal API reference for MCMC configuration dataclasses used by inference dispatchers and
 backend integrations.
 
-::: dynestyx.inference.mcmc_configs
+The canonical implementation module is `dynestyx.inference.configs.mcmc`.
+
+::: dynestyx.inference.configs.mcmc
     options:
       filters: []

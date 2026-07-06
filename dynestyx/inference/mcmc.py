@@ -3,14 +3,14 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from numpyro.infer import HMC, MCMC, NUTS
 
-from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
-from dynestyx.inference.mcmc_configs import (
+from dynestyx.inference.configs.mcmc import (
     BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
     SGLDConfig,
 )
+from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
 
 
 class MCMCInference:

@@ -17,12 +17,7 @@ from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.distribution_utils import (
-    _categorical_log_probs_to_dists,
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
-)
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
@@ -39,6 +34,11 @@ from dynestyx.inference.filter_configs import (
     PFConfig,
     PFResamplingConfig,
     UKFConfig,
+)
+from dynestyx.inference.distribution_utils import (
+    _categorical_log_probs_to_dists,
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (
@@ -190,7 +190,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](../filter_configs.md).
+    [Available filter configurations](filter_configs.md).
 
     Defaults
     --------

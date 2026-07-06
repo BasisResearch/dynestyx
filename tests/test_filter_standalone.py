@@ -6,7 +6,7 @@ import jax.random as jr
 import optax
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import EnKFConfig, KFConfig
+from dynestyx.inference.configs.filter import EnKFConfig, KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.types import ConditionedResult
 

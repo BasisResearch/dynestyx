@@ -13,9 +13,9 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
+from dynestyx import ODESimulator
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.models.observations import LinearGaussianObservation
-from dynestyx.simulators import ODESimulator
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True

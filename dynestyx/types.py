@@ -41,6 +41,52 @@ class ConditionedResult:
         )
 
 
+@dataclasses.dataclass
+class LatentStateResult:
+    """Result of latent-state construction / scoring without NumPyro side effects.
+
+    Let ``z = state_path_params`` denote the free variables used to
+    parameterize the latent trajectory, and let
+
+    ``x = state_path = g(z)``
+
+    denote the full reconstructed latent state path used by the probabilistic
+    model. The joint density is evaluated as ``log p(x, y)`` after
+    reconstructing ``x`` from ``z``.
+
+    In simple discrete models these may match exactly. In ODE or compressed
+    exact-observation settings they generally differ.
+    """
+
+    joint_log_prob: jax.Array | None = None
+    state_path_params: object = None
+    state_path_param_times: object = None
+    state_path_param_coordinate_indices: object = None
+    state_path: object = None
+    state_path_times: object = None
+    state_dists: list | None = None
+    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
+        default=None, repr=False
+    )
+
+
+@dataclasses.dataclass
+class SimulatedResult:
+    """Result of pure-JAX forward simulation without NumPyro side effects.
+
+    The simulator now conceptually owns data generation only. This result
+    therefore stores the realized state path ``x`` and observation path ``y``
+    produced on the requested simulator time grid.
+    """
+
+    times: object = None
+    states: object = None
+    observations: object = None
+    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
+        default=None, repr=False
+    )
+
+
 def as_scalar_time_array(
     value: float | int | Array, *, name: str, dtype=None
 ) -> Real[Array, ""]:

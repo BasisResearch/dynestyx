@@ -13,7 +13,7 @@ from dynestyx.discretizers import (
     EulerMaruyamaGaussianStateEvolution,
     euler_maruyama,
 )
-from dynestyx.inference.filter_configs import EKFConfig
+from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,

@@ -6,7 +6,7 @@ import jax.random as jr
 import optax
 
 import dynestyx as dsx
-from dynestyx.inference.smoother_configs import KFSmootherConfig
+from dynestyx.inference.configs.smoother import KFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.types import ConditionedResult
 

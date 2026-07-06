@@ -3,34 +3,45 @@
 Simulators (also called *unrollers*) turn a `DynamicalModel` into explicit NumPyro
 `sample` sites for latent states and observations on a chosen time grid.
 
+## Package Layout
+
+The simulator refactor split the previous monolithic `dynestyx/simulators.py`
+implementation into the `dynestyx/simulation/` package:
+
+- `base.py`: shared handler logic and helper functions
+- `discrete.py`: `DiscreteTimeSimulator`
+- `ode.py`: `ODESimulator`
+- `sde.py`: `SDESimulator`
+- `auto.py`: lazy auto-routing `Simulator`
+
+For pure-JAX forward generation, user-facing code should prefer
+`dsx.simulate(...)`. The simulator classes documented here are the NumPyro-aware
+handler implementations used by `dsx.sample(...)` and by posterior rollout from
+`Filter`/`Smoother`.
+
 !!! note "When to use each time argument"
-    - **`obs_times` and `obs_values` must be provided together**:
-      - `obs_times` defines where observation sample sites (`y_t`) live.
-      - `obs_values` provides conditioning values for those sites via `obs=...`.
-      - Typical use: observed-data simulation/inference on a known observation grid.
     - **`predict_times`**: use this when you want rollout trajectories at specific
       times for simulation and/or post-filter rollout.
-      - In filter-rollout mode, predictions are generated at `predict_times` from
-        filtered posteriors.
+      - In posterior-rollout mode, predictions are generated at `predict_times`
+        from inference-handler posteriors.
       - Typical use: forward simulation, forecasting, or dense trajectories for
         visualization.
-    - **If both are provided**:
-      - `obs_times` controls filtering/conditioning points.
-      - `predict_times` controls where predicted trajectories are reported.
-    - **If both are omitted**: simulator does not run and adds no deterministic sites.
+    - **`obs_times` / `obs_values`** are consumed by observation-aware handlers
+      such as `LatentPathBuilder`, `Filter`, and `Smoother`, not by the public
+      simulator interface itself.
+    - **If `predict_times` is omitted**: the simulator does not run and adds no
+      deterministic sites.
 
 !!! note "Context and caveats"
     - **NumPyro context required**: simulators call `numpyro.sample(...)` and draw
       randomness via NumPyro PRNG keys, so they must run inside a NumPyro model
       (or a `numpyro.handlers.seed(...)` context).
-    - **Conditioning is optional**: if `obs_values` is provided (e.g.
-      `dsx.sample(..., DynamicalModel(...), obs_times=..., obs_values=...)`),
-      simulators pass these values as `obs=...` to the observation `numpyro.sample`
-      sites.
-    - **Prefer filtering for inference**: for parameter inference that marginalizes
-      latent trajectories, prefer filtering (`dynestyx.inference.filters.Filter`)
-      over simulators. In particular, conditioning directly on observations with
-      `SDESimulator` is usually a poor inference strategy.
+    - **Generation-only public API**: raw `Simulator`, `DiscreteTimeSimulator`,
+      `ODESimulator`, and `SDESimulator` calls expect `predict_times`, not direct
+      observation conditioning.
+    - **Inference lives elsewhere**: use `LatentPathBuilder` for explicit latent
+      paths, `Filter` for marginalized inference, and `Smoother` for smoothing.
+      Simulators can then wrap those handlers for rollout with `predict_times`.
 
 !!! note "Deterministic sites"
     When simulator trajectories are produced, sites are recorded as `"{name}_{key}"`
@@ -39,7 +50,7 @@ Simulators (also called *unrollers*) turn a `DynamicalModel` into explicit NumPy
 
     - `"f_times"`: trajectory time grid, shape `(n_sim, T)`,
     - `"f_states"`: latent trajectory, shape `(n_sim, T, state_dim)`,
-    - `"f_observations"`: sampled or conditioned emissions, shape `(n_sim, T, obs_dim)`.
+    - `"f_observations"`: sampled observations, shape `(n_sim, T, obs_dim)`.
 
     In filter-rollout mode (`predict_times` with filtered posteriors), additional
     keys `"f_predicted_states"`, `"f_predicted_times"`, and
@@ -50,12 +61,12 @@ Simulators (also called *unrollers*) turn a `DynamicalModel` into explicit NumPy
     Use `dynestyx.flatten_draws` to collapse the `(num_samples, n_sim)` prefix into one
     axis for plotting or downstream analysis.
 
-    If both `obs_times` and `predict_times` are omitted, no simulation is performed
-    and these sites are not added.
+    If `predict_times` is omitted, no public simulator rollout is performed and
+    these sites are not added.
 
 ## Simulators
 
-::: dynestyx.simulators
+::: dynestyx.simulation
     options:
       filters: []
       show_root_heading: false

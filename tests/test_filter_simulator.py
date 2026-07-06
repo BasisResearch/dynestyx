@@ -18,7 +18,7 @@ from dynestyx import (
     SDESimulator,
     Simulator,
 )
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeEnKFConfig,
     PFConfig,
 )
@@ -168,7 +168,7 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
     """Filter + DiscreteTimeSimulator with predict_times and n_simulations produces CI-ready outputs."""
     from numpyro.infer import Predictive
 
-    from dynestyx.inference.filter_configs import KFConfig
+    from dynestyx.inference.configs.filter import KFConfig
     from tests.models import discrete_time_lti_simplified_model
 
     rng_key = jr.PRNGKey(42)

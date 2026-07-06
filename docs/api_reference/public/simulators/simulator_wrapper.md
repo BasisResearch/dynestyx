@@ -1,6 +1,6 @@
 # Simulator
 
-::: dynestyx.simulators.Simulator
+::: dynestyx.simulation.auto.Simulator
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -20,7 +20,7 @@
     state_dim = 1
     observation_dim = 1
 
-    def model(phi=None, obs_times=None, obs_values=None):
+    def model(phi=None, predict_times=None):
         phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
         dynamics = DynamicalModel(
             control_dim=0,
@@ -37,41 +37,19 @@
                 0.3**2 * jnp.eye(observation_dim),
             ),
         )
-        return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        return dsx.sample("f", dynamics, predict_times=predict_times)
 
-    obs_times = jnp.arange(20.0)
+    predict_times = jnp.arange(20.0)
     with Simulator():
         prior_pred = Predictive(model, num_samples=5)(
             jr.PRNGKey(0),
-            predict_times=obs_times,
+            predict_times=predict_times,
         )
     print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f_observations', 'f_states', 'f_times', 'phi', ...]
     print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1
     ```
 
-??? example "NUTS inference with auto-routing"
-    ```python
-    import dynestyx as dsx
-    import jax.random as jr
-    from dynestyx import Simulator
-    from numpyro.infer import MCMC, NUTS, Predictive
-
-    # Assume `model`, `obs_times`, and `obs_values` are defined as above.
-    def conditioned_model():
-        return model(obs_times=obs_times, obs_values=obs_values)
-
-    with Simulator():
-        mcmc = MCMC(NUTS(conditioned_model), num_warmup=100, num_samples=100)
-        mcmc.run(jr.PRNGKey(1))
-        posterior = mcmc.get_samples()
-    print("Posterior sample keys:", sorted(posterior.keys()))  # stochastic sites (e.g. parameters, and possibly latent x_* sites)
-    print("Posterior sample shapes:", {k: v.shape for k, v in posterior.items()})  # each shape starts with num_samples (here 100)
-
-    # Deterministic trajectory keys like 'f_states'/'f_observations' are in posterior predictive output.
-    with Simulator():
-        post_pred = Predictive(model, posterior_samples=posterior)(
-            jr.PRNGKey(2), predict_times=obs_times
-        )
-    print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'f_states', 'f_observations', 'f_times'
-    print("Posterior predictive shapes:", {k: v.shape for k, v in post_pred.items()})
-    ```
+!!! note
+    `Simulator` only auto-routes forward generation and rollout. For explicit
+    latent-state inference use `LatentPathBuilder`; for marginalized inference
+    use `Filter` or `Smoother`.

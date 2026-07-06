@@ -5,8 +5,14 @@ from importlib.metadata import version
 __version__ = version("dynestyx")
 
 from dynestyx.discretizers import Discretizer, euler_maruyama
-from dynestyx.handlers import condition, plate, sample
+from dynestyx.handlers import condition, log_prob, plate, sample, simulate
+from dynestyx.inference.configs.simulator import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+)
 from dynestyx.inference.filters import Filter
+from dynestyx.inference.latent.builder import LatentPathBuilder
+from dynestyx.inference.latent.state_path import prepare_dirac_state_path_metadata
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
@@ -29,13 +35,13 @@ from dynestyx.models import (
     ScalarDiffusion,
     StochasticContinuousTimeStateEvolution,
 )
-from dynestyx.simulators import (
+from dynestyx.simulation import (
     DiscreteTimeSimulator,
     ODESimulator,
     SDESimulator,
     Simulator,
 )
-from dynestyx.types import ConditionedResult
+from dynestyx.types import ConditionedResult, SimulatedResult
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -58,16 +64,23 @@ __all__ = [
     "Discretizer",
     "ObservationModel",
     "Filter",
+    "LatentPathBuilder",
+    "prepare_dirac_state_path_metadata",
     "Smoother",
     "flatten_draws",
     "condition",
     "ConditionedResult",
+    "SimulatedResult",
+    "log_prob",
     "plate",
     "sample",
+    "simulate",
     "DiracIdentityObservation",
     "LinearGaussianObservation",
     "LinearGaussianObservationParams",
     "GaussianObservation",
+    "ODESimulatorConfig",
+    "SDESimulatorConfig",
     "DiscreteTimeSimulator",
     "ODESimulator",
     "SDESimulator",

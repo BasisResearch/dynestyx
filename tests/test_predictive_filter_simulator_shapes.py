@@ -22,7 +22,7 @@ from dynestyx import (
     ODESimulator,
     SDESimulator,
 )
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
     KFConfig,

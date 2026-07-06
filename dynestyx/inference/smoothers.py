@@ -17,6 +17,17 @@ from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
     _validate_missing_observation_support,
 )
+from dynestyx.inference.configs.smoother import (
+    BaseSmootherConfig,
+    ContinuousTimeEKFSmootherConfig,
+    ContinuousTimeKFSmootherConfig,
+    ContinuousTimeSmootherConfigs,
+    DiscreteTimeSmootherConfigs,
+    EKFSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
+    UKFSmootherConfig,
+)
 from dynestyx.inference.distribution_utils import (
     _cholesky_state_sequence_to_dists,
     _posterior_sequence_to_dists,
@@ -43,17 +54,6 @@ from dynestyx.inference.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
-)
-from dynestyx.inference.smoother_configs import (
-    BaseSmootherConfig,
-    ContinuousTimeEKFSmootherConfig,
-    ContinuousTimeKFSmootherConfig,
-    ContinuousTimeSmootherConfigs,
-    DiscreteTimeSmootherConfigs,
-    EKFSmootherConfig,
-    KFSmootherConfig,
-    PFSmootherConfig,
-    UKFSmootherConfig,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.types import ConditionedResult, FunctionOfTime
@@ -242,7 +242,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             )
             raise ValueError(
                 f"Invalid smoother config: {type(config).__name__}. "
-                "Expected a smoother config class from dynestyx.inference.smoother_configs. "
+                "Expected a smoother config class from dynestyx.inference.configs.smoother. "
                 f"Valid types: {valid}"
             )
         _validate_missing_observation_support(

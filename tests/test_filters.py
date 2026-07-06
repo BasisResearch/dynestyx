@@ -7,7 +7,8 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import (
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
     EKFConfig,
     EnKFConfig,
@@ -22,7 +23,6 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.fixtures import (
     _squeeze_sim_dims,
     data_conditioned_jumpy_controls,

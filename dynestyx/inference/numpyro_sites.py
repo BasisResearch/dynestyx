@@ -9,19 +9,19 @@ import jax
 import jax.numpy as jnp
 import numpyro
 
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     HMMConfig,
     PFConfig,
     _config_to_record_kwargs,
 )
-from dynestyx.inference.integrations.utils import covariance_from_cholesky
-from dynestyx.inference.smoother_configs import (
+from dynestyx.inference.configs.smoother import (
     BaseSmootherConfig,
     PFSmootherConfig,
     _config_to_smoother_record_kwargs,
 )
+from dynestyx.inference.integrations.utils import covariance_from_cholesky
 from dynestyx.utils import _should_record_field
 
 

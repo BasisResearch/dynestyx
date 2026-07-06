@@ -11,20 +11,20 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     unscented_kalman_smoother,
 )
 
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     EKFConfig,
     KFConfig,
     UKFConfig,
 )
+from dynestyx.inference.configs.smoother import (
+    BaseSmootherConfig,
+)
+from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
     _prepare_inputs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
-from dynestyx.inference.smoother_configs import (
-    BaseSmootherConfig,
-)
 from dynestyx.models import DynamicalModel
 
 

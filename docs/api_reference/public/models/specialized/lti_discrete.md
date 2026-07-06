@@ -9,11 +9,11 @@
     This factory is a convenience wrapper: you can construct an equivalent
     Kalman-filter-friendly model by manually wiring `DynamicalModel` with
     `LinearGaussianStateEvolution` (state transition) and
-    `LinearGaussianObservation` (emissions), plus a Gaussian initial condition.
+    `LinearGaussianObservation` (observations), plus a Gaussian initial condition.
     Using these structured classes makes the linear/Gaussian structure explicit
     so `dynestyx` can dispatch to fast Kalman filtering; see
-    [Filters](../../../inference/filters.md) and `KFConfig` in
-    [FilterConfigs](../../../inference/filter_configs.md).
+    [Filters](../../inference/filters.md) and `KFConfig` in
+    [FilterConfigs](../../inference/filter_configs.md).
 
     Without this exploitable structure, parameter inference that marginalizes
     latent trajectories generally falls back to particle filters (`PFConfig`),
@@ -39,4 +39,3 @@
         R=0.05 * jnp.eye(1),
     )
     ```
-
