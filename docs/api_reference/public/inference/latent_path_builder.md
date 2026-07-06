@@ -21,7 +21,11 @@ The main output names are intentionally distinct from simulator rollout names:
 For user code, the recommended import is:
 
 ```python
-from dynestyx import LatentPathBuilder, prepare_dirac_state_path_metadata
+from dynestyx import (
+    LatentPathBuilder,
+    prepare_dirac_state_path_metadata,
+    prepare_missing_observation_metadata,
+)
 ```
 
 For partially missing `DiracIdentityObservation` models under traced NumPyro
@@ -38,6 +42,29 @@ dirac_metadata = prepare_dirac_state_path_metadata(
 with LatentPathBuilder(dirac_state_path_metadata=dirac_metadata):
     ...
 ```
+
+For unsupported partially missing *continuous* observation families, use
+explicit missing-observation augmentation. In NumPyro workflows this creates a
+second latent block `f_missing_obs_values`, reconstructs
+`f_completed_obs_values`, and scores the complete-data observation density:
+
+```python
+missing_obs_metadata = prepare_missing_observation_metadata(
+    dynamics,
+    obs_times=obs_times,
+    obs_values=obs_values,
+)
+
+with LatentPathBuilder(
+    missing_observation_strategy="auto",
+    missing_obs_metadata=missing_obs_metadata,
+):
+    ...
+```
+
+This is the recommended fallback when direct masked-likelihood marginalization
+is unavailable, for example with correlated continuous observation families
+such as multivariate Student `t` models.
 
 ::: dynestyx.inference.latent.builder
     options:

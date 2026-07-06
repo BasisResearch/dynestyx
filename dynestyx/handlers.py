@@ -15,7 +15,11 @@ from dynestyx.inference.latent.trajectory_log_probs import (
 from dynestyx.models import (
     DynamicalModel,
 )
-from dynestyx.observation_missingness import prepare_observation_views
+from dynestyx.observation_missingness import (
+    MissingObservationMetadata,
+    MissingObservationStrategy,
+    prepare_observation_views,
+)
 from dynestyx.types import FunctionOfTime, SimulatedResult
 from dynestyx.utils import (
     _get_dynamics_with_t0,
@@ -179,10 +183,13 @@ def log_prob(
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
+    missing_observation_strategy: MissingObservationStrategy = "auto",
+    missing_obs_values=None,
+    missing_obs_metadata: MissingObservationMetadata | None = None,
     chunk_size: int | None = None,
     ode_diffeqsolve_settings=None,
 ):
-    """Return the pure-JAX joint log density ``log p(x, y | ...)``.
+    """Return the pure-JAX joint log density for a state path and observations.
 
     Parameters:
         dynamics: Dynamical model to score.
@@ -197,6 +204,17 @@ def log_prob(
         obs_values: Observation values at ``obs_times``.
         ctrl_times: Times at which controls are supplied.
         ctrl_values: Control values aligned to ``ctrl_times``.
+        missing_observation_strategy: Strategy for handling missing
+            observation coordinates. `"auto"` prefers exact marginalization when
+            supported and otherwise falls back to explicit augmentation for
+            continuous observation families.
+        missing_obs_values: Explicit values for the missing observation
+            coordinates when augmentation is active. In that case this function
+            scores the augmented complete-data target
+            ``log p(x, y_observed, y_missing | ...)`` rather than the
+            marginalized observed-data target.
+        missing_obs_metadata: Optional precomputed metadata defining the flat
+            ordering of ``missing_obs_values`` for traced/JIT callers.
         chunk_size: Optional host-level chunk size for scoring loops.
         ode_diffeqsolve_settings: Optional Diffrax solve settings used when
             reconstructing deterministic continuous-time trajectories.
@@ -222,6 +240,9 @@ def log_prob(
         obs_values=obs_values,
         obs_values_filled=obs_values_filled,
         obs_mask=obs_mask,
+        missing_observation_strategy=missing_observation_strategy,
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=missing_obs_metadata,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         chunk_size=chunk_size,

@@ -36,6 +36,13 @@ from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
 )
+from dynestyx.observation_missingness import (
+    MissingObservationMetadata,
+    MissingObservationStrategy,
+    canonicalize_missing_obs_values,
+    infer_missing_observation_metadata,
+    resolve_missing_observation_strategy,
+)
 from dynestyx.simulation.base import (
     _slice_tree_for_plate_member,
     _suspend_numpyro_plate_frames,
@@ -69,10 +76,18 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     NumPyro inference, precompute the compression metadata eagerly with
     ``prepare_dirac_state_path_metadata(...)`` and pass it here via
     ``dirac_state_path_metadata``.
+
+    For unsupported partially missing continuous observation families, set
+    ``missing_observation_strategy="augment"`` (or leave it at `"auto"`) to
+    introduce explicit NumPyro latents for the missing observation
+    coordinates. The corresponding pure-JAX scoring API lives in
+    ``dsx.log_prob(...)``.
     """
 
     ode_diffeqsolve_settings: dict[str, Any] | None = None
     dirac_state_path_metadata: DiracLatentMetadata | None = None
+    missing_observation_strategy: MissingObservationStrategy = "auto"
+    missing_obs_metadata: MissingObservationMetadata | None = None
 
     def _sample_single(
         self,
@@ -91,6 +106,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         state_path_params: Array | None = None,
+        missing_obs_values: Array | None = None,
         _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
@@ -112,6 +128,16 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             and _obs_values_filled is not None
             and (_obs_has_missing is False or _obs_mask is not None)
         )
+        if (
+            use_dirac_compression
+            and self.missing_observation_strategy == "augment"
+            and _obs_has_missing is not False
+        ):
+            raise ValueError(
+                "DiracIdentityObservation missingness should be handled via "
+                "state-path compression, not explicit missing-observation "
+                "augmentation."
+            )
 
         dirac_metadata = None
         if use_dirac_compression:
@@ -125,12 +151,27 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                         "dirac_state_path_metadata.state_shape does not match the "
                         "observed data shape for this LatentPathBuilder call."
                     )
-            elif _obs_mask is not None:
-                dirac_metadata = infer_dirac_state_path_param_metadata(
-                    dynamics,
+            elif _obs_has_missing is False:
+                assert _obs_values_filled is not None
+                dirac_metadata = fully_observed_dirac_state_path_param_metadata(
                     obs_times=obs_times,
-                    obs_mask=_obs_mask,
+                    state_shape=tuple(jnp.asarray(_obs_values_filled).shape),
                 )
+            elif _obs_mask is not None:
+                try:
+                    dirac_metadata = infer_dirac_state_path_param_metadata(
+                        dynamics,
+                        obs_times=obs_times,
+                        obs_mask=_obs_mask,
+                    )
+                except ValueError as exc:
+                    if "concrete observation missingness pattern" not in str(exc):
+                        raise
+                    assert _obs_values_filled is not None
+                    dirac_metadata = fully_observed_dirac_state_path_param_metadata(
+                        obs_times=obs_times,
+                        state_shape=tuple(jnp.asarray(_obs_values_filled).shape),
+                    )
             else:
                 assert _obs_values_filled is not None
                 dirac_metadata = fully_observed_dirac_state_path_param_metadata(
@@ -149,6 +190,66 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             if dirac_metadata is not None
             else infer_state_path_param_times(dynamics, obs_times=obs_times)
         )
+
+        effective_missing_obs_metadata = self.missing_obs_metadata
+        if (
+            dirac_metadata is None
+            and effective_missing_obs_metadata is None
+            and self.missing_observation_strategy in ("augment", "auto")
+            and _obs_mask is not None
+        ):
+            try:
+                effective_missing_obs_metadata = infer_missing_observation_metadata(
+                    obs_times=obs_times,
+                    obs_mask=_obs_mask,
+                )
+            except ValueError:
+                if self.missing_observation_strategy == "augment":
+                    raise
+
+        canonical_missing_obs_values = None
+        example_missing_obs_values = None
+        active_missing_obs_metadata = None
+        if effective_missing_obs_metadata is not None:
+            if effective_missing_obs_metadata.observation_shape != tuple(
+                jnp.asarray(obs_values).shape
+            ):
+                raise ValueError(
+                    "missing_obs_metadata.observation_shape does not match the "
+                    "observed data shape for this LatentPathBuilder call."
+                )
+            use_missing_obs_augmentation, _ = resolve_missing_observation_strategy(
+                dynamics,
+                observation_dim=(
+                    1 if jnp.asarray(obs_values).ndim == 1 else obs_values.shape[-1]
+                ),
+                has_missing=effective_missing_obs_metadata.has_missing,
+                has_partial_missing=effective_missing_obs_metadata.has_partial_missing,
+                requested_strategy=self.missing_observation_strategy,
+            )
+            if use_missing_obs_augmentation:
+                active_missing_obs_metadata = effective_missing_obs_metadata
+                n_missing_obs = effective_missing_obs_metadata.free_flat_indices.shape[
+                    0
+                ]
+                if (
+                    missing_obs_values is None
+                    and not _dsx_sample_mode
+                    and n_missing_obs != 0
+                ):
+                    raise ValueError(
+                        "missing_obs_values must be provided when explicit "
+                        "missing-observation augmentation is active under "
+                        "dsx.condition."
+                    )
+                if missing_obs_values is None:
+                    example_missing_obs_values = jnp.zeros((n_missing_obs,))
+                else:
+                    canonical_missing_obs_values = canonicalize_missing_obs_values(
+                        missing_obs_values,
+                        n_missing_obs=n_missing_obs,
+                    )
+                    example_missing_obs_values = canonical_missing_obs_values
 
         if state_path_params is None and not _dsx_sample_mode:
             raise ValueError(
@@ -208,6 +309,9 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                     obs_values=obs_values,
                     obs_values_filled=_obs_values_filled,
                     obs_mask=_obs_mask,
+                    missing_observation_strategy=self.missing_observation_strategy,
+                    missing_obs_values=missing_obs_values,
+                    missing_obs_metadata=active_missing_obs_metadata,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
@@ -232,6 +336,11 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             )
         )
         base_dist = _base_state_path_param_distribution(example_state_path_params)
+        missing_obs_base_dist = (
+            None
+            if example_missing_obs_values is None
+            else _base_state_path_param_distribution(example_missing_obs_values)
+        )
 
         def _register(site_name: str) -> None:
             path_param_site = numpyro.sample(
@@ -239,6 +348,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 base_dist,
                 obs=canonical_state_path_params,
             )
+            missing_obs_site = None
+            if missing_obs_base_dist is not None:
+                missing_obs_site = numpyro.sample(
+                    f"{site_name}_missing_obs_values",
+                    missing_obs_base_dist,
+                    obs=canonical_missing_obs_values,
+                )
             if dirac_metadata is not None:
                 assert dirac_obs_values_filled_array is not None
                 assert dirac_obs_mask_array is not None
@@ -278,13 +394,22 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                     obs_values=obs_values,
                     obs_values_filled=_obs_values_filled,
                     obs_mask=_obs_mask,
+                    missing_observation_strategy=self.missing_observation_strategy,
+                    missing_obs_values=missing_obs_site,
+                    missing_obs_metadata=active_missing_obs_metadata,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
                 )
             numpyro.factor(
                 f"{site_name}_state_path_params_lp",
-                terms_now.joint_log_prob - base_dist.log_prob(path_param_site),
+                terms_now.joint_log_prob
+                - base_dist.log_prob(path_param_site)
+                - (
+                    0.0
+                    if missing_obs_site is None or missing_obs_base_dist is None
+                    else missing_obs_base_dist.log_prob(missing_obs_site)
+                ),
             )
             numpyro.deterministic(
                 f"{site_name}_state_path_param_times",
@@ -299,6 +424,21 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             numpyro.deterministic(
                 f"{site_name}_state_path_times", assembled_now.state_path_times
             )
+            if terms_now.missing_obs_times is not None:
+                numpyro.deterministic(
+                    f"{site_name}_missing_obs_times",
+                    terms_now.missing_obs_times,
+                )
+            if terms_now.missing_obs_coordinate_indices is not None:
+                numpyro.deterministic(
+                    f"{site_name}_missing_obs_coordinate_indices",
+                    terms_now.missing_obs_coordinate_indices,
+                )
+            if terms_now.completed_obs_values is not None:
+                numpyro.deterministic(
+                    f"{site_name}_completed_obs_values",
+                    terms_now.completed_obs_values,
+                )
             numpyro.deterministic(
                 f"{site_name}_joint_log_prob", terms_now.joint_log_prob
             )
@@ -316,6 +456,30 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             ),
             state_path=None if assembled is None else assembled.state_path,
             state_path_times=None if assembled is None else assembled.state_path_times,
+            missing_obs_values=(
+                canonical_missing_obs_values
+                if terms is None
+                else terms.missing_obs_values
+            ),
+            missing_obs_times=(
+                (
+                    None
+                    if active_missing_obs_metadata is None
+                    else active_missing_obs_metadata.missing_obs_times
+                )
+                if terms is None
+                else terms.missing_obs_times
+            ),
+            missing_obs_coordinate_indices=(
+                (
+                    None
+                    if active_missing_obs_metadata is None
+                    else active_missing_obs_metadata.missing_obs_coordinate_indices
+                )
+                if terms is None
+                else terms.missing_obs_coordinate_indices
+            ),
+            completed_obs_values=None if terms is None else terms.completed_obs_values,
             state_dists=None,
             _register_numpyro_sites=_register,
         )
@@ -339,6 +503,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         state_path_params: Array | None = None,
+        missing_obs_values: Array | None = None,
         _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
@@ -354,6 +519,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 state_path_params=state_path_params,
+                missing_obs_values=missing_obs_values,
                 _dsx_sample_mode=_dsx_sample_mode,
                 **kwargs,
             )
@@ -396,6 +562,9 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                     _slice_array_for_plate_member(
                         state_path_params, plate_shapes, plate_idx
                     ),
+                    _slice_array_for_plate_member(
+                        missing_obs_values, plate_shapes, plate_idx
+                    ),
                 )
             )
 
@@ -410,6 +579,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             member_ctrl_times,
             member_ctrl_values,
             member_state_path_params,
+            member_missing_obs_values,
         ) in member_specs:
             with _suspend_numpyro_plate_frames():
                 member_results.append(
@@ -424,6 +594,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                         ctrl_times=member_ctrl_times,
                         ctrl_values=member_ctrl_values,
                         state_path_params=member_state_path_params,
+                        missing_obs_values=member_missing_obs_values,
                         _dsx_sample_mode=True,
                         **kwargs,
                     )
@@ -455,6 +626,10 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             ),
             state_path=_stack("state_path"),
             state_path_times=_stack("state_path_times"),
+            missing_obs_values=_stack("missing_obs_values"),
+            missing_obs_times=_stack("missing_obs_times"),
+            missing_obs_coordinate_indices=_stack("missing_obs_coordinate_indices"),
+            completed_obs_values=_stack("completed_obs_values"),
             state_dists=None,
             _register_numpyro_sites=_register,
         )

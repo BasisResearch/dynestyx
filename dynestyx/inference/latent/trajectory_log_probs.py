@@ -18,7 +18,11 @@ from dynestyx.models import (
     DynamicalModel,
     StochasticContinuousTimeStateEvolution,
 )
-from dynestyx.observation_missingness import ObservationLogProb
+from dynestyx.observation_missingness import (
+    MissingObservationMetadata,
+    MissingObservationStrategy,
+    ObservationLogProb,
+)
 from dynestyx.utils import (
     _get_val_or_None,
     _raise_now_or_error_if,
@@ -32,6 +36,10 @@ class TrajectoryLogProbTerms:
     initial_log_prob: Array
     transition_log_probs: Array
     observation_log_probs: Array
+    missing_obs_values: Array | None = None
+    missing_obs_times: Array | None = None
+    missing_obs_coordinate_indices: Array | None = None
+    completed_obs_values: Array | None = None
 
     @property
     def joint_log_prob(self) -> Array:
@@ -100,13 +108,18 @@ def _gather_by_exact_time(
 
 def _prepare_observation_log_prob(
     dynamics: DynamicalModel,
+    obs_times: Array,
     obs_values: Array,
     *,
     obs_values_filled: Array | None,
     obs_mask: Array | None,
+    missing_observation_strategy: MissingObservationStrategy,
+    missing_obs_values: Array | None,
+    missing_obs_metadata: MissingObservationMetadata | None,
 ) -> ObservationLogProb:
     """Construct the missingness-aware observation scorer."""
     obs_values_for_helper = obs_values[:, None] if obs_values.ndim == 1 else obs_values
+    obs_times_for_helper = jnp.asarray(obs_times)
     filled_obs_for_helper = (
         None
         if obs_values_filled is None
@@ -120,8 +133,12 @@ def _prepare_observation_log_prob(
     return ObservationLogProb(
         dynamics=dynamics,
         obs_values=obs_values_for_helper,
+        obs_times=obs_times_for_helper,
         precomputed_filled_obs=filled_obs_for_helper,
         precomputed_obs_mask=obs_mask_for_helper,
+        missing_observation_strategy=missing_observation_strategy,
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=missing_obs_metadata,
     )
 
 
@@ -150,6 +167,9 @@ def _compute_log_prob_terms_from_state_trajectory(
     obs_values: Array | None = None,
     obs_values_filled: Array | None = None,
     obs_mask: Array | None = None,
+    missing_observation_strategy: MissingObservationStrategy = "auto",
+    missing_obs_values: Array | None = None,
+    missing_obs_metadata: MissingObservationMetadata | None = None,
     ctrl_times: Array | None = None,
     ctrl_values: Array | None = None,
     chunk_size: int | None = None,
@@ -214,6 +234,7 @@ def _compute_log_prob_terms_from_state_trajectory(
             )
 
     observation_log_probs = jnp.zeros((0,), dtype=initial_log_prob.dtype)
+    observation_scorer: ObservationLogProb | None = None
     if (
         not observations_are_exact_constraints
         and obs_times is not None
@@ -231,9 +252,13 @@ def _compute_log_prob_terms_from_state_trajectory(
         )
         observation_scorer = _prepare_observation_log_prob(
             dynamics,
+            obs_times_arr,
             jnp.asarray(obs_values),
             obs_values_filled=obs_values_filled,
             obs_mask=obs_mask,
+            missing_observation_strategy=missing_observation_strategy,
+            missing_obs_values=missing_obs_values,
+            missing_obs_metadata=missing_obs_metadata,
         )
 
         def _obs_at(i: Array) -> Array:
@@ -256,6 +281,22 @@ def _compute_log_prob_terms_from_state_trajectory(
         initial_log_prob=initial_log_prob,
         transition_log_probs=transition_log_probs,
         observation_log_probs=observation_log_probs,
+        missing_obs_values=(
+            None
+            if observation_scorer is None
+            else observation_scorer.missing_obs_values
+        ),
+        missing_obs_times=(
+            None if observation_scorer is None else observation_scorer.missing_obs_times
+        ),
+        missing_obs_coordinate_indices=(
+            None
+            if observation_scorer is None
+            else observation_scorer.missing_obs_coordinate_indices
+        ),
+        completed_obs_values=(
+            None if observation_scorer is None else observation_scorer.completed_obs
+        ),
     )
 
 
@@ -268,6 +309,9 @@ def compute_trajectory_log_prob_terms(
     obs_values: Array | None = None,
     obs_values_filled: Array | None = None,
     obs_mask: Array | None = None,
+    missing_observation_strategy: MissingObservationStrategy = "auto",
+    missing_obs_values: Array | None = None,
+    missing_obs_metadata: MissingObservationMetadata | None = None,
     ctrl_times: Array | None = None,
     ctrl_values: Array | None = None,
     chunk_size: int | None = None,
@@ -330,6 +374,9 @@ def compute_trajectory_log_prob_terms(
         obs_values=obs_values,
         obs_values_filled=obs_values_filled,
         obs_mask=obs_mask,
+        missing_observation_strategy=missing_observation_strategy,
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=missing_obs_metadata,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         chunk_size=chunk_size,

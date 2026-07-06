@@ -56,6 +56,14 @@ class LatentStateResult:
 
     In simple discrete models these may match exactly. In ODE or compressed
     exact-observation settings they generally differ.
+
+    When explicit missing-observation augmentation is active, the result also
+    carries a second latent block:
+
+    - ``missing_obs_values`` are the free coordinates used to fill missing
+      entries of ``obs_values``,
+    - ``completed_obs_values`` is the dense observation array after those
+      missing entries are filled back in.
     """
 
     joint_log_prob: jax.Array | None = None
@@ -64,6 +72,10 @@ class LatentStateResult:
     state_path_param_coordinate_indices: object = None
     state_path: object = None
     state_path_times: object = None
+    missing_obs_values: object = None
+    missing_obs_times: object = None
+    missing_obs_coordinate_indices: object = None
+    completed_obs_values: object = None
     state_dists: list | None = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False

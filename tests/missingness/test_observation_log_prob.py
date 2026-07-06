@@ -7,6 +7,7 @@ from dynestyx.models import DynamicalModel, LinearGaussianObservation
 from dynestyx.observation_missingness import (
     ObservationLogProb,
     _masked_multivariate_normal_log_prob,
+    prepare_missing_observation_metadata,
 )
 from tests.missingness.models import GAUSSIAN_R, INDEPENDENT_SCALE
 from tests.missingness.utils import (
@@ -124,6 +125,7 @@ def test_observation_log_prob_partial_missing_unsupported_distribution_raises_at
         ObservationLogProb(
             dynamics=_build_vector_dynamics(lambda x, u, t: dist.Delta(x, event_dim=1)),
             obs_values=obs_values,
+            missing_observation_strategy="marginalize",
         )
 
 
@@ -172,5 +174,49 @@ def test_observation_log_prob_linear_gaussian_matches_manual_reference():
         GAUSSIAN_R,
         jnp.array([0.0, 0.2]),
         jnp.array([False, True]),
+    )
+    assert jnp.allclose(actual, expected)
+
+
+def test_observation_log_prob_augment_student_t_matches_completed_data_reference():
+    scale_tril = jnp.array([[0.4, 0.0], [0.15, 0.5]])
+    obs_values = jnp.array([[1.0, jnp.nan]])
+    dynamics = _build_vector_dynamics(
+        lambda x, u, t: dist.MultivariateStudentT(
+            df=5.0,
+            loc=x,
+            scale_tril=scale_tril,
+        )
+    )
+    metadata = prepare_missing_observation_metadata(
+        dynamics,
+        obs_times=jnp.array([0.0]),
+        obs_values=obs_values,
+    )
+    log_prob = ObservationLogProb(
+        dynamics=dynamics,
+        obs_values=obs_values,
+        obs_times=jnp.array([0.0]),
+        missing_observation_strategy="augment",
+        missing_obs_values=jnp.array([0.3]),
+        missing_obs_metadata=metadata,
+    )
+    x = jnp.array([0.5, -0.2])
+    completed_obs = jnp.array([1.0, 0.3])
+    actual = log_prob.log_prob_step(x=x, u=None, t=jnp.array(0.0), t_idx=0)
+    expected = dist.MultivariateStudentT(
+        df=5.0,
+        loc=x,
+        scale_tril=scale_tril,
+    ).log_prob(completed_obs)
+
+    assert log_prob.completed_obs is not None
+    assert log_prob.missing_obs_times is not None
+    assert log_prob.missing_obs_coordinate_indices is not None
+    assert jnp.allclose(log_prob.completed_obs[0], completed_obs)
+    assert jnp.array_equal(log_prob.missing_obs_times, jnp.array([0.0]))
+    assert jnp.array_equal(
+        log_prob.missing_obs_coordinate_indices,
+        jnp.array([1], dtype=jnp.int32),
     )
     assert jnp.allclose(actual, expected)
