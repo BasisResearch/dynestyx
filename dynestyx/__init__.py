@@ -9,6 +9,7 @@ from dynestyx.handlers import condition, log_prob, plate, sample, simulate
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
+    SimulatorConfig,
 )
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.latent.builder import LatentPathBuilder
@@ -83,6 +84,7 @@ __all__ = [
     "GaussianObservation",
     "ODESimulatorConfig",
     "SDESimulatorConfig",
+    "SimulatorConfig",
     "DiscreteTimeSimulator",
     "ODESimulator",
     "SDESimulator",

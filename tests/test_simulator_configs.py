@@ -76,15 +76,35 @@ def test_simulator_routes_backend_specific_configs():
     predict_times = jnp.array([0.0, 0.5, 1.0])
 
     with trace() as ode_trace, seed(rng_seed=jr.PRNGKey(0)):
-        with dsx.Simulator(ode_simulator_config=ode_config, n_simulations=2):
+        with dsx.Simulator(simulator_config=ode_config, n_simulations=2):
             _ode_model(predict_times=predict_times)
 
     with trace() as sde_trace, seed(rng_seed=jr.PRNGKey(1)):
-        with dsx.Simulator(sde_simulator_config=sde_config, n_simulations=2):
+        with dsx.Simulator(simulator_config=sde_config, n_simulations=2):
             _sde_model(predict_times=predict_times)
 
     assert ode_trace["f_states"]["value"].shape == (2, len(predict_times), 1)
     assert sde_trace["f_states"]["value"].shape == (2, len(predict_times), 1)
+
+
+def test_simulator_rejects_mismatched_config_for_routed_backend():
+    predict_times = jnp.array([0.0, 0.5, 1.0])
+
+    with pytest.raises(ValueError, match="Pass an SDESimulatorConfig instead"):
+        with trace(), seed(rng_seed=jr.PRNGKey(0)):
+            with dsx.Simulator(
+                simulator_config=dsx.ODESimulatorConfig(),
+                n_simulations=1,
+            ):
+                _sde_model(predict_times=predict_times)
+
+    with pytest.raises(ValueError, match="Pass an ODESimulatorConfig instead"):
+        with trace(), seed(rng_seed=jr.PRNGKey(1)):
+            with dsx.Simulator(
+                simulator_config=dsx.SDESimulatorConfig(),
+                n_simulations=1,
+            ):
+                _ode_model(predict_times=predict_times)
 
 
 def test_odesimulator_rejects_mixed_config_and_direct_kwargs():

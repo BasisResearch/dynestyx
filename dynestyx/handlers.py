@@ -262,8 +262,7 @@ def simulate(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     n_simulations: int = 1,
-    ode_simulator_config=None,
-    sde_simulator_config=None,
+    simulator_config=None,
     **simulator_kwargs,
 ) -> SimulatedResult:
     """Run pure-JAX forward simulation and return a :class:`SimulatedResult`.
@@ -287,8 +286,7 @@ def simulate(
 
     simulator = Simulator(
         n_simulations=n_simulations,
-        ode_simulator_config=ode_simulator_config,
-        sde_simulator_config=sde_simulator_config,
+        simulator_config=simulator_config,
         **simulator_kwargs,
     )
     return simulator.simulate(

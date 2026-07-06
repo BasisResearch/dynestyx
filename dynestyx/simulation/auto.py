@@ -5,6 +5,7 @@ from jax import Array
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
+    SimulatorConfig,
 )
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
@@ -31,9 +32,8 @@ class Simulator(BaseSimulator):
         - Any `*args` / `**kwargs` are forwarded to the routed simulator
           constructor, so Diffrax settings can be supplied here when routing to
           `ODESimulator` / `SDESimulator`.
-        - `ode_simulator_config` and `sde_simulator_config` can be supplied to
-          provide structured per-backend settings while still relying on
-          auto-routing.
+        - `simulator_config` can be supplied to provide structured
+          backend-specific settings while still relying on auto-routing.
         - Auto-routing depends on structured model metadata (for example,
           `ContinuousTimeStateEvolution` vs. `DiscreteTimeStateEvolution`, and
           diffusion presence for continuous-time models).
@@ -52,14 +52,12 @@ class Simulator(BaseSimulator):
     def __init__(
         self,
         *args,
-        ode_simulator_config: ODESimulatorConfig | None = None,
-        sde_simulator_config: SDESimulatorConfig | None = None,
+        simulator_config: SimulatorConfig | None = None,
         **kwargs,
     ):
         self.args = args
         self.kwargs = kwargs
-        self.ode_simulator_config = ode_simulator_config
-        self.sde_simulator_config = sde_simulator_config
+        self.simulator_config = simulator_config
 
         self.simulator: BaseSimulator | None = None
 
@@ -69,10 +67,15 @@ class Simulator(BaseSimulator):
             return self.simulator
 
         if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-            if self.sde_simulator_config is not None:
+            if isinstance(self.simulator_config, ODESimulatorConfig):
+                raise ValueError(
+                    "Received an ODESimulatorConfig for stochastic continuous-time "
+                    "dynamics. Pass an SDESimulatorConfig instead."
+                )
+            if self.simulator_config is not None:
                 self.simulator = SDESimulator(
                     *self.args,
-                    simulator_config=self.sde_simulator_config,
+                    simulator_config=self.simulator_config,
                     **self.kwargs,
                 )
             else:
@@ -80,10 +83,15 @@ class Simulator(BaseSimulator):
         elif isinstance(
             dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
         ):
-            if self.ode_simulator_config is not None:
+            if isinstance(self.simulator_config, SDESimulatorConfig):
+                raise ValueError(
+                    "Received an SDESimulatorConfig for deterministic continuous-time "
+                    "dynamics. Pass an ODESimulatorConfig instead."
+                )
+            if self.simulator_config is not None:
                 self.simulator = ODESimulator(
                     *self.args,
-                    simulator_config=self.ode_simulator_config,
+                    simulator_config=self.simulator_config,
                     **self.kwargs,
                 )
             else:
@@ -91,6 +99,11 @@ class Simulator(BaseSimulator):
         else:
             # Non-continuous models are discrete-time. This includes structured
             # DiscreteTimeStateEvolution instances and plain transition callables.
+            if self.simulator_config is not None:
+                raise ValueError(
+                    "Received a continuous-time SimulatorConfig for discrete-time "
+                    "dynamics. Use direct DiscreteTimeSimulator settings instead."
+                )
             self.simulator = DiscreteTimeSimulator(*self.args, **self.kwargs)
 
         return self.simulator

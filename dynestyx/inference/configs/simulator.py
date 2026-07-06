@@ -99,3 +99,6 @@ class SDESimulatorConfig:
             "tol_vbt must be smaller than dt0 for statistically correct simulation."
         )
         return tol_vbt_arr
+
+
+type SimulatorConfig = ODESimulatorConfig | SDESimulatorConfig

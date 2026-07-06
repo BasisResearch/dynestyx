@@ -121,7 +121,7 @@ def test_simulate_ode_accepts_structured_config():
         rng_key=jr.PRNGKey(1),
         predict_times=predict_times,
         n_simulations=2,
-        ode_simulator_config=dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
+        simulator_config=dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
     )
     times = jnp.asarray(result.times)
     states = jnp.asarray(result.states)
@@ -141,7 +141,7 @@ def test_simulate_sde_accepts_structured_config():
         rng_key=jr.PRNGKey(2),
         predict_times=predict_times,
         n_simulations=2,
-        sde_simulator_config=dsx.SDESimulatorConfig(
+        simulator_config=dsx.SDESimulatorConfig(
             dt0=0.01,
             tol_vbt=0.005,
             max_steps=2_000,
