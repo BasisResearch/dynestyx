@@ -23,24 +23,36 @@ For user code, the recommended import is:
 ```python
 from dynestyx import (
     LatentPathBuilder,
-    prepare_dirac_state_path_metadata,
-    prepare_missing_observation_metadata,
 )
 ```
 
-For partially missing `DiracIdentityObservation` models under traced NumPyro
-inference, precompute the compression metadata eagerly and pass it into the
-builder:
+Latent-path layout preparation happens automatically inside the builder. In
+particular, partially missing `DiracIdentityObservation` models use compressed
+state latents without requiring extra constructor metadata:
 
 ```python
-dirac_metadata = prepare_dirac_state_path_metadata(
+with LatentPathBuilder():
+    ...
+```
+
+If you need to pin the layout eagerly for traced edge cases, prepare it once
+and pass it at the `dsx.sample(...)` site:
+
+```python
+layout = dsx.prepare_latent_path_layout(
     dynamics,
     obs_times=obs_times,
     obs_values=obs_values,
 )
 
-with LatentPathBuilder(dirac_state_path_metadata=dirac_metadata):
-    ...
+with LatentPathBuilder():
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        latent_path_layout=layout,
+    )
 ```
 
 For unsupported partially missing *continuous* observation families, use
@@ -49,16 +61,7 @@ second latent block `f_missing_obs_values`, reconstructs
 `f_completed_obs_values`, and scores the complete-data observation density:
 
 ```python
-missing_obs_metadata = prepare_missing_observation_metadata(
-    dynamics,
-    obs_times=obs_times,
-    obs_values=obs_values,
-)
-
-with LatentPathBuilder(
-    missing_observation_strategy="auto",
-    missing_obs_metadata=missing_obs_metadata,
-):
+with LatentPathBuilder(missing_observation_strategy="auto"):
     ...
 ```
 
@@ -66,7 +69,7 @@ This is the recommended fallback when direct masked-likelihood marginalization
 is unavailable, for example with correlated continuous observation families
 such as multivariate Student `t` models.
 
-::: dynestyx.inference.latent.base
+::: dynestyx.inference.latent.builder
     options:
       members:
         - LatentPathBuilder

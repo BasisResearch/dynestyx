@@ -13,8 +13,11 @@ from dynestyx.inference.configs.simulator import (
     SimulatorConfig,
 )
 from dynestyx.inference.filters import Filter
-from dynestyx.inference.latent.base import LatentPathBuilder
-from dynestyx.inference.latent.metadata import prepare_dirac_state_path_metadata
+from dynestyx.inference.latent.builder import LatentPathBuilder
+from dynestyx.inference.latent.parameterization import (
+    prepare_dirac_state_path_metadata,
+    prepare_latent_path_layout,
+)
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
@@ -68,6 +71,7 @@ __all__ = [
     "ObservationModel",
     "Filter",
     "LatentPathBuilder",
+    "prepare_latent_path_layout",
     "prepare_dirac_state_path_metadata",
     "prepare_missing_observation_metadata",
     "Smoother",

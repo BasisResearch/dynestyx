@@ -376,19 +376,20 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
             [jnp.nan, jnp.nan],
         ]
     )
-    dirac_metadata = dsx.prepare_dirac_state_path_metadata(
+    latent_path_layout = dsx.prepare_latent_path_layout(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
     )
 
     def conditioned_model(obs_times=None, obs_values=None):
-        with dsx.LatentPathBuilder(dirac_state_path_metadata=dirac_metadata):
+        with dsx.LatentPathBuilder():
             dsx.sample(
                 "f",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                latent_path_layout=latent_path_layout,
             )
 
     mcmc = MCMC(
@@ -424,15 +425,7 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
     assert posterior["f_state_path"].shape == (10, 3, 2)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Under traced Predictive without precomputed dirac_state_path_metadata, "
-        "LatentPathBuilder currently falls back to a fully observed Dirac layout "
-        "and silently drops the free latent coordinates."
-    ),
-)
-def test_latent_path_builder_dirac_partial_missing_predictive_without_metadata_keeps_compressed_layout():
+def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_layout():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array(
@@ -442,6 +435,11 @@ def test_latent_path_builder_dirac_partial_missing_predictive_without_metadata_k
             [jnp.nan, jnp.nan],
         ]
     )
+    latent_path_layout = dsx.prepare_latent_path_layout(
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 
     def conditioned_model(obs_times=None, obs_values=None):
         with dsx.LatentPathBuilder():
@@ -450,6 +448,7 @@ def test_latent_path_builder_dirac_partial_missing_predictive_without_metadata_k
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                latent_path_layout=latent_path_layout,
             )
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
@@ -499,10 +498,7 @@ def test_latent_path_builder_sample_registers_missing_observation_sites_under_au
     missing_obs_values = jnp.array([0.5, -0.4])
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-        with dsx.LatentPathBuilder(
-            missing_observation_strategy="augment",
-            missing_obs_metadata=metadata,
-        ):
+        with dsx.LatentPathBuilder(missing_observation_strategy="augment"):
             dsx.sample(
                 "f",
                 dynamics,
@@ -557,17 +553,9 @@ def test_latent_path_builder_forced_augment_on_gaussian_partial_missing_creates_
     dynamics = _make_vector_gaussian_dynamics()
     obs_times = jnp.array([0.0, 1.0])
     obs_values = jnp.array([[0.2, jnp.nan], [jnp.nan, -0.1]])
-    metadata = dsx.prepare_missing_observation_metadata(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-    )
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-        with dsx.LatentPathBuilder(
-            missing_observation_strategy="augment",
-            missing_obs_metadata=metadata,
-        ):
+        with dsx.LatentPathBuilder(missing_observation_strategy="augment"):
             dsx.sample(
                 "f",
                 dynamics,
@@ -593,24 +581,23 @@ def test_latent_path_builder_auto_augments_student_t_partial_missing_mcmc_smoke(
     obs_values = cast(Array, sim.observations)[0]
     obs_values = obs_values.at[1, 0].set(jnp.nan)
     obs_values = obs_values.at[2, 1].set(jnp.nan)
-    metadata = dsx.prepare_missing_observation_metadata(
+    latent_path_layout = dsx.prepare_latent_path_layout(
         dynamics_true,
         obs_times=obs_times,
         obs_values=obs_values,
+        missing_observation_strategy="auto",
     )
 
     def conditioned_model(obs_times=None, obs_values=None):
         alpha = numpyro.sample("alpha", dist.Uniform(0.0, 0.9))
         dynamics = _make_student_t_discrete_dynamics(alpha=alpha)
-        with dsx.LatentPathBuilder(
-            missing_observation_strategy="auto",
-            missing_obs_metadata=metadata,
-        ):
+        with dsx.LatentPathBuilder(missing_observation_strategy="auto"):
             dsx.sample(
                 "f",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                latent_path_layout=latent_path_layout,
             )
 
     mcmc = MCMC(

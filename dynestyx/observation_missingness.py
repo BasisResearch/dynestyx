@@ -51,6 +51,20 @@ class MissingObservationMetadata:
     has_fully_missing_rows: bool
 
 
+def _concrete_observation_mask(
+    obs_values: Array | np.ndarray,
+) -> np.ndarray | None:
+    """Return a concrete observation mask when raw values are NumPy-convertible."""
+    try:
+        obs_values_np = np.asarray(obs_values)
+    except Exception:  # pragma: no cover - defensive for traced callers
+        return None
+
+    if np.issubdtype(obs_values_np.dtype, np.inexact):
+        return ~np.isnan(obs_values_np)
+    return np.ones(obs_values_np.shape, dtype=bool)
+
+
 def canonicalize_missing_obs_values(
     missing_obs_values: Array,
     *,
@@ -163,6 +177,12 @@ def prepare_missing_observation_metadata(
 
     if obs_mask is None:
         assert obs_values is not None
+        concrete_obs_mask = _concrete_observation_mask(obs_values)
+        if concrete_obs_mask is not None:
+            return infer_missing_observation_metadata(
+                obs_times=obs_times,
+                obs_mask=jnp.asarray(concrete_obs_mask),
+            )
         _, obs_mask, _ = prepare_observation_views(dynamics, obs_values)
         if obs_mask is None:
             raise ValueError(
@@ -272,14 +292,18 @@ def prepare_observation_views(
         return None, None, False
 
     obs_arr = jnp.asarray(obs_values)
+    concrete_obs_mask = _concrete_observation_mask(obs_values)
     if jnp.issubdtype(obs_arr.dtype, jnp.inexact):
         obs_mask = ~jnp.isnan(obs_arr)
     else:
         obs_mask = jnp.ones(obs_arr.shape, dtype=bool)
-    try:
-        has_missing = bool(jnp.any(~obs_mask))
-    except TracerBoolConversionError:
-        has_missing = None
+    if concrete_obs_mask is not None:
+        has_missing = bool(np.any(~concrete_obs_mask))
+    else:
+        try:
+            has_missing = bool(jnp.any(~obs_mask))
+        except TracerBoolConversionError:
+            has_missing = None
 
     obs_dist = _probe_observation_distribution(dynamics)
     if not _is_categorical_distribution(obs_dist):
@@ -746,6 +770,18 @@ class ObservationLogProb:
         if use_augmentation:
             metadata = self.missing_obs_metadata
             if metadata is None:
+                if self.missing_obs_values is not None and tuple(
+                    jnp.asarray(self.missing_obs_values).shape
+                ) == tuple(self.filled_obs.shape):
+                    self.distribution_mode = "augment"
+                    self.completed_obs = jnp.where(
+                        self.obs_mask,
+                        self.filled_obs,
+                        self.missing_obs_values,
+                    )
+                    self.missing_obs_times = None
+                    self.missing_obs_coordinate_indices = None
+                    return
                 metadata = infer_missing_observation_metadata(
                     obs_times=(
                         jnp.arange(self.obs_values.shape[0])

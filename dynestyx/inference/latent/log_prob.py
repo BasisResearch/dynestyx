@@ -1,4 +1,16 @@
-"""Pure-JAX joint trajectory log-probability helpers."""
+"""Pure-JAX joint log-probability helpers for latent-path inference.
+
+This module evaluates the trajectory density once a full state path is known.
+It is intentionally NumPyro-free: the goal is to compute
+``log p(x, y | ...)`` and related bookkeeping terms using only JAX arrays.
+
+The two main entry points differ by what the caller already has:
+
+- :func:`compute_state_path_log_prob_terms` starts from a fully specified state
+  path ``x``,
+- :func:`compute_trajectory_log_prob_terms` starts from latent path parameters
+  ``z = state_path_params`` and first reconstructs ``x = g(z)``.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +24,11 @@ import jax
 import jax.numpy as jnp
 from jax import Array, lax
 
-from dynestyx.inference.latent.assembly import assemble_state_path
+from dynestyx.inference.latent.parameterization import (
+    AssembledStatePath,
+    StatePathParameterization,
+    assemble_state_path,
+)
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
@@ -23,15 +39,21 @@ from dynestyx.observation_missingness import (
     MissingObservationStrategy,
     ObservationLogProb,
 )
-from dynestyx.utils import (
-    _get_val_or_None,
-    _raise_now_or_error_if,
-)
+from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
 
 
 @dataclasses.dataclass
 class TrajectoryLogProbTerms:
-    """Pure-JAX decomposition of ``log p(x, y | ...)``."""
+    """Pure-JAX decomposition of ``log p(x, y | ...)``.
+
+    The decomposition is
+
+    ``log p(x_0) + sum_t log p(x_{t+1} | x_t) + sum_t log p(y_t | x_t)``.
+
+    The extra fields record any missing-observation augmentation outputs so the
+    caller can surface completed observations or attach deterministic NumPyro
+    sites without recomputing them.
+    """
 
     initial_log_prob: Array
     transition_log_probs: Array
@@ -43,6 +65,7 @@ class TrajectoryLogProbTerms:
 
     @property
     def joint_log_prob(self) -> Array:
+        """Return the scalar joint trajectory log-probability."""
         return (
             self.initial_log_prob
             + jnp.sum(self.transition_log_probs)
@@ -57,7 +80,13 @@ def _scan_chunked_vmap(
     chunk_size: int | None,
     dtype,
 ) -> Array:
-    """Evaluate a scalar per-index function via a scan of vmapped chunks."""
+    """Evaluate a scalar per-index function via a scan of vmapped chunks.
+
+    This helper is used for both transition and observation terms. It preserves
+    the semantics of ``jax.vmap(fn)(jnp.arange(size))`` while allowing the work
+    to be chunked through ``lax.scan`` when memory pressure would make a single
+    large vmap inconvenient.
+    """
     if size == 0:
         return jnp.zeros((0,), dtype=dtype)
 
@@ -88,7 +117,12 @@ def _gather_by_exact_time(
     *,
     value_name: str,
 ) -> Array:
-    """Gather values defined on ``source_times`` at ``query_times`` exactly."""
+    """Gather values defined on ``source_times`` at ``query_times`` exactly.
+
+    Latent-path scoring assumes that controls and state values are queried only
+    at times where they are already defined. This helper enforces that exact
+    alignment rather than silently interpolating or snapping to nearby times.
+    """
     source = jnp.asarray(source_times)
     query = jnp.asarray(query_times)
     if query.size == 0:
@@ -117,7 +151,13 @@ def _prepare_observation_log_prob(
     missing_obs_values: Array | None,
     missing_obs_metadata: MissingObservationMetadata | None,
 ) -> ObservationLogProb:
-    """Construct the missingness-aware observation scorer."""
+    """Construct the missingness-aware observation scorer.
+
+    ``ObservationLogProb`` expects observations in a consistently shaped
+    time-by-event layout. This helper performs the small shape adaptations
+    needed for scalar observations and forwards any missingness metadata or
+    augmentation latents to the scorer.
+    """
     obs_values_for_helper = obs_values[:, None] if obs_values.ndim == 1 else obs_values
     obs_times_for_helper = jnp.asarray(obs_times)
     filled_obs_for_helper = (
@@ -130,6 +170,15 @@ def _prepare_observation_log_prob(
         if obs_mask is None
         else (obs_mask[:, None] if obs_values.ndim == 1 else obs_mask)
     )
+    missing_obs_values_for_helper = (
+        None
+        if missing_obs_values is None
+        else (
+            missing_obs_values[:, None]
+            if obs_values.ndim == 1 and jnp.asarray(missing_obs_values).ndim == 1
+            else missing_obs_values
+        )
+    )
     return ObservationLogProb(
         dynamics=dynamics,
         obs_values=obs_values_for_helper,
@@ -137,7 +186,7 @@ def _prepare_observation_log_prob(
         precomputed_filled_obs=filled_obs_for_helper,
         precomputed_obs_mask=obs_mask_for_helper,
         missing_observation_strategy=missing_observation_strategy,
-        missing_obs_values=missing_obs_values,
+        missing_obs_values=missing_obs_values_for_helper,
         missing_obs_metadata=missing_obs_metadata,
     )
 
@@ -158,7 +207,7 @@ def _control_values_at_times(
     )
 
 
-def _compute_log_prob_terms_from_state_trajectory(
+def compute_state_path_log_prob_terms(
     dynamics: DynamicalModel,
     *,
     state_path: Array,
@@ -175,23 +224,19 @@ def _compute_log_prob_terms_from_state_trajectory(
     chunk_size: int | None = None,
     observations_are_exact_constraints: bool = False,
 ) -> TrajectoryLogProbTerms:
-    """Compute ``log p(x, y | ...)`` from full reconstructed state values.
+    """Compute ``log p(x, y | ...)`` from a fully reconstructed state path ``x``.
 
-    This helper assumes the caller has already converted any latent
-    parameterization into a concrete state path on a concrete state-time grid.
-    In particular, ``state_path`` is the actual latent trajectory
+    This is the most direct scorer in the latent stack. It assumes the caller
+    already has the full state trajectory ``x`` and its times, and then
+    computes:
 
-    ``x = (x_0, x_1, ..., x_T)``
+    - the initial-condition log-probability,
+    - each transition log-probability along the path, and
+    - each observation log-probability at observation times.
 
-    used in the
-    initial-condition term, the transition terms, and the observation terms.
-
-    This differs from ``state_path_params``, which may be a compressed or
-    model-specific parameterization ``z`` with ``x = g(z)``:
-    - discrete / discretized v1: full latent path, often equal to
-      ``state_path``,
-    - deterministic continuous-time models: initial condition only,
-    - exact-observation compressed layouts: only the free coordinates.
+    For deterministic continuous-time models there are no stochastic transition
+    terms after the initial condition, so the transition contribution is the
+    empty vector.
     """
     state_path_times = jnp.asarray(state_path_times)
     state_path = jnp.asarray(state_path)
@@ -317,24 +362,15 @@ def compute_trajectory_log_prob_terms(
     chunk_size: int | None = None,
     ode_diffeqsolve_settings: dict[str, Any] | None = None,
 ) -> TrajectoryLogProbTerms:
-    """Compute ``log p(x, y | ...)`` from a state-path parameterization.
+    """Compute ``log p(x, y | ...)`` from ``z = state_path_params``.
 
-    Let ``z = state_path_params`` denote the free variables supplied by the
-    caller, and let ``x = state_path`` denote the full trajectory appearing in
-    the model. This function evaluates ``log p(x, y | ...)`` after first
-    reconstructing ``x = g(z)``.
+    This is the pure-JAX analogue of the latent-path inference story:
 
-    The path parameters are not required to equal the full trajectory that appears in the
-    probabilistic model:
-    - discrete / discretized v1: ``state_path_params`` are the full latent path,
-    - deterministic continuous-time models: ``state_path_params`` are only the
-      initial condition and the ODE solution reconstructs the rest,
-    - compressed exact-observation layouts are handled by a different assembly
-      path before calling the internal assembled-state scorer.
+    1. reconstruct ``x = g(z)``,
+    2. evaluate ``log p(x, y | ...)`` on that reconstructed path.
 
-    This function therefore has two stages:
-    1. assemble ``state_path_params`` into a full ``state_path`` on ``state_path_times``
-    2. score that assembled trajectory
+    It is the natural scoring entry point for callers outside NumPyro that want
+    to optimize or sample over ``state_path_params`` directly.
     """
     state_path_param_times = jnp.asarray(state_path_param_times)
     _raise_now_or_error_if(
@@ -366,7 +402,7 @@ def compute_trajectory_log_prob_terms(
                 "path parameter in dsx.log_prob: the initial condition."
             )
 
-    return _compute_log_prob_terms_from_state_trajectory(
+    return compute_state_path_log_prob_terms(
         dynamics,
         state_path=assembled.state_path,
         state_path_times=assembled.state_path_times,
@@ -383,7 +419,57 @@ def compute_trajectory_log_prob_terms(
     )
 
 
+def compute_trajectory_log_prob_terms_for_layout(
+    dynamics: DynamicalModel,
+    *,
+    layout: StatePathParameterization,
+    state_path: Array,
+    state_path_times: Array,
+    obs_times: Array,
+    obs_values: Array,
+    obs_values_filled: Array | None,
+    obs_mask: Array | None,
+    missing_observation_strategy: MissingObservationStrategy = "auto",
+    missing_obs_values: Array | None = None,
+    ctrl_times: Array | None = None,
+    ctrl_values: Array | None = None,
+    chunk_size: int | None = None,
+) -> TrajectoryLogProbTerms:
+    """Backward-compatible layout-aware scoring helper.
+
+    This helper exists for call sites that already have a
+    :class:`StatePathParameterization` and a state path in hand. It forwards the
+    layout's missingness metadata and exact-observation flags into
+    :func:`compute_state_path_log_prob_terms`.
+    """
+    assembled = AssembledStatePath(
+        state_path_params=state_path,
+        state_path_param_times=layout.state_path_param_times,
+        state_path_param_coordinate_indices=layout.state_path_param_coordinate_indices,
+        state_path=state_path,
+        state_path_times=state_path_times,
+    )
+    return compute_state_path_log_prob_terms(
+        dynamics,
+        state_path=assembled.state_path,
+        state_path_times=assembled.state_path_times,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        obs_values_filled=obs_values_filled,
+        obs_mask=obs_mask,
+        missing_observation_strategy=missing_observation_strategy,
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=layout.missing_obs_metadata,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        chunk_size=chunk_size,
+        observations_are_exact_constraints=layout.dirac_metadata is not None,
+    )
+
+
 __all__ = [
     "TrajectoryLogProbTerms",
+    "compute_state_path_log_prob_terms",
     "compute_trajectory_log_prob_terms",
+    "compute_trajectory_log_prob_terms_for_layout",
 ]
