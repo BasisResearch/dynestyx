@@ -924,5 +924,6 @@ def test_sample_site_parity_plate_and_non_plate():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(15)):
             _plate_discrete_lti_model(predict_times=t, M=2)
     member_x0_sites = [k for k in tr if re.fullmatch(r"f_p\d+_x_0", k)]
-    assert len(member_x0_sites) == 2
+    assert not member_x0_sites
+    assert "f_x_0" in tr
     assert "f_observations" in tr

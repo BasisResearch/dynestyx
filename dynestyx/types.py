@@ -84,16 +84,26 @@ class LatentStateResult:
 
 @dataclasses.dataclass
 class SimulatedResult:
-    """Result of pure-JAX forward simulation without NumPyro side effects.
+    """Result of simulation without eager NumPyro side effects.
 
     The simulator now conceptually owns data generation only. This result
     therefore stores the realized state path ``x`` and observation path ``y``
     produced on the requested simulator time grid.
+
+    For raw forward simulation, ``times``, ``states``, and ``observations``
+    are populated. When a simulator is layered outside a Filter or Smoother
+    for posterior rollout, the same result object instead carries
+    ``predicted_times``, ``predicted_states``, and
+    ``predicted_observations``.
     """
 
     times: object = None
+    initial_states: object = None
     states: object = None
     observations: object = None
+    predicted_times: object = None
+    predicted_states: object = None
+    predicted_observations: object = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )
@@ -109,3 +119,18 @@ def as_scalar_time_array(
             f"{name} must be a numeric scalar (Python/NumPy real or scalar JAX array)."
         )
     return arr
+
+
+def chain_numpyro_site_registrations(
+    *callbacks: Callable[[str], None] | None,
+) -> Callable[[str], None] | None:
+    """Compose deferred NumPyro site-registration callbacks in order."""
+    active_callbacks = [callback for callback in callbacks if callable(callback)]
+    if not active_callbacks:
+        return None
+
+    def _register(site_name: str) -> None:
+        for callback in active_callbacks:
+            callback(site_name)
+
+    return _register

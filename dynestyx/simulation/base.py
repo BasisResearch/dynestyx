@@ -3,7 +3,7 @@
 import itertools
 from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 import equinox as eqx
 import jax
@@ -26,10 +26,7 @@ from dynestyx.models import (
     Diffusion,
     DynamicalModel,
 )
-from dynestyx.observation_missingness import (
-    ObservationLogProb,
-)
-from dynestyx.types import FunctionOfTime, SimulatedResult
+from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
 from dynestyx.utils import (
     _diffusion_coefficient_is_plate_batched,
     _dist_has_plate_batch_dims,
@@ -77,13 +74,84 @@ def _merge_segments(
     return out
 
 
-def _simulated_result_to_dict(result: SimulatedResult) -> dict[str, Array]:
-    """Convert a pure simulation result into deterministic-site payloads."""
-    return {
-        "times": jnp.asarray(result.times),
-        "states": jnp.asarray(result.states),
-        "observations": jnp.asarray(result.observations),
+def _simulated_result_site_payload(result: SimulatedResult) -> dict[str, Array]:
+    """Convert a simulation result into deterministic-site payloads."""
+    payload: dict[str, Array] = {}
+    for field_name in (
+        "times",
+        "initial_states",
+        "states",
+        "observations",
+        "predicted_times",
+        "predicted_states",
+        "predicted_observations",
+    ):
+        value = getattr(result, field_name)
+        if value is not None:
+            payload[field_name] = jnp.asarray(value)
+    return payload
+
+
+def _stack_simulated_results(
+    results: list[SimulatedResult],
+    *,
+    plate_shapes: tuple[int, ...],
+) -> SimulatedResult:
+    """Stack per-member simulation results back onto the plate grid."""
+    payloads = [_simulated_result_site_payload(result) for result in results]
+    keys = payloads[0].keys()
+    for payload in payloads:
+        if payload.keys() != keys:
+            raise ValueError(
+                "Plate simulator members returned inconsistent result keys."
+            )
+
+    stacked_payload: dict[str, Array] = {}
+    for key in keys:
+        values = [payload[key] for payload in payloads]
+        flat = jnp.stack(values, axis=0)
+        stacked_payload[key] = flat.reshape(*plate_shapes, *values[0].shape)
+
+    return SimulatedResult(
+        times=stacked_payload.get("times"),
+        initial_states=stacked_payload.get("initial_states"),
+        states=stacked_payload.get("states"),
+        observations=stacked_payload.get("observations"),
+        predicted_times=stacked_payload.get("predicted_times"),
+        predicted_states=stacked_payload.get("predicted_states"),
+        predicted_observations=stacked_payload.get("predicted_observations"),
+        _register_numpyro_sites=chain_numpyro_site_registrations(
+            *(getattr(result, "_register_numpyro_sites", None) for result in results)
+        ),
+    )
+
+
+def _register_simulated_result_sites(
+    result: SimulatedResult, *, site_name: str
+) -> None:
+    """Register a simulation result's public trace sites under ``site_name``."""
+    site_suffixes = {
+        "times": "times",
+        "initial_states": "x_0",
+        "states": "states",
+        "observations": "observations",
+        "predicted_times": "predicted_times",
+        "predicted_states": "predicted_states",
+        "predicted_observations": "predicted_observations",
     }
+    for field_name, value in _simulated_result_site_payload(result).items():
+        numpyro.deterministic(f"{site_name}_{site_suffixes[field_name]}", value)
+
+
+def _sample_initial_states(
+    initial_condition,
+    *,
+    rng_key: Array,
+    n_simulations: int,
+) -> Array:
+    """Draw independent initial states for each simulation member."""
+    keys = jr.split(rng_key, n_simulations)
+    return jax.vmap(initial_condition.sample)(keys)
 
 
 _SIMULATOR_CONFIG_UNSET = object()
@@ -118,8 +186,9 @@ def _validate_no_config_and_direct_kwargs(
 def _suspend_numpyro_plate_frames():
     """Temporarily remove active numpyro.plate frames from the pyro stack.
 
-    This is necessary so that `numpyro.sample` statements can be called within
-    the simulator inside of a dsx.plate context."""
+    LatentPathBuilder still uses this helper when it enumerates plate members
+    and then re-registers per-member NumPyro sites.
+    """
     stack = numpyro.primitives._PYRO_STACK
     original = list(stack)
     stack[:] = [f for f in original if not isinstance(f, numpyro.primitives.plate)]
@@ -162,12 +231,14 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
     """Base class for generation-only simulator/unroller handlers.
 
-    Interprets `dsx.sample(name, dynamics, predict_times=..., ...)` by unrolling
-    `dynamics` into NumPyro sample sites for forward simulation on the requested
-    prediction grid.
+    Interprets `dsx.sample(name, dynamics, predict_times=..., ...)` by running a
+    pure-JAX forward simulation on the requested prediction grid, then
+    registering the realized simulator outputs as deferred NumPyro sites only
+    when the NumPyro-style API is used.
 
     When the simulator runs, it records the solved trajectories as deterministic
-    sites (conventionally `"times"`, `"states"`, and `"observations"`).
+    sites (conventionally `"x_0"`, `"times"`, `"states"`, and
+    `"observations"`).
 
     Notes:
         - Raw simulator handlers are generation-only and therefore require
@@ -187,6 +258,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        rng_key: Array | None = None,
         obs_times=None,
         obs_values=None,
         _obs_values_filled=None,
@@ -201,7 +273,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         smoothed_dists=None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
-    ) -> dict[str, Array] | None:
+    ) -> SimulatedResult | None:
         """Run simulator logic for one unbatched member and return trajectories."""
         use_smoothed_rollout = smoothed_times is not None or smoothed_dists is not None
         if use_smoothed_rollout and (
@@ -235,6 +307,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if posterior_rollout:
             assert predict_times is not None
+            if rng_key is None:
+                raise ValueError("PRNG key required for simulator rollout.")
             _validate_site_sorting(rollout_times, name=f"{rollout_label}_times")
 
             def _ctrl_for_segment(sub_times):
@@ -266,22 +340,29 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             if _posterior_rollout_final_only:
                 dynamics_seg, seg_name = _dynamics_for_segment(0)
                 ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(predict_times)
-                seg_result = self._simulate(
-                    seg_name,
+                seg_result = self.simulate(
                     dynamics_seg,
-                    obs_times=None,
-                    obs_values=None,
+                    rng_key=rng_key,
                     ctrl_times=ctrl_t_seg,
                     ctrl_values=ctrl_v_seg,
                     predict_times=predict_times,
                 )
-                results = {
-                    "predicted_states": seg_result["states"],
-                    "predicted_observations": seg_result["observations"],
-                }
-                n_sim_out = results["predicted_states"].shape[0]
-                results["predicted_times"] = _tile_times(predict_times, n_sim_out)
-                return results
+                assert seg_result.states is not None
+                assert seg_result.observations is not None
+                predicted_states = cast(Array, seg_result.states)
+                return SimulatedResult(
+                    predicted_states=predicted_states,
+                    predicted_observations=seg_result.observations,
+                    predicted_times=_tile_times(
+                        predict_times, predicted_states.shape[0]
+                    ),
+                    _register_numpyro_sites=lambda _site_name: (
+                        _register_simulated_result_sites(
+                            SimulatedResult(initial_states=seg_result.initial_states),
+                            site_name=seg_name,
+                        )
+                    ),
+                )
 
             n_pred = len(predict_times)
 
@@ -291,10 +372,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             ft_host = np.asarray(jax.device_get(rollout_times))
             seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
 
-            seg_results = []
+            seg_results: list[SimulatedResult] = []
             seg_masks = []
+            seg_names: list[str] = []
+            nonempty_seg_ids = [int(s) for s in np.unique(seg_ids_host)]
+            seg_keys = jr.split(rng_key, len(nonempty_seg_ids))
             # Simulate one segment per present anchor (skip empty segments).
-            for seg_id in [int(s) for s in np.unique(seg_ids_host)]:
+            for seg_idx, seg_id in enumerate(nonempty_seg_ids):
                 # mask_host[i] = True iff predict_times[i] belongs to this segment id.
                 # This is the global-to-segment membership mask over the full prediction grid.
                 mask_host = seg_ids_host == seg_id
@@ -308,14 +392,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 # Extract just this segment's prediction times (variable-length sub-grid).
                 sub_times = jnp.asarray(pt_host[mask_host], dtype=predict_times.dtype)
                 dynamics_seg, seg_name = _dynamics_for_segment(seg_id)
+                seg_names.append(seg_name)
 
                 ctrl_t_seg, ctrl_v_seg = _ctrl_for_segment(sub_times)
                 seg_results.append(
-                    self._simulate(
-                        seg_name,
+                    self.simulate(
                         dynamics_seg,
-                        obs_times=None,
-                        obs_values=None,
+                        rng_key=seg_keys[seg_idx],
                         ctrl_times=ctrl_t_seg,
                         ctrl_values=ctrl_v_seg,
                         predict_times=sub_times,
@@ -324,30 +407,54 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 seg_masks.append(mask_seg)
 
             # Scatter each segment's output into the global predict_times order.
-            merge = lambda key: _merge_segments(
-                [r[key] for r in seg_results], seg_masks, n_pred
+            def _merge_attr(attr: str) -> Array:
+                return _merge_segments(
+                    [jnp.asarray(getattr(result, attr)) for result in seg_results],
+                    seg_masks,
+                    n_pred,
+                )
+
+            predicted_states = _merge_attr("states")
+            return SimulatedResult(
+                predicted_states=predicted_states,
+                predicted_observations=_merge_attr("observations"),
+                predicted_times=_tile_times(predict_times, predicted_states.shape[0]),
+                _register_numpyro_sites=chain_numpyro_site_registrations(
+                    *(
+                        (
+                            lambda _site_name, seg_name=seg_name, seg_result=seg_result: (
+                                _register_simulated_result_sites(
+                                    SimulatedResult(
+                                        initial_states=seg_result.initial_states
+                                    ),
+                                    site_name=seg_name,
+                                )
+                            )
+                        )
+                        for seg_name, seg_result in zip(
+                            seg_names, seg_results, strict=True
+                        )
+                    )
+                ),
             )
-            results = {
-                "predicted_states": merge("states"),
-                "predicted_observations": merge("observations"),
-            }
-            n_sim_out = results["predicted_states"].shape[0]
-            results["predicted_times"] = _tile_times(predict_times, n_sim_out)
-            return results
 
         if self.n_simulations > 1 and obs_values is not None:
             raise ValueError(
                 "n_simulations > 1 is only supported when obs_values is None "
                 "(forward simulation only)"
             )
-        return self._simulate(
-            name,
+        if rng_key is None:
+            raise ValueError("PRNG key required for simulation.")
+        if obs_times is not None or obs_values is not None:
+            raise ValueError(
+                f"{type(self).__name__} is generation-only. Use predict_times for "
+                "simulation, or LatentPathBuilder / Filter / Smoother for inference "
+                "with observations."
+            )
+        return self.simulate(
             dynamics,
+            rng_key=rng_key,
             obs_times=obs_times,
-            obs_values=obs_values,
-            _obs_values_filled=_obs_values_filled,
-            _obs_mask=_obs_mask,
-            _obs_has_missing=_obs_has_missing,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -359,6 +466,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
+        rng_key: Array | None = None,
         plate_shapes: tuple[int, ...],
         obs_times=None,
         obs_values=None,
@@ -374,7 +482,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         smoothed_dists=None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
-    ) -> dict[str, Array] | None:
+    ) -> SimulatedResult | None:
         """Run simulator over all plate members and stack outputs.
 
         Plated simulation enumerates over all plate members and runs
@@ -401,9 +509,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             )
 
         plate_indices = list(itertools.product(*[range(s) for s in plate_shapes]))
-        member_results: list[dict[str, Array]] = []
+        member_results: list[SimulatedResult] = []
+        member_keys = None if rng_key is None else jr.split(rng_key, len(plate_indices))
 
-        for plate_idx in plate_indices:
+        for member_idx, plate_idx in enumerate(plate_indices):
             member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
 
             # We begin by slicing the dynamics tree for each plate member.
@@ -466,28 +575,25 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     for d in smoothed_dists
                 ]
 
-            # To perform inference, we need to suspend the active numpyro.plate frames
-            # This is because the simulator has unguarded numpyro.sample statements inside,
-            # which would otherwise create nested plate frames.
-            with _suspend_numpyro_plate_frames():
-                member_result = self._run_single_member_simulation(
-                    member_name,
-                    member_dynamics,
-                    obs_times=member_obs_times,
-                    obs_values=member_obs_values,
-                    _obs_values_filled=member_obs_values_filled,
-                    _obs_mask=member_obs_mask,
-                    _obs_has_missing=_obs_has_missing,
-                    ctrl_times=member_ctrl_times,
-                    ctrl_values=member_ctrl_values,
-                    predict_times=member_predict_times,
-                    filtered_times=member_filtered_times,
-                    filtered_dists=member_filtered_dists,
-                    smoothed_times=member_smoothed_times,
-                    smoothed_dists=member_smoothed_dists,
-                    _posterior_rollout_final_only=_posterior_rollout_final_only,
-                    **kwargs,
-                )
+            member_result = self._run_single_member_simulation(
+                member_name,
+                member_dynamics,
+                rng_key=(None if member_keys is None else member_keys[member_idx]),
+                obs_times=member_obs_times,
+                obs_values=member_obs_values,
+                _obs_values_filled=member_obs_values_filled,
+                _obs_mask=member_obs_mask,
+                _obs_has_missing=_obs_has_missing,
+                ctrl_times=member_ctrl_times,
+                ctrl_values=member_ctrl_values,
+                predict_times=member_predict_times,
+                filtered_times=member_filtered_times,
+                filtered_dists=member_filtered_dists,
+                smoothed_times=member_smoothed_times,
+                smoothed_dists=member_smoothed_dists,
+                _posterior_rollout_final_only=_posterior_rollout_final_only,
+                **kwargs,
+            )
 
             if member_result is not None:
                 member_results.append(member_result)
@@ -495,19 +601,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         if not member_results:
             return None
 
-        keys = member_results[0].keys()
-        for result in member_results:
-            if result.keys() != keys:
-                raise ValueError(
-                    "Plate simulator members returned inconsistent result keys."
-                )
-
-        stacked: dict[str, Array] = {}
-        for key in keys:
-            values = [r[key] for r in member_results]
-            flat = jnp.stack(values, axis=0)
-            stacked[key] = flat.reshape(*plate_shapes, *values[0].shape)
-        return stacked
+        return _stack_simulated_results(member_results, plate_shapes=plate_shapes)
 
     @implements(_condition_intp)
     def _sample_ds(
@@ -533,7 +627,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         smoothed_times=None,
         smoothed_dists=None,
         **kwargs,
-    ) -> FunctionOfTime:
+    ) -> object:
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
@@ -550,10 +644,17 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 "simulation, LatentPathBuilder for explicit latent-path inference, "
                 "or Filter/Smoother for marginalized inference."
             )
+        need_simulation = predict_times is not None
+        simulation_key = None
+        if need_simulation:
+            simulation_key = numpyro.prng_key()
+            if simulation_key is None:
+                raise ValueError("PRNG key required for simulation.")
         if plate_shapes:
             results = self._run_plated_simulation(
                 name,
                 dynamics,
+                rng_key=simulation_key,
                 plate_shapes=plate_shapes,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -574,6 +675,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             results = self._run_single_member_simulation(
                 name,
                 dynamics,
+                rng_key=simulation_key,
                 obs_times=obs_times,
                 obs_values=obs_values,
                 _obs_values_filled=_obs_values_filled,
@@ -590,12 +692,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 **kwargs,
             )
 
-        if results is not None:
-            # Add the results from the simulator as deterministic sites
-            for site_name, trajectory in results.items():
-                numpyro.deterministic(f"{name}_{site_name}", trajectory)
-
-        return fwd(
+        downstream_result = fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
@@ -610,44 +707,21 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             **kwargs,
         )
 
-    def _simulate(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        **kwargs,
-    ) -> dict[str, Array]:
-        """Unroll `dynamics` as a NumPyro forward simulator.
+        if results is None:
+            return downstream_result
 
-        Implementations are expected to:
-        - require `predict_times` for raw generation / rollout,
-        - sample latent states and observations on that grid,
-        - and return arrays suitable for recording as deterministic sites.
+        def _register_self(site_name: str) -> None:
+            _register_simulated_result_sites(results, site_name=site_name)
 
-        Args:
-            dynamics: Dynamical model to simulate/unroll.
-            obs_times: Internal rollout metadata from higher-level handlers.
-                Raw simulator use should leave this as `None`.
-            obs_values: Internal rollout metadata from higher-level handlers.
-                Raw simulator use should leave this as `None`.
-            ctrl_times: Optional control times.
-            ctrl_values: Optional control values aligned to `ctrl_times`.
-            predict_times: Prediction times at which to emit forward-simulation
-                sites.
-        Returns:
-            dict[str, State]: Mapping from deterministic site names to
-                trajectories. Conventionally includes `"times"`, `"states"`,
-                and `"observations"`.
-        """
-        raise NotImplementedError()
+        downstream_register = getattr(
+            downstream_result, "_register_numpyro_sites", None
+        )
+        results._register_numpyro_sites = chain_numpyro_site_registrations(
+            _register_self,
+            results._register_numpyro_sites,
+            downstream_register,
+        )
+        return results
 
     def simulate(
         self,
@@ -663,32 +737,31 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         """Run pure-JAX forward simulation without registering NumPyro sites."""
         raise NotImplementedError()
 
+    def _emit_observations(
+        self,
+        name: str,
+        dynamics,
+        states: Array,
+        times: Array,
+        obs_values: Array | None,
+        control_path_eval: Callable[[Array], Array | None] | None,
+        key=None,
+    ) -> Array:
+        """Emit observations in pure-JAX or NumPyro mode."""
+        ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
+        T = len(times)
 
-def _emit_observations(
-    name: str,
-    dynamics,
-    states: Array,
-    times: Array,
-    obs_values: Array | None,
-    control_path_eval: Callable[[Array], Array | None],
-    key=None,
-) -> Array:
-    """Emit observations via numpyro.sample (conditioning) or dist.sample (vmap)."""
-    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
-    T = len(times)
+        if key is not None:
+            obs_keys = jr.split(key, T)
 
-    if key is not None:
-        obs_keys = jr.split(key, T)
+            def _obs_step(t_idx):
+                x_t = states[t_idx]
+                t = times[t_idx]
+                u_t = ctrl(t)
+                obs_dist = dynamics.observation_model(x=x_t, u=u_t, t=t)
+                return obs_dist.sample(obs_keys[t_idx])
 
-        def _obs_step(t_idx):
-            x_t = states[t_idx]
-            t = times[t_idx]
-            u_t = ctrl(t)
-            obs_dist = dynamics.observation_model(x=x_t, u=u_t, t=t)
-            return obs_dist.sample(obs_keys[t_idx])
-
-        return jax.vmap(_obs_step)(jnp.arange(T))
-    else:
+            return jax.vmap(_obs_step)(jnp.arange(T))
 
         def _step(carry, t_idx):
             x_t = states[t_idx]
@@ -704,28 +777,3 @@ def _emit_observations(
 
         _, observations = nscan(_step, None, jnp.arange(T))
         return observations
-
-
-def _apply_observation_log_prob(
-    name: str,
-    states: Array,
-    times: Array,
-    log_prob: ObservationLogProb,
-    control_path_eval: Callable[[Array], Array | None],
-) -> Array:
-    """Apply observation log-probability terms and preserve NaNs in outputs."""
-    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
-    T = len(times)
-
-    def _step(carry, t_idx):
-        x_t = states[t_idx]
-        t = times[t_idx]
-        u_t = ctrl(t)
-        lp = log_prob.log_prob_step(x=x_t, u=u_t, t=t, t_idx=t_idx)
-        numpyro.factor(f"{name}_y_{t_idx}_lp", lp)
-        return carry, log_prob.observation_step(t_idx)
-
-    _, observations = nscan(_step, None, jnp.arange(T))
-    for t_idx in range(T):
-        numpyro.deterministic(f"{name}_y_{t_idx}", observations[t_idx])
-    return observations

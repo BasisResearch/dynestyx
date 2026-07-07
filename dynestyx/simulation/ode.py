@@ -6,7 +6,6 @@ import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import numpyro
 from jax import Array
 
 from dynestyx.inference.configs.simulator import ODESimulatorConfig
@@ -14,7 +13,8 @@ from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import (
     _SIMULATOR_CONFIG_UNSET,
     BaseSimulator,
-    _simulated_result_to_dict,
+    _sample_initial_states,
+    _tile_times,
     _validate_no_config_and_direct_kwargs,
 )
 from dynestyx.solvers import solve_ode
@@ -123,30 +123,23 @@ class ODESimulator(BaseSimulator):
                 control_path_eval,
                 self.diffeqsolve_settings,
             )
-
-            def _emit_one(t_idx):
-                x_t = states[t_idx]
-                t = times[t_idx]
-                u_t = control_path_eval(t)
-                return dynamics.observation_model(x=x_t, u=u_t, t=t).sample(
-                    obs_keys[t_idx]
-                )
-
-            obs_keys_local = jr.split(obs_key, len(times))
-            observations = jax.vmap(
-                lambda t_idx, k: dynamics.observation_model(
-                    x=states[t_idx],
-                    u=control_path_eval(times[t_idx]),
-                    t=times[t_idx],
-                ).sample(k)
-            )(jnp.arange(len(times)), obs_keys_local)
+            observations = self._emit_observations(
+                "",
+                dynamics,
+                states,
+                times,
+                None,
+                control_path_eval,
+                key=obs_key,
+            )
             return states, observations
 
         states, observations = jax.vmap(_sim_one_trajectory)(
             initial_state, obs_key=obs_keys
         )
         return SimulatedResult(
-            times=times[None, :].repeat(n_sim, axis=0),
+            times=_tile_times(times, n_sim),
+            initial_states=jnp.asarray(initial_state),
             states=states,
             observations=observations,
         )
@@ -168,8 +161,10 @@ class ODESimulator(BaseSimulator):
             raise ValueError("obs_times or predict_times must be provided")
 
         initial_key, rollout_key = jr.split(rng_key)
-        initial_state = dynamics.initial_condition.sample(
-            initial_key, sample_shape=(self.n_simulations,)
+        initial_state = _sample_initial_states(
+            dynamics.initial_condition,
+            rng_key=initial_key,
+            n_simulations=self.n_simulations,
         )
         return self._simulate_forward_from_initial_state(
             dynamics,
@@ -179,44 +174,3 @@ class ODESimulator(BaseSimulator):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
-
-    def _simulate(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        **kwargs,
-    ) -> dict[str, Array]:
-        """Unroll a deterministic continuous-time model as a NumPyro forward simulator."""
-        if obs_times is not None or obs_values is not None:
-            raise ValueError(
-                "ODESimulator is generation-only. Use predict_times for simulation, "
-                "or LatentPathBuilder / Filter / Smoother for inference with observations."
-            )
-
-        times = predict_times
-        if times is None:
-            raise ValueError("predict_times must be provided")
-
-        with numpyro.plate(f"{name}_n_simulations", self.n_simulations):
-            initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
-        prng_key = numpyro.prng_key()
-        if prng_key is None:
-            raise ValueError("PRNG key required for simulation")
-        result = self._simulate_forward_from_initial_state(
-            dynamics,
-            initial_state=jnp.asarray(initial_state),
-            rng_key=prng_key,
-            times=times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-        )
-        return _simulated_result_to_dict(result)

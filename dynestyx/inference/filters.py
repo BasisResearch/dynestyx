@@ -68,7 +68,11 @@ from dynestyx.inference.utils.plate_utils import (
     _slice_dist_for_plate_member,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.types import ConditionedResult, FunctionOfTime
+from dynestyx.types import (
+    ConditionedResult,
+    FunctionOfTime,
+    chain_numpyro_site_registrations,
+)
 from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -109,7 +113,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
 
         # Filter consumes obs_times and obs_values, so they are passed forward as None.
         # fwd() lets handlers above (e.g. Simulator) use filtered_dists for rollout.
-        fwd(
+        forwarded_result = fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
@@ -122,7 +126,14 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             **kwargs,
         )
 
-        return self._build_infer_result(name, filtered_dists)
+        result = self._build_infer_result(name, filtered_dists)
+        forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
+        result._register_numpyro_sites = chain_numpyro_site_registrations(
+            result._register_numpyro_sites,
+            forwarded_register,
+        )
+
+        return result
 
     @abstractmethod
     def _add_log_factors(

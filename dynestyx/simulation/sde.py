@@ -7,7 +7,6 @@ import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import numpyro
 from jax import Array
 
 from dynestyx.inference.configs.simulator import SDESimulatorConfig
@@ -15,8 +14,7 @@ from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvoluti
 from dynestyx.simulation.base import (
     _SIMULATOR_CONFIG_UNSET,
     BaseSimulator,
-    _emit_observations,
-    _simulated_result_to_dict,
+    _sample_initial_states,
     _tile_times,
     _validate_no_config_and_direct_kwargs,
 )
@@ -30,9 +28,10 @@ class SDESimulator(BaseSimulator):
 
     This simulator integrates a `ContinuousTimeStateEvolution` with nonzero diffusion
     using Diffrax and a `VirtualBrownianTree` (see the Diffrax docs on
-    [Brownian controls](https://docs.kidger.site/diffrax/api/brownian/)). It constructs a NumPyro generative
-    model with state sample sites (starting at `"x_0"`) and observation sample sites
-    (`"y_0"`, `"y_1"`, ...).
+    [Brownian controls](https://docs.kidger.site/diffrax/api/brownian/)). The
+    rollout itself is pure JAX; when used through `dsx.sample(...)`, realized
+    outputs are attached afterward as NumPyro deterministic sites, including
+    `"x_0"`, `"times"`, `"states"`, and `"observations"`.
 
     Controls:
         If `ctrl_times` / `ctrl_values` are provided at the `dsx.sample(...)` site,
@@ -40,8 +39,9 @@ class SDESimulator(BaseSimulator):
         (`left=False`), i.e., the control at time `t_k` is `ctrl_values[k]`.
 
     Deterministic outputs:
-        When run, the simulator records `"times"`, `"states"`, and `"observations"`
-        as `numpyro.deterministic(...)` sites.
+        When run through `dsx.sample(...)`, the simulator records `"x_0"`,
+        `"times"`, `"states"`, and `"observations"` as
+        `numpyro.deterministic(...)` sites.
 
     Important:
         - This is intended for **simulation / predictive checks** inside NumPyro.
@@ -209,7 +209,7 @@ class SDESimulator(BaseSimulator):
                 key=k_solve,
                 tol_vbt=self.tol_vbt,
             )
-            observations = _emit_observations(
+            observations = self._emit_observations(
                 "",
                 dynamics,
                 states,
@@ -223,6 +223,7 @@ class SDESimulator(BaseSimulator):
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
         return SimulatedResult(
             times=_tile_times(times, n_sim),
+            initial_states=jnp.asarray(initial_state),
             states=states,
             observations=observations,
         )
@@ -257,8 +258,10 @@ class SDESimulator(BaseSimulator):
             raise ValueError("predict_times must be provided for SDESimulator.")
 
         initial_key, rollout_key = jr.split(rng_key)
-        initial_state = dynamics.initial_condition.sample(
-            initial_key, sample_shape=(self.n_simulations,)
+        initial_state = _sample_initial_states(
+            dynamics.initial_condition,
+            rng_key=initial_key,
+            n_simulations=self.n_simulations,
         )
         return self._simulate_forward_from_initial_state(
             dynamics,
@@ -268,89 +271,3 @@ class SDESimulator(BaseSimulator):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
-
-    def _simulate(
-        self,
-        name: str,
-        dynamics,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        **kwargs,
-    ) -> dict[str, Array]:
-        """
-        Unroll a continuous-time SDE as a NumPyro model.
-
-        This method:
-        - samples the initial latent state as `numpyro.sample("x_0", ...)`,
-        - integrates the SDE to all `obs_times` using Diffrax,
-        - emits observations at those times as `numpyro.sample("y_i", ..., obs=...)`,
-        - and returns trajectories for deterministic recording.
-
-        To handle controls, we use a rectilinear interpolation that is right-continuous,
-        i.e., if ctrl_times = [0.0, 1.0, 2.0] and ctrl_values = [0.0, 1.0, 2.0],
-        then the control at time 1.0 is the value at time 1.0.
-
-        Args:
-            dynamics: A `DynamicalModel` whose `state_evolution` is a
-                `ContinuousTimeStateEvolution` with a non-None diffusion
-                and inferred `bm_dim` (set during `DynamicalModel` construction).
-            obs_times: Times at which to save the latent state and emit observations.
-                Required.
-            obs_values: Optional observation array. If provided, observation sites are
-                conditioned via `obs=obs_values[i]`.
-            ctrl_times: Optional control times.
-            ctrl_values: Optional control values aligned to `ctrl_times`.
-            predict_times: Optional prediction times. If provided, prediction sites are
-                emitted at those times as `numpyro.sample("y_i", ..., obs=None)`.
-        Returns:
-            dict[str, State]: Dictionary with `"times"`, `"states"`, and
-                `"observations"` trajectories.
-
-        Warning:
-            Conditioning on `obs_values` here is generally **not** a good way to do
-            parameter inference for SDEs, because it introduces an explicit, high-
-            dimensional latent path. Prefer filtering (`Filter`) or particle methods.
-        """
-        if not isinstance(
-            dynamics.state_evolution, StochasticContinuousTimeStateEvolution
-        ):
-            raise NotImplementedError(
-                "SDESimulator only works with StochasticContinuousTimeStateEvolution, got "
-                f"{type(dynamics.state_evolution)}"
-            )
-
-        if obs_times is not None:
-            raise ValueError(
-                "obs_times must not be provided to an SDESimulator; it cannot be used for inference. \
-                Please use a filter, or discretize the SDE and use a DiscreteTimeSimulator. \
-                A natural example forthcoming (i.e., to be implemented) is the SimulatedLikelihoodDiscretizer."
-            )
-
-        if obs_values is not None:
-            raise ValueError(
-                "obs_values conditioning is not supported for SDESimulator. "
-                "Use Filter for inference with SDEs."
-            )
-
-        times = predict_times
-        if times is None:
-            raise ValueError("predict_times must be provided for SDESimulator.")
-
-        prng_key = numpyro.prng_key()
-        if prng_key is None:
-            raise ValueError("PRNG key required for simulation")
-        with numpyro.plate(f"{name}_n_simulations", self.n_simulations):
-            initial_state = numpyro.sample(f"{name}_x_0", dynamics.initial_condition)
-        result = self._simulate_forward_from_initial_state(
-            dynamics,
-            initial_state=jnp.asarray(initial_state),
-            rng_key=prng_key,
-            times=times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-        )
-        return _simulated_result_to_dict(result)

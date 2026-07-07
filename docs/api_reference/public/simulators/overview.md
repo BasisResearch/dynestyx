@@ -18,9 +18,11 @@ handlers to produce posterior rollouts.
       deterministic sites.
 
 !!! note "Context and caveats"
-    - **NumPyro context required**: simulators call `numpyro.sample(...)` and draw
-      randomness via NumPyro PRNG keys, so they must run inside a NumPyro model
-      (or a `numpyro.handlers.seed(...)` context).
+    - **NumPyro context required for `dsx.sample(...)`**: simulator handlers draw
+      randomness from the active NumPyro PRNG key, but the rollout itself is pure
+      JAX and the realized sites are registered only at the end. Use
+      `dsx.simulate(...)` when you want a pure-JAX API with an explicit
+      `rng_key`.
     - **Generation-only public API**: raw `Simulator`, `DiscreteTimeSimulator`,
       `ODESimulator`, and `SDESimulator` calls expect `predict_times`, not direct
       observation conditioning.
@@ -33,13 +35,15 @@ handlers to produce posterior rollouts.
     where `name` is the first
     argument to `dsx.sample(name, dynamics, ...)` (conventionally `"f"`):
 
+    - `"f_x_0"`: realized initial-state draw, shape `(n_sim, state_dim)`,
     - `"f_times"`: trajectory time grid, shape `(n_sim, T)`,
     - `"f_states"`: latent trajectory, shape `(n_sim, T, state_dim)`,
     - `"f_observations"`: sampled observations, shape `(n_sim, T, obs_dim)`.
 
     In filter-rollout mode (`predict_times` with filtered posteriors), additional
     keys `"f_predicted_states"`, `"f_predicted_times"`, and
-    `"f_predicted_observations"` are recorded.
+    `"f_predicted_observations"` are recorded. Segment-level rollouts also
+    register realized anchor-state sites such as `"f_1_x_0"` when applicable.
 
     Under `numpyro.infer.Predictive(model, num_samples=N)`, NumPyro prepends a leading
     `num_samples` axis, giving final shapes `(num_samples, n_sim, T, dim)`.

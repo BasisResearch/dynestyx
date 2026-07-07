@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
 import pytest
+from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
 
@@ -112,6 +113,25 @@ def test_simulate_callable_discrete_transition_auto_routes_to_discrete():
     assert jnp.allclose(times[0], predict_times)
     assert jnp.all(jnp.isfinite(states))
     assert jnp.all(jnp.isfinite(observations))
+
+
+def test_condition_with_simulator_returns_deferred_simulated_result():
+    predict_times = jnp.arange(5.0)
+
+    with dsx.DiscreteTimeSimulator(n_simulations=2):
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+            result = dsx.condition(
+                "f",
+                _make_discrete_dynamics(),
+                predict_times=predict_times,
+            )
+
+    assert isinstance(result, dsx.SimulatedResult)
+    assert callable(result._register_numpyro_sites)
+    assert "f_x_0" not in tr
+    assert "f_times" not in tr
+    assert "f_states" not in tr
+    assert "f_observations" not in tr
 
 
 def test_simulate_ode_accepts_structured_config():

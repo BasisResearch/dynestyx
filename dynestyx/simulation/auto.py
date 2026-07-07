@@ -108,30 +108,6 @@ class Simulator(BaseSimulator):
 
         return self.simulator
 
-    def _simulate(
-        self,
-        name: str,
-        dynamics: DynamicalModel,
-        *,
-        obs_times=None,
-        obs_values=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        **kwargs,
-    ) -> dict[str, Array]:
-        simulator = self._ensure_simulator(dynamics)
-        return simulator._simulate(
-            name,
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            predict_times=predict_times,
-            **kwargs,
-        )
-
     def simulate(
         self,
         dynamics: DynamicalModel,
