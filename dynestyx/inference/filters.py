@@ -35,11 +35,6 @@ from dynestyx.inference.configs.filter import (
     PFResamplingConfig,
     UKFConfig,
 )
-from dynestyx.inference.distribution_utils import (
-    _categorical_log_probs_to_dists,
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
-)
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (
     ContinuousTimeFilterConfig,
@@ -58,11 +53,16 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.numpyro_sites import (
+from dynestyx.inference.utils.distribution_utils import (
+    _categorical_log_probs_to_dists,
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
+from dynestyx.inference.utils.numpyro_sites import (
     register_filter_sites,
     register_hmm_filter_sites,
 )
-from dynestyx.inference.plate_utils import (
+from dynestyx.inference.utils.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,

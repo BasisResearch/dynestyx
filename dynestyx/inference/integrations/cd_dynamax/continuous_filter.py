@@ -19,11 +19,11 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
 )
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM

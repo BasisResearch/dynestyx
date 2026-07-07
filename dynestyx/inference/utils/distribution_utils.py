@@ -9,7 +9,10 @@ from dynestyx.inference.integrations.utils import (
     WeightedParticles,
     covariance_from_cholesky,
 )
-from dynestyx.inference.plate_utils import _slice_time_axis, _time_len_from_array
+from dynestyx.inference.utils.plate_utils import (
+    _slice_time_axis,
+    _time_len_from_array,
+)
 
 MissingPolicy = Literal["raise", "empty"]
 

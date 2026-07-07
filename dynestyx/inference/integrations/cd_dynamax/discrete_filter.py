@@ -21,12 +21,12 @@ from dynestyx.inference.configs.filter import (
     KFConfig,
     UKFConfig,
 )
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
     gaussian_to_nlgssm_params,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,

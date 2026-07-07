@@ -28,7 +28,7 @@ from dynestyx.inference.latent.trajectory_log_probs import (
     _compute_log_prob_terms_from_state_trajectory,
     compute_trajectory_log_prob_terms,
 )
-from dynestyx.inference.plate_utils import (
+from dynestyx.inference.utils.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
 )

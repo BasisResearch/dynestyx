@@ -9,4 +9,5 @@ __all__ = [
     "mcmc_configs",
     "smoother_configs",
     "smoothers",
+    "utils",
 ]

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import jax
 import jax.numpy as jnp
 
-from dynestyx.inference.distribution_utils import (
+from dynestyx.inference.utils.distribution_utils import (
     _categorical_log_probs_to_dists,
     _cholesky_state_sequence_to_dists,
     _gaussian_sequence_to_dists,

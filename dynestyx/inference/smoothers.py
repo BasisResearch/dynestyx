@@ -28,10 +28,6 @@ from dynestyx.inference.configs.smoother import (
     PFSmootherConfig,
     UKFSmootherConfig,
 )
-from dynestyx.inference.distribution_utils import (
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
-)
 from dynestyx.inference.integrations.cd_dynamax.continuous_smoother import (
     compute_continuous_smoother,
     run_continuous_smoother,
@@ -49,8 +45,12 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
-from dynestyx.inference.numpyro_sites import register_smoother_sites
-from dynestyx.inference.plate_utils import (
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
+from dynestyx.inference.utils.numpyro_sites import register_smoother_sites
+from dynestyx.inference.utils.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,

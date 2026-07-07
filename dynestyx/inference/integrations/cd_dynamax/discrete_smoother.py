@@ -19,12 +19,12 @@ from dynestyx.inference.configs.filter import (
 from dynestyx.inference.configs.smoother import (
     BaseSmootherConfig,
 )
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
     _prepare_inputs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
 
