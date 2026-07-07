@@ -5,7 +5,7 @@ import numpyro.distributions as dist
 import pytest
 
 import dynestyx as dsx
-from dynestyx.inference.latent.state_path import assemble_state_path
+from dynestyx.inference.latent.assembly import assemble_state_path
 
 
 def test_assemble_state_path_discrete_is_identity_on_full_path():

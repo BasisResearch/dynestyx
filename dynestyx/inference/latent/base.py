@@ -14,17 +14,19 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
-from dynestyx.inference.latent.state_path import (
-    DiracLatentMetadata,
+from dynestyx.inference.latent.assembly import (
     assemble_dirac_state_path,
     assemble_state_path,
+)
+from dynestyx.inference.latent.metadata import (
+    DiracLatentMetadata,
     canonicalize_dirac_state_path_params,
     canonicalize_state_path_params,
     fully_observed_dirac_state_path_param_metadata,
     infer_dirac_state_path_param_metadata,
     infer_state_path_param_times,
 )
-from dynestyx.inference.latent.trajectory_log_probs import (
+from dynestyx.inference.latent.scoring import (
     _compute_log_prob_terms_from_state_trajectory,
     compute_trajectory_log_prob_terms,
 )

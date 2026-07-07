@@ -12,7 +12,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array, lax
 
-from dynestyx.inference.latent.state_path import assemble_state_path
+from dynestyx.inference.latent.assembly import assemble_state_path
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
@@ -381,3 +381,9 @@ def compute_trajectory_log_prob_terms(
         ctrl_values=ctrl_values,
         chunk_size=chunk_size,
     )
+
+
+__all__ = [
+    "TrajectoryLogProbTerms",
+    "compute_trajectory_log_prob_terms",
+]

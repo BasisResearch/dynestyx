@@ -66,7 +66,7 @@ This is the recommended fallback when direct masked-likelihood marginalization
 is unavailable, for example with correlated continuous observation families
 such as multivariate Student `t` models.
 
-::: dynestyx.inference.latent.builder
+::: dynestyx.inference.latent.base
     options:
       members:
         - LatentPathBuilder

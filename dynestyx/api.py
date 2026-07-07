@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
-from dynestyx.inference.latent.trajectory_log_probs import (
+from dynestyx.inference.latent.scoring import (
     compute_trajectory_log_prob_terms,
 )
 from dynestyx.models import DynamicalModel
