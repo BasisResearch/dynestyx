@@ -424,6 +424,56 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
     assert posterior["f_state_path"].shape == (10, 3, 2)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Under traced Predictive without precomputed dirac_state_path_metadata, "
+        "LatentPathBuilder currently falls back to a fully observed Dirac layout "
+        "and silently drops the free latent coordinates."
+    ),
+)
+def test_latent_path_builder_dirac_partial_missing_predictive_without_metadata_keeps_compressed_layout():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array(
+        [
+            [0.2, jnp.nan],
+            [jnp.nan, -0.1],
+            [jnp.nan, jnp.nan],
+        ]
+    )
+
+    def conditioned_model(obs_times=None, obs_values=None):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        conditioned_model(obs_times=obs_times, obs_values=obs_values)
+
+    assert tr["f_state_path_params"]["value"].shape == (4,)
+    assert jnp.array_equal(
+        tr["f_state_path_param_coordinate_indices"]["value"],
+        jnp.array([1, 0, 0, 1], dtype=jnp.int32),
+    )
+
+    predictive = Predictive(conditioned_model, num_samples=2)(
+        jr.PRNGKey(1),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    assert predictive["f_state_path_params"].shape == (2, 4)
+    assert jnp.array_equal(
+        predictive["f_state_path_param_coordinate_indices"][0],
+        jnp.array([1, 0, 0, 1], dtype=jnp.int32),
+    )
+
+
 def test_latent_path_builder_sample_registers_missing_observation_sites_under_augment():
     dynamics = _make_student_t_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
