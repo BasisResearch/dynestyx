@@ -18,13 +18,20 @@ from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.inference.configs.simulator import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+    SimulatorConfig,
+)
 from dynestyx.inference.utils.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
 )
 from dynestyx.models import (
+    DeterministicContinuousTimeStateEvolution,
     Diffusion,
     DynamicalModel,
+    StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
 from dynestyx.utils import (
@@ -777,3 +784,98 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         _, observations = nscan(_step, None, jnp.arange(T))
         return observations
+
+
+class Simulator(BaseSimulator):
+    """Auto-selecting simulator wrapper.
+
+    Chooses a concrete simulator based on the structure of
+    ``dynamics.state_evolution``:
+
+    - stochastic continuous-time -> ``SDESimulator``
+    - deterministic continuous-time -> ``ODESimulator``
+    - otherwise -> ``DiscreteTimeSimulator``
+    """
+
+    def __init__(
+        self,
+        *args,
+        simulator_config: SimulatorConfig | None = None,
+        **kwargs,
+    ):
+        self.args = args
+        self.kwargs = kwargs
+        self.simulator_config = simulator_config
+        self.simulator: BaseSimulator | None = None
+
+    def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
+        """Instantiate and cache the concrete simulator for ``dynamics``."""
+        if self.simulator is not None:
+            return self.simulator
+
+        from dynestyx.simulation.discrete import DiscreteTimeSimulator
+        from dynestyx.simulation.ode import ODESimulator
+        from dynestyx.simulation.sde import SDESimulator
+
+        if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
+            if isinstance(self.simulator_config, ODESimulatorConfig):
+                raise ValueError(
+                    "Received an ODESimulatorConfig for stochastic continuous-time "
+                    "dynamics. Pass an SDESimulatorConfig instead."
+                )
+            if self.simulator_config is not None:
+                self.simulator = SDESimulator(
+                    *self.args,
+                    simulator_config=self.simulator_config,
+                    **self.kwargs,
+                )
+            else:
+                self.simulator = SDESimulator(*self.args, **self.kwargs)
+        elif isinstance(
+            dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
+        ):
+            if isinstance(self.simulator_config, SDESimulatorConfig):
+                raise ValueError(
+                    "Received an SDESimulatorConfig for deterministic continuous-time "
+                    "dynamics. Pass an ODESimulatorConfig instead."
+                )
+            if self.simulator_config is not None:
+                self.simulator = ODESimulator(
+                    *self.args,
+                    simulator_config=self.simulator_config,
+                    **self.kwargs,
+                )
+            else:
+                self.simulator = ODESimulator(*self.args, **self.kwargs)
+        else:
+            if self.simulator_config is not None:
+                raise ValueError(
+                    "Received a continuous-time SimulatorConfig for discrete-time "
+                    "dynamics. Use direct DiscreteTimeSimulator settings instead."
+                )
+            self.simulator = DiscreteTimeSimulator(*self.args, **self.kwargs)
+
+        return self.simulator
+
+    def simulate(
+        self,
+        dynamics: DynamicalModel,
+        *,
+        rng_key: Array,
+        obs_times=None,
+        ctrl_times=None,
+        ctrl_values=None,
+        predict_times=None,
+        **kwargs,
+    ) -> SimulatedResult:
+        """Auto-route to the appropriate pure-JAX simulator backend."""
+        simulator = self._ensure_simulator(dynamics)
+        return simulator.simulate(
+            dynamics,
+            rng_key=rng_key,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+            **kwargs,
+        )

@@ -21,11 +21,19 @@ with Filter(EKFConfig()):
 
 will implement the `dsx.sample` primitive using an extended Kalman filter. For more details, see the corresponding [developer API page](../developer/handlers.md).
 
+## Handler primitives
+
 ::: dynestyx.handlers
     options:
         members:
             - condition
-            - log_prob
             - sample
-            - simulate
             - plate
+
+## Pure APIs
+
+::: dynestyx.api
+    options:
+        members:
+            - log_prob
+            - simulate

@@ -1,6 +1,6 @@
 # Simulator
 
-::: dynestyx.simulation.auto.Simulator
+::: dynestyx.simulation.base.Simulator
     options:
       show_root_heading: false
       show_root_toc_entry: false
