@@ -4,7 +4,7 @@ This module is the orchestration layer for latent-path inference. It does not
 define the latent parameterization ``z`` or the scoring rules itself; instead it
 coordinates three steps:
 
-1. prepare a concrete :class:`StatePathParameterization`,
+1. prepare a concrete :class:`LatentPathLayout`,
 2. reconstruct and score ``x = g(z)`` in pure JAX, and
 3. optionally register NumPyro sites after that pure-JAX work is done.
 
@@ -31,7 +31,7 @@ from dynestyx.inference.latent.log_prob import (
 )
 from dynestyx.inference.latent.parameterization import (
     AssembledStatePath,
-    StatePathParameterization,
+    LatentPathLayout,
 )
 from dynestyx.inference.latent.plate import (
     _plate_member_specs,
@@ -54,7 +54,7 @@ def _evaluate_latent_path_request(
     obs_values: Array,
     ctrl_times: Array | None,
     ctrl_values: Array | None,
-    latent_observation_mode: MissingObservationStrategy,
+    missing_observation_strategy: MissingObservationStrategy,
     ode_diffeqsolve_settings: dict[str, Any] | None,
     state_path_params: Array | None = None,
     missing_obs_values: Array | None = None,
@@ -84,8 +84,8 @@ def _evaluate_latent_path_request(
         if missing_obs_values is None
         else missing_obs_values
     )
-    assembled_state_path = prepared.parameterization.assemble_state_path(
-        dynamics,
+    assembled_state_path = prepared.layout.assemble_from_params(
+        dynamics=dynamics,
         state_path_params=active_state_path_params,
         obs_times=obs_times,
         obs_values_filled=prepared.obs_values_filled,
@@ -101,15 +101,12 @@ def _evaluate_latent_path_request(
         obs_values=obs_values,
         obs_values_filled=prepared.obs_values_filled,
         obs_mask=prepared.obs_mask,
-        missing_observation_strategy=latent_observation_mode,
+        missing_observation_strategy=missing_observation_strategy,
         missing_obs_values=active_missing_obs_values,
-        missing_obs_metadata=prepared.parameterization.missing_obs_metadata,
+        missing_obs_metadata=prepared.layout.missing_obs_metadata,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        observations_are_exact_constraints=(
-            prepared.parameterization.dirac_metadata is not None
-            or prepared.parameterization.exact_observation_mask is not None
-        ),
+        observations_are_exact_constraints=prepared.layout.observations_are_exact_constraints,
     )
     return assembled_state_path, log_prob_terms
 
@@ -128,7 +125,7 @@ def _build_latent_state_result(
     paths, and log-probability terms into that public shape, while also
     attaching the deferred ``_register_numpyro_sites`` callback.
     """
-    missing_obs_metadata = prepared.parameterization.missing_obs_metadata
+    missing_obs_metadata = prepared.layout.missing_obs_metadata
     missing_obs_times = None
     missing_obs_coordinate_indices = None
     if log_prob_terms is None:
@@ -150,7 +147,7 @@ def _build_latent_state_result(
             if assembled_state_path is None
             else assembled_state_path.state_path_params
         ),
-        state_path_param_times=prepared.parameterization.state_path_param_times,
+        state_path_param_times=prepared.layout.state_path_param_times,
         state_path_param_coordinate_indices=(
             None
             if assembled_state_path is None
@@ -198,39 +195,56 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     """
 
     ode_diffeqsolve_settings: dict[str, Any] | None
-    latent_observation_mode: MissingObservationStrategy
+    missing_observation_strategy: MissingObservationStrategy
+    _latent_path_layout_cache: dict[tuple[Any, ...], LatentPathLayout]
 
     def __init__(
         self,
         ode_diffeqsolve_settings: dict[str, Any] | None = None,
-        latent_observation_mode: MissingObservationStrategy = "auto",
-        missing_observation_strategy: MissingObservationStrategy | None = None,
+        missing_observation_strategy: MissingObservationStrategy = "auto",
     ) -> None:
         """Initialize the latent-path builder.
 
-        ``latent_observation_mode`` controls whether partially missing
+        ``missing_observation_strategy`` controls whether partially missing
         observations are marginalized, augmented with explicit latent
-        coordinates, or rejected. ``missing_observation_strategy`` remains as a
-        backward-compatible alias for the same setting.
+        coordinates, or rejected. For ``DiracIdentityObservation`` models with
+        missing data, latent-path inference resolves ``"auto"`` to augment
+        semantics: the missing exact observations are treated as the free
+        coordinates needed to reconstruct the state path.
 
         ``ode_diffeqsolve_settings`` is only used when the latent path for a
         deterministic continuous-time model must be reconstructed by solving an
         ODE from its initial condition.
         """
-        if missing_observation_strategy is not None:
-            if latent_observation_mode != "auto":
-                raise ValueError(
-                    "Pass only one of latent_observation_mode or "
-                    "missing_observation_strategy."
-                )
-            latent_observation_mode = missing_observation_strategy
         self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
-        self.latent_observation_mode = latent_observation_mode
+        self.missing_observation_strategy = missing_observation_strategy
+        self._latent_path_layout_cache = {}
 
-    @property
-    def missing_observation_strategy(self) -> MissingObservationStrategy:
-        """Backward-compatible alias for ``latent_observation_mode``."""
-        return self.latent_observation_mode
+    def _latent_path_layout_cache_key(
+        self,
+        *,
+        name: str,
+        dynamics,
+        obs_times: Array,
+        obs_values: Array,
+    ) -> tuple[Any, ...]:
+        """Return a stable cache key for auto-prepared latent layouts.
+
+        ``LatentPathBuilder`` may be invoked repeatedly by NumPyro during one
+        MCMC/SVI run. Reusing the first concrete layout keeps the latent site
+        structure stable even when later evaluations see traced observation
+        arrays.
+        """
+        return (
+            name,
+            self.missing_observation_strategy,
+            tuple(obs_times.shape),
+            tuple(obs_values.shape),
+            dynamics.state_dim,
+            dynamics.observation_dim,
+            dynamics.continuous_time,
+            dynamics.categorical_state,
+        )
 
     def _sample_single(
         self,
@@ -248,7 +262,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
-        latent_path_layout: StatePathParameterization | None = None,
+        latent_path_layout: LatentPathLayout | None = None,
         state_path_params: Array | None = None,
         missing_obs_values: Array | None = None,
         **kwargs,
@@ -266,6 +280,23 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         reduced to repeated calls to this method.
         """
         _validate_inference_supported_model_classes(dynamics)
+        resolved_latent_path_layout = latent_path_layout
+        layout_cache_key = None
+        if (
+            resolved_latent_path_layout is None
+            and obs_times is not None
+            and obs_values is not None
+        ):
+            layout_cache_key = self._latent_path_layout_cache_key(
+                name=name,
+                dynamics=dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+            resolved_latent_path_layout = self._latent_path_layout_cache.get(
+                layout_cache_key
+            )
+
         prepared = _prepare_latent_path_request(
             dynamics=dynamics,
             obs_times=obs_times,
@@ -273,11 +304,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             obs_values_filled=_obs_values_filled,
             obs_mask=_obs_mask,
             obs_has_missing=_obs_has_missing,
-            latent_path_layout=latent_path_layout,
+            latent_path_layout=resolved_latent_path_layout,
             state_path_params=state_path_params,
             missing_obs_values=missing_obs_values,
-            latent_observation_mode=self.latent_observation_mode,
+            missing_observation_strategy=self.missing_observation_strategy,
         )
+        if layout_cache_key is not None and latent_path_layout is None:
+            self._latent_path_layout_cache.setdefault(layout_cache_key, prepared.layout)
         assert obs_times is not None
         assert obs_values is not None
         assembled_state_path, log_prob_terms = _evaluate_latent_path_request(
@@ -287,7 +320,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
-            latent_observation_mode=self.latent_observation_mode,
+            missing_observation_strategy=self.missing_observation_strategy,
             ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
         )
 
@@ -302,7 +335,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                latent_observation_mode=self.latent_observation_mode,
+                missing_observation_strategy=self.missing_observation_strategy,
                 ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
                 state_path_params=state_path_params_value,
                 missing_obs_values=missing_obs_values_value,
@@ -346,7 +379,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
-        latent_path_layout: StatePathParameterization | None = None,
+        latent_path_layout: LatentPathLayout | None = None,
         state_path_params: Array | None = None,
         missing_obs_values: Array | None = None,
         _dsx_sample_mode: bool = False,

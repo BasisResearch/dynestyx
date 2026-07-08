@@ -3,13 +3,6 @@
 This module evaluates the trajectory density once a full state path is known.
 It is intentionally NumPyro-free: the goal is to compute
 ``log p(x, y | ...)`` and related bookkeeping terms using only JAX arrays.
-
-The two main entry points differ by what the caller already has:
-
-- :func:`compute_state_path_log_prob_terms` starts from a fully specified state
-  path ``x``,
-- :func:`compute_trajectory_log_prob_terms` starts from latent path parameters
-  ``z = state_path_params`` and first reconstructs ``x = g(z)``.
 """
 
 from __future__ import annotations
@@ -17,23 +10,13 @@ from __future__ import annotations
 import dataclasses
 import math
 from collections.abc import Callable
-from typing import Any
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array, lax
 
-from dynestyx.inference.latent.parameterization import (
-    AssembledStatePath,
-    StatePathParameterization,
-    assemble_state_path,
-)
-from dynestyx.models import (
-    DeterministicContinuousTimeStateEvolution,
-    DynamicalModel,
-    StochasticContinuousTimeStateEvolution,
-)
+from dynestyx.models import DeterministicContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
     MissingObservationStrategy,
@@ -345,134 +328,7 @@ def compute_state_path_log_prob_terms(
     )
 
 
-def compute_trajectory_log_prob_terms(
-    dynamics: DynamicalModel,
-    *,
-    state_path_params: Array,
-    state_path_param_times: Array,
-    obs_times: Array | None = None,
-    obs_values: Array | None = None,
-    obs_values_filled: Array | None = None,
-    obs_mask: Array | None = None,
-    missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values: Array | None = None,
-    missing_obs_metadata: MissingObservationMetadata | None = None,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
-    chunk_size: int | None = None,
-    ode_diffeqsolve_settings: dict[str, Any] | None = None,
-) -> TrajectoryLogProbTerms:
-    """Compute ``log p(x, y | ...)`` from ``z = state_path_params``.
-
-    This is the pure-JAX analogue of the latent-path inference story:
-
-    1. reconstruct ``x = g(z)``,
-    2. evaluate ``log p(x, y | ...)`` on that reconstructed path.
-
-    It is the natural scoring entry point for callers outside NumPyro that want
-    to optimize or sample over ``state_path_params`` directly.
-    """
-    state_path_param_times = jnp.asarray(state_path_param_times)
-    _raise_now_or_error_if(
-        state_path_param_times,
-        state_path_param_times.shape[0] < 1,
-        "state_path_param_times must contain at least one time point.",
-    )
-
-    if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-        raise ValueError(
-            "dsx.log_prob does not yet support native SDE models. "
-            "Please discretize the model first."
-        )
-
-    assembled = assemble_state_path(
-        dynamics,
-        state_path_params=state_path_params,
-        state_path_param_times=state_path_param_times,
-        obs_times=obs_times,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        ode_diffeqsolve_settings=ode_diffeqsolve_settings,
-    )
-
-    if isinstance(dynamics.state_evolution, DeterministicContinuousTimeStateEvolution):
-        if state_path_param_times.shape[0] != 1:
-            raise ValueError(
-                "Deterministic continuous-time models expect exactly one latent "
-                "path parameter in dsx.log_prob: the initial condition."
-            )
-
-    return compute_state_path_log_prob_terms(
-        dynamics,
-        state_path=assembled.state_path,
-        state_path_times=assembled.state_path_times,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        obs_values_filled=obs_values_filled,
-        obs_mask=obs_mask,
-        missing_observation_strategy=missing_observation_strategy,
-        missing_obs_values=missing_obs_values,
-        missing_obs_metadata=missing_obs_metadata,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        chunk_size=chunk_size,
-    )
-
-
-def compute_trajectory_log_prob_terms_for_layout(
-    dynamics: DynamicalModel,
-    *,
-    layout: StatePathParameterization,
-    state_path: Array,
-    state_path_times: Array,
-    obs_times: Array,
-    obs_values: Array,
-    obs_values_filled: Array | None,
-    obs_mask: Array | None,
-    missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values: Array | None = None,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
-    chunk_size: int | None = None,
-) -> TrajectoryLogProbTerms:
-    """Backward-compatible layout-aware scoring helper.
-
-    This helper exists for call sites that already have a
-    :class:`StatePathParameterization` and a state path in hand. It forwards the
-    layout's missingness metadata and exact-observation flags into
-    :func:`compute_state_path_log_prob_terms`.
-    """
-    assembled = AssembledStatePath(
-        state_path_params=state_path,
-        state_path_param_times=layout.state_path_param_times,
-        state_path_param_coordinate_indices=layout.state_path_param_coordinate_indices,
-        state_path=state_path,
-        state_path_times=state_path_times,
-    )
-    return compute_state_path_log_prob_terms(
-        dynamics,
-        state_path=assembled.state_path,
-        state_path_times=assembled.state_path_times,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        obs_values_filled=obs_values_filled,
-        obs_mask=obs_mask,
-        missing_observation_strategy=missing_observation_strategy,
-        missing_obs_values=missing_obs_values,
-        missing_obs_metadata=layout.missing_obs_metadata,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        chunk_size=chunk_size,
-        observations_are_exact_constraints=(
-            layout.dirac_metadata is not None
-            or layout.exact_observation_mask is not None
-        ),
-    )
-
-
 __all__ = [
     "TrajectoryLogProbTerms",
     "compute_state_path_log_prob_terms",
-    "compute_trajectory_log_prob_terms",
-    "compute_trajectory_log_prob_terms_for_layout",
 ]

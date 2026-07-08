@@ -1,41 +1,6 @@
-"""Latent-path construction, parameterization, and scoring helpers."""
+"""Latent-path inference entry points."""
 
 from dynestyx.inference.latent.builder import LatentPathBuilder
-from dynestyx.inference.latent.log_prob import (
-    TrajectoryLogProbTerms,
-    compute_state_path_log_prob_terms,
-    compute_trajectory_log_prob_terms,
-)
-from dynestyx.inference.latent.parameterization import (
-    AssembledStatePath,
-    AssembledStateTrajectory,
-    LatentPathLayout,
-    StatePathParameterization,
-    assemble_dirac_state_path,
-    assemble_state_path,
-    canonicalize_dirac_state_path_params,
-    canonicalize_state_path_params,
-    default_ode_diffeqsolve_settings,
-    infer_state_path_param_times,
-    prepare_latent_path_layout,
-    prepare_state_path_parameterization,
-)
+from dynestyx.inference.latent.parameterization import prepare_latent_path_layout
 
-__all__ = [
-    "AssembledStatePath",
-    "AssembledStateTrajectory",
-    "LatentPathBuilder",
-    "LatentPathLayout",
-    "StatePathParameterization",
-    "TrajectoryLogProbTerms",
-    "assemble_dirac_state_path",
-    "assemble_state_path",
-    "canonicalize_dirac_state_path_params",
-    "canonicalize_state_path_params",
-    "compute_state_path_log_prob_terms",
-    "compute_trajectory_log_prob_terms",
-    "default_ode_diffeqsolve_settings",
-    "infer_state_path_param_times",
-    "prepare_latent_path_layout",
-    "prepare_state_path_parameterization",
-]
+__all__ = ["LatentPathBuilder", "prepare_latent_path_layout"]

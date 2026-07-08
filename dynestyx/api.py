@@ -5,9 +5,8 @@ from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.latent.log_prob import (
-    compute_trajectory_log_prob_terms,
-)
+from dynestyx.inference.latent.log_prob import compute_state_path_log_prob_terms
+from dynestyx.inference.latent.parameterization import assemble_state_path
 from dynestyx.models import DynamicalModel
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
@@ -121,6 +120,7 @@ def log_prob(
             reconstructing deterministic continuous-time trajectories.
     """
     state_path_param_times = jnp.asarray(state_path_param_times)
+    _validate_site_sorting(state_path_param_times, name="state_path_param_times")
     _validate_inference_supported_model_classes(dynamics)
     dynamics_with_t0, obs_values_filled, obs_mask, _obs_has_missing = (
         _validate_and_prepare(
@@ -134,10 +134,19 @@ def log_prob(
         )
     )
 
-    terms = compute_trajectory_log_prob_terms(
+    assembled = assemble_state_path(
         dynamics_with_t0,
         state_path_params=state_path_params,
         state_path_param_times=state_path_param_times,
+        obs_times=obs_times,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        ode_diffeqsolve_settings=ode_diffeqsolve_settings,
+    )
+    return compute_state_path_log_prob_terms(
+        dynamics_with_t0,
+        state_path=assembled.state_path,
+        state_path_times=assembled.state_path_times,
         obs_times=obs_times,
         obs_values=obs_values,
         obs_values_filled=obs_values_filled,
@@ -148,9 +157,7 @@ def log_prob(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         chunk_size=chunk_size,
-        ode_diffeqsolve_settings=ode_diffeqsolve_settings,
-    )
-    return terms.joint_log_prob
+    ).joint_log_prob
 
 
 __all__ = ["log_prob", "simulate"]

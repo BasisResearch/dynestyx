@@ -10,17 +10,13 @@ from __future__ import annotations
 
 import dataclasses
 
-import jax.numpy as jnp
 from jaxtyping import Array
 
 from dynestyx.inference.latent.parameterization import (
-    StatePathParameterization,
-    prepare_state_path_parameterization,
+    LatentPathLayout,
+    prepare_latent_path_layout,
 )
-from dynestyx.observation_missingness import (
-    MissingObservationStrategy,
-    canonicalize_missing_obs_values,
-)
+from dynestyx.observation_missingness import MissingObservationStrategy
 
 
 @dataclasses.dataclass
@@ -38,7 +34,7 @@ class _PreparedLatentPathRequest:
     any layout-resolution logic.
     """
 
-    parameterization: StatePathParameterization
+    layout: LatentPathLayout
     obs_values_filled: Array | None
     obs_mask: Array | None
     canonical_state_path_params: Array | None
@@ -47,59 +43,9 @@ class _PreparedLatentPathRequest:
     example_missing_obs_values: Array | None
 
 
-def _validate_latent_path_request(
-    *,
-    obs_times: Array | None,
-    obs_values: Array | None,
-) -> None:
-    """Validate the observation inputs required by ``LatentPathBuilder``.
-
-    Unlike simulators, the latent-path handler is always an
-    observation-consuming inference object. It therefore requires concrete
-    ``obs_times`` and ``obs_values`` so that the latent layout and joint score
-    ``log p(x, y | ...)`` are both well-defined.
-    """
-    if obs_times is None or obs_values is None:
-        raise ValueError(
-            "LatentPathBuilder requires obs_times and obs_values. "
-            "It is an observation-consuming handler."
-        )
-
-
-def _resolve_state_path_parameterization(
-    *,
-    dynamics,
-    obs_times: Array,
-    obs_values: Array,
-    obs_values_filled: Array | None,
-    obs_mask: Array | None,
-    obs_has_missing: bool | None,
-    latent_observation_mode: MissingObservationStrategy,
-    latent_path_layout: StatePathParameterization | None,
-) -> StatePathParameterization:
-    """Resolve the concrete latent parameterization for one trajectory.
-
-    If the caller supplied a precomputed layout, this helper simply reuses it.
-    Otherwise it derives a fresh :class:`StatePathParameterization` from the
-    model, times, observations, and missingness strategy.
-    """
-    if latent_path_layout is not None:
-        return latent_path_layout
-
-    return prepare_state_path_parameterization(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        missing_observation_strategy=latent_observation_mode,
-        obs_values_filled=obs_values_filled,
-        obs_mask=obs_mask,
-        obs_has_missing=obs_has_missing,
-    )
-
-
 def _prepare_missing_obs_values(
     *,
-    parameterization: StatePathParameterization,
+    layout: LatentPathLayout,
     missing_obs_values: Array | None,
 ) -> tuple[Array | None, Array | None]:
     """Canonicalize or synthesize the missing-observation latent block.
@@ -110,36 +56,24 @@ def _prepare_missing_obs_values(
     - ``example`` is the shape-only placeholder used to define NumPyro sample
       sites under ``dsx.sample(...)``.
 
-    For explicit augmentation, the latent block may either be the compressed
-    vector of missing coordinates or a dense observation-shaped block when the
-    layout chose dense augmentation.
+    For explicit augmentation, the latent block may either be the flat vector
+    of missing coordinates or a dense observation-shaped block when the layout
+    chose dense augmentation. Exact-observation state assembly does not create
+    a separate ``missing_obs_values`` block here; its missing coordinates are
+    handled through ``state_path_params`` instead.
     """
-    if parameterization.uses_dense_missing_obs_augmentation:
-        assert parameterization.dense_missing_obs_shape is not None
-        if missing_obs_values is None:
-            return None, jnp.zeros(parameterization.dense_missing_obs_shape)
-        dense_missing_obs_values = jnp.asarray(missing_obs_values)
-        if (
-            tuple(dense_missing_obs_values.shape)
-            != parameterization.dense_missing_obs_shape
-        ):
-            raise ValueError(
-                "Dense missing_obs_values must match the observation array shape "
-                "for this latent-path parameterization."
-            )
-        return dense_missing_obs_values, dense_missing_obs_values
-
-    metadata = parameterization.missing_obs_metadata
-    if not parameterization.uses_missing_obs_augmentation or metadata is None:
-        return None, None
-
-    n_missing_obs = metadata.free_flat_indices.shape[0]
+    example_missing_obs_values = layout.example_missing_obs_values()
     if missing_obs_values is None:
-        return None, jnp.zeros((n_missing_obs,))
+        return None, example_missing_obs_values
 
-    canonical_missing_obs_values = canonicalize_missing_obs_values(
-        missing_obs_values,
-        n_missing_obs=n_missing_obs,
+    if example_missing_obs_values is None:
+        raise ValueError(
+            "missing_obs_values was provided, but this latent-path layout does "
+            "not use a separate missing_obs_values block."
+        )
+
+    canonical_missing_obs_values = layout.canonicalize_missing_obs_values(
+        missing_obs_values
     )
     return canonical_missing_obs_values, canonical_missing_obs_values
 
@@ -152,10 +86,10 @@ def _prepare_latent_path_request(
     obs_values_filled: Array | None,
     obs_mask: Array | None,
     obs_has_missing: bool | None,
-    latent_path_layout: StatePathParameterization | None,
+    latent_path_layout: LatentPathLayout | None,
     state_path_params: Array | None,
     missing_obs_values: Array | None,
-    latent_observation_mode: MissingObservationStrategy,
+    missing_observation_strategy: MissingObservationStrategy,
 ) -> _PreparedLatentPathRequest:
     """Prepare canonical latent inputs for later evaluation or registration.
 
@@ -170,35 +104,38 @@ def _prepare_latent_path_request(
     The returned object can then be reused by both the eager pure-JAX
     evaluation and the deferred NumPyro registration path.
     """
-    _validate_latent_path_request(obs_times=obs_times, obs_values=obs_values)
-    assert obs_times is not None
-    assert obs_values is not None
+    if obs_times is None or obs_values is None:
+        raise ValueError(
+            "LatentPathBuilder requires obs_times and obs_values. "
+            "It is an observation-consuming handler."
+        )
 
-    parameterization = _resolve_state_path_parameterization(
-        dynamics=dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        obs_values_filled=obs_values_filled,
-        obs_mask=obs_mask,
-        obs_has_missing=obs_has_missing,
-        latent_observation_mode=latent_observation_mode,
-        latent_path_layout=latent_path_layout,
-    )
+    layout = latent_path_layout
+    if layout is None:
+        layout = prepare_latent_path_layout(
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            missing_observation_strategy=missing_observation_strategy,
+            obs_values_filled=obs_values_filled,
+            obs_mask=obs_mask,
+            obs_has_missing=obs_has_missing,
+        )
     canonical_missing_obs_values, example_missing_obs_values = (
         _prepare_missing_obs_values(
-            parameterization=parameterization,
+            layout=layout,
             missing_obs_values=missing_obs_values,
         )
     )
 
     canonical_state_path_params = None
     if state_path_params is not None:
-        canonical_state_path_params = parameterization.canonicalize_state_path_params(
+        canonical_state_path_params = layout.canonicalize_state_path_params(
             dynamics, state_path_params
         )
 
     return _PreparedLatentPathRequest(
-        parameterization=parameterization,
+        layout=layout,
         obs_values_filled=obs_values_filled,
         obs_mask=obs_mask,
         canonical_state_path_params=canonical_state_path_params,
@@ -206,7 +143,7 @@ def _prepare_latent_path_request(
         example_state_path_params=(
             canonical_state_path_params
             if canonical_state_path_params is not None
-            else parameterization.example_state_path_params(dynamics)
+            else layout.example_state_path_params(dynamics)
         ),
         example_missing_obs_values=example_missing_obs_values,
     )

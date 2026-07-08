@@ -12,8 +12,8 @@ Throughout the latent-path code, we distinguish:
 
 Different models and observation structures induce different choices of
 ``z``. For example, a discrete model may use one latent state per observation
-time, whereas a Dirac observation model with partial missingness may compress
-``z`` down to only the unobserved coordinates.
+time, whereas an exact-observation state assembly may identify ``z`` with only
+the free unobserved coordinates of a completed observation array.
 """
 
 from __future__ import annotations
@@ -100,17 +100,16 @@ def canonicalize_state_path_params(
     return params
 
 
-def canonicalize_dirac_state_path_params(
+def canonicalize_completed_observation_state_params(
     state_path_params: Array,
     *,
     n_state_path_params: int,
 ) -> Array:
-    """Canonicalize compressed exact-observation path params to a flat vector.
+    """Canonicalize completed-observation state params to a flat vector.
 
-    In the compressed Dirac case, ``state_path_params`` are no longer a dense
-    trajectory array. Instead they are a one-dimensional vector containing only
-    the free coordinates not fixed by exact observations. This helper enforces
-    that convention.
+    When exact observations determine the state path, ``state_path_params`` are
+    a one-dimensional vector containing only the free coordinates not fixed by
+    the observed entries of ``y``. This helper enforces that convention.
     """
     try:
         return canonicalize_missing_obs_values(
@@ -119,7 +118,7 @@ def canonicalize_dirac_state_path_params(
         )
     except ValueError as exc:
         raise ValueError(
-            "Compressed exact-observation state_path_params must be a flat vector "
+            "Completed-observation state_path_params must be a flat vector "
             "whose length matches the number of free state coordinates."
         ) from exc
 
@@ -165,14 +164,14 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
     }
 
 
-def assemble_dirac_state_path(
+def assemble_completed_observation_state_path(
     *,
     state_path_params: Array,
     latent_metadata: MissingObservationMetadata,
     obs_times: Array,
     obs_values_filled: Array,
 ) -> AssembledStatePath:
-    """Reconstruct the full state path from compressed Dirac latents.
+    """Reconstruct the full state path from completed-observation latents.
 
     Here ``z = state_path_params`` is the vector of free unobserved
     coordinates. The reconstruction ``x = g(z)`` is performed by taking the
@@ -180,7 +179,7 @@ def assemble_dirac_state_path(
     free coordinates back into the locations identified by
     ``latent_metadata.free_flat_indices``.
     """
-    canonical_params = canonicalize_dirac_state_path_params(
+    canonical_params = canonicalize_completed_observation_state_params(
         state_path_params,
         n_state_path_params=latent_metadata.free_flat_indices.shape[0],
     )
@@ -213,7 +212,7 @@ def assemble_state_path(
 ) -> AssembledStatePath:
     """Assemble a full state path ``x = g(z)`` from dense path parameters.
 
-    This is the non-compressed reconstruction path:
+    This is the standard dense reconstruction path:
 
     - for discrete / discretized models, the dense latent block already is the
       full state path, so ``g`` is essentially the identity;
@@ -297,57 +296,38 @@ def assemble_state_path(
 
 @dataclasses.dataclass
 class StatePathParameterization:
-    """Concrete definition of latent variables ``z`` and reconstruction ``x=g(z)``.
+    """Define the free state-path variables ``z = state_path_params``.
 
-    For one concrete model and observation configuration, this object defines:
+    This object only answers questions about the latent block ``z`` itself:
 
-    - which free latent variables ``z = state_path_params`` are used,
-    - which times / coordinates index those latent variables,
-    - whether observation-side augmentation is active, and
-    - how to reconstruct the full latent path ``x = state_path = g(z)``.
+    - which times index ``z``,
+    - whether ``z`` is dense or a flat vector of free coordinates, and
+    - how to canonicalize/example that latent block.
 
-    This is the central "layout" object for latent inference. Once it is fixed,
-    the rest of the latent-path pipeline can treat reconstruction and scoring as
-    pure numerical computations rather than API decisions.
+    It does not decide how missing observations are handled or how the full
+    state path ``x = g(z)`` is assembled. Those decisions live in
+    :class:`ObservationCompletionPlan` and :class:`StateAssemblyPlan`.
     """
 
     state_path_param_times: Array
-    dirac_metadata: MissingObservationMetadata | None = None
-    missing_obs_metadata: MissingObservationMetadata | None = None
-    uses_missing_obs_augmentation: bool = False
-    exact_observation_mask: Array | None = None
-    uses_dense_missing_obs_augmentation: bool = False
-    dense_missing_obs_shape: tuple[int, ...] | None = None
+    state_path_param_coordinate_indices: Array | None = None
+    n_state_path_params: int | None = None
 
     @property
-    def state_path_param_coordinate_indices(self) -> Array | None:
-        """Return coordinate indices for compressed parameterizations when present.
-
-        This is only meaningful for compressed Dirac layouts, where
-        ``state_path_params`` is indexed not just by time but by
-        ``(time, coordinate)`` pairs.
-        """
-        if self.dirac_metadata is None:
-            return None
-        return self.dirac_metadata.missing_obs_coordinate_indices
+    def uses_flat_state_path_params(self) -> bool:
+        """Return whether ``state_path_params`` are a flat free-coordinate vector."""
+        return self.n_state_path_params is not None
 
     def canonicalize_state_path_params(
         self,
         dynamics: DynamicalModel,
         state_path_params: Array,
     ) -> Array:
-        """Canonicalize ``z = state_path_params`` for this parameterization.
-
-        The concrete shape rules depend on the active layout:
-
-        - compressed Dirac layouts expect a flat vector of free coordinates,
-        - dense layouts expect a leading time axis matching
-          ``state_path_param_times``.
-        """
-        if self.dirac_metadata is not None:
-            return canonicalize_dirac_state_path_params(
+        """Canonicalize ``z = state_path_params`` for this parameterization."""
+        if self.n_state_path_params is not None:
+            return canonicalize_completed_observation_state_params(
                 state_path_params,
-                n_state_path_params=self.dirac_metadata.free_flat_indices.shape[0],
+                n_state_path_params=self.n_state_path_params,
             )
         return canonicalize_state_path_params(
             dynamics,
@@ -356,14 +336,9 @@ class StatePathParameterization:
         )
 
     def example_state_path_params(self, dynamics: DynamicalModel) -> Array:
-        """Return a shape-only example latent block for NumPyro site setup.
-
-        This does not represent a meaningful latent value. Its only purpose is
-        to define the correct event shape for dummy NumPyro sample sites when
-        the actual latent values are not yet available.
-        """
-        if self.dirac_metadata is not None:
-            return jnp.zeros((self.dirac_metadata.free_flat_indices.shape[0],))
+        """Return a shape-only example latent block for ``state_path_params``."""
+        if self.n_state_path_params is not None:
+            return jnp.zeros((self.n_state_path_params,))
         return canonicalize_state_path_params(
             dynamics,
             jnp.zeros(
@@ -375,7 +350,222 @@ class StatePathParameterization:
             n_times=self.state_path_param_times.shape[0],
         )
 
-    def assemble_state_path(
+
+@dataclasses.dataclass
+class ObservationCompletionPlan:
+    """Define any separate missing-observation latent block.
+
+    This plan is only about an optional auxiliary latent block
+    ``missing_obs_values`` that fills missing coordinates of ``y`` before
+    evaluating observation log-probabilities. It is intentionally independent
+    from state-path assembly.
+    """
+
+    missing_obs_metadata: MissingObservationMetadata | None = None
+    dense_missing_obs_shape: tuple[int, ...] | None = None
+
+    @property
+    def uses_missing_obs_augmentation(self) -> bool:
+        """Return whether a separate ``missing_obs_values`` block is active."""
+        return (
+            self.missing_obs_metadata is not None
+            or self.dense_missing_obs_shape is not None
+        )
+
+    @property
+    def uses_dense_missing_obs_augmentation(self) -> bool:
+        """Return whether augmentation uses an observation-shaped dense block."""
+        return self.dense_missing_obs_shape is not None
+
+    def canonicalize_missing_obs_values(self, missing_obs_values: Array) -> Array:
+        """Canonicalize the auxiliary ``missing_obs_values`` latent block."""
+        if self.dense_missing_obs_shape is not None:
+            dense_missing_obs_values = jnp.asarray(missing_obs_values)
+            if tuple(dense_missing_obs_values.shape) != self.dense_missing_obs_shape:
+                raise ValueError(
+                    "Dense missing_obs_values must match the observation array "
+                    "shape for this latent-path layout."
+                )
+            return dense_missing_obs_values
+
+        metadata = self.missing_obs_metadata
+        if metadata is None:
+            raise ValueError(
+                "This latent-path layout does not define a separate "
+                "missing_obs_values latent block."
+            )
+
+        return canonicalize_missing_obs_values(
+            missing_obs_values,
+            n_missing_obs=metadata.free_flat_indices.shape[0],
+        )
+
+    def example_missing_obs_values(self) -> Array | None:
+        """Return a shape-only example ``missing_obs_values`` block when needed."""
+        if self.dense_missing_obs_shape is not None:
+            return jnp.zeros(self.dense_missing_obs_shape)
+        if self.missing_obs_metadata is None:
+            return None
+        return jnp.zeros((self.missing_obs_metadata.free_flat_indices.shape[0],))
+
+
+@dataclasses.dataclass
+class StateAssemblyPlan:
+    """Define how ``x = state_path = g(z)`` is reconstructed.
+
+    This plan answers the model-side question:
+
+    - does the state path come directly from ``state_path_params``, or
+    - do completed exact observations determine some/all of the state path?
+    """
+
+    completed_obs_state_metadata: MissingObservationMetadata | None = None
+    completed_obs_exact_mask: Array | None = None
+
+    @property
+    def observations_are_exact_constraints(self) -> bool:
+        """Return whether completed observations determine the state path."""
+        return (
+            self.completed_obs_state_metadata is not None
+            or self.completed_obs_exact_mask is not None
+        )
+
+    def assemble_from_params(
+        self,
+        dynamics: DynamicalModel,
+        *,
+        parameterization: StatePathParameterization,
+        state_path_params: Array,
+        obs_times: Array,
+        obs_values_filled: Array | None,
+        ctrl_times: Array | None = None,
+        ctrl_values: Array | None = None,
+        ode_diffeqsolve_settings: dict[str, Any] | None = None,
+    ) -> AssembledStatePath:
+        """Assemble the full latent path ``x = g(z)`` from concrete latents."""
+        if self.completed_obs_state_metadata is not None:
+            if obs_values_filled is None:
+                raise ValueError(
+                    "Completed-observation latent-state assembly requires "
+                    "pre-filled observation values."
+                )
+            return assemble_completed_observation_state_path(
+                state_path_params=state_path_params,
+                latent_metadata=self.completed_obs_state_metadata,
+                obs_times=obs_times,
+                obs_values_filled=obs_values_filled,
+            )
+
+        if self.completed_obs_exact_mask is not None:
+            if obs_values_filled is None:
+                raise ValueError(
+                    "Exact-observation latent-state assembly requires pre-filled "
+                    "observation values."
+                )
+            if jnp.asarray(state_path_params).size == 0:
+                return AssembledStatePath(
+                    state_path_params=jnp.asarray(state_path_params),
+                    state_path_param_times=parameterization.state_path_param_times,
+                    state_path_param_coordinate_indices=None,
+                    state_path=jnp.asarray(obs_values_filled),
+                    state_path_times=jnp.asarray(obs_times),
+                )
+            canonical_params = parameterization.canonicalize_state_path_params(
+                dynamics, state_path_params
+            )
+            state_path = jnp.where(
+                self.completed_obs_exact_mask,
+                jnp.asarray(obs_values_filled),
+                canonical_params,
+            )
+            return AssembledStatePath(
+                state_path_params=canonical_params,
+                state_path_param_times=parameterization.state_path_param_times,
+                state_path_param_coordinate_indices=None,
+                state_path=state_path,
+                state_path_times=jnp.asarray(obs_times),
+            )
+
+        return assemble_state_path(
+            dynamics,
+            state_path_params=state_path_params,
+            state_path_param_times=parameterization.state_path_param_times,
+            obs_times=obs_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            ode_diffeqsolve_settings=ode_diffeqsolve_settings,
+        )
+
+
+@dataclasses.dataclass
+class LatentPathLayout:
+    """Concrete latent-path layout for one model/observation configuration.
+
+    This wrapper keeps the latent inference story split into three pieces:
+
+    - :math:`z = \\text{state_path_params}` via
+      :class:`StatePathParameterization`,
+    - any separate missing-observation latent block via
+      :class:`ObservationCompletionPlan`,
+    - the reconstruction :math:`x = g(z)` via :class:`StateAssemblyPlan`.
+
+    Most callers should work with this object rather than the lower-level
+    pieces directly.
+    """
+
+    state_path_parameterization: StatePathParameterization
+    observation_completion_plan: ObservationCompletionPlan = dataclasses.field(
+        default_factory=ObservationCompletionPlan
+    )
+    state_assembly_plan: StateAssemblyPlan = dataclasses.field(
+        default_factory=StateAssemblyPlan
+    )
+
+    @property
+    def state_path_param_times(self) -> Array:
+        """Return the times indexing ``state_path_params``."""
+        return self.state_path_parameterization.state_path_param_times
+
+    @property
+    def state_path_param_coordinate_indices(self) -> Array | None:
+        """Return coordinate indices when ``state_path_params`` are flat."""
+        return self.state_path_parameterization.state_path_param_coordinate_indices
+
+    @property
+    def missing_obs_metadata(self) -> MissingObservationMetadata | None:
+        """Return metadata for a separate ``missing_obs_values`` block, if any."""
+        return self.observation_completion_plan.missing_obs_metadata
+
+    @property
+    def observations_are_exact_constraints(self) -> bool:
+        """Return whether completed observations determine the state path."""
+        return self.state_assembly_plan.observations_are_exact_constraints
+
+    def canonicalize_state_path_params(
+        self,
+        dynamics: DynamicalModel,
+        state_path_params: Array,
+    ) -> Array:
+        """Canonicalize ``z = state_path_params`` for this layout."""
+        return self.state_path_parameterization.canonicalize_state_path_params(
+            dynamics, state_path_params
+        )
+
+    def example_state_path_params(self, dynamics: DynamicalModel) -> Array:
+        """Return a shape-only example ``state_path_params`` block."""
+        return self.state_path_parameterization.example_state_path_params(dynamics)
+
+    def canonicalize_missing_obs_values(self, missing_obs_values: Array) -> Array:
+        """Canonicalize the auxiliary ``missing_obs_values`` block."""
+        return self.observation_completion_plan.canonicalize_missing_obs_values(
+            missing_obs_values
+        )
+
+    def example_missing_obs_values(self) -> Array | None:
+        """Return a shape-only example ``missing_obs_values`` block, if any."""
+        return self.observation_completion_plan.example_missing_obs_values()
+
+    def assemble_from_params(
         self,
         dynamics: DynamicalModel,
         *,
@@ -386,247 +576,253 @@ class StatePathParameterization:
         ctrl_values: Array | None = None,
         ode_diffeqsolve_settings: dict[str, Any] | None = None,
     ) -> AssembledStatePath:
-        """Reconstruct the full latent state path ``x = g(z)``.
-
-        There are three main reconstruction modes:
-
-        - compressed Dirac layout: fill observed coordinates from the data and
-          free coordinates from ``z``,
-        - exact-observation mask fallback: use a dense state-shaped ``z`` but
-          overwrite exactly observed entries with data,
-        - standard dense layout: delegate to :func:`assemble_state_path`.
-        """
-        if self.dirac_metadata is not None:
-            if obs_values_filled is None:
-                raise ValueError(
-                    "Dirac latent-path assembly requires pre-filled observation values."
-                )
-            return assemble_dirac_state_path(
-                state_path_params=state_path_params,
-                latent_metadata=self.dirac_metadata,
-                obs_times=obs_times,
-                obs_values_filled=obs_values_filled,
-            )
-
-        if self.exact_observation_mask is not None:
-            if obs_values_filled is None:
-                raise ValueError(
-                    "Exact-observation latent-state assembly requires pre-filled "
-                    "observation values."
-                )
-            if jnp.asarray(state_path_params).size == 0:
-                return AssembledStatePath(
-                    state_path_params=jnp.asarray(state_path_params),
-                    state_path_param_times=self.state_path_param_times,
-                    state_path_param_coordinate_indices=None,
-                    state_path=jnp.asarray(obs_values_filled),
-                    state_path_times=jnp.asarray(obs_times),
-                )
-            canonical_params = canonicalize_state_path_params(
-                dynamics,
-                state_path_params,
-                n_times=self.state_path_param_times.shape[0],
-            )
-            state_path = jnp.where(
-                self.exact_observation_mask,
-                jnp.asarray(obs_values_filled),
-                canonical_params,
-            )
-            return AssembledStatePath(
-                state_path_params=canonical_params,
-                state_path_param_times=self.state_path_param_times,
-                state_path_param_coordinate_indices=None,
-                state_path=state_path,
-                state_path_times=jnp.asarray(obs_times),
-            )
-
-        return assemble_state_path(
+        """Assemble the full latent state path ``x = g(z)`` for this layout."""
+        return self.state_assembly_plan.assemble_from_params(
             dynamics,
+            parameterization=self.state_path_parameterization,
             state_path_params=state_path_params,
-            state_path_param_times=self.state_path_param_times,
             obs_times=obs_times,
+            obs_values_filled=obs_values_filled,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             ode_diffeqsolve_settings=ode_diffeqsolve_settings,
         )
 
 
-def prepare_state_path_parameterization(
-    dynamics: DynamicalModel,
+def _empty_missing_observation_metadata(
     *,
     obs_times: Array,
     obs_values: Array,
-    missing_observation_strategy: MissingObservationStrategy = "auto",
-    obs_values_filled: Array | None = None,
-    obs_mask: Array | None = None,
-    obs_has_missing: bool | None = None,
-) -> StatePathParameterization:
-    """Prepare the concrete latent parameterization for one observation setup.
+) -> MissingObservationMetadata:
+    """Return zero-free-coordinate metadata for fully observed arrays."""
+    obs_times_arr = jnp.asarray(obs_times)
+    obs_values_arr = jnp.asarray(obs_values)
+    return MissingObservationMetadata(
+        missing_obs_times=obs_times_arr[:0],
+        missing_obs_coordinate_indices=(
+            None if obs_values_arr.ndim == 1 else jnp.zeros((0,), dtype=jnp.int32)
+        ),
+        free_flat_indices=jnp.zeros((0,), dtype=jnp.int32),
+        observation_shape=tuple(obs_values_arr.shape),
+        has_missing=False,
+        has_partial_missing=False,
+        has_fully_missing_rows=False,
+    )
 
-    This is the main layout-selection routine. Given a model, observation
-    times, observation values, and a missingness strategy, it decides which
-    latent representation should be used for inference.
 
-    In broad strokes:
+def _prepare_completion_metadata(
+    *,
+    dynamics: DynamicalModel,
+    obs_times: Array,
+    obs_values: Array,
+    obs_mask: Array | None,
+    obs_has_missing: bool | None,
+) -> tuple[MissingObservationMetadata | None, Array | None]:
+    """Prepare generic completion metadata for partially observed arrays.
 
-    - standard models use dense ``state_path_params`` indexed by
-      ``state_path_param_times``,
-    - ``DiracIdentityObservation`` models may compress away observed
-      coordinates,
-    - missing observations may additionally activate explicit
-      ``missing_obs_values`` augmentation.
+    This helper is intentionally model-agnostic about how the completed
+    observations will later be used. It answers only:
 
-    The returned :class:`StatePathParameterization` is then reused throughout
-    the builder, scorer, and NumPyro-registration code paths.
+    - which observation entries are already fixed,
+    - which ones are free,
+    - and whether the missingness pattern is concrete enough to index eagerly.
+
+    Callers may then decide whether those free coordinates become
+    ``missing_obs_values`` augmentation latents or directly parameterize the
+    state path.
     """
     obs_times_arr = jnp.asarray(obs_times)
     obs_values_arr = jnp.asarray(obs_values)
 
-    if obs_values_filled is None or obs_mask is None or obs_has_missing is None:
-        obs_values_filled, obs_mask, obs_has_missing = prepare_observation_views(
-            dynamics, obs_values_arr
-        )
+    if obs_has_missing is False:
+        return _empty_missing_observation_metadata(
+            obs_times=obs_times_arr,
+            obs_values=obs_values_arr,
+        ), None
 
-    is_dirac_observation = isinstance(
-        dynamics.observation_model, DiracIdentityObservation
-    )
-    is_ode = isinstance(
-        dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
-    )
-    is_sde = isinstance(
-        dynamics.state_evolution, StochasticContinuousTimeStateEvolution
-    )
-    use_dirac_compression = (
-        is_dirac_observation
-        and not is_ode
-        and not is_sde
+    try:
+        return prepare_missing_observation_metadata(
+            dynamics,
+            obs_times=obs_times_arr,
+            obs_values=obs_values_arr,
+        ), None
+    except ValueError as exc:
+        if obs_mask is None:
+            raise
+        if "concrete missingness pattern" not in str(exc):
+            raise
+        return None, obs_mask
+
+
+def _uses_completed_observation_state_assembly(
+    dynamics: DynamicalModel,
+    *,
+    obs_values_filled: Array | None,
+    obs_mask: Array | None,
+    obs_has_missing: bool | None,
+) -> bool:
+    """Return whether the state path should come from completed observations."""
+    return (
+        isinstance(dynamics.observation_model, DiracIdentityObservation)
+        and not isinstance(
+            dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
+        )
+        and not isinstance(
+            dynamics.state_evolution, StochasticContinuousTimeStateEvolution
+        )
         and obs_values_filled is not None
         and (obs_has_missing is False or obs_mask is not None)
     )
-    if (
-        use_dirac_compression
-        and missing_observation_strategy == "augment"
-        and obs_has_missing is not False
-    ):
+
+
+def _resolve_exact_observation_strategy(
+    *,
+    requested_strategy: MissingObservationStrategy,
+    obs_has_missing: bool | None,
+) -> MissingObservationStrategy:
+    """Resolve the missingness strategy for exact-observation state assembly."""
+    if obs_has_missing is False:
+        return requested_strategy
+    if requested_strategy in ("marginalize", "error"):
         raise ValueError(
-            "DiracIdentityObservation missingness should be handled via "
-            "state-path compression, not explicit missing-observation augmentation."
+            "DiracIdentityObservation missingness in latent-path inference "
+            "supports only augment semantics. Use "
+            "missing_observation_strategy='auto' or 'augment'."
         )
+    if requested_strategy == "auto":
+        return "augment"
+    return requested_strategy
 
-    dirac_metadata = None
-    exact_observation_mask = None
-    if use_dirac_compression:
-        if obs_has_missing is False:
-            dirac_metadata = MissingObservationMetadata(
-                missing_obs_times=obs_times_arr[:0],
-                missing_obs_coordinate_indices=(
-                    None
-                    if obs_values_arr.ndim == 1
-                    else jnp.zeros((0,), dtype=jnp.int32)
+
+def _prepare_completed_observation_state_layout(
+    *,
+    dynamics: DynamicalModel,
+    obs_times: Array,
+    obs_values: Array,
+    obs_mask: Array | None,
+    obs_has_missing: bool | None,
+) -> tuple[StatePathParameterization, StateAssemblyPlan]:
+    """Prepare state-path pieces for exact-observation models.
+
+    By the time this helper runs, the caller has already decided that the
+    completed observations determine the state path. The remaining question is
+    only how the free state-path variables should be represented:
+
+    - as a flat vector of free coordinates when the missingness pattern is
+      concrete, or
+    - as a dense state-shaped array with an exact-observation overwrite mask
+      when traced execution prevents eager coordinate extraction.
+    """
+    metadata, exact_mask = _prepare_completion_metadata(
+        dynamics=dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        obs_mask=obs_mask,
+        obs_has_missing=obs_has_missing,
+    )
+    if metadata is not None:
+        return (
+            StatePathParameterization(
+                state_path_param_times=metadata.missing_obs_times,
+                state_path_param_coordinate_indices=(
+                    metadata.missing_obs_coordinate_indices
                 ),
-                free_flat_indices=jnp.zeros((0,), dtype=jnp.int32),
-                observation_shape=tuple(obs_values_arr.shape),
-                has_missing=False,
-                has_partial_missing=False,
-                has_fully_missing_rows=False,
+                n_state_path_params=metadata.free_flat_indices.shape[0],
+            ),
+            StateAssemblyPlan(completed_obs_state_metadata=metadata),
+        )
+
+    if exact_mask is None:
+        raise ValueError(
+            "Exact-observation state assembly requires either concrete free "
+            "coordinate metadata or an exact-observation mask."
+        )
+
+    return (
+        StatePathParameterization(state_path_param_times=jnp.asarray(obs_times)),
+        StateAssemblyPlan(completed_obs_exact_mask=exact_mask),
+    )
+
+
+def _prepare_observation_completion_plan(
+    dynamics: DynamicalModel,
+    *,
+    obs_times: Array,
+    obs_values: Array,
+    obs_mask: Array | None,
+    missing_observation_strategy: MissingObservationStrategy,
+) -> ObservationCompletionPlan:
+    """Prepare a separate missing-observation augmentation plan."""
+    plan = ObservationCompletionPlan()
+    if missing_observation_strategy not in ("augment", "auto") or obs_mask is None:
+        return plan
+
+    obs_times_arr = jnp.asarray(obs_times)
+    obs_values_arr = jnp.asarray(obs_values)
+    observation_dim = 1 if obs_values_arr.ndim == 1 else obs_values_arr.shape[-1]
+    probed_obs_dist = _canonicalize_observation_distribution(
+        _probe_observation_distribution(dynamics),
+        observation_dim=observation_dim,
+    )
+    marginal_mode = _marginalizable_distribution_mode(probed_obs_dist)
+    augmentation_supported = _supports_missing_observation_augmentation(probed_obs_dist)
+
+    if missing_observation_strategy == "auto" and marginal_mode is not None:
+        return plan
+
+    try:
+        metadata, _ = _prepare_completion_metadata(
+            dynamics=dynamics,
+            obs_times=obs_times_arr,
+            obs_values=obs_values_arr,
+            obs_mask=obs_mask,
+            obs_has_missing=None,
+        )
+    except ValueError as exc:
+        if "concrete missingness pattern" not in str(exc):
+            raise
+        if missing_observation_strategy == "augment":
+            if not augmentation_supported:
+                raise NotImplementedError(
+                    "Explicit missing-observation augmentation currently "
+                    "requires a continuous observation family."
+                ) from exc
+            return ObservationCompletionPlan(
+                dense_missing_obs_shape=tuple(obs_values_arr.shape)
             )
-        else:
-            try:
-                dirac_metadata = prepare_missing_observation_metadata(
-                    dynamics,
-                    obs_times=obs_times_arr,
-                    obs_values=obs_values_arr,
-                )
-            except ValueError as exc:
-                if obs_mask is None:
-                    raise
-                if "concrete missingness pattern" not in str(exc):
-                    raise
-                exact_observation_mask = obs_mask
+        return ObservationCompletionPlan()
 
-    state_path_param_times = (
-        dirac_metadata.missing_obs_times
-        if dirac_metadata is not None
-        else infer_state_path_param_times(dynamics, obs_times=obs_times_arr)
-    )
-    if exact_observation_mask is not None:
-        state_path_param_times = obs_times_arr
-
-    missing_obs_metadata = None
-    uses_missing_obs_augmentation = False
-    uses_dense_missing_obs_augmentation = False
-    dense_missing_obs_shape = None
-    if (
-        dirac_metadata is None
-        and exact_observation_mask is None
-        and missing_observation_strategy in ("augment", "auto")
-        and obs_mask is not None
-    ):
-        observation_dim = 1 if obs_values_arr.ndim == 1 else obs_values_arr.shape[-1]
-        probed_obs_dist = _canonicalize_observation_distribution(
-            _probe_observation_distribution(dynamics),
-            observation_dim=observation_dim,
+    if metadata is None:
+        uses_augmentation = missing_observation_strategy == "augment" or (
+            missing_observation_strategy == "auto" and marginal_mode is None
         )
-        marginal_mode = _marginalizable_distribution_mode(probed_obs_dist)
-        augmentation_supported = _supports_missing_observation_augmentation(
-            probed_obs_dist
+        if not uses_augmentation:
+            return ObservationCompletionPlan()
+        if not augmentation_supported:
+            raise NotImplementedError(
+                "Explicit missing-observation augmentation currently "
+                "requires a continuous observation family."
+            )
+        return ObservationCompletionPlan(
+            dense_missing_obs_shape=tuple(obs_values_arr.shape)
         )
 
-        if missing_observation_strategy == "auto" and marginal_mode is not None:
-            uses_missing_obs_augmentation = False
-        else:
-            try:
-                effective_missing_obs_metadata = prepare_missing_observation_metadata(
-                    dynamics,
-                    obs_times=obs_times_arr,
-                    obs_values=obs_values_arr,
-                )
-            except ValueError as exc:
-                if "concrete missingness pattern" not in str(exc):
-                    raise
-                if missing_observation_strategy == "augment":
-                    if not augmentation_supported:
-                        raise NotImplementedError(
-                            "Explicit missing-observation augmentation currently "
-                            "requires a continuous observation family."
-                        ) from exc
-                    uses_missing_obs_augmentation = True
-                    uses_dense_missing_obs_augmentation = True
-                    dense_missing_obs_shape = tuple(obs_values_arr.shape)
-                elif missing_observation_strategy == "auto":
-                    uses_missing_obs_augmentation = False
-                else:
-                    raise
-            else:
-                if effective_missing_obs_metadata.observation_shape != tuple(
-                    obs_values_arr.shape
-                ):
-                    raise ValueError(
-                        "Prepared missing observation metadata does not match the "
-                        "observed data shape for this latent-path parameterization."
-                    )
+    if metadata.observation_shape != tuple(obs_values_arr.shape):
+        raise ValueError(
+            "Prepared missing observation metadata does not match the observed "
+            "data shape for this latent-path parameterization."
+        )
 
-                uses_missing_obs_augmentation, _ = resolve_missing_observation_strategy(
-                    dynamics,
-                    observation_dim=observation_dim,
-                    has_missing=effective_missing_obs_metadata.has_missing,
-                    has_partial_missing=(
-                        effective_missing_obs_metadata.has_partial_missing
-                    ),
-                    requested_strategy=missing_observation_strategy,
-                )
-                if uses_missing_obs_augmentation:
-                    missing_obs_metadata = effective_missing_obs_metadata
-
-    return StatePathParameterization(
-        state_path_param_times=state_path_param_times,
-        dirac_metadata=dirac_metadata,
-        missing_obs_metadata=missing_obs_metadata,
-        uses_missing_obs_augmentation=uses_missing_obs_augmentation,
-        exact_observation_mask=exact_observation_mask,
-        uses_dense_missing_obs_augmentation=uses_dense_missing_obs_augmentation,
-        dense_missing_obs_shape=dense_missing_obs_shape,
+    uses_augmentation, _ = resolve_missing_observation_strategy(
+        dynamics,
+        observation_dim=observation_dim,
+        has_missing=metadata.has_missing,
+        has_partial_missing=metadata.has_partial_missing,
+        requested_strategy=missing_observation_strategy,
     )
+    if uses_augmentation:
+        return ObservationCompletionPlan(missing_obs_metadata=metadata)
+    return ObservationCompletionPlan()
 
 
 def prepare_latent_path_layout(
@@ -638,34 +834,80 @@ def prepare_latent_path_layout(
     obs_values_filled: Array | None = None,
     obs_mask: Array | None = None,
     obs_has_missing: bool | None = None,
-) -> StatePathParameterization:
-    """Backward-compatible wrapper for eager latent parameterization prep."""
-    return prepare_state_path_parameterization(
+) -> LatentPathLayout:
+    """Prepare the full latent-path layout for one observation configuration.
+
+    The returned layout freezes the three structural decisions needed by
+    :class:`LatentPathBuilder`:
+
+    1. what the free state-path block ``z = state_path_params`` looks like,
+    2. whether a separate ``missing_obs_values`` block is needed, and
+    3. how the full state path ``x = g(z)`` is reconstructed and scored.
+    """
+    obs_times_arr = jnp.asarray(obs_times)
+    obs_values_arr = jnp.asarray(obs_values)
+
+    if obs_values_filled is None or obs_mask is None or obs_has_missing is None:
+        obs_values_filled, obs_mask, obs_has_missing = prepare_observation_views(
+            dynamics, obs_values_arr
+        )
+
+    state_path_from_completed_observations = _uses_completed_observation_state_assembly(
         dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        missing_observation_strategy=missing_observation_strategy,
         obs_values_filled=obs_values_filled,
         obs_mask=obs_mask,
         obs_has_missing=obs_has_missing,
     )
 
+    if state_path_from_completed_observations:
+        missing_observation_strategy = _resolve_exact_observation_strategy(
+            requested_strategy=missing_observation_strategy,
+            obs_has_missing=obs_has_missing,
+        )
+        (
+            state_path_parameterization,
+            state_assembly_plan,
+        ) = _prepare_completed_observation_state_layout(
+            dynamics=dynamics,
+            obs_times=obs_times_arr,
+            obs_values=obs_values_arr,
+            obs_mask=obs_mask,
+            obs_has_missing=obs_has_missing,
+        )
+        observation_completion_plan = ObservationCompletionPlan()
+    else:
+        state_path_parameterization = StatePathParameterization(
+            state_path_param_times=infer_state_path_param_times(
+                dynamics, obs_times=obs_times_arr
+            )
+        )
+        state_assembly_plan = StateAssemblyPlan()
+        observation_completion_plan = _prepare_observation_completion_plan(
+            dynamics,
+            obs_times=obs_times_arr,
+            obs_values=obs_values_arr,
+            obs_mask=obs_mask,
+            missing_observation_strategy=missing_observation_strategy,
+        )
 
-LatentPathLayout = StatePathParameterization
-AssembledStateTrajectory = AssembledStatePath
+    return LatentPathLayout(
+        state_path_parameterization=state_path_parameterization,
+        observation_completion_plan=observation_completion_plan,
+        state_assembly_plan=state_assembly_plan,
+    )
 
 
 __all__ = [
     "AssembledStatePath",
-    "AssembledStateTrajectory",
     "LatentPathLayout",
+    "ObservationCompletionPlan",
     "StatePathParameterization",
-    "assemble_dirac_state_path",
+    "StateAssemblyPlan",
+    "assemble_completed_observation_state_path",
     "assemble_state_path",
-    "canonicalize_dirac_state_path_params",
+    "canonicalize_completed_observation_state_params",
     "canonicalize_state_path_params",
     "default_ode_diffeqsolve_settings",
     "infer_state_path_param_times",
     "prepare_latent_path_layout",
-    "prepare_state_path_parameterization",
 ]

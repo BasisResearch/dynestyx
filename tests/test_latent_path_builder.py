@@ -504,6 +504,96 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
     )
 
 
+def test_prepare_latent_path_layout_dirac_partial_missing_augment_matches_auto():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array(
+        [
+            [0.2, jnp.nan],
+            [jnp.nan, -0.1],
+            [jnp.nan, jnp.nan],
+        ]
+    )
+
+    auto_layout = dsx.prepare_latent_path_layout(
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        missing_observation_strategy="auto",
+    )
+    augment_layout = dsx.prepare_latent_path_layout(
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        missing_observation_strategy="augment",
+    )
+
+    assert jnp.array_equal(
+        auto_layout.state_path_param_times, augment_layout.state_path_param_times
+    )
+    assert auto_layout.state_path_param_coordinate_indices is not None
+    assert augment_layout.state_path_param_coordinate_indices is not None
+    assert jnp.array_equal(
+        auto_layout.state_path_param_coordinate_indices,
+        augment_layout.state_path_param_coordinate_indices,
+    )
+
+
+def test_latent_path_builder_dirac_partial_missing_explicit_augment_uses_state_path_params():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array(
+        [
+            [0.2, jnp.nan],
+            [jnp.nan, -0.1],
+            [jnp.nan, jnp.nan],
+        ]
+    )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder(missing_observation_strategy="augment"):
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    assert tr["f_state_path_params"]["value"].shape == (4,)
+    assert "f_missing_obs_values" not in tr
+    assert jnp.array_equal(
+        tr["f_state_path_param_coordinate_indices"]["value"],
+        jnp.array([1, 0, 0, 1], dtype=jnp.int32),
+    )
+
+
+@pytest.mark.parametrize("strategy", ["marginalize", "error"])
+def test_latent_path_builder_dirac_partial_missing_rejects_non_augment_strategies(
+    strategy,
+):
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array(
+        [
+            [0.2, jnp.nan],
+            [jnp.nan, -0.1],
+            [jnp.nan, jnp.nan],
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="supports only augment semantics",
+    ):
+        with dsx.LatentPathBuilder(missing_observation_strategy=strategy):
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+
 def test_latent_path_builder_sample_registers_missing_observation_sites_under_augment():
     dynamics = _make_student_t_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
