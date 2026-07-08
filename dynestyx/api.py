@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
+from dynestyx.inference.checkers import _validate_inference_supported_model_classes
 from dynestyx.inference.latent.log_prob import (
     compute_trajectory_log_prob_terms,
 )
@@ -120,6 +121,7 @@ def log_prob(
             reconstructing deterministic continuous-time trajectories.
     """
     state_path_param_times = jnp.asarray(state_path_param_times)
+    _validate_inference_supported_model_classes(dynamics)
     dynamics_with_t0, obs_values_filled, obs_mask, _obs_has_missing = (
         _validate_and_prepare(
             "log_prob",

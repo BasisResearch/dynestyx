@@ -8,6 +8,17 @@ import dynestyx as dsx
 from tests.missingness.utils import manual_masked_mvn_log_prob
 
 
+def _make_dirac_ode_dynamics() -> dsx.DynamicalModel:
+    return dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -0.1 * x
+        ),
+        observation_model=dsx.DiracIdentityObservation(),
+    )
+
+
 def test_log_prob_discrete_matches_manual_joint_density():
     state_times = jnp.array([0.0, 1.0, 2.0])
     state_path_params = jnp.array([0.2, -0.1, 0.4])
@@ -180,6 +191,18 @@ def test_log_prob_sde_requires_discretization():
     with pytest.raises(ValueError, match="discretize"):
         dsx.log_prob(
             dynamics,
+            state_path_params=jnp.array([0.1]),
+            state_path_param_times=jnp.array([0.0]),
+        )
+
+
+def test_log_prob_rejects_dirac_ode_models_early():
+    with pytest.raises(
+        ValueError,
+        match="Inference/scoring .* DiracIdentityObservation",
+    ):
+        dsx.log_prob(
+            _make_dirac_ode_dynamics(),
             state_path_params=jnp.array([0.1]),
             state_path_param_times=jnp.array([0.0]),
         )

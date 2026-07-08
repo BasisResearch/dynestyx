@@ -22,6 +22,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.inference.checkers import _validate_inference_supported_model_classes
 from dynestyx.inference.latent._numpyro import build_latent_path_site_registrar
 from dynestyx.inference.latent.log_prob import (
     TrajectoryLogProbTerms,
@@ -263,6 +264,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         This is the main single-trajectory implementation; plated requests are
         reduced to repeated calls to this method.
         """
+        _validate_inference_supported_model_classes(dynamics)
         prepared = _prepare_latent_path_request(
             dynamics=dynamics,
             obs_times=obs_times,

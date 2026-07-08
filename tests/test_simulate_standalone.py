@@ -56,6 +56,19 @@ def _make_ode_dynamics() -> dsx.DynamicalModel:
     )
 
 
+def _make_dirac_ode_dynamics() -> dsx.DynamicalModel:
+    return dsx.DynamicalModel(
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.zeros(1),
+            covariance_matrix=0.2**2 * jnp.eye(1),
+        ),
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -0.3 * x
+        ),
+        observation_model=dsx.DiracIdentityObservation(),
+    )
+
+
 def _make_sde_dynamics() -> dsx.DynamicalModel:
     return dsx.DynamicalModel(
         initial_condition=dist.MultivariateNormal(
@@ -134,6 +147,23 @@ def test_condition_with_simulator_returns_deferred_simulated_result():
     assert "f_observations" not in tr
 
 
+def test_sample_with_ode_simulator_allows_dirac_ode_models():
+    predict_times = jnp.linspace(0.0, 1.0, 5)
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.ODESimulator():
+            result = dsx.sample(
+                "f",
+                _make_dirac_ode_dynamics(),
+                predict_times=predict_times,
+            )
+
+    assert isinstance(result, dsx.SimulatedResult)
+    assert "f_x_0" in tr
+    assert "f_states" in tr
+    assert "f_observations" in tr
+
+
 def test_simulate_ode_accepts_structured_config():
     predict_times = jnp.linspace(0.0, 1.0, 6)
     result = dsx.simulate(
@@ -193,3 +223,21 @@ def test_simulate_sde_rejects_obs_times():
             rng_key=jr.PRNGKey(0),
             obs_times=jnp.linspace(0.0, 0.5, 5),
         )
+
+
+def test_simulate_allows_dirac_ode_models():
+    predict_times = jnp.linspace(0.0, 1.0, 5)
+    result = dsx.simulate(
+        _make_dirac_ode_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+    )
+    times = jnp.asarray(result.times)
+    states = jnp.asarray(result.states)
+    observations = jnp.asarray(result.observations)
+
+    assert isinstance(result, dsx.SimulatedResult)
+    assert times.shape == (1, len(predict_times))
+    assert states.shape == (1, len(predict_times), 1)
+    assert observations.shape == (1, len(predict_times), 1)
+    assert jnp.allclose(observations, states)

@@ -22,7 +22,11 @@ from dynestyx.inference.configs.smoother import (
     DiscreteTimeSmootherConfigs,
     KFSmootherConfig,
 )
-from dynestyx.models import DynamicalModel
+from dynestyx.models import (
+    DeterministicContinuousTimeStateEvolution,
+    DiracIdentityObservation,
+    DynamicalModel,
+)
 from dynestyx.utils import _has_any_batched_plate_source, _raise_now_or_error_if
 
 
@@ -183,3 +187,24 @@ def _validate_missing_observation_support(
         has_missing,
         f"NaN-valued obs_values are not supported for {type(config).__name__} {fallback_label}s.",
     )
+
+
+def _validate_inference_supported_model_classes(dynamics: DynamicalModel) -> None:
+    """Reject model classes that are valid for simulation but not inference.
+
+    In particular, deterministic continuous-time dynamics paired with
+    ``DiracIdentityObservation`` are allowed for forward simulation, but not for
+    scoring or inference. In continuous time, exact identity observations turn
+    the observation model into a degenerate path constraint rather than a
+    regular likelihood term.
+    """
+    if isinstance(
+        dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
+    ) and isinstance(dynamics.observation_model, DiracIdentityObservation):
+        raise ValueError(
+            "Inference/scoring with deterministic continuous-time dynamics "
+            "(ODEs) and DiracIdentityObservation is not supported. Forward "
+            "simulation is still allowed, but exact-observation likelihoods "
+            "are degenerate in continuous time; add observation noise or "
+            "reformulate the model."
+        )

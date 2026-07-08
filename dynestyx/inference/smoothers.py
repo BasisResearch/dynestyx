@@ -15,6 +15,7 @@ from jaxtyping import Array, PRNGKeyArray, Real
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
 from dynestyx.inference.configs.smoother import (
@@ -241,6 +242,7 @@ class Smoother(BaseSmootherLogFactorAdder):
     ) -> list[numpyro.distributions.Distribution] | None:
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for smoothing.")
+        _validate_inference_supported_model_classes(dynamics)
 
         config = (
             self.smoother_config

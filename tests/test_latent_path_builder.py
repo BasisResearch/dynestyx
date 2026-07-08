@@ -33,6 +33,15 @@ def _make_ode_dynamics():
     )
 
 
+def _make_dirac_ode_dynamics():
+    return dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Normal(0.0, 0.7),
+        state_evolution=dsx.ContinuousTimeStateEvolution(drift=lambda x, u, t: 0.0 * x),
+        observation_model=dsx.DiracIdentityObservation(),
+    )
+
+
 def _make_dirac_discrete_dynamics():
     return dsx.DynamicalModel(
         control_dim=0,
@@ -148,6 +157,24 @@ def test_latent_path_builder_condition_ode_reconstructs_state_path():
     assert jnp.array_equal(result.state_path_param_times, jnp.array([0.0]))
     assert jnp.array_equal(result.state_path_times, jnp.array([0.0, 0.0, 1.0, 2.0]))
     assert jnp.allclose(result.state_path, jnp.array([0.1, 0.1, 0.1, 0.1]))
+
+
+def test_latent_path_builder_rejects_dirac_ode_inference():
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([0.1, 0.1, 0.1])
+
+    with pytest.raises(
+        ValueError,
+        match="Inference/scoring .* DiracIdentityObservation",
+    ):
+        with dsx.LatentPathBuilder():
+            dsx.condition(
+                "f",
+                _make_dirac_ode_dynamics(),
+                obs_times=obs_times,
+                obs_values=obs_values,
+                state_path_params=jnp.array(0.1),
+            )
 
 
 def test_latent_path_builder_condition_dirac_partial_missing_compresses_per_coordinate():
