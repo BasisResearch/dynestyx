@@ -240,15 +240,16 @@ def test_prepare_dirac_state_path_metadata_matches_partial_missing_layout():
     )
 
     assert jnp.array_equal(
-        metadata.state_path_param_times,
+        metadata.missing_obs_times,
         jnp.array([0.0, 1.0, 2.0, 2.0]),
     )
+    assert metadata.missing_obs_coordinate_indices is not None
     assert jnp.array_equal(
-        metadata.state_path_param_coordinate_indices,
+        metadata.missing_obs_coordinate_indices,
         jnp.array([1, 0, 0, 1], dtype=jnp.int32),
     )
     assert jnp.array_equal(metadata.free_flat_indices, jnp.array([1, 2, 4, 5]))
-    assert metadata.state_shape == (3, 2)
+    assert metadata.observation_shape == (3, 2)
 
 
 def test_latent_path_builder_rejects_dsx_condition():

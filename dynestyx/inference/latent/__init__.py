@@ -9,7 +9,6 @@ from dynestyx.inference.latent.log_prob import (
 from dynestyx.inference.latent.parameterization import (
     AssembledStatePath,
     AssembledStateTrajectory,
-    DiracLatentMetadata,
     LatentPathLayout,
     StatePathParameterization,
     assemble_dirac_state_path,
@@ -28,7 +27,6 @@ from dynestyx.inference.latent.parameterization import (
 __all__ = [
     "AssembledStatePath",
     "AssembledStateTrajectory",
-    "DiracLatentMetadata",
     "LatentPathBuilder",
     "LatentPathLayout",
     "StatePathParameterization",
