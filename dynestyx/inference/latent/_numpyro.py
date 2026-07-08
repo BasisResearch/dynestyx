@@ -59,11 +59,10 @@ def build_latent_path_site_registrar(
 
     Args:
         canonical_state_path_params:
-            Concrete latent path parameters ``z`` when they are already known.
-            This happens on the ``dsx.condition(...)`` path, or after the
-            builder has eagerly canonicalized user-provided values. These are
-            passed as ``obs=...`` to the dummy NumPyro sample site so the trace
-            uses the supplied latent values rather than drawing fresh ones.
+            Concrete latent path parameters ``z`` when the caller provided them
+            directly to ``dsx.sample(...)``. These are passed as ``obs=...`` to
+            the dummy NumPyro sample site so the trace uses the supplied latent
+            values rather than drawing fresh ones.
         canonical_missing_obs_values:
             Same idea as ``canonical_state_path_params``, but for the optional
             missing-observation augmentation latent block.

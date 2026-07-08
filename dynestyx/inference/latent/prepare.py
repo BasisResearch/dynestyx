@@ -1,9 +1,9 @@
 """Request preparation helpers for latent-path inference.
 
-This module turns a user-facing latent-path request into a concrete internal
-problem description. By the time these helpers return, the handler knows the
-latent layout, any canonicalized latent values, and the shape-only example
-values needed for later NumPyro site registration.
+This module turns a user-facing ``LatentPathBuilder`` request into a concrete
+internal problem description. By the time these helpers return, the handler
+knows the latent layout, any directly supplied latent values, and the
+shape-only example values needed for later NumPyro site registration.
 """
 
 from __future__ import annotations
@@ -101,14 +101,12 @@ def _prepare_missing_obs_values(
     *,
     parameterization: StatePathParameterization,
     missing_obs_values: Array | None,
-    dsx_sample_mode: bool,
 ) -> tuple[Array | None, Array | None]:
     """Canonicalize or synthesize the missing-observation latent block.
 
     Returns a pair ``(canonical, example)``:
 
-    - ``canonical`` is the concrete value to use under ``dsx.condition(...)``
-      when the caller supplied one.
+    - ``canonical`` is the directly supplied latent value, when present.
     - ``example`` is the shape-only placeholder used to define NumPyro sample
       sites under ``dsx.sample(...)``.
 
@@ -137,11 +135,6 @@ def _prepare_missing_obs_values(
 
     n_missing_obs = metadata.free_flat_indices.shape[0]
     if missing_obs_values is None:
-        if not dsx_sample_mode and n_missing_obs != 0:
-            raise ValueError(
-                "missing_obs_values must be provided when explicit "
-                "missing-observation augmentation is active under dsx.condition."
-            )
         return None, jnp.zeros((n_missing_obs,))
 
     canonical_missing_obs_values = canonicalize_missing_obs_values(
@@ -163,7 +156,6 @@ def _prepare_latent_path_request(
     state_path_params: Array | None,
     missing_obs_values: Array | None,
     latent_observation_mode: MissingObservationStrategy,
-    dsx_sample_mode: bool,
 ) -> _PreparedLatentPathRequest:
     """Prepare canonical latent inputs for later evaluation or registration.
 
@@ -196,7 +188,6 @@ def _prepare_latent_path_request(
         _prepare_missing_obs_values(
             parameterization=parameterization,
             missing_obs_values=missing_obs_values,
-            dsx_sample_mode=dsx_sample_mode,
         )
     )
 
@@ -204,11 +195,6 @@ def _prepare_latent_path_request(
     if state_path_params is not None:
         canonical_state_path_params = parameterization.canonicalize_state_path_params(
             dynamics, state_path_params
-        )
-    elif not dsx_sample_mode:
-        raise ValueError(
-            "state_path_params must be provided when using dsx.condition with "
-            "LatentPathBuilder. Use dsx.sample under NumPyro to sample them."
         )
 
     return _PreparedLatentPathRequest(

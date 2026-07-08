@@ -12,7 +12,6 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx.types import LatentStateResult
 
 
 def _make_discrete_dynamics():
@@ -106,28 +105,28 @@ def _manual_discrete_state_log_prob(dynamics, state_path, state_path_times):
     return expected
 
 
-def test_latent_path_builder_condition_discrete_matches_log_prob():
+def test_latent_path_builder_sample_discrete_matches_log_prob():
     dynamics = _make_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array([0.2, -0.1, 0.3])
     state_path_params = jnp.array([0.1, -0.2, 0.4])
 
-    with dsx.LatentPathBuilder():
-        result = dsx.condition(
-            "f",
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            state_path_params=state_path_params,
-        )
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                state_path_params=state_path_params,
+            )
 
-    assert isinstance(result, LatentStateResult)
-    assert jnp.array_equal(result.state_path_params, state_path_params)
-    assert jnp.array_equal(result.state_path, state_path_params)
-    assert jnp.array_equal(result.state_path_param_times, obs_times)
-    assert jnp.array_equal(result.state_path_times, obs_times)
+    assert jnp.array_equal(tr["f_state_path_params"]["value"], state_path_params)
+    assert jnp.array_equal(tr["f_state_path"]["value"], state_path_params)
+    assert jnp.array_equal(tr["f_state_path_param_times"]["value"], obs_times)
+    assert jnp.array_equal(tr["f_state_path_times"]["value"], obs_times)
     assert jnp.allclose(
-        result.joint_log_prob,
+        tr["f_joint_log_prob"]["value"],
         dsx.log_prob(
             dynamics,
             state_path_params=state_path_params,
@@ -138,25 +137,27 @@ def test_latent_path_builder_condition_discrete_matches_log_prob():
     )
 
 
-def test_latent_path_builder_condition_ode_reconstructs_state_path():
+def test_latent_path_builder_sample_ode_reconstructs_state_path():
     dynamics = _make_ode_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array([0.1, 0.1, 0.1])
     state_path_params = jnp.array(0.1)
 
-    with dsx.LatentPathBuilder():
-        result = dsx.condition(
-            "f",
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            state_path_params=state_path_params,
-        )
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                state_path_params=state_path_params,
+            )
 
-    assert isinstance(result, LatentStateResult)
-    assert jnp.array_equal(result.state_path_param_times, jnp.array([0.0]))
-    assert jnp.array_equal(result.state_path_times, jnp.array([0.0, 0.0, 1.0, 2.0]))
-    assert jnp.allclose(result.state_path, jnp.array([0.1, 0.1, 0.1, 0.1]))
+    assert jnp.array_equal(tr["f_state_path_param_times"]["value"], jnp.array([0.0]))
+    assert jnp.array_equal(
+        tr["f_state_path_times"]["value"], jnp.array([0.0, 0.0, 1.0, 2.0])
+    )
+    assert jnp.allclose(tr["f_state_path"]["value"], jnp.array([0.1, 0.1, 0.1, 0.1]))
 
 
 def test_latent_path_builder_rejects_dirac_ode_inference():
@@ -168,7 +169,7 @@ def test_latent_path_builder_rejects_dirac_ode_inference():
         match="Inference/scoring .* DiracIdentityObservation",
     ):
         with dsx.LatentPathBuilder():
-            dsx.condition(
+            dsx.sample(
                 "f",
                 _make_dirac_ode_dynamics(),
                 obs_times=obs_times,
@@ -177,7 +178,7 @@ def test_latent_path_builder_rejects_dirac_ode_inference():
             )
 
 
-def test_latent_path_builder_condition_dirac_partial_missing_compresses_per_coordinate():
+def test_latent_path_builder_sample_dirac_partial_missing_compresses_per_coordinate():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array(
@@ -189,14 +190,15 @@ def test_latent_path_builder_condition_dirac_partial_missing_compresses_per_coor
     )
     state_path_params = jnp.array([0.5, -0.3, 0.7, 0.9])
 
-    with dsx.LatentPathBuilder():
-        result = dsx.condition(
-            "f",
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            state_path_params=state_path_params,
-        )
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                state_path_params=state_path_params,
+            )
 
     expected_states = jnp.array(
         [
@@ -205,17 +207,17 @@ def test_latent_path_builder_condition_dirac_partial_missing_compresses_per_coor
             [0.7, 0.9],
         ]
     )
-    assert jnp.array_equal(result.state_path_params, state_path_params)
+    assert jnp.array_equal(tr["f_state_path_params"]["value"], state_path_params)
     assert jnp.array_equal(
-        result.state_path_param_times, jnp.array([0.0, 1.0, 2.0, 2.0])
+        tr["f_state_path_param_times"]["value"], jnp.array([0.0, 1.0, 2.0, 2.0])
     )
     assert jnp.array_equal(
-        result.state_path_param_coordinate_indices,
+        tr["f_state_path_param_coordinate_indices"]["value"],
         jnp.array([1, 0, 0, 1], dtype=jnp.int32),
     )
-    assert jnp.allclose(result.state_path, expected_states)
+    assert jnp.allclose(tr["f_state_path"]["value"], expected_states)
     assert jnp.allclose(
-        result.joint_log_prob,
+        tr["f_joint_log_prob"]["value"],
         _manual_discrete_state_log_prob(dynamics, expected_states, obs_times),
     )
 
@@ -249,18 +251,19 @@ def test_prepare_dirac_state_path_metadata_matches_partial_missing_layout():
     assert metadata.state_shape == (3, 2)
 
 
-def test_latent_path_builder_condition_requires_state_path_params():
+def test_latent_path_builder_rejects_dsx_condition():
     dynamics = _make_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0])
     obs_values = jnp.array([0.2, -0.1])
 
-    with pytest.raises(ValueError, match="state_path_params must be provided"):
+    with pytest.raises(ValueError, match="only supports dsx.sample"):
         with dsx.LatentPathBuilder():
             dsx.condition(
                 "f",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                state_path_params=jnp.array([0.1, -0.2]),
             )
 
 
@@ -670,7 +673,7 @@ def test_latent_path_builder_rejects_native_sdes():
 
     with pytest.raises(ValueError, match="discretize"):
         with dsx.LatentPathBuilder():
-            dsx.condition(
+            dsx.sample(
                 "f",
                 dynamics,
                 obs_times=jnp.array([0.0]),

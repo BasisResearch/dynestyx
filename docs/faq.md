@@ -24,7 +24,7 @@ with Filter(filter_config=HMMConfig()):
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Discrete-time**: Either **LatentPathBuilder** (explicit latent-state inference) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
+- **Discrete-time**: Either **LatentPathBuilder** (explicit latent-state inference) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `LatentPathBuilder` is a NumPyro-side handler used through `dsx.sample(...)`; for pure-JAX scoring of fixed latent paths, use `dsx.log_prob(...)`. `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
 For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), do:
 ```python
 with dsx.LatentPathBuilder():

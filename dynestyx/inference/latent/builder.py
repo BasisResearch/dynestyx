@@ -9,8 +9,9 @@ coordinates three steps:
 3. optionally register NumPyro sites after that pure-JAX work is done.
 
 Keeping those responsibilities separate is what allows
-``LatentPathBuilder`` to reuse the same JAX computations under both
-``dsx.condition(...)`` and ``dsx.sample(...)``.
+``LatentPathBuilder`` to keep its reconstruction/scoring logic in pure JAX
+even though the public handler itself is NumPyro-facing and only supports
+``dsx.sample(...)``.
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ def _evaluate_latent_path_request(
 ) -> tuple[AssembledStatePath | None, TrajectoryLogProbTerms | None]:
     """Reconstruct the state path and score ``log p(x, y | ...)``.
 
-    This is the core pure-JAX evaluation step. Given canonical latent values,
+    This is the core pure-JAX evaluation step. Given concrete latent values,
     it first reconstructs the full state path ``x = g(z)`` and then computes
     the joint trajectory score
 
@@ -182,8 +183,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     """Build latent path parameters and score ``log p(x, y | ...)``.
 
     Writing ``z = state_path_params`` and ``x = state_path = g(z)``, this
-    handler constructs or conditions on ``z``, reconstructs ``x``, and returns
-    quantities associated with the joint density ``log p(x, y | ...)``.
+    handler constructs latent NumPyro sites for ``z``, reconstructs ``x``, and
+    returns quantities associated with the joint density ``log p(x, y | ...)``.
 
     In pure-JAX terms, this handler owns the latent-state inference problem
     rather than the forward simulation problem. Compared with a simulator:
@@ -249,7 +250,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         latent_path_layout: StatePathParameterization | None = None,
         state_path_params: Array | None = None,
         missing_obs_values: Array | None = None,
-        _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
         """Handle one non-plated latent-path request.
@@ -276,7 +276,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             state_path_params=state_path_params,
             missing_obs_values=missing_obs_values,
             latent_observation_mode=self.latent_observation_mode,
-            dsx_sample_mode=_dsx_sample_mode,
         )
         assert obs_times is not None
         assert obs_values is not None
@@ -352,16 +351,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
-        """Interpret ``dsx.condition(...)`` for latent-path inference.
+        """Interpret ``dsx.sample(...)`` for latent-path inference."""
+        if not _dsx_sample_mode:
+            raise ValueError(
+                "LatentPathBuilder only supports dsx.sample(...) under NumPyro. "
+                "Use dsx.log_prob(...) for pure-JAX trajectory scoring."
+            )
 
-        With no plates, this simply delegates to :meth:`_sample_single`.
-        With plates, it runs the latent-path logic independently for each plate
-        member and then stacks the resulting ``LatentStateResult`` fields.
-
-        Batched ``dsx.condition(...)`` without NumPyro sampling is currently not
-        supported because there is not yet a clear public API for passing
-        per-member latent inputs directly.
-        """
         if not plate_shapes:
             return self._sample_single(
                 name,
@@ -376,7 +372,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 latent_path_layout=latent_path_layout,
                 state_path_params=state_path_params,
                 missing_obs_values=missing_obs_values,
-                _dsx_sample_mode=_dsx_sample_mode,
                 **kwargs,
             )
 
@@ -384,11 +379,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             raise NotImplementedError(
                 "Plated LatentPathBuilder requests do not yet support an explicit "
                 "latent_path_layout override."
-            )
-        if not _dsx_sample_mode:
-            raise NotImplementedError(
-                "LatentPathBuilder does not yet support dsx.condition batched latent-path "
-                "construction. Use dsx.sample under NumPyro, or remove dsx.plate."
             )
 
         member_specs = _plate_member_specs(
@@ -421,7 +411,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                         ctrl_values=member.ctrl_values,
                         state_path_params=member.state_path_params,
                         missing_obs_values=member.missing_obs_values,
-                        _dsx_sample_mode=True,
                         **kwargs,
                     )
                 )

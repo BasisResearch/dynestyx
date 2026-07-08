@@ -4,6 +4,10 @@
 that need explicit latent-state variables rather than marginal likelihoods from
 `Filter`/`Smoother`.
 
+It is a NumPyro-facing handler: use it through `dsx.sample(...)` inside a
+NumPyro model. For pure-JAX trajectory scoring of fixed latent values, use
+`dsx.log_prob(...)` instead.
+
 Conceptually:
 
 - `Simulator` generates trajectories and observations.
