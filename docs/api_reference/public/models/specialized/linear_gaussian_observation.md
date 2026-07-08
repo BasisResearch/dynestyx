@@ -11,7 +11,7 @@
     observation form is what lets filtering backends use fast Kalman-family
     methods; see [Filters](../../inference/filters.md), especially `KFConfig`
     and `EnKFConfig` (or `ContinuousTimeKFConfig` / `ContinuousTimeEnKFConfig`)
-    in [FilterConfigs](../../inference/filter_configs.md).
+    in [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without this exploitable structure, parameter inference that marginalizes
     latent trajectories often relies on particle filters (`PFConfig` and

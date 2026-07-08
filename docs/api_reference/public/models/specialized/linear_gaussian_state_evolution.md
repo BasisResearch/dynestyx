@@ -11,7 +11,7 @@
     transition form is what enables fast Kalman-family filtering methods; see
     [Filters](../../inference/filters.md), especially `KFConfig` (and
     `ContinuousTimeKFConfig` for continuous-time settings) in
-    [FilterConfigs](../../inference/filter_configs.md).
+    [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without this exploitable structure, marginalizing latent trajectories
     during parameter inference typically falls back to particle filters

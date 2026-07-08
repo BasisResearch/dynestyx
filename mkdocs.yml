@@ -72,12 +72,12 @@ nav:
           - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
       - Inference:
         - Filters: api_reference/public/inference/filters.md
-        - FilterConfigs: api_reference/public/inference/filter_configs.md
+        - FilterConfigs: api_reference/public/inference/configs/filter_configs.md
         - LatentPathBuilder: api_reference/public/inference/latent_path_builder.md
         - Smoothers: api_reference/public/inference/smoothers.md
-        - SmootherOptions: api_reference/public/inference/smoother_configs.md
+        - SmootherOptions: api_reference/public/inference/configs/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
-        - MCMCConfigs: api_reference/public/inference/mcmc_configs.md
+        - MCMCConfigs: api_reference/public/inference/configs/mcmc_configs.md
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
       - Handlers:
@@ -101,12 +101,12 @@ nav:
       - Inference:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
-        - FilterConfigs: api_reference/developer/inference/filter_configs.md
+        - FilterConfigs: api_reference/developer/inference/configs/filter_configs.md
         - LatentPathBuilder: api_reference/developer/inference/latent_path_builder.md
         - Smoothers: api_reference/developer/inference/smoothers.md
-        - SmootherOptions: api_reference/developer/inference/smoother_configs.md
+        - SmootherOptions: api_reference/developer/inference/configs/smoother_configs.md
         - MCMC: api_reference/developer/inference/mcmc.md
-        - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
+        - MCMCConfigs: api_reference/developer/inference/configs/mcmc_configs.md
         - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md
       - Discretizers:
         - Discretizer: api_reference/developer/discretizers/discretizer.md

@@ -11,7 +11,7 @@
     explicitly signals Gaussian emission structure that enables fast ensemble
     Kalman methods; see [Filters](../../inference/filters.md) and `EnKFConfig`
     / `ContinuousTimeEnKFConfig` in
-    [FilterConfigs](../../inference/filter_configs.md).
+    [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without these exploitable structures, marginalizing latent processes during
     parameter inference typically requires particle filters (`PFConfig` and

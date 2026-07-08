@@ -11,7 +11,7 @@
     transition form is what lets filtering backends use Gaussian filtering
     methods for nonlinear models; see [Filters](../../inference/filters.md),
     especially `EKFConfig`, `UKFConfig`, and `EnKFConfig` in
-    [FilterConfigs](../../inference/filter_configs.md).
+    [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without this exploitable structure, marginalizing latent trajectories
     during parameter inference typically falls back to particle filters

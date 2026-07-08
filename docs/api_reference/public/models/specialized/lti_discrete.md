@@ -13,7 +13,7 @@
     Using these structured classes makes the linear/Gaussian structure explicit
     so `dynestyx` can dispatch to fast Kalman filtering; see
     [Filters](../../inference/filters.md) and `KFConfig` in
-    [FilterConfigs](../../inference/filter_configs.md).
+    [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without this exploitable structure, parameter inference that marginalizes
     latent trajectories generally falls back to particle filters (`PFConfig`),

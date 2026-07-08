@@ -4,17 +4,6 @@ Simulators (also called *unrollers*) run pure-JAX forward trajectories for a
 `DynamicalModel` on a chosen time grid, then optionally attach the realized
 outputs to a NumPyro trace when used through `dsx.sample(...)`.
 
-## Package Layout
-
-The simulator refactor split the previous monolithic `dynestyx/simulators.py`
-implementation into the `dynestyx/simulation/` package:
-
-- `base.py`: shared handler logic and helper functions
-- `discrete.py`: `DiscreteTimeSimulator`
-- `ode.py`: `ODESimulator`
-- `sde.py`: `SDESimulator`
-- `auto.py`: lazy auto-routing `Simulator`
-
 For pure-JAX forward generation, user-facing code should prefer
 `dsx.simulate(...)`. The simulator classes documented here are the NumPyro-aware
 handler implementations used by `dsx.sample(...)` and by posterior rollout from
