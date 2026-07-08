@@ -36,13 +36,11 @@ from dynestyx.observation_missingness import (
     MissingObservationMetadata,
     MissingObservationStrategy,
     _canonicalize_observation_distribution,
-    _concrete_observation_mask,
     _marginalizable_distribution_mode,
     _probe_observation_distribution,
     _supports_missing_observation_augmentation,
     assemble_completed_observations,
     canonicalize_missing_obs_values,
-    infer_missing_observation_metadata,
     prepare_missing_observation_metadata,
     prepare_observation_views,
     resolve_missing_observation_strategy,
@@ -148,120 +146,6 @@ def infer_state_path_param_times(
         obs_times_arr = jnp.asarray(obs_times)
         return jnp.asarray([jnp.asarray(dynamics.t0, dtype=obs_times_arr.dtype)])
     return jnp.asarray(obs_times)
-
-
-def infer_dirac_state_path_param_metadata(
-    dynamics: DynamicalModel,
-    *,
-    obs_times: Array,
-    obs_mask: Array,
-) -> MissingObservationMetadata:
-    """Infer compressed latent indexing for exact-observation state paths.
-
-    Mathematically, this chooses a compressed parameterization
-    ``z = state_path_params`` containing only the free coordinates of the full
-    state path ``x``. The output metadata then defines the scatter operation
-    that reconstructs ``x = g(z)`` by filling observed coordinates directly
-    from ``obs_values`` and free coordinates from ``z``.
-    """
-    if isinstance(dynamics.state_evolution, DeterministicContinuousTimeStateEvolution):
-        raise ValueError(
-            "DiracIdentityObservation missingness compression is not yet "
-            "implemented for deterministic continuous-time models."
-        )
-    if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-        raise ValueError(
-            "Latent-state assembly does not yet support native SDE models. "
-            "Please discretize the model first."
-        )
-    if not isinstance(dynamics.observation_model, DiracIdentityObservation):
-        raise ValueError(
-            "Dirac latent metadata is only defined for DiracIdentityObservation."
-        )
-
-    try:
-        metadata = infer_missing_observation_metadata(
-            obs_times=obs_times,
-            obs_mask=obs_mask,
-        )
-    except ValueError as exc:
-        if "concrete missingness pattern" not in str(exc):
-            raise
-        raise ValueError(
-            "Dirac latent compression currently requires a concrete observation "
-            "missingness pattern. Prepare the latent layout eagerly with "
-            "prepare_latent_path_layout(...) or prepare_dirac_state_path_metadata(...)."
-        ) from exc
-
-    return metadata
-
-
-def prepare_dirac_state_path_metadata(
-    dynamics: DynamicalModel,
-    *,
-    obs_times: Array,
-    obs_values: Array | None = None,
-    obs_mask: Array | None = None,
-) -> MissingObservationMetadata:
-    """Precompute exact-observation compression metadata outside traced code.
-
-    Dirac compression depends on the concrete missingness pattern. When callers
-    are about to enter traced NumPyro/JAX code, they can use this helper
-    eagerly so that the latent layout is fixed ahead of time rather than being
-    inferred from traced arrays.
-    """
-    if (obs_values is None) == (obs_mask is None):
-        raise ValueError(
-            "Provide exactly one of obs_values or obs_mask when preparing Dirac "
-            "state-path metadata."
-        )
-
-    if obs_mask is None:
-        assert obs_values is not None
-        concrete_obs_mask = _concrete_observation_mask(obs_values)
-        if concrete_obs_mask is not None:
-            return infer_dirac_state_path_param_metadata(
-                dynamics,
-                obs_times=obs_times,
-                obs_mask=jnp.asarray(concrete_obs_mask),
-            )
-        _, obs_mask, _ = prepare_observation_views(dynamics, obs_values)
-        if obs_mask is None:
-            raise ValueError(
-                "Could not prepare an observation mask for Dirac state-path metadata."
-            )
-
-    return infer_dirac_state_path_param_metadata(
-        dynamics,
-        obs_times=obs_times,
-        obs_mask=obs_mask,
-    )
-
-
-def fully_observed_dirac_state_path_param_metadata(
-    *,
-    obs_times: Array,
-    state_shape: tuple[int, ...],
-) -> MissingObservationMetadata:
-    """Return empty compression metadata for fully observed exact observations.
-
-    In this case the exact observations determine the entire state path, so the
-    compressed latent vector has length zero.
-    """
-    obs_times_arr = jnp.asarray(obs_times)
-    if len(state_shape) == 1:
-        coordinate_indices = None
-    else:
-        coordinate_indices = jnp.asarray([], dtype=jnp.int32)
-    return MissingObservationMetadata(
-        missing_obs_times=jnp.asarray([], dtype=obs_times_arr.dtype),
-        missing_obs_coordinate_indices=coordinate_indices,
-        free_flat_indices=jnp.asarray([], dtype=jnp.int32),
-        observation_shape=state_shape,
-        has_missing=False,
-        has_partial_missing=False,
-        has_fully_missing_rows=False,
-    )
 
 
 def default_ode_diffeqsolve_settings() -> dict[str, Any]:
@@ -633,13 +517,22 @@ def prepare_state_path_parameterization(
     exact_observation_mask = None
     if use_dirac_compression:
         if obs_has_missing is False:
-            dirac_metadata = fully_observed_dirac_state_path_param_metadata(
-                obs_times=obs_times_arr,
-                state_shape=tuple(jnp.asarray(obs_values_filled).shape),
+            dirac_metadata = MissingObservationMetadata(
+                missing_obs_times=obs_times_arr[:0],
+                missing_obs_coordinate_indices=(
+                    None
+                    if obs_values_arr.ndim == 1
+                    else jnp.zeros((0,), dtype=jnp.int32)
+                ),
+                free_flat_indices=jnp.zeros((0,), dtype=jnp.int32),
+                observation_shape=tuple(obs_values_arr.shape),
+                has_missing=False,
+                has_partial_missing=False,
+                has_fully_missing_rows=False,
             )
         else:
             try:
-                dirac_metadata = prepare_dirac_state_path_metadata(
+                dirac_metadata = prepare_missing_observation_metadata(
                     dynamics,
                     obs_times=obs_times_arr,
                     obs_values=obs_values_arr,
@@ -647,7 +540,7 @@ def prepare_state_path_parameterization(
             except ValueError as exc:
                 if obs_mask is None:
                     raise
-                if "concrete observation missingness pattern" not in str(exc):
+                if "concrete missingness pattern" not in str(exc):
                     raise
                 exact_observation_mask = obs_mask
 
@@ -772,10 +665,7 @@ __all__ = [
     "canonicalize_dirac_state_path_params",
     "canonicalize_state_path_params",
     "default_ode_diffeqsolve_settings",
-    "fully_observed_dirac_state_path_param_metadata",
-    "infer_dirac_state_path_param_metadata",
     "infer_state_path_param_times",
-    "prepare_dirac_state_path_metadata",
     "prepare_latent_path_layout",
     "prepare_state_path_parameterization",
 ]

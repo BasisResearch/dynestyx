@@ -108,6 +108,7 @@ def _evaluate_latent_path_request(
         ctrl_values=ctrl_values,
         observations_are_exact_constraints=(
             prepared.parameterization.dirac_metadata is not None
+            or prepared.parameterization.exact_observation_mask is not None
         ),
     )
     return assembled_state_path, log_prob_terms

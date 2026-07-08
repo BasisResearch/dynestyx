@@ -463,7 +463,10 @@ def compute_trajectory_log_prob_terms_for_layout(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         chunk_size=chunk_size,
-        observations_are_exact_constraints=layout.dirac_metadata is not None,
+        observations_are_exact_constraints=(
+            layout.dirac_metadata is not None
+            or layout.exact_observation_mask is not None
+        ),
     )
 
 

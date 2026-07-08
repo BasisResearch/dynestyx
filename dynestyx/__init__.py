@@ -15,7 +15,6 @@ from dynestyx.inference.configs.simulator import (
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.latent.builder import LatentPathBuilder
 from dynestyx.inference.latent.parameterization import (
-    prepare_dirac_state_path_metadata,
     prepare_latent_path_layout,
 )
 from dynestyx.inference.smoothers import Smoother
@@ -72,7 +71,6 @@ __all__ = [
     "Filter",
     "LatentPathBuilder",
     "prepare_latent_path_layout",
-    "prepare_dirac_state_path_metadata",
     "prepare_missing_observation_metadata",
     "Smoother",
     "flatten_draws",

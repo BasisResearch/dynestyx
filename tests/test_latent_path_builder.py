@@ -222,7 +222,7 @@ def test_latent_path_builder_sample_dirac_partial_missing_compresses_per_coordin
     )
 
 
-def test_prepare_dirac_state_path_metadata_matches_partial_missing_layout():
+def test_prepare_missing_observation_metadata_matches_dirac_partial_missing_layout():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array(
@@ -233,7 +233,7 @@ def test_prepare_dirac_state_path_metadata_matches_partial_missing_layout():
         ]
     )
 
-    metadata = dsx.prepare_dirac_state_path_metadata(
+    metadata = dsx.prepare_missing_observation_metadata(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
