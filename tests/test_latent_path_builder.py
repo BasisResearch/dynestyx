@@ -286,7 +286,7 @@ def test_latent_path_builder_sample_registers_expected_sites():
 
     assert "f_state_path_params" in tr
     assert "f_joint_log_prob_factor" in tr
-    assert "f_dummy_latent_log_prob_correction" in tr
+    assert "f_state_path_params_base_log_prob_correction" in tr
     assert "f_state_path_param_times" in tr
     assert "f_state_path" in tr
     assert "f_state_path_times" in tr
@@ -308,7 +308,7 @@ def test_latent_path_builder_sample_registers_expected_sites():
     ) - base_dist.log_prob(state_path_params)
     actual = (
         tr["f_joint_log_prob_factor"]["fn"].log_factor
-        + tr["f_dummy_latent_log_prob_correction"]["fn"].log_factor
+        + tr["f_state_path_params_base_log_prob_correction"]["fn"].log_factor
     )
     assert jnp.allclose(actual, expected)
 
@@ -360,7 +360,7 @@ def test_latent_path_builder_sample_registers_dirac_index_metadata():
     ) - base_dist.log_prob(state_path_params)
     actual = (
         tr["f_joint_log_prob_factor"]["fn"].log_factor
-        + tr["f_dummy_latent_log_prob_correction"]["fn"].log_factor
+        + tr["f_state_path_params_base_log_prob_correction"]["fn"].log_factor
     )
     assert jnp.allclose(actual, expected)
 
@@ -666,7 +666,8 @@ def test_latent_path_builder_sample_registers_missing_observation_sites_under_au
     assert jnp.allclose(tr["f_completed_obs_values"]["value"], completed_obs)
     actual = (
         tr["f_joint_log_prob_factor"]["fn"].log_factor
-        + tr["f_dummy_latent_log_prob_correction"]["fn"].log_factor
+        + tr["f_state_path_params_base_log_prob_correction"]["fn"].log_factor
+        + tr["f_missing_obs_base_log_prob_correction"]["fn"].log_factor
     )
     assert jnp.allclose(actual, expected)
 

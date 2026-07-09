@@ -5,16 +5,12 @@ from __future__ import annotations
 import dataclasses
 import math
 from collections.abc import Callable
-from typing import Any
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array, lax
-from jaxtyping import Array as JTArray
 
-from dynestyx.inference.state_paths.layout import LatentPathLayout
-from dynestyx.inference.state_paths.reconstruct import AssembledStatePath
 from dynestyx.models import DeterministicContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
@@ -43,24 +39,6 @@ class TrajectoryLogProbTerms:
             + jnp.sum(self.transition_log_probs)
             + jnp.sum(self.observation_log_probs)
         )
-
-
-@dataclasses.dataclass(frozen=True)
-class StatePathScoringInputs:
-    """Concrete inputs needed to reconstruct and score one state-path request."""
-
-    dynamics: Any
-    layout: LatentPathLayout
-    obs_times: JTArray
-    obs_values: JTArray
-    obs_values_filled: JTArray | None
-    obs_mask: JTArray | None
-    ctrl_times: JTArray | None
-    ctrl_values: JTArray | None
-    missing_observation_strategy: MissingObservationStrategy
-    ode_diffeqsolve_settings: dict[str, Any] | None
-    canonical_state_path_params: JTArray | None = None
-    canonical_missing_obs_values: JTArray | None = None
 
 
 def _scan_chunked_vmap(
@@ -309,56 +287,7 @@ def compute_state_path_log_prob_terms(
     )
 
 
-def reconstruct_and_score_state_path(
-    scoring_inputs: StatePathScoringInputs,
-    *,
-    state_path_params: Array | None = None,
-    missing_obs_values: Array | None = None,
-) -> tuple[AssembledStatePath | None, TrajectoryLogProbTerms | None]:
-    """Reconstruct ``x = g(z)`` and score ``log p(x, y | ...)``."""
-    active_state_path_params = (
-        scoring_inputs.canonical_state_path_params
-        if state_path_params is None
-        else state_path_params
-    )
-    if active_state_path_params is None:
-        return None, None
-
-    active_missing_obs_values = (
-        scoring_inputs.canonical_missing_obs_values
-        if missing_obs_values is None
-        else missing_obs_values
-    )
-    assembled_state_path = scoring_inputs.layout.assemble_from_params(
-        dynamics=scoring_inputs.dynamics,
-        state_path_params=active_state_path_params,
-        obs_times=scoring_inputs.obs_times,
-        obs_values_filled=scoring_inputs.obs_values_filled,
-        ctrl_times=scoring_inputs.ctrl_times,
-        ctrl_values=scoring_inputs.ctrl_values,
-        ode_diffeqsolve_settings=scoring_inputs.ode_diffeqsolve_settings,
-    )
-    log_prob_terms = compute_state_path_log_prob_terms(
-        scoring_inputs.dynamics,
-        state_path=assembled_state_path.state_path,
-        state_path_times=assembled_state_path.state_path_times,
-        obs_times=scoring_inputs.obs_times,
-        obs_values=scoring_inputs.obs_values,
-        obs_values_filled=scoring_inputs.obs_values_filled,
-        obs_mask=scoring_inputs.obs_mask,
-        missing_observation_strategy=scoring_inputs.missing_observation_strategy,
-        missing_obs_values=active_missing_obs_values,
-        missing_obs_metadata=scoring_inputs.layout.missing_obs_metadata,
-        ctrl_times=scoring_inputs.ctrl_times,
-        ctrl_values=scoring_inputs.ctrl_values,
-        observations_are_exact_constraints=scoring_inputs.layout.observations_are_exact_constraints,
-    )
-    return assembled_state_path, log_prob_terms
-
-
 __all__ = [
-    "StatePathScoringInputs",
     "TrajectoryLogProbTerms",
     "compute_state_path_log_prob_terms",
-    "reconstruct_and_score_state_path",
 ]

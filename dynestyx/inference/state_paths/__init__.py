@@ -17,10 +17,8 @@ from dynestyx.inference.state_paths.reconstruct import (
     infer_state_path_param_times,
 )
 from dynestyx.inference.state_paths.score import (
-    StatePathScoringInputs,
     TrajectoryLogProbTerms,
     compute_state_path_log_prob_terms,
-    reconstruct_and_score_state_path,
 )
 
 __all__ = [
@@ -29,7 +27,6 @@ __all__ = [
     "ObservationCompletionPlan",
     "StateAssemblyPlan",
     "StatePathParameterization",
-    "StatePathScoringInputs",
     "TrajectoryLogProbTerms",
     "assemble_completed_observation_state_path",
     "assemble_state_path",
@@ -39,5 +36,4 @@ __all__ = [
     "default_ode_diffeqsolve_settings",
     "infer_state_path_param_times",
     "prepare_latent_path_layout",
-    "reconstruct_and_score_state_path",
 ]
