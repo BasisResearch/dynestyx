@@ -121,3 +121,14 @@ def test_sdesimulator_rejects_mixed_config_and_direct_kwargs():
             simulator_config=dsx.SDESimulatorConfig(),
             source="em_scan",
         )
+
+
+def test_sdesimulator_config_rejects_tol_vbt_not_smaller_than_dt0():
+    config = dsx.SDESimulatorConfig(
+        dt0=1e-2,
+        tol_vbt=1e-2,
+        source="diffrax",
+    )
+
+    with pytest.raises(ValueError, match="tol_vbt must be smaller than dt0"):
+        config.resolved_tol_vbt()

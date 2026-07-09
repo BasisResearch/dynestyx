@@ -95,9 +95,10 @@ class SDESimulatorConfig:
             if self.tol_vbt is None
             else as_scalar_time_array(self.tol_vbt, name="tol_vbt")
         )
-        assert tol_vbt_arr < dt0_arr, (
-            "tol_vbt must be smaller than dt0 for statistically correct simulation."
-        )
+        if bool(tol_vbt_arr >= dt0_arr):
+            raise ValueError(
+                "tol_vbt must be smaller than dt0 for statistically correct simulation."
+            )
         return tol_vbt_arr
 
 

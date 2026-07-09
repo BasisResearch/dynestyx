@@ -200,7 +200,8 @@ def _is_opaque_plate_leaf(node) -> bool:
     fields generically. NumPyro distributions are always opaque. The three
     consumers (:func:`_has_any_batched_plate_source`,
     ``inference.utils.plate_utils._make_plate_in_axes``,
-    ``simulators._slice_tree_for_plate_member``) must share this one predicate so
+    ``simulation.base._slice_tree_for_plate_member``) must share this one
+    predicate so
     a callable diffusion is never seen as batched by the slicer/vmap while being
     invisible to the alignment guard.
     """

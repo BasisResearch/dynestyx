@@ -6,8 +6,6 @@ __all__ = [
     "integrations",
     "latent",
     "mcmc",
-    "mcmc_configs",
-    "smoother_configs",
     "smoothers",
     "utils",
 ]

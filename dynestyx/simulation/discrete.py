@@ -17,7 +17,32 @@ from dynestyx.simulation.base import (
     _tile_times,
 )
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _get_val_or_None
+from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
+
+
+def _align_ctrl_values_to_times(
+    *,
+    times: Array,
+    ctrl_times: Array | None,
+    ctrl_values: Array | None,
+) -> Array | None:
+    """Return control values aligned to the simulator time grid."""
+    if ctrl_times is None or ctrl_values is None:
+        return ctrl_values
+
+    times_arr = jnp.asarray(times)
+    ctrl_times_arr = jnp.asarray(ctrl_times)
+    ctrl_values_arr = jnp.asarray(ctrl_values)
+    idx = jnp.searchsorted(ctrl_times_arr, times_arr, side="left")
+    max_idx = ctrl_times_arr.shape[0] - 1
+    safe_idx = jnp.clip(idx, 0, max_idx)
+    matched = (idx < ctrl_times_arr.shape[0]) & (ctrl_times_arr[safe_idx] == times_arr)
+    _raise_now_or_error_if(
+        times_arr,
+        jnp.any(~matched),
+        "ctrl_times must contain every discrete simulation time exactly.",
+    )
+    return ctrl_values_arr[safe_idx]
 
 
 @dataclasses.dataclass
@@ -116,6 +141,11 @@ class DiscreteTimeSimulator(BaseSimulator):
         if times is None:
             raise ValueError("obs_times or predict_times must be provided")
 
+        aligned_ctrl_values = _align_ctrl_values_to_times(
+            times=jnp.asarray(times),
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
         initial_key, rollout_key = jr.split(rng_key)
         initial_state = _sample_initial_states(
             dynamics.initial_condition,
@@ -127,5 +157,5 @@ class DiscreteTimeSimulator(BaseSimulator):
             initial_state=jnp.asarray(initial_state),
             rng_key=rollout_key,
             times=times,
-            ctrl_values=ctrl_values,
+            ctrl_values=aligned_ctrl_values,
         )

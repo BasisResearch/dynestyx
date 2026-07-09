@@ -86,6 +86,15 @@ def _make_sde_dynamics() -> dsx.DynamicalModel:
     )
 
 
+def _make_controlled_deterministic_discrete_dynamics() -> dsx.DynamicalModel:
+    return dsx.DynamicalModel(
+        control_dim=1,
+        initial_condition=dist.Delta(jnp.array([0.0])).to_event(1),
+        state_evolution=lambda x, u, t_now, t_next: dist.Delta(x + u).to_event(1),
+        observation_model=lambda x, u, t: dist.Delta(x).to_event(1),
+    )
+
+
 def test_simulate_discrete_returns_simulated_result():
     predict_times = jnp.arange(5.0)
     result = dsx.simulate(
@@ -241,3 +250,24 @@ def test_simulate_allows_dirac_ode_models():
     assert states.shape == (1, len(predict_times), 1)
     assert observations.shape == (1, len(predict_times), 1)
     assert jnp.allclose(observations, states)
+
+
+def test_discrete_simulator_backend_aligns_ctrl_values_using_ctrl_times():
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_times = jnp.array([-1.0, 0.0, 1.0, 2.0, 3.0])
+    ctrl_values = jnp.array([[999.0], [1.0], [10.0], [100.0], [1000.0]])
+
+    result = dsx.DiscreteTimeSimulator().simulate(
+        _make_controlled_deterministic_discrete_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
+    expected_states = jnp.array([[[0.0], [1.0], [11.0], [111.0]]])
+    states = jnp.asarray(result.states)
+    observations = jnp.asarray(result.observations)
+
+    assert jnp.array_equal(states, expected_states)
+    assert jnp.array_equal(observations, expected_states)
