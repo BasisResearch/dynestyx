@@ -31,25 +31,17 @@ from dynestyx import (
 ```
 
 Latent-path layout preparation happens automatically inside the builder. In
-particular, partially missing `DiracIdentityObservation` models use compressed
-state latents without requiring extra constructor metadata:
+particular:
+
+- partially missing `DiracIdentityObservation` models use per-coordinate
+  `state_path_params` without extra constructor metadata;
+- unsupported partially missing continuous observation families can fall back
+  to explicit observation augmentation through `f_missing_obs_values`; and
+- the user-facing entry point remains the same:
 
 ```python
 with LatentPathBuilder():
     ...
-```
-
-`prepare_latent_path_layout(...)` remains available as a lower-level helper for
-inspection and testing, but `LatentPathBuilder` prepares its layout internally
-rather than accepting a `latent_path_layout=` override at the `dsx.sample(...)`
-site:
-
-```python
-layout = dsx.prepare_latent_path_layout(
-    dynamics,
-    obs_times=obs_times,
-    obs_values=obs_values,
-)
 ```
 
 For unsupported partially missing *continuous* observation families, use

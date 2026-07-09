@@ -15,9 +15,6 @@ from dynestyx.inference.configs.simulator import (
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.latent.builder import LatentPathBuilder
 from dynestyx.inference.smoothers import Smoother
-from dynestyx.inference.state_paths.layout import (
-    prepare_latent_path_layout,
-)
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
@@ -39,7 +36,6 @@ from dynestyx.models import (
     ScalarDiffusion,
     StochasticContinuousTimeStateEvolution,
 )
-from dynestyx.observation_missingness import prepare_missing_observation_metadata
 from dynestyx.simulation import (
     DiscreteTimeSimulator,
     ODESimulator,
@@ -70,8 +66,6 @@ __all__ = [
     "ObservationModel",
     "Filter",
     "LatentPathBuilder",
-    "prepare_latent_path_layout",
-    "prepare_missing_observation_metadata",
     "Smoother",
     "flatten_draws",
     "condition",

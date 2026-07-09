@@ -54,8 +54,9 @@ class LatentStateResult:
     model. The joint density is evaluated as ``log p(x, y)`` after
     reconstructing ``x`` from ``z``.
 
-    In simple discrete models these may match exactly. In ODE or compressed
-    exact-observation settings they generally differ.
+    In simple discrete models these may match exactly. In ODE models, or when
+    exact observations leave only a subset of state coordinates free, they
+    generally differ.
 
     When explicit missing-observation augmentation is active, the result also
     carries a second latent block:

@@ -12,6 +12,8 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
+from dynestyx.inference.state_paths.layout import prepare_latent_path_layout
+from dynestyx.observation_missingness import prepare_missing_observation_metadata
 
 
 def _make_discrete_dynamics():
@@ -233,7 +235,7 @@ def test_prepare_missing_observation_metadata_matches_dirac_partial_missing_layo
         ]
     )
 
-    metadata = dsx.prepare_missing_observation_metadata(
+    metadata = prepare_missing_observation_metadata(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
@@ -512,13 +514,13 @@ def test_prepare_latent_path_layout_dirac_partial_missing_augment_matches_auto()
         ]
     )
 
-    auto_layout = dsx.prepare_latent_path_layout(
+    auto_layout = prepare_latent_path_layout(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
         missing_observation_strategy="auto",
     )
-    augment_layout = dsx.prepare_latent_path_layout(
+    augment_layout = prepare_latent_path_layout(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
@@ -608,7 +610,7 @@ def test_latent_path_builder_sample_registers_missing_observation_sites_under_au
             [0.3, -0.1],
         ]
     )
-    metadata = dsx.prepare_missing_observation_metadata(
+    metadata = prepare_missing_observation_metadata(
         dynamics,
         obs_times=obs_times,
         obs_values=obs_values,
