@@ -336,12 +336,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 "LatentPathBuilder only supports dsx.sample(...) under NumPyro. "
                 "Use dsx.log_prob(...) for pure-JAX trajectory scoring."
             )
-        _ = kwargs.pop("predict_times", None)
-        if kwargs:
-            unexpected = ", ".join(sorted(kwargs))
-            raise TypeError(
-                f"LatentPathBuilder got unexpected handler kwargs: {unexpected}"
-            )
 
         if not plate_shapes:
             return self._sample_single(

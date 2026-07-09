@@ -536,33 +536,6 @@ def test_prepare_latent_path_layout_dirac_partial_missing_augment_matches_auto()
     )
 
 
-def test_latent_path_builder_rejects_explicit_layout_override():
-    dynamics = _make_dirac_discrete_dynamics()
-    obs_times = jnp.array([0.0, 1.0, 2.0])
-    obs_values = jnp.array(
-        [
-            [0.2, jnp.nan],
-            [jnp.nan, -0.1],
-            [jnp.nan, jnp.nan],
-        ]
-    )
-    layout = dsx.prepare_latent_path_layout(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-    )
-
-    with pytest.raises(TypeError):
-        with dsx.LatentPathBuilder():
-            dsx.sample(
-                "f",
-                dynamics,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                latent_path_layout=layout,
-            )
-
-
 def test_latent_path_builder_dirac_partial_missing_explicit_augment_uses_state_path_params():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
