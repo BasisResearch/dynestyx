@@ -16,6 +16,7 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.latent.builder import LatentPathBuilder
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
+    AffineDrift,
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
     DiagonalDiffusion,
