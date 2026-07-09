@@ -19,20 +19,14 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+import jax.numpy as jnp
+import numpyro
+import numpyro.distributions as dist
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.latent._numpyro import build_latent_path_site_registrar
-from dynestyx.inference.latent.log_prob import (
-    TrajectoryLogProbTerms,
-    compute_state_path_log_prob_terms,
-)
-from dynestyx.inference.latent.parameterization import (
-    AssembledStatePath,
-    LatentPathLayout,
-)
 from dynestyx.inference.latent.plate import (
     _plate_member_specs,
     _stack_member_attr,
@@ -41,74 +35,15 @@ from dynestyx.inference.latent.prepare import (
     _prepare_latent_path_request,
     _PreparedLatentPathRequest,
 )
+from dynestyx.inference.state_paths.reconstruct import AssembledStatePath
+from dynestyx.inference.state_paths.score import (
+    StatePathScoringInputs,
+    TrajectoryLogProbTerms,
+    reconstruct_and_score_state_path,
+)
 from dynestyx.observation_missingness import MissingObservationStrategy
 from dynestyx.simulation.base import _suspend_numpyro_plate_frames
 from dynestyx.types import LatentStateResult
-
-
-def _evaluate_latent_path_request(
-    *,
-    dynamics,
-    prepared: _PreparedLatentPathRequest,
-    obs_times: Array,
-    obs_values: Array,
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
-    missing_observation_strategy: MissingObservationStrategy,
-    ode_diffeqsolve_settings: dict[str, Any] | None,
-    state_path_params: Array | None = None,
-    missing_obs_values: Array | None = None,
-) -> tuple[AssembledStatePath | None, TrajectoryLogProbTerms | None]:
-    """Reconstruct the state path and score ``log p(x, y | ...)``.
-
-    This is the core pure-JAX evaluation step. Given concrete latent values,
-    it first reconstructs the full state path ``x = g(z)`` and then computes
-    the joint trajectory score
-
-    ``log p(x_0) + sum_t log p(x_{t+1} | x_t) + sum_t log p(y_t | x_t)``.
-
-    Returning ``None`` is only possible when no concrete ``state_path_params``
-    are available yet, which occurs on the ``dsx.sample(...)`` path before
-    NumPyro has sampled the latent sites.
-    """
-    active_state_path_params = (
-        prepared.canonical_state_path_params
-        if state_path_params is None
-        else state_path_params
-    )
-    if active_state_path_params is None:
-        return None, None
-
-    active_missing_obs_values = (
-        prepared.canonical_missing_obs_values
-        if missing_obs_values is None
-        else missing_obs_values
-    )
-    assembled_state_path = prepared.layout.assemble_from_params(
-        dynamics=dynamics,
-        state_path_params=active_state_path_params,
-        obs_times=obs_times,
-        obs_values_filled=prepared.obs_values_filled,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        ode_diffeqsolve_settings=ode_diffeqsolve_settings,
-    )
-    log_prob_terms = compute_state_path_log_prob_terms(
-        dynamics,
-        state_path=assembled_state_path.state_path,
-        state_path_times=assembled_state_path.state_path_times,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        obs_values_filled=prepared.obs_values_filled,
-        obs_mask=prepared.obs_mask,
-        missing_observation_strategy=missing_observation_strategy,
-        missing_obs_values=active_missing_obs_values,
-        missing_obs_metadata=prepared.layout.missing_obs_metadata,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        observations_are_exact_constraints=prepared.layout.observations_are_exact_constraints,
-    )
-    return assembled_state_path, log_prob_terms
 
 
 def _build_latent_state_result(
@@ -116,14 +51,12 @@ def _build_latent_state_result(
     prepared: _PreparedLatentPathRequest,
     assembled_state_path: AssembledStatePath | None,
     log_prob_terms: TrajectoryLogProbTerms | None,
-    register_numpyro_sites,
 ) -> LatentStateResult:
     """Package one latent-path evaluation into the public result dataclass.
 
     ``LatentStateResult`` is the external object seen by callers. This helper
     translates the internal split between prepared inputs, assembled state
-    paths, and log-probability terms into that public shape, while also
-    attaching the deferred ``_register_numpyro_sites`` callback.
+    paths, and log-probability terms into that public shape.
     """
     missing_obs_metadata = prepared.layout.missing_obs_metadata
     missing_obs_times = None
@@ -172,7 +105,6 @@ def _build_latent_state_result(
             None if log_prob_terms is None else log_prob_terms.completed_obs_values
         ),
         state_dists=None,
-        _register_numpyro_sites=register_numpyro_sites,
     )
 
 
@@ -196,7 +128,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
 
     ode_diffeqsolve_settings: dict[str, Any] | None
     missing_observation_strategy: MissingObservationStrategy
-    _latent_path_layout_cache: dict[tuple[Any, ...], LatentPathLayout]
 
     def __init__(
         self,
@@ -218,33 +149,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         """
         self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
         self.missing_observation_strategy = missing_observation_strategy
-        self._latent_path_layout_cache = {}
-
-    def _latent_path_layout_cache_key(
-        self,
-        *,
-        name: str,
-        dynamics,
-        obs_times: Array,
-        obs_values: Array,
-    ) -> tuple[Any, ...]:
-        """Return a stable cache key for auto-prepared latent layouts.
-
-        ``LatentPathBuilder`` may be invoked repeatedly by NumPyro during one
-        MCMC/SVI run. Reusing the first concrete layout keeps the latent site
-        structure stable even when later evaluations see traced observation
-        arrays.
-        """
-        return (
-            name,
-            self.missing_observation_strategy,
-            tuple(obs_times.shape),
-            tuple(obs_values.shape),
-            dynamics.state_dim,
-            dynamics.observation_dim,
-            dynamics.continuous_time,
-            dynamics.categorical_state,
-        )
 
     def _sample_single(
         self,
@@ -262,10 +166,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
-        latent_path_layout: LatentPathLayout | None = None,
         state_path_params: Array | None = None,
         missing_obs_values: Array | None = None,
-        **kwargs,
     ) -> LatentStateResult:
         """Handle one non-plated latent-path request.
 
@@ -273,92 +175,136 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
 
         1. prepare/canonicalize the latent request,
         2. perform an eager pure-JAX evaluation when possible, and
-        3. build a deferred NumPyro registration callback that can either reuse
-           the eager result or recompute it from sampled latent values.
+        3. run NumPyro side effects for latent sampling and output registration.
 
         This is the main single-trajectory implementation; plated requests are
         reduced to repeated calls to this method.
         """
         _validate_inference_supported_model_classes(dynamics)
-        resolved_latent_path_layout = latent_path_layout
-        layout_cache_key = None
-        if (
-            resolved_latent_path_layout is None
-            and obs_times is not None
-            and obs_values is not None
-        ):
-            layout_cache_key = self._latent_path_layout_cache_key(
-                name=name,
-                dynamics=dynamics,
-                obs_times=obs_times,
-                obs_values=obs_values,
-            )
-            resolved_latent_path_layout = self._latent_path_layout_cache.get(
-                layout_cache_key
-            )
-
         prepared = _prepare_latent_path_request(
+            name=name,
             dynamics=dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
             obs_values_filled=_obs_values_filled,
             obs_mask=_obs_mask,
             obs_has_missing=_obs_has_missing,
-            latent_path_layout=resolved_latent_path_layout,
             state_path_params=state_path_params,
             missing_obs_values=missing_obs_values,
             missing_observation_strategy=self.missing_observation_strategy,
         )
-        if layout_cache_key is not None and latent_path_layout is None:
-            self._latent_path_layout_cache.setdefault(layout_cache_key, prepared.layout)
         assert obs_times is not None
         assert obs_values is not None
-        assembled_state_path, log_prob_terms = _evaluate_latent_path_request(
+        scoring_inputs = StatePathScoringInputs(
             dynamics=dynamics,
-            prepared=prepared,
+            layout=prepared.layout,
             obs_times=obs_times,
             obs_values=obs_values,
+            obs_values_filled=prepared.obs_values_filled,
+            obs_mask=prepared.obs_mask,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             missing_observation_strategy=self.missing_observation_strategy,
             ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
-        )
-
-        def _evaluate_latent_values(
-            state_path_params_value: Array,
-            missing_obs_values_value: Array | None,
-        ) -> tuple[AssembledStatePath, TrajectoryLogProbTerms]:
-            assembled_now, terms_now = _evaluate_latent_path_request(
-                dynamics=dynamics,
-                prepared=prepared,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                missing_observation_strategy=self.missing_observation_strategy,
-                ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
-                state_path_params=state_path_params_value,
-                missing_obs_values=missing_obs_values_value,
-            )
-            assert assembled_now is not None
-            assert terms_now is not None
-            return assembled_now, terms_now
-
-        register_numpyro_sites = build_latent_path_site_registrar(
             canonical_state_path_params=prepared.canonical_state_path_params,
             canonical_missing_obs_values=prepared.canonical_missing_obs_values,
-            example_state_path_params=prepared.example_state_path_params,
-            example_missing_obs_values=prepared.example_missing_obs_values,
-            eager_assembled_state_path=assembled_state_path,
-            eager_log_prob_terms=log_prob_terms,
-            evaluate_latent_values=_evaluate_latent_values,
+        )
+        assembled_state_path, log_prob_terms = reconstruct_and_score_state_path(
+            scoring_inputs
+        )
+
+        state_path_param_base_dist = dist.Normal(0.0, 1.0).expand(
+            tuple(jnp.asarray(prepared.example_state_path_params).shape)
+        )
+        state_path_param_base_dist = state_path_param_base_dist.to_event(
+            len(tuple(jnp.asarray(prepared.example_state_path_params).shape))
+        )
+        # Sample the state path parameters and missing observations.
+        # Their log-probabilities are subtracted back out later.
+        state_path_param_site = numpyro.sample(
+            f"{name}_state_path_params",
+            state_path_param_base_dist,
+            obs=prepared.canonical_state_path_params,
+        )
+        missing_obs_site = None
+        missing_obs_base_dist = None
+        if prepared.example_missing_obs_values is not None:
+            missing_obs_shape = tuple(
+                jnp.asarray(prepared.example_missing_obs_values).shape
+            )
+            missing_obs_base_dist = (
+                dist.Normal(0.0, 1.0)
+                .expand(missing_obs_shape)
+                .to_event(len(missing_obs_shape))
+            )
+            missing_obs_site = numpyro.sample(
+                f"{name}_missing_obs_values",
+                missing_obs_base_dist,
+                obs=prepared.canonical_missing_obs_values,
+            )
+
+        sampled_state_path, sampled_log_prob_terms = reconstruct_and_score_state_path(
+            scoring_inputs,
+            state_path_params=state_path_param_site,
+            missing_obs_values=missing_obs_site,
+        )
+        assert sampled_state_path is not None
+        assert sampled_log_prob_terms is not None
+
+        dummy_latent_log_prob = state_path_param_base_dist.log_prob(
+            state_path_param_site
+        )
+        if missing_obs_site is not None and missing_obs_base_dist is not None:
+            dummy_latent_log_prob = (
+                dummy_latent_log_prob + missing_obs_base_dist.log_prob(missing_obs_site)
+            )
+
+        numpyro.factor(
+            f"{name}_joint_log_prob_factor",
+            sampled_log_prob_terms.joint_log_prob,
+        )
+        numpyro.factor(
+            f"{name}_dummy_latent_log_prob_correction",
+            -dummy_latent_log_prob,
+        )
+        numpyro.deterministic(
+            f"{name}_state_path_param_times",
+            sampled_state_path.state_path_param_times,
+        )
+        if sampled_state_path.state_path_param_coordinate_indices is not None:
+            numpyro.deterministic(
+                f"{name}_state_path_param_coordinate_indices",
+                sampled_state_path.state_path_param_coordinate_indices,
+            )
+        numpyro.deterministic(f"{name}_state_path", sampled_state_path.state_path)
+        numpyro.deterministic(
+            f"{name}_state_path_times",
+            sampled_state_path.state_path_times,
+        )
+        if sampled_log_prob_terms.missing_obs_times is not None:
+            numpyro.deterministic(
+                f"{name}_missing_obs_times",
+                sampled_log_prob_terms.missing_obs_times,
+            )
+        if sampled_log_prob_terms.missing_obs_coordinate_indices is not None:
+            numpyro.deterministic(
+                f"{name}_missing_obs_coordinate_indices",
+                sampled_log_prob_terms.missing_obs_coordinate_indices,
+            )
+        if sampled_log_prob_terms.completed_obs_values is not None:
+            numpyro.deterministic(
+                f"{name}_completed_obs_values",
+                sampled_log_prob_terms.completed_obs_values,
+            )
+        numpyro.deterministic(
+            f"{name}_joint_log_prob",
+            sampled_log_prob_terms.joint_log_prob,
         )
 
         return _build_latent_state_result(
             prepared=prepared,
             assembled_state_path=assembled_state_path,
             log_prob_terms=log_prob_terms,
-            register_numpyro_sites=register_numpyro_sites,
         )
 
     @implements(_condition_intp)
@@ -379,7 +325,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
-        latent_path_layout: LatentPathLayout | None = None,
         state_path_params: Array | None = None,
         missing_obs_values: Array | None = None,
         _dsx_sample_mode: bool = False,
@@ -390,6 +335,12 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             raise ValueError(
                 "LatentPathBuilder only supports dsx.sample(...) under NumPyro. "
                 "Use dsx.log_prob(...) for pure-JAX trajectory scoring."
+            )
+        _ = kwargs.pop("predict_times", None)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs))
+            raise TypeError(
+                f"LatentPathBuilder got unexpected handler kwargs: {unexpected}"
             )
 
         if not plate_shapes:
@@ -403,16 +354,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
-                latent_path_layout=latent_path_layout,
                 state_path_params=state_path_params,
                 missing_obs_values=missing_obs_values,
-                **kwargs,
-            )
-
-        if latent_path_layout is not None:
-            raise NotImplementedError(
-                "Plated LatentPathBuilder requests do not yet support an explicit "
-                "latent_path_layout override."
             )
 
         member_specs = _plate_member_specs(
@@ -445,16 +388,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                         ctrl_values=member.ctrl_values,
                         state_path_params=member.state_path_params,
                         missing_obs_values=member.missing_obs_values,
-                        **kwargs,
                     )
                 )
-
-        def _register(_site_name: str) -> None:
-            for member, member_result in zip(member_specs, member_results, strict=True):
-                register = getattr(member_result, "_register_numpyro_sites", None)
-                if callable(register):
-                    with _suspend_numpyro_plate_frames():
-                        register(member.name)
 
         return LatentStateResult(
             joint_log_prob=_stack_member_attr(
@@ -488,7 +423,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 member_results, "completed_obs_values", plate_shapes
             ),
             state_dists=None,
-            _register_numpyro_sites=_register,
         )
 
 

@@ -1,21 +1,20 @@
-"""Pure-JAX joint log-probability helpers for latent-path inference.
-
-This module evaluates the trajectory density once a full state path is known.
-It is intentionally NumPyro-free: the goal is to compute
-``log p(x, y | ...)`` and related bookkeeping terms using only JAX arrays.
-"""
+"""Pure-JAX state-path scoring helpers."""
 
 from __future__ import annotations
 
 import dataclasses
 import math
 from collections.abc import Callable
+from typing import Any
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array, lax
+from jaxtyping import Array as JTArray
 
+from dynestyx.inference.state_paths.layout import LatentPathLayout
+from dynestyx.inference.state_paths.reconstruct import AssembledStatePath
 from dynestyx.models import DeterministicContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
@@ -27,16 +26,7 @@ from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
 
 @dataclasses.dataclass
 class TrajectoryLogProbTerms:
-    """Pure-JAX decomposition of ``log p(x, y | ...)``.
-
-    The decomposition is
-
-    ``log p(x_0) + sum_t log p(x_{t+1} | x_t) + sum_t log p(y_t | x_t)``.
-
-    The extra fields record any missing-observation augmentation outputs so the
-    caller can surface completed observations or attach deterministic NumPyro
-    sites without recomputing them.
-    """
+    """Pure-JAX decomposition of ``log p(x, y | ...)``."""
 
     initial_log_prob: Array
     transition_log_probs: Array
@@ -48,12 +38,29 @@ class TrajectoryLogProbTerms:
 
     @property
     def joint_log_prob(self) -> Array:
-        """Return the scalar joint trajectory log-probability."""
         return (
             self.initial_log_prob
             + jnp.sum(self.transition_log_probs)
             + jnp.sum(self.observation_log_probs)
         )
+
+
+@dataclasses.dataclass(frozen=True)
+class StatePathScoringInputs:
+    """Concrete inputs needed to reconstruct and score one state-path request."""
+
+    dynamics: Any
+    layout: LatentPathLayout
+    obs_times: JTArray
+    obs_values: JTArray
+    obs_values_filled: JTArray | None
+    obs_mask: JTArray | None
+    ctrl_times: JTArray | None
+    ctrl_values: JTArray | None
+    missing_observation_strategy: MissingObservationStrategy
+    ode_diffeqsolve_settings: dict[str, Any] | None
+    canonical_state_path_params: JTArray | None = None
+    canonical_missing_obs_values: JTArray | None = None
 
 
 def _scan_chunked_vmap(
@@ -63,13 +70,6 @@ def _scan_chunked_vmap(
     chunk_size: int | None,
     dtype,
 ) -> Array:
-    """Evaluate a scalar per-index function via a scan of vmapped chunks.
-
-    This helper is used for both transition and observation terms. It preserves
-    the semantics of ``jax.vmap(fn)(jnp.arange(size))`` while allowing the work
-    to be chunked through ``lax.scan`` when memory pressure would make a single
-    large vmap inconvenient.
-    """
     if size == 0:
         return jnp.zeros((0,), dtype=dtype)
 
@@ -100,12 +100,6 @@ def _gather_by_exact_time(
     *,
     value_name: str,
 ) -> Array:
-    """Gather values defined on ``source_times`` at ``query_times`` exactly.
-
-    Latent-path scoring assumes that controls and state values are queried only
-    at times where they are already defined. This helper enforces that exact
-    alignment rather than silently interpolating or snapping to nearby times.
-    """
     source = jnp.asarray(source_times)
     query = jnp.asarray(query_times)
     if query.size == 0:
@@ -134,13 +128,6 @@ def _prepare_observation_log_prob(
     missing_obs_values: Array | None,
     missing_obs_metadata: MissingObservationMetadata | None,
 ) -> ObservationLogProb:
-    """Construct the missingness-aware observation scorer.
-
-    ``ObservationLogProb`` expects observations in a consistently shaped
-    time-by-event layout. This helper performs the small shape adaptations
-    needed for scalar observations and forwards any missingness metadata or
-    augmentation latents to the scorer.
-    """
     obs_values_for_helper = obs_values[:, None] if obs_values.ndim == 1 else obs_values
     obs_times_for_helper = jnp.asarray(obs_times)
     filled_obs_for_helper = (
@@ -179,7 +166,6 @@ def _control_values_at_times(
     ctrl_values: Array | None,
     query_times: Array | None,
 ) -> Array | None:
-    """Return control values aligned exactly to ``query_times`` when present."""
     if ctrl_times is None or ctrl_values is None or query_times is None:
         return None
     return _gather_by_exact_time(
@@ -207,20 +193,6 @@ def compute_state_path_log_prob_terms(
     chunk_size: int | None = None,
     observations_are_exact_constraints: bool = False,
 ) -> TrajectoryLogProbTerms:
-    """Compute ``log p(x, y | ...)`` from a fully reconstructed state path ``x``.
-
-    This is the most direct scorer in the latent stack. It assumes the caller
-    already has the full state trajectory ``x`` and its times, and then
-    computes:
-
-    - the initial-condition log-probability,
-    - each transition log-probability along the path, and
-    - each observation log-probability at observation times.
-
-    For deterministic continuous-time models there are no stochastic transition
-    terms after the initial condition, so the transition contribution is the
-    empty vector.
-    """
     state_path_times = jnp.asarray(state_path_times)
     state_path = jnp.asarray(state_path)
     _raise_now_or_error_if(
@@ -261,74 +233,132 @@ def compute_state_path_log_prob_terms(
                 dtype=initial_log_prob.dtype,
             )
 
-    observation_log_probs = jnp.zeros((0,), dtype=initial_log_prob.dtype)
-    observation_scorer: ObservationLogProb | None = None
-    if (
-        not observations_are_exact_constraints
-        and obs_times is not None
-        and obs_values is not None
-    ):
-        obs_times_arr = jnp.asarray(obs_times)
-        obs_states = _gather_by_exact_time(
-            state_path,
-            state_path_times,
-            obs_times_arr,
-            value_name="state_path",
+    if obs_times is None or obs_values is None:
+        observation_log_probs = jnp.zeros((0,), dtype=initial_log_prob.dtype)
+        return TrajectoryLogProbTerms(
+            initial_log_prob=initial_log_prob,
+            transition_log_probs=transition_log_probs,
+            observation_log_probs=observation_log_probs,
         )
-        obs_ctrl_values = _control_values_at_times(
-            ctrl_times, ctrl_values, obs_times_arr
+
+    state_at_obs_times = _gather_by_exact_time(
+        state_path,
+        state_path_times,
+        jnp.asarray(obs_times),
+        value_name="state_path",
+    )
+    if observations_are_exact_constraints:
+        observation_log_probs = jnp.zeros(
+            (jnp.asarray(obs_times).shape[0],), dtype=initial_log_prob.dtype
         )
-        observation_scorer = _prepare_observation_log_prob(
-            dynamics,
-            obs_times_arr,
-            jnp.asarray(obs_values),
-            obs_values_filled=obs_values_filled,
-            obs_mask=obs_mask,
-            missing_observation_strategy=missing_observation_strategy,
+        return TrajectoryLogProbTerms(
+            initial_log_prob=initial_log_prob,
+            transition_log_probs=transition_log_probs,
+            observation_log_probs=observation_log_probs,
             missing_obs_values=missing_obs_values,
-            missing_obs_metadata=missing_obs_metadata,
+            missing_obs_times=(
+                None
+                if missing_obs_metadata is None
+                else missing_obs_metadata.missing_obs_times
+            ),
+            missing_obs_coordinate_indices=(
+                None
+                if missing_obs_metadata is None
+                else missing_obs_metadata.missing_obs_coordinate_indices
+            ),
+            completed_obs_values=state_at_obs_times,
         )
 
-        def _obs_at(i: Array) -> Array:
-            u_t = _get_val_or_None(obs_ctrl_values, i)
-            return observation_scorer.log_prob_step(
-                x=obs_states[i],
-                u=u_t,
-                t=obs_times_arr[i],
-                t_idx=i,
-            )
+    obs_ctrl_values = _control_values_at_times(ctrl_times, ctrl_values, obs_times)
+    observation_log_prob = _prepare_observation_log_prob(
+        dynamics,
+        jnp.asarray(obs_times),
+        jnp.asarray(obs_values),
+        obs_values_filled=obs_values_filled,
+        obs_mask=obs_mask,
+        missing_observation_strategy=missing_observation_strategy,
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=missing_obs_metadata,
+    )
 
-        observation_log_probs = _scan_chunked_vmap(
-            _obs_at,
-            obs_times_arr.shape[0],
-            chunk_size=chunk_size,
-            dtype=initial_log_prob.dtype,
+    def _observation_at(i: Array) -> Array:
+        return observation_log_prob.log_prob_step(
+            x=state_at_obs_times[i],
+            u=_get_val_or_None(obs_ctrl_values, i),
+            t=jnp.asarray(obs_times)[i],
+            t_idx=i,
         )
+
+    observation_log_probs = _scan_chunked_vmap(
+        _observation_at,
+        jnp.asarray(obs_times).shape[0],
+        chunk_size=chunk_size,
+        dtype=initial_log_prob.dtype,
+    )
 
     return TrajectoryLogProbTerms(
         initial_log_prob=initial_log_prob,
         transition_log_probs=transition_log_probs,
         observation_log_probs=observation_log_probs,
-        missing_obs_values=(
-            None
-            if observation_scorer is None
-            else observation_scorer.missing_obs_values
-        ),
-        missing_obs_times=(
-            None if observation_scorer is None else observation_scorer.missing_obs_times
-        ),
+        missing_obs_values=missing_obs_values,
+        missing_obs_times=observation_log_prob.missing_obs_times,
         missing_obs_coordinate_indices=(
-            None
-            if observation_scorer is None
-            else observation_scorer.missing_obs_coordinate_indices
+            observation_log_prob.missing_obs_coordinate_indices
         ),
-        completed_obs_values=(
-            None if observation_scorer is None else observation_scorer.completed_obs
-        ),
+        completed_obs_values=observation_log_prob.completed_obs,
     )
 
 
+def reconstruct_and_score_state_path(
+    scoring_inputs: StatePathScoringInputs,
+    *,
+    state_path_params: Array | None = None,
+    missing_obs_values: Array | None = None,
+) -> tuple[AssembledStatePath | None, TrajectoryLogProbTerms | None]:
+    """Reconstruct ``x = g(z)`` and score ``log p(x, y | ...)``."""
+    active_state_path_params = (
+        scoring_inputs.canonical_state_path_params
+        if state_path_params is None
+        else state_path_params
+    )
+    if active_state_path_params is None:
+        return None, None
+
+    active_missing_obs_values = (
+        scoring_inputs.canonical_missing_obs_values
+        if missing_obs_values is None
+        else missing_obs_values
+    )
+    assembled_state_path = scoring_inputs.layout.assemble_from_params(
+        dynamics=scoring_inputs.dynamics,
+        state_path_params=active_state_path_params,
+        obs_times=scoring_inputs.obs_times,
+        obs_values_filled=scoring_inputs.obs_values_filled,
+        ctrl_times=scoring_inputs.ctrl_times,
+        ctrl_values=scoring_inputs.ctrl_values,
+        ode_diffeqsolve_settings=scoring_inputs.ode_diffeqsolve_settings,
+    )
+    log_prob_terms = compute_state_path_log_prob_terms(
+        scoring_inputs.dynamics,
+        state_path=assembled_state_path.state_path,
+        state_path_times=assembled_state_path.state_path_times,
+        obs_times=scoring_inputs.obs_times,
+        obs_values=scoring_inputs.obs_values,
+        obs_values_filled=scoring_inputs.obs_values_filled,
+        obs_mask=scoring_inputs.obs_mask,
+        missing_observation_strategy=scoring_inputs.missing_observation_strategy,
+        missing_obs_values=active_missing_obs_values,
+        missing_obs_metadata=scoring_inputs.layout.missing_obs_metadata,
+        ctrl_times=scoring_inputs.ctrl_times,
+        ctrl_values=scoring_inputs.ctrl_values,
+        observations_are_exact_constraints=scoring_inputs.layout.observations_are_exact_constraints,
+    )
+    return assembled_state_path, log_prob_terms
+
+
 __all__ = [
+    "StatePathScoringInputs",
     "TrajectoryLogProbTerms",
     "compute_state_path_log_prob_terms",
+    "reconstruct_and_score_state_path",
 ]

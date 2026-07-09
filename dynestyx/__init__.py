@@ -14,10 +14,10 @@ from dynestyx.inference.configs.simulator import (
 )
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.latent.builder import LatentPathBuilder
-from dynestyx.inference.latent.parameterization import (
+from dynestyx.inference.smoothers import Smoother
+from dynestyx.inference.state_paths.layout import (
     prepare_latent_path_layout,
 )
-from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,

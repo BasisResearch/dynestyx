@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import dataclasses
 
+from jax.core import Tracer
 from jaxtyping import Array
 
-from dynestyx.inference.latent.parameterization import (
+from dynestyx.inference.state_paths.layout import (
     LatentPathLayout,
     prepare_latent_path_layout,
 )
 from dynestyx.observation_missingness import MissingObservationStrategy
+
+_LATENT_PATH_LAYOUT_CACHE: dict[str, LatentPathLayout] = {}
 
 
 @dataclasses.dataclass
@@ -80,13 +83,13 @@ def _prepare_missing_obs_values(
 
 def _prepare_latent_path_request(
     *,
+    name: str,
     dynamics,
     obs_times: Array | None,
     obs_values: Array | None,
     obs_values_filled: Array | None,
     obs_mask: Array | None,
     obs_has_missing: bool | None,
-    latent_path_layout: LatentPathLayout | None,
     state_path_params: Array | None,
     missing_obs_values: Array | None,
     missing_observation_strategy: MissingObservationStrategy,
@@ -110,8 +113,13 @@ def _prepare_latent_path_request(
             "It is an observation-consuming handler."
         )
 
-    layout = latent_path_layout
-    if layout is None:
+    if name in _LATENT_PATH_LAYOUT_CACHE and (
+        isinstance(obs_values, Tracer)
+        or isinstance(obs_mask, Tracer)
+        or isinstance(obs_times, Tracer)
+    ):
+        layout = _LATENT_PATH_LAYOUT_CACHE[name]
+    else:
         layout = prepare_latent_path_layout(
             dynamics,
             obs_times=obs_times,
@@ -121,6 +129,8 @@ def _prepare_latent_path_request(
             obs_mask=obs_mask,
             obs_has_missing=obs_has_missing,
         )
+        _LATENT_PATH_LAYOUT_CACHE[name] = layout
+
     canonical_missing_obs_values, example_missing_obs_values = (
         _prepare_missing_obs_values(
             layout=layout,

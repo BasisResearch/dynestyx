@@ -5,8 +5,8 @@ from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.latent.log_prob import compute_state_path_log_prob_terms
-from dynestyx.inference.latent.parameterization import assemble_state_path
+from dynestyx.inference.state_paths.reconstruct import assemble_state_path
+from dynestyx.inference.state_paths.score import compute_state_path_log_prob_terms
 from dynestyx.models import DynamicalModel
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,

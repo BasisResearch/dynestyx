@@ -39,8 +39,10 @@ with LatentPathBuilder():
     ...
 ```
 
-If you need to pin the layout eagerly for traced edge cases, prepare it once
-and pass it at the `dsx.sample(...)` site:
+`prepare_latent_path_layout(...)` remains available as a lower-level helper for
+inspection and testing, but `LatentPathBuilder` prepares its layout internally
+rather than accepting a `latent_path_layout=` override at the `dsx.sample(...)`
+site:
 
 ```python
 layout = dsx.prepare_latent_path_layout(
@@ -48,15 +50,6 @@ layout = dsx.prepare_latent_path_layout(
     obs_times=obs_times,
     obs_values=obs_values,
 )
-
-with LatentPathBuilder():
-    dsx.sample(
-        "f",
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        latent_path_layout=layout,
-    )
 ```
 
 For unsupported partially missing *continuous* observation families, use

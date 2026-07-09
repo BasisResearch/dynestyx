@@ -77,9 +77,6 @@ class LatentStateResult:
     missing_obs_coordinate_indices: object = None
     completed_obs_values: object = None
     state_dists: list | None = None
-    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
-        default=None, repr=False
-    )
 
 
 @dataclasses.dataclass

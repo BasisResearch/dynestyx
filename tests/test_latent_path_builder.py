@@ -285,7 +285,8 @@ def test_latent_path_builder_sample_registers_expected_sites():
             )
 
     assert "f_state_path_params" in tr
-    assert "f_state_path_params_lp" in tr
+    assert "f_joint_log_prob_factor" in tr
+    assert "f_dummy_latent_log_prob_correction" in tr
     assert "f_state_path_param_times" in tr
     assert "f_state_path" in tr
     assert "f_state_path_times" in tr
@@ -305,7 +306,11 @@ def test_latent_path_builder_sample_registers_expected_sites():
         obs_times=obs_times,
         obs_values=obs_values,
     ) - base_dist.log_prob(state_path_params)
-    assert jnp.allclose(tr["f_state_path_params_lp"]["fn"].log_factor, expected)
+    actual = (
+        tr["f_joint_log_prob_factor"]["fn"].log_factor
+        + tr["f_dummy_latent_log_prob_correction"]["fn"].log_factor
+    )
+    assert jnp.allclose(actual, expected)
 
 
 def test_latent_path_builder_sample_registers_dirac_index_metadata():
@@ -353,7 +358,11 @@ def test_latent_path_builder_sample_registers_dirac_index_metadata():
     expected = _manual_discrete_state_log_prob(
         dynamics, expected_states, obs_times
     ) - base_dist.log_prob(state_path_params)
-    assert jnp.allclose(tr["f_state_path_params_lp"]["fn"].log_factor, expected)
+    actual = (
+        tr["f_joint_log_prob_factor"]["fn"].log_factor
+        + tr["f_dummy_latent_log_prob_correction"]["fn"].log_factor
+    )
+    assert jnp.allclose(actual, expected)
 
 
 def test_latent_path_builder_sample_can_draw_latents_when_unspecified():
@@ -407,11 +416,6 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
             [jnp.nan, jnp.nan],
         ]
     )
-    latent_path_layout = dsx.prepare_latent_path_layout(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-    )
 
     def conditioned_model(obs_times=None, obs_values=None):
         with dsx.LatentPathBuilder():
@@ -420,7 +424,6 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
-                latent_path_layout=latent_path_layout,
             )
 
     mcmc = MCMC(
@@ -466,11 +469,6 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
             [jnp.nan, jnp.nan],
         ]
     )
-    latent_path_layout = dsx.prepare_latent_path_layout(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-    )
 
     def conditioned_model(obs_times=None, obs_values=None):
         with dsx.LatentPathBuilder():
@@ -479,7 +477,6 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
-                latent_path_layout=latent_path_layout,
             )
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
@@ -537,6 +534,33 @@ def test_prepare_latent_path_layout_dirac_partial_missing_augment_matches_auto()
         auto_layout.state_path_param_coordinate_indices,
         augment_layout.state_path_param_coordinate_indices,
     )
+
+
+def test_latent_path_builder_rejects_explicit_layout_override():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array(
+        [
+            [0.2, jnp.nan],
+            [jnp.nan, -0.1],
+            [jnp.nan, jnp.nan],
+        ]
+    )
+    layout = dsx.prepare_latent_path_layout(
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    with pytest.raises(TypeError):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                latent_path_layout=layout,
+            )
 
 
 def test_latent_path_builder_dirac_partial_missing_explicit_augment_uses_state_path_params():
@@ -667,7 +691,11 @@ def test_latent_path_builder_sample_registers_missing_observation_sites_under_au
         jnp.array([1, 0], dtype=jnp.int32),
     )
     assert jnp.allclose(tr["f_completed_obs_values"]["value"], completed_obs)
-    assert jnp.allclose(tr["f_state_path_params_lp"]["fn"].log_factor, expected)
+    actual = (
+        tr["f_joint_log_prob_factor"]["fn"].log_factor
+        + tr["f_dummy_latent_log_prob_correction"]["fn"].log_factor
+    )
+    assert jnp.allclose(actual, expected)
 
 
 def test_latent_path_builder_forced_augment_on_gaussian_partial_missing_creates_sites():
@@ -702,12 +730,6 @@ def test_latent_path_builder_auto_augments_student_t_partial_missing_mcmc_smoke(
     obs_values = cast(Array, sim.observations)[0]
     obs_values = obs_values.at[1, 0].set(jnp.nan)
     obs_values = obs_values.at[2, 1].set(jnp.nan)
-    latent_path_layout = dsx.prepare_latent_path_layout(
-        dynamics_true,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        missing_observation_strategy="auto",
-    )
 
     def conditioned_model(obs_times=None, obs_values=None):
         alpha = numpyro.sample("alpha", dist.Uniform(0.0, 0.9))
@@ -718,7 +740,6 @@ def test_latent_path_builder_auto_augments_student_t_partial_missing_mcmc_smoke(
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
-                latent_path_layout=latent_path_layout,
             )
 
     mcmc = MCMC(
