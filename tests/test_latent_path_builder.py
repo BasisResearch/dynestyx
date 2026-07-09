@@ -139,6 +139,38 @@ def test_latent_path_builder_sample_discrete_matches_log_prob():
     )
 
 
+def test_latent_path_builder_chunk_size_matches_unchunked_scoring():
+    dynamics = _make_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    obs_values = jnp.array([0.2, -0.1, 0.3, 0.0])
+    state_path_params = jnp.array([0.1, -0.2, 0.4, 0.05])
+
+    with trace() as chunked_tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder(chunk_size=2):
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                state_path_params=state_path_params,
+            )
+
+    with trace() as unchunked_tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                state_path_params=state_path_params,
+            )
+
+    assert jnp.allclose(
+        chunked_tr["f_joint_log_prob"]["value"],
+        unchunked_tr["f_joint_log_prob"]["value"],
+    )
+
+
 def test_latent_path_builder_sample_ode_reconstructs_state_path():
     dynamics = _make_ode_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])

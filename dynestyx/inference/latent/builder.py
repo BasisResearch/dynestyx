@@ -127,11 +127,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
 
     ode_diffeqsolve_settings: dict[str, Any] | None
     missing_observation_strategy: MissingObservationStrategy
+    chunk_size: int | None
 
     def __init__(
         self,
         ode_diffeqsolve_settings: dict[str, Any] | None = None,
         missing_observation_strategy: MissingObservationStrategy = "auto",
+        chunk_size: int | None = None,
     ) -> None:
         """Initialize the latent-path builder.
 
@@ -145,9 +147,14 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         ``ode_diffeqsolve_settings`` is only used when the latent path for a
         deterministic continuous-time model must be reconstructed by solving an
         ODE from its initial condition.
+
+        ``chunk_size`` controls optional host-side chunking for the transition
+        and observation scoring loops. When provided, latent-path scoring uses
+        ``lax.scan`` over chunks instead of one large ``vmap``.
         """
         self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
         self.missing_observation_strategy = missing_observation_strategy
+        self.chunk_size = chunk_size
 
     def _sample_single(
         self,
@@ -247,6 +254,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             missing_obs_metadata=prepared.layout.missing_obs_metadata,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            chunk_size=self.chunk_size,
             observations_are_exact_constraints=prepared.layout.observations_are_exact_constraints,
         )
 
