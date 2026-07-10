@@ -2,9 +2,6 @@
 
 from dynestyx.inference.state_paths.layout import (
     LatentPathLayout,
-    ObservationCompletionPlan,
-    StateAssemblyPlan,
-    StatePathParameterization,
     prepare_latent_path_layout,
 )
 from dynestyx.inference.state_paths.reconstruct import (
@@ -24,9 +21,6 @@ from dynestyx.inference.state_paths.score import (
 __all__ = [
     "AssembledStatePath",
     "LatentPathLayout",
-    "ObservationCompletionPlan",
-    "StateAssemblyPlan",
-    "StatePathParameterization",
     "TrajectoryLogProbTerms",
     "assemble_completed_observation_state_path",
     "assemble_state_path",
