@@ -17,11 +17,12 @@ even though the public handler itself is NumPyro-facing and only supports
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+from typing import Any, cast
 
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
@@ -34,6 +35,10 @@ from dynestyx.inference.latent.plate import (
 from dynestyx.inference.latent.prepare import (
     _prepare_latent_path_request,
     _PreparedLatentPathRequest,
+)
+from dynestyx.inference.posterior_rollout import (
+    _final_times_for_rollout,
+    _validate_future_only_predict_times,
 )
 from dynestyx.inference.state_paths.reconstruct import AssembledStatePath
 from dynestyx.inference.state_paths.score import (
@@ -50,6 +55,7 @@ def _build_latent_state_result(
     prepared: _PreparedLatentPathRequest,
     assembled_state_path: AssembledStatePath | None,
     log_prob_terms: TrajectoryLogProbTerms | None,
+    state_dists: list[dist.Distribution] | None,
 ) -> LatentStateResult:
     """Package one latent-path evaluation into the public result dataclass.
 
@@ -103,8 +109,20 @@ def _build_latent_state_result(
         completed_obs_values=(
             None if log_prob_terms is None else log_prob_terms.completed_obs_values
         ),
-        state_dists=None,
+        state_dists=state_dists,
     )
+
+
+def _build_state_path_distributions(
+    dynamics,
+    state_path: Array,
+) -> list[dist.Distribution]:
+    """Wrap each inferred state in a Delta distribution for rollout forwarding."""
+    event_dim = len(dynamics.initial_condition.event_shape)
+    time_major_state_path = jnp.moveaxis(jnp.asarray(state_path), -(event_dim + 1), 0)
+    return [
+        dist.Delta(state_t, event_dim=event_dim) for state_t in time_major_state_path
+    ]
 
 
 @dataclasses.dataclass(init=False)
@@ -312,6 +330,9 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             prepared=prepared,
             assembled_state_path=assembled_state_path,
             log_prob_terms=log_prob_terms,
+            state_dists=_build_state_path_distributions(
+                dynamics, assembled_state_path.state_path
+            ),
         )
 
     @implements(_condition_intp)
@@ -332,6 +353,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
         state_path_params: Array | None = None,
         missing_obs_values: Array | None = None,
         _dsx_sample_mode: bool = False,
@@ -345,7 +367,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             )
 
         if not plate_shapes:
-            return self._sample_single(
+            result = self._sample_single(
                 name,
                 dynamics,
                 obs_times=obs_times,
@@ -358,73 +380,124 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 state_path_params=state_path_params,
                 missing_obs_values=missing_obs_values,
             )
+        else:
+            member_specs = _plate_member_specs(
+                name=name,
+                dynamics=dynamics,
+                plate_shapes=plate_shapes,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                obs_values_filled=_obs_values_filled,
+                obs_mask=_obs_mask,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                state_path_params=state_path_params,
+                missing_obs_values=missing_obs_values,
+            )
 
-        member_specs = _plate_member_specs(
-            name=name,
-            dynamics=dynamics,
+            member_results = []
+            for member in member_specs:
+                with _suspend_numpyro_plate_frames():
+                    member_results.append(
+                        self._sample_single(
+                            member.name,
+                            member.dynamics,
+                            obs_times=member.obs_times,
+                            obs_values=member.obs_values,
+                            _obs_values_filled=member.obs_values_filled,
+                            _obs_mask=member.obs_mask,
+                            _obs_has_missing=_obs_has_missing,
+                            ctrl_times=member.ctrl_times,
+                            ctrl_values=member.ctrl_values,
+                            state_path_params=member.state_path_params,
+                            missing_obs_values=member.missing_obs_values,
+                        )
+                    )
+
+            state_path = _stack_member_attr(member_results, "state_path", plate_shapes)
+            result = LatentStateResult(
+                joint_log_prob=_stack_member_attr(
+                    member_results, "joint_log_prob", plate_shapes
+                ),
+                state_path_params=_stack_member_attr(
+                    member_results, "state_path_params", plate_shapes
+                ),
+                state_path_param_times=_stack_member_attr(
+                    member_results, "state_path_param_times", plate_shapes
+                ),
+                state_path_param_coordinate_indices=_stack_member_attr(
+                    member_results,
+                    "state_path_param_coordinate_indices",
+                    plate_shapes,
+                ),
+                state_path=state_path,
+                state_path_times=_stack_member_attr(
+                    member_results, "state_path_times", plate_shapes
+                ),
+                missing_obs_values=_stack_member_attr(
+                    member_results, "missing_obs_values", plate_shapes
+                ),
+                missing_obs_times=_stack_member_attr(
+                    member_results, "missing_obs_times", plate_shapes
+                ),
+                missing_obs_coordinate_indices=_stack_member_attr(
+                    member_results, "missing_obs_coordinate_indices", plate_shapes
+                ),
+                completed_obs_values=_stack_member_attr(
+                    member_results, "completed_obs_values", plate_shapes
+                ),
+                state_dists=(
+                    None
+                    if state_path is None
+                    else _build_state_path_distributions(dynamics, state_path)
+                ),
+            )
+
+        predict_times = _validate_future_only_predict_times(
+            predict_times,
+            cast(Array | None, result.state_path_times),
+            error_message=(
+                "LatentPathBuilder rollout only supports predict_times >= "
+                "max(state_path_times); in-window latent-path predictions are "
+                "not implemented yet."
+            ),
+        )
+        filtered_times = None
+        filtered_dists = None
+        posterior_rollout_final_only = False
+        smoothed_times = result.state_path_times
+        smoothed_dists = result.state_dists
+        if predict_times is not None and smoothed_dists:
+            assert result.state_path_times is not None
+            filtered_times = _final_times_for_rollout(
+                cast(Array, result.state_path_times)
+            )
+            filtered_dists = [smoothed_dists[-1]]
+            posterior_rollout_final_only = True
+            smoothed_times = None
+            smoothed_dists = None
+
+        forwarded_result = fwd(
+            name,
+            dynamics,
             plate_shapes=plate_shapes,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            obs_values_filled=_obs_values_filled,
-            obs_mask=_obs_mask,
+            obs_times=None,
+            obs_values=None,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
-            state_path_params=state_path_params,
-            missing_obs_values=missing_obs_values,
+            predict_times=predict_times,
+            filtered_times=filtered_times,
+            filtered_dists=filtered_dists,
+            smoothed_times=smoothed_times,
+            smoothed_dists=smoothed_dists,
+            _posterior_rollout_final_only=posterior_rollout_final_only,
+            **kwargs,
         )
+        downstream_register = getattr(forwarded_result, "_register_numpyro_sites", None)
+        if callable(downstream_register):
+            downstream_register(name)
 
-        member_results = []
-        for member in member_specs:
-            with _suspend_numpyro_plate_frames():
-                member_results.append(
-                    self._sample_single(
-                        member.name,
-                        member.dynamics,
-                        obs_times=member.obs_times,
-                        obs_values=member.obs_values,
-                        _obs_values_filled=member.obs_values_filled,
-                        _obs_mask=member.obs_mask,
-                        _obs_has_missing=_obs_has_missing,
-                        ctrl_times=member.ctrl_times,
-                        ctrl_values=member.ctrl_values,
-                        state_path_params=member.state_path_params,
-                        missing_obs_values=member.missing_obs_values,
-                    )
-                )
-
-        return LatentStateResult(
-            joint_log_prob=_stack_member_attr(
-                member_results, "joint_log_prob", plate_shapes
-            ),
-            state_path_params=_stack_member_attr(
-                member_results, "state_path_params", plate_shapes
-            ),
-            state_path_param_times=_stack_member_attr(
-                member_results, "state_path_param_times", plate_shapes
-            ),
-            state_path_param_coordinate_indices=_stack_member_attr(
-                member_results,
-                "state_path_param_coordinate_indices",
-                plate_shapes,
-            ),
-            state_path=_stack_member_attr(member_results, "state_path", plate_shapes),
-            state_path_times=_stack_member_attr(
-                member_results, "state_path_times", plate_shapes
-            ),
-            missing_obs_values=_stack_member_attr(
-                member_results, "missing_obs_values", plate_shapes
-            ),
-            missing_obs_times=_stack_member_attr(
-                member_results, "missing_obs_times", plate_shapes
-            ),
-            missing_obs_coordinate_indices=_stack_member_attr(
-                member_results, "missing_obs_coordinate_indices", plate_shapes
-            ),
-            completed_obs_values=_stack_member_attr(
-                member_results, "completed_obs_values", plate_shapes
-            ),
-            state_dists=None,
-        )
+        return result
 
 
 __all__ = ["LatentPathBuilder"]
