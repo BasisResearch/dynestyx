@@ -2,6 +2,7 @@
 
 from typing import cast
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -92,6 +93,15 @@ def _make_student_t_discrete_dynamics(alpha=0.8):
             loc=x,
             scale_tril=jnp.array([[0.4, 0.0], [0.15, 0.5]]),
         ),
+    )
+
+
+def _make_deterministic_rollout_dynamics():
+    return dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Delta(jnp.array(0.0)),
+        state_evolution=lambda x, u, t_now, t_next: dist.Delta(x + 1.0),
+        observation_model=lambda x, u, t: dist.Delta(2.0 * x),
     )
 
 
@@ -253,6 +263,89 @@ def test_latent_path_builder_sample_dirac_partial_missing_compresses_per_coordin
     assert jnp.allclose(
         tr["f_joint_log_prob"]["value"],
         _manual_discrete_state_log_prob(dynamics, expected_states, obs_times),
+    )
+
+
+def test_latent_path_builder_future_only_rollout_forwards_to_outer_simulator():
+    dynamics = _make_deterministic_rollout_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([0.0, 2.0, 4.0])
+    state_path_params = jnp.array([0.0, 1.0, 2.0])
+    predict_times = jnp.array([obs_times[-1], 3.0, 4.0])
+
+    def conditioned_model():
+        with dsx.DiscreteTimeSimulator():
+            with dsx.LatentPathBuilder():
+                dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=predict_times,
+                    state_path_params=state_path_params,
+                )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        conditioned_model()
+
+    assert jnp.array_equal(tr["f_state_path"]["value"], state_path_params)
+    assert jnp.array_equal(tr["f_predicted_times"]["value"], predict_times[None, :])
+    assert jnp.array_equal(
+        tr["f_predicted_states"]["value"][0, :, 0],
+        jnp.array([2.0, 3.0, 4.0]),
+    )
+    assert jnp.array_equal(
+        tr["f_predicted_observations"]["value"][0, :, 0],
+        jnp.array([4.0, 6.0, 8.0]),
+    )
+
+
+def test_latent_path_builder_rejects_in_window_predict_times():
+    dynamics = _make_deterministic_rollout_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([0.0, 2.0, 4.0])
+
+    with pytest.raises(
+        (ValueError, eqx.EquinoxRuntimeError),
+        match="LatentPathBuilder rollout only supports predict_times >= max\\(state_path_times\\)",
+    ):
+        with dsx.DiscreteTimeSimulator():
+            with dsx.LatentPathBuilder():
+                dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=jnp.array([1.0, 2.0, 3.0]),
+                    state_path_params=jnp.array([0.0, 1.0, 2.0]),
+                )
+
+
+def test_latent_path_builder_future_only_rollout_ode_states():
+    dynamics = _make_ode_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([0.1, 0.1, 0.1])
+    predict_times = jnp.array([obs_times[-1], 3.0, 4.0])
+
+    def conditioned_model():
+        with dsx.ODESimulator():
+            with dsx.LatentPathBuilder():
+                dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=predict_times,
+                    state_path_params=jnp.array(0.1),
+                )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        conditioned_model()
+
+    assert jnp.array_equal(tr["f_predicted_times"]["value"], predict_times[None, :])
+    assert jnp.allclose(
+        jnp.squeeze(tr["f_predicted_states"]["value"][0]),
+        jnp.array([0.1, 0.1, 0.1]),
     )
 
 

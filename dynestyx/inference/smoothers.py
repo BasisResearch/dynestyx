@@ -6,7 +6,6 @@ from typing import cast
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -45,6 +44,10 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 )
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
+)
+from dynestyx.inference.posterior_rollout import (
+    _final_times_for_rollout,
+    _validate_future_only_predict_times,
 )
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
@@ -86,33 +89,6 @@ def _valid_smoother_config_names(*, continuous_time: bool) -> list[str]:
     return [c.__name__ for c in DiscreteTimeSmootherConfigs]
 
 
-def _validate_future_only_predict_times(
-    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
-    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
-) -> Real[Array, "*predict_time_plate predict_time"] | None:
-    """Validate the current smoother prediction contract."""
-    if predict_times is None or obs_times is None:
-        return predict_times
-    obs_end = obs_times[..., -1:]
-    _ = eqx.error_if(
-        predict_times,
-        jnp.any(predict_times < obs_end),
-        "Smoother prediction only supports predict_times >= max(obs_times); in-window smoothing predictions are not implemented yet. Please use `Filter` for in-window predictions for now.",
-    )
-    return predict_times
-
-
-def _final_obs_times_for_rollout(
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-) -> Real[Array, "*obs_time_plate one"]:
-    """Return the final observation time while keeping simulator segmentation host-safe."""
-    try:
-        obs_times_host = np.asarray(jax.device_get(obs_times))
-        return jnp.asarray(obs_times_host[..., -1:], dtype=obs_times.dtype)
-    except Exception:
-        return obs_times[..., -1:]
-
-
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base class for smoother handlers."""
 
@@ -147,14 +123,22 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
                 **kwargs,
             )
 
-        predict_times = _validate_future_only_predict_times(predict_times, obs_times)
+        predict_times = _validate_future_only_predict_times(
+            predict_times,
+            obs_times,
+            error_message=(
+                "Smoother prediction only supports predict_times >= max(obs_times); "
+                "in-window smoothing predictions are not implemented yet. "
+                "Please use `Filter` for in-window predictions for now."
+            ),
+        )
         filtered_times = None
         filtered_dists = None
         posterior_rollout_final_only = False
         smoothed_times = obs_times
         if predict_times is not None and smoothed_dists:
             assert obs_times is not None
-            filtered_times = _final_obs_times_for_rollout(obs_times)
+            filtered_times = _final_times_for_rollout(obs_times)
             filtered_dists = [smoothed_dists[-1]]
             posterior_rollout_final_only = True
             smoothed_times = None
