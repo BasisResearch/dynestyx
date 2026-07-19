@@ -45,6 +45,65 @@ def _align_ctrl_values_to_times(
     return ctrl_values_arr[safe_idx]
 
 
+def _sample_discrete_state_path_from_initial_state(
+    dynamics: DynamicalModel,
+    *,
+    initial_state: Array,
+    rng_key: Array,
+    times: Array,
+    ctrl_values: Array | None,
+) -> Array:
+    """Sample one canonical discrete state path from a fixed initial state."""
+    if len(times) == 1:
+        return jnp.expand_dims(initial_state, axis=0)
+
+    state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+
+    def _step(carry, t_idx):
+        x_prev, key_curr = carry
+        key_next, key_transition = jr.split(key_curr)
+        transition_dist = state_transition(
+            x=x_prev,
+            u=_get_val_or_None(ctrl_values, t_idx),
+            t_now=times[t_idx],
+            t_next=times[t_idx + 1],
+        )
+        x_t = transition_dist.sample(key_transition)
+        return (x_t, key_next), x_t
+
+    (_, _), scan_states = jax.lax.scan(
+        _step,
+        (initial_state, rng_key),
+        jnp.arange(len(times) - 1),
+    )
+    return jnp.concatenate([jnp.expand_dims(initial_state, 0), scan_states], axis=0)
+
+
+def _sample_discrete_state_path(
+    rng_key: Array,
+    *,
+    dynamics: DynamicalModel,
+    times: Array,
+    ctrl_times: Array | None = None,
+    ctrl_values: Array | None = None,
+) -> Array:
+    """Sample one state path from the discrete dynamical prior."""
+    aligned_ctrl_values = _align_ctrl_values_to_times(
+        times=jnp.asarray(times),
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    initial_key, transition_key = jr.split(rng_key)
+    initial_state = dynamics.initial_condition.sample(initial_key)
+    return _sample_discrete_state_path_from_initial_state(
+        dynamics,
+        initial_state=jnp.asarray(initial_state),
+        rng_key=transition_key,
+        times=jnp.asarray(times),
+        ctrl_values=aligned_ctrl_values,
+    )
+
+
 @dataclasses.dataclass
 class DiscreteTimeSimulator(BaseSimulator):
     """Forward simulator for discrete-time dynamical models."""
@@ -61,9 +120,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         ctrl_values: Array | None,
     ) -> SimulatedResult:
         """Run pure forward simulation for a discrete-time model."""
-        state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
         n_sim = initial_state.shape[0]
-        T = len(times)
         sim_keys = jr.split(rng_key, n_sim)
         ctrl_eval = (
             (lambda t: ctrl_values[jnp.searchsorted(times, t, side="left")])
@@ -71,41 +128,15 @@ class DiscreteTimeSimulator(BaseSimulator):
             else None
         )
 
-        def _step_dists(x_prev, t_idx):
-            t_now = times[t_idx]
-            t_next = times[t_idx + 1]
-            u_now = _get_val_or_None(ctrl_values, t_idx)
-            u_next = _get_val_or_None(ctrl_values, t_idx + 1)
-            trans_dist = state_transition(x=x_prev, u=u_now, t_now=t_now, t_next=t_next)
-            return t_next, u_next, trans_dist
-
         def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
-            if T == 1:
-                states = jnp.expand_dims(x0, axis=0)
-                observations = self._emit_observations(
-                    "",
-                    dynamics,
-                    states,
-                    times,
-                    None,
-                    ctrl_eval,
-                    key=key,
-                )
-                return states, observations
-
-            key_trans, key_obs = jr.split(key)
-
-            def _step(carry, t_idx):
-                x_prev, key_curr = carry
-                key_next, k_trans = jr.split(key_curr, 2)
-                _, _, trans_dist = _step_dists(x_prev, t_idx)
-                x_t = trans_dist.sample(k_trans)
-                return (x_t, key_next), x_t
-
-            (_, _), scan_states = jax.lax.scan(
-                _step, (x0, key_trans), jnp.arange(T - 1)
+            key_states, key_obs = jr.split(key)
+            states = _sample_discrete_state_path_from_initial_state(
+                dynamics,
+                initial_state=x0,
+                rng_key=key_states,
+                times=times,
+                ctrl_values=ctrl_values,
             )
-            states = jnp.concatenate([jnp.expand_dims(x0, 0), scan_states], axis=0)
             observations = self._emit_observations(
                 "",
                 dynamics,

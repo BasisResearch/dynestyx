@@ -6,7 +6,6 @@ turned into a full state trajectory ``x = state_path = g(z)``.
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
 from typing import Any
 
@@ -22,30 +21,19 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
     assemble_completed_observations,
-    canonicalize_missing_obs_values,
+    validate_missing_obs_values,
 )
 from dynestyx.solvers import solve_ode
 from dynestyx.utils import _build_control_path, _raise_now_or_error_if
 
 
-@dataclasses.dataclass
-class AssembledStatePath:
-    """Reconstructed state path ``x = g(z)`` for one parameterization."""
-
-    state_path_params: Array
-    state_path_param_times: Array
-    state_path_param_coordinate_indices: Array | None
-    state_path: Array
-    state_path_times: Array
-
-
-def canonicalize_state_path_params(
+def validate_state_path_params(
     dynamics: DynamicalModel,
     state_path_params: Array,
     *,
     n_times: int,
 ) -> Array:
-    """Canonicalize dense ``state_path_params`` so time is the leading axis."""
+    """Validate state-path parameters and return them with a leading time axis."""
     params = jnp.asarray(state_path_params)
     event_ndim = len(dynamics.initial_condition.event_shape)
 
@@ -66,24 +54,6 @@ def canonicalize_state_path_params(
             "state_path_param_times for discrete / discretized models."
         )
     return params
-
-
-def canonicalize_completed_observation_state_params(
-    state_path_params: Array,
-    *,
-    n_state_path_params: int,
-) -> Array:
-    """Canonicalize exact-observation path params to a flat free-coordinate vector."""
-    try:
-        return canonicalize_missing_obs_values(
-            state_path_params,
-            n_missing_obs=n_state_path_params,
-        )
-    except ValueError as exc:
-        raise ValueError(
-            "Completed-observation state_path_params must be a flat vector "
-            "whose length matches the number of free state coordinates."
-        ) from exc
 
 
 def infer_state_path_param_times(
@@ -114,36 +84,68 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
     }
 
 
-def assemble_completed_observation_state_path(
+def solve_ode_state_path(
+    dynamics: DynamicalModel,
+    *,
+    initial_state: Array,
+    t0: Array,
+    path_times: Array,
+    ctrl_times: Array | None = None,
+    ctrl_values: Array | None = None,
+    diffeqsolve_settings: dict[str, Any] | None = None,
+) -> Array:
+    """Solve one ODE trajectory with shared control and solver settings."""
+    path_times = jnp.asarray(path_times)
+    if ctrl_times is not None and ctrl_values is not None:
+        control_path = _build_control_path(ctrl_times, ctrl_values, path_times)
+        control_path_eval: Callable[[Array], Array | None] = lambda t: (
+            control_path.evaluate(t, left=False)
+        )
+    else:
+        control_path_eval = lambda t: None
+
+    return solve_ode(
+        dynamics,
+        t0=t0,
+        saveat_times=path_times,
+        x0=initial_state,
+        control_path_eval=control_path_eval,
+        diffeqsolve_settings=(
+            diffeqsolve_settings
+            if diffeqsolve_settings is not None
+            else default_ode_diffeqsolve_settings()
+        ),
+    )
+
+
+def reconstruct_state_path_from_exact_observations(
     *,
     state_path_params: Array,
     latent_metadata: MissingObservationMetadata,
     obs_times: Array,
     obs_values_filled: Array,
-) -> AssembledStatePath:
-    """Reconstruct the state path from completed exact observations."""
-    canonical_params = canonicalize_completed_observation_state_params(
-        state_path_params,
-        n_state_path_params=latent_metadata.free_flat_indices.shape[0],
-    )
+) -> tuple[Array, Array, Array]:
+    """Fill missing exact observations to reconstruct the state trajectory."""
+    try:
+        validated_params = validate_missing_obs_values(
+            state_path_params,
+            n_missing_obs=latent_metadata.missing_flat_indices.shape[0],
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "Exact-observation state_path_params must be a flat vector whose "
+            "length matches the number of missing state coordinates."
+        ) from exc
     state_path = assemble_completed_observations(
         obs_values_filled=jnp.asarray(obs_values_filled),
-        missing_obs_values=canonical_params,
+        missing_obs_values=validated_params,
         missing_obs_metadata=latent_metadata,
     )
     obs_times_arr = jnp.asarray(obs_times)
-    return AssembledStatePath(
-        state_path_params=canonical_params,
-        state_path_param_times=latent_metadata.missing_obs_times,
-        state_path_param_coordinate_indices=(
-            latent_metadata.missing_obs_coordinate_indices
-        ),
-        state_path=state_path,
-        state_path_times=obs_times_arr,
-    )
+    return validated_params, state_path, obs_times_arr
 
 
-def assemble_state_path(
+def reconstruct_state_path(
     dynamics: DynamicalModel,
     *,
     state_path_params: Array,
@@ -152,8 +154,8 @@ def assemble_state_path(
     ctrl_times: Array | None = None,
     ctrl_values: Array | None = None,
     ode_diffeqsolve_settings: dict[str, Any] | None = None,
-) -> AssembledStatePath:
-    """Assemble a full state path ``x = g(z)`` from dense path parameters."""
+) -> tuple[Array, Array, Array]:
+    """Reconstruct a discrete path or solve an ODE from its initial state."""
     state_path_param_times = jnp.asarray(state_path_param_times)
     _raise_now_or_error_if(
         state_path_param_times,
@@ -161,7 +163,7 @@ def assemble_state_path(
         "state_path_param_times must contain at least one time point.",
     )
 
-    canonical_params = canonicalize_state_path_params(
+    validated_params = validate_state_path_params(
         dynamics,
         state_path_params,
         n_times=state_path_param_times.shape[0],
@@ -182,58 +184,32 @@ def assemble_state_path(
 
         if obs_times is None:
             state_path_times = state_path_param_times
-            state_path = canonical_params
+            state_path = validated_params
         else:
             state_path_times = jnp.concatenate(
                 [state_path_param_times, jnp.asarray(obs_times)],
                 axis=0,
             )
-            if ctrl_times is not None and ctrl_values is not None:
-                control_path = _build_control_path(
-                    ctrl_times, ctrl_values, state_path_times
-                )
-                control_path_eval: Callable[[Array], Array | None] = lambda t: (
-                    control_path.evaluate(t, left=False)
-                )
-            else:
-                control_path_eval = lambda t: None
-
-            state_path = solve_ode(
+            state_path = solve_ode_state_path(
                 dynamics,
                 t0=state_path_param_times[0],
-                saveat_times=state_path_times,
-                x0=canonical_params[0],
-                control_path_eval=control_path_eval,
-                diffeqsolve_settings=(
-                    ode_diffeqsolve_settings
-                    if ode_diffeqsolve_settings is not None
-                    else default_ode_diffeqsolve_settings()
-                ),
+                initial_state=validated_params[0],
+                path_times=state_path_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                diffeqsolve_settings=ode_diffeqsolve_settings,
             )
 
-        return AssembledStatePath(
-            state_path_params=canonical_params,
-            state_path_param_times=state_path_param_times,
-            state_path_param_coordinate_indices=None,
-            state_path=state_path,
-            state_path_times=state_path_times,
-        )
+        return validated_params, state_path, state_path_times
 
-    return AssembledStatePath(
-        state_path_params=canonical_params,
-        state_path_param_times=state_path_param_times,
-        state_path_param_coordinate_indices=None,
-        state_path=canonical_params,
-        state_path_times=state_path_param_times,
-    )
+    return validated_params, validated_params, state_path_param_times
 
 
 __all__ = [
-    "AssembledStatePath",
-    "assemble_completed_observation_state_path",
-    "assemble_state_path",
-    "canonicalize_completed_observation_state_params",
-    "canonicalize_state_path_params",
+    "reconstruct_state_path",
+    "reconstruct_state_path_from_exact_observations",
     "default_ode_diffeqsolve_settings",
     "infer_state_path_param_times",
+    "solve_ode_state_path",
+    "validate_state_path_params",
 ]

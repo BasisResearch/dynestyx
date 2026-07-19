@@ -9,6 +9,7 @@ import jax.random as jr
 from jax import Array
 
 from dynestyx.inference.configs.simulator import ODESimulatorConfig
+from dynestyx.inference.state_paths.reconstruct import solve_ode_state_path
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import (
     _SIMULATOR_CONFIG_UNSET,
@@ -17,7 +18,6 @@ from dynestyx.simulation.base import (
     _tile_times,
     _validate_no_config_and_direct_kwargs,
 )
-from dynestyx.solvers import solve_ode
 from dynestyx.types import SimulatedResult
 from dynestyx.utils import _build_control_path
 
@@ -115,13 +115,14 @@ class ODESimulator(BaseSimulator):
         obs_keys = jr.split(rng_key, n_sim)
 
         def _sim_one_trajectory(x0: Array, *, obs_key: Array) -> tuple[Array, Array]:
-            states = solve_ode(
+            states = solve_ode_state_path(
                 dynamics,
-                t0,
-                times,
-                x0,
-                control_path_eval,
-                self.diffeqsolve_settings,
+                t0=t0,
+                initial_state=x0,
+                path_times=times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                diffeqsolve_settings=self.diffeqsolve_settings,
             )
             observations = self._emit_observations(
                 "",

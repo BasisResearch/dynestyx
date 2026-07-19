@@ -1,116 +1,141 @@
-"""Latent-path handler for joint state + parameter inference.
-
-This module is the orchestration layer for latent-path inference. It does not
-define the latent parameterization ``z`` or the scoring rules itself; instead it
-coordinates three steps:
-
-1. prepare a concrete :class:`LatentPathLayout`,
-2. reconstruct and score ``x = g(z)`` in pure JAX, and
-3. optionally register NumPyro sites after that pure-JAX work is done.
-
-Keeping those responsibilities separate is what allows
-``LatentPathBuilder`` to keep its reconstruction/scoring logic in pure JAX
-even though the public handler itself is NumPyro-facing and only supports
-``dsx.sample(...)``.
-"""
+"""NumPyro-facing explicit latent-path inference."""
 
 from __future__ import annotations
 
-import dataclasses
+import itertools
 from typing import Any, cast
 
+import equinox as eqx
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jax.core import Tracer
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.latent.plate import (
-    _plate_member_specs,
-    _stack_member_attr,
-)
-from dynestyx.inference.latent.prepare import (
-    _prepare_latent_path_request,
-    _PreparedLatentPathRequest,
-)
 from dynestyx.inference.posterior_rollout import (
     _final_times_for_rollout,
     _validate_future_only_predict_times,
 )
-from dynestyx.inference.state_paths.reconstruct import AssembledStatePath
-from dynestyx.inference.state_paths.score import (
-    TrajectoryLogProbTerms,
-    compute_state_path_log_prob_terms,
+from dynestyx.inference.state_paths.reconstruct import (
+    infer_state_path_param_times,
+    reconstruct_state_path,
+    reconstruct_state_path_from_exact_observations,
+    validate_state_path_params,
 )
-from dynestyx.observation_missingness import MissingObservationStrategy
-from dynestyx.simulation.base import _suspend_numpyro_plate_frames
+from dynestyx.inference.state_paths.score import (
+    _gather_by_exact_time,
+    compute_state_path_log_prob,
+)
+from dynestyx.inference.utils.distribution_utils import (
+    _ForwardSimulationImproperUniform,
+)
+from dynestyx.inference.utils.plate_utils import (
+    _slice_array_for_plate_member,
+    _slice_dynamics_for_plate_member,
+    _stack_optional_member_values,
+    _suspend_numpyro_plate_frames,
+)
+from dynestyx.models import (
+    DeterministicContinuousTimeStateEvolution,
+    DiracIdentityObservation,
+    StochasticContinuousTimeStateEvolution,
+)
+from dynestyx.observation_missingness import (
+    MissingObservationMetadata,
+    MissingObservationStrategy,
+    assemble_completed_observations,
+    prepare_missing_observation_metadata,
+    prepare_observation_views,
+    resolve_missing_observation_strategy,
+    validate_missing_obs_values,
+)
+from dynestyx.simulation.base import _sample_observation_path
+from dynestyx.simulation.discrete import _sample_discrete_state_path
 from dynestyx.types import LatentStateResult
+from dynestyx.utils import _build_control_path
+
+_MISSING_OBSERVATION_METADATA_CACHE: dict[
+    tuple[str, str, tuple[int, ...], MissingObservationStrategy],
+    MissingObservationMetadata,
+] = {}
 
 
-def _build_latent_state_result(
+def _resolve_missing_observation_metadata(
     *,
-    prepared: _PreparedLatentPathRequest,
-    assembled_state_path: AssembledStatePath | None,
-    log_prob_terms: TrajectoryLogProbTerms | None,
-    state_dists: list[dist.Distribution] | None,
-) -> LatentStateResult:
-    """Package one latent-path evaluation into the public result dataclass.
+    name: str,
+    role: str,
+    dynamics,
+    obs_times: Array,
+    obs_values: Array,
+    obs_mask: Array,
+    strategy: MissingObservationStrategy,
+) -> MissingObservationMetadata:
+    """Resolve missing-observation metadata.
 
-    ``LatentStateResult`` is the external object seen by callers. This helper
-    translates the internal split between prepared inputs, assembled state
-    paths, and log-probability terms into that public shape.
+    Concrete calls compute and cache it; traced calls retrieve it from the cache.
     """
-    missing_obs_metadata = prepared.layout.missing_obs_metadata
-    missing_obs_times = None
-    missing_obs_coordinate_indices = None
-    if log_prob_terms is None:
-        if missing_obs_metadata is not None:
-            missing_obs_times = missing_obs_metadata.missing_obs_times
-            missing_obs_coordinate_indices = (
-                missing_obs_metadata.missing_obs_coordinate_indices
+    cache_key = (name, role, tuple(obs_values.shape), strategy)
+    if any(isinstance(value, Tracer) for value in (obs_times, obs_values, obs_mask)):
+        metadata = _MISSING_OBSERVATION_METADATA_CACHE.get(cache_key)
+        if metadata is None:
+            raise ValueError(
+                "LatentPathBuilder encountered traced observation missingness before "
+                "a compatible concrete model execution. Run the model once with "
+                "concrete obs_times/obs_values before traced replay."
             )
-    else:
-        missing_obs_times = log_prob_terms.missing_obs_times
-        missing_obs_coordinate_indices = log_prob_terms.missing_obs_coordinate_indices
+        if metadata.observation_shape != tuple(obs_values.shape):
+            raise ValueError(
+                "Cached LatentPathBuilder missingness metadata does not match the "
+                "current observation shape."
+            )
+        return metadata
 
-    return LatentStateResult(
-        joint_log_prob=None
-        if log_prob_terms is None
-        else log_prob_terms.joint_log_prob,
-        state_path_params=(
-            None
-            if assembled_state_path is None
-            else assembled_state_path.state_path_params
-        ),
-        state_path_param_times=prepared.layout.state_path_param_times,
-        state_path_param_coordinate_indices=(
-            None
-            if assembled_state_path is None
-            else assembled_state_path.state_path_param_coordinate_indices
-        ),
-        state_path=(
-            None if assembled_state_path is None else assembled_state_path.state_path
-        ),
-        state_path_times=(
-            None
-            if assembled_state_path is None
-            else assembled_state_path.state_path_times
-        ),
-        missing_obs_values=(
-            prepared.canonical_missing_obs_values
-            if log_prob_terms is None
-            else log_prob_terms.missing_obs_values
-        ),
-        missing_obs_times=missing_obs_times,
-        missing_obs_coordinate_indices=missing_obs_coordinate_indices,
-        completed_obs_values=(
-            None if log_prob_terms is None else log_prob_terms.completed_obs_values
-        ),
-        state_dists=state_dists,
+    metadata = prepare_missing_observation_metadata(
+        dynamics,
+        obs_times=obs_times,
+        obs_mask=obs_mask,
     )
+    _MISSING_OBSERVATION_METADATA_CACHE[cache_key] = metadata
+    return metadata
+
+
+def _sample_missing_observation_prior(
+    dynamics,
+    state_path: Array,
+    state_path_times: Array,
+    obs_times: Array,
+    ctrl_times: Array | None,
+    ctrl_values: Array | None,
+    missing_flat_indices: Array,
+    key: Array,
+) -> Array:
+    """Sample missing observations conditional on the assembled state path."""
+    if missing_flat_indices.shape[0] == 0:
+        return jnp.zeros((0,), dtype=jnp.asarray(state_path).dtype)
+
+    states_at_observations = _gather_by_exact_time(
+        state_path,
+        state_path_times,
+        obs_times,
+        value_name="state_path",
+    )
+    if ctrl_times is not None and ctrl_values is not None:
+        control_path = _build_control_path(ctrl_times, ctrl_values, obs_times)
+        control_path_eval = lambda t: control_path.evaluate(t, left=False)
+    else:
+        control_path_eval = None
+    dense_observations = _sample_observation_path(
+        dynamics,
+        states=states_at_observations,
+        times=obs_times,
+        rng_key=key,
+        control_path_eval=control_path_eval,
+    )
+    return jnp.reshape(dense_observations, (-1,))[missing_flat_indices]
 
 
 def _build_state_path_distributions(
@@ -125,27 +150,8 @@ def _build_state_path_distributions(
     ]
 
 
-@dataclasses.dataclass(init=False)
 class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
-    """Build latent path parameters and score ``log p(x, y | ...)``.
-
-    Writing ``z = state_path_params`` and ``x = state_path = g(z)``, this
-    handler constructs latent NumPyro sites for ``z``, reconstructs ``x``, and
-    returns quantities associated with the joint density ``log p(x, y | ...)``.
-
-    In pure-JAX terms, this handler owns the latent-state inference problem
-    rather than the forward simulation problem. Compared with a simulator:
-
-    - the simulator produces trajectories from the generative model,
-    - ``LatentPathBuilder`` treats the latent trajectory as an inference object,
-      represented by ``state_path_params``, and
-    - NumPyro sites are only an outer registration layer placed on top of the
-      pure-JAX reconstruction/scoring logic.
-    """
-
-    ode_diffeqsolve_settings: dict[str, Any] | None
-    missing_observation_strategy: MissingObservationStrategy
-    chunk_size: int | None
+    """Build explicit latent paths and score ``log p(x, y | ...)``."""
 
     def __init__(
         self,
@@ -153,22 +159,17 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         missing_observation_strategy: MissingObservationStrategy = "auto",
         chunk_size: int | None = None,
     ) -> None:
-        """Initialize the latent-path builder.
+        """Initialize explicit latent-path inference.
 
-        ``missing_observation_strategy`` controls whether partially missing
-        observations are marginalized, augmented with explicit latent
-        coordinates, or rejected. For ``DiracIdentityObservation`` models with
-        missing data, latent-path inference resolves ``"auto"`` to augment
-        semantics: the missing exact observations are treated as the free
-        coordinates needed to reconstruct the state path.
+        ``ode_diffeqsolve_settings`` configures ODE reconstruction from a
+        sampled initial condition. ``missing_observation_strategy`` selects
+        marginalization, explicit augmentation, automatic selection, or an
+        error for missing observations. Missing exact identity observations
+        support automatic selection and explicit augmentation only.
 
-        ``ode_diffeqsolve_settings`` is only used when the latent path for a
-        deterministic continuous-time model must be reconstructed by solving an
-        ODE from its initial condition.
-
-        ``chunk_size`` controls optional host-side chunking for the transition
-        and observation scoring loops. When provided, latent-path scoring uses
-        ``lax.scan`` over chunks instead of one large ``vmap``.
+        ``chunk_size`` limits the number of transition or observation terms
+        evaluated in each ``lax.scan`` chunk. By default, all terms are
+        evaluated in one ``vmap``.
         """
         self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
         self.missing_observation_strategy = missing_observation_strategy
@@ -179,160 +180,276 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics,
         *,
-        obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
-        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-        | Real[Array, "*obs_value_plate obs_time"]
-        | None = None,
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
-        _obs_has_missing: bool | None = None,
-        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-        | Real[Array, "*ctrl_value_plate ctrl_time"]
-        | None = None,
-        state_path_params: Array | None = None,
-        missing_obs_values: Array | None = None,
+        obs_times: Array | None,
+        obs_values: Array | None,
+        obs_values_filled: Array | None,
+        obs_mask: Array | None,
+        ctrl_times: Array | None,
+        ctrl_values: Array | None,
+        state_path_params: Array | None,
+        missing_obs_values: Array | None,
     ) -> LatentStateResult:
-        """Handle one non-plated latent-path request.
-
-        The control flow is intentionally staged:
-
-        1. prepare/canonicalize the latent request,
-        2. register the dummy latent NumPyro sites, and
-        3. reconstruct/score the path once from the active site values.
-
-        This is the main single-trajectory implementation; plated requests are
-        reduced to repeated calls to this method.
-        """
         _validate_inference_supported_model_classes(dynamics)
-        prepared = _prepare_latent_path_request(
+        if isinstance(
+            dynamics.state_evolution,
+            StochasticContinuousTimeStateEvolution,
+        ):
+            raise ValueError(
+                "Latent-state assembly does not yet support native SDE models. "
+                "Please discretize the model first."
+            )
+        if obs_times is None or obs_values is None:
+            raise ValueError(
+                "LatentPathBuilder requires obs_times and obs_values. "
+                "It is an observation-consuming handler."
+            )
+        if self.missing_observation_strategy not in (
+            "auto",
+            "marginalize",
+            "augment",
+            "error",
+        ):
+            raise ValueError(
+                "missing_observation_strategy must be one of 'auto', "
+                "'marginalize', 'augment', or 'error'."
+            )
+
+        if obs_values_filled is None or obs_mask is None:
+            obs_values_filled, obs_mask, _ = prepare_observation_views(
+                dynamics,
+                obs_values,
+            )
+        assert obs_values_filled is not None
+        assert obs_mask is not None
+
+        metadata = _resolve_missing_observation_metadata(
             name=name,
+            role="observations",
             dynamics=dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
-            obs_values_filled=_obs_values_filled,
-            obs_mask=_obs_mask,
-            obs_has_missing=_obs_has_missing,
-            state_path_params=state_path_params,
-            missing_obs_values=missing_obs_values,
-            missing_observation_strategy=self.missing_observation_strategy,
+            obs_mask=obs_mask,
+            strategy=self.missing_observation_strategy,
         )
-        assert obs_times is not None
-        assert obs_values is not None
+        exact_observations = isinstance(
+            dynamics.observation_model,
+            DiracIdentityObservation,
+        )
 
-        state_path_param_base_dist = dist.Normal(0.0, 1.0).expand(
-            tuple(jnp.asarray(prepared.example_state_path_params).shape)
-        )
-        state_path_param_base_dist = state_path_param_base_dist.to_event(
-            len(tuple(jnp.asarray(prepared.example_state_path_params).shape))
-        )
-        # Sample the state path parameters and missing observations.
-        # Their log-probabilities are subtracted back out later.
+        if (
+            exact_observations
+            and metadata.has_missing
+            and (self.missing_observation_strategy in ("marginalize", "error"))
+        ):
+            raise ValueError(
+                "DiracIdentityObservation missingness in latent-path inference "
+                "supports only augment semantics. Use "
+                "missing_observation_strategy='auto' or 'augment'."
+            )
+
+        observation_dim = 1 if obs_values.ndim == 1 else obs_values.shape[-1]
+        use_observation_augmentation = False
+        if not exact_observations:
+            use_observation_augmentation, _ = resolve_missing_observation_strategy(
+                dynamics,
+                observation_dim=observation_dim,
+                has_missing=metadata.has_missing,
+                has_partial_missing=metadata.has_partial_missing,
+                requested_strategy=self.missing_observation_strategy,
+            )
+
+        state_path_param_coordinate_indices = None
+        state_sample_transform = None
+        if exact_observations:
+            state_path_param_times = metadata.missing_obs_times
+            state_path_param_coordinate_indices = (
+                metadata.missing_obs_coordinate_indices
+            )
+            state_event_shape = (metadata.missing_flat_indices.shape[0],)
+            validated_state_path_params = (
+                None
+                if state_path_params is None
+                else validate_missing_obs_values(
+                    state_path_params,
+                    n_missing_obs=metadata.missing_flat_indices.shape[0],
+                )
+            )
+            state_forward_sampler = eqx.Partial(
+                _sample_discrete_state_path,
+                dynamics=dynamics,
+                times=obs_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
+            state_sample_transform = eqx.Partial(
+                jnp.take,
+                indices=metadata.missing_flat_indices,
+            )
+        else:
+            state_path_param_times = infer_state_path_param_times(
+                dynamics,
+                obs_times=obs_times,
+            )
+            state_event_shape = (
+                state_path_param_times.shape[0],
+                *dynamics.initial_condition.event_shape,
+            )
+            validated_state_path_params = (
+                None
+                if state_path_params is None
+                else validate_state_path_params(
+                    dynamics,
+                    state_path_params,
+                    n_times=state_path_param_times.shape[0],
+                )
+            )
+            state_forward_sampler = (
+                dynamics.initial_condition
+                if isinstance(
+                    dynamics.state_evolution,
+                    DeterministicContinuousTimeStateEvolution,
+                )
+                else eqx.Partial(
+                    _sample_discrete_state_path,
+                    dynamics=dynamics,
+                    times=obs_times,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
+            )
+
         state_path_param_site = numpyro.sample(
             f"{name}_state_path_params",
-            state_path_param_base_dist,
-            obs=prepared.canonical_state_path_params,
+            _ForwardSimulationImproperUniform(
+                state_forward_sampler,
+                event_shape=state_event_shape,
+                sample_transform=state_sample_transform,
+            ),
+            obs=validated_state_path_params,
         )
-        missing_obs_site = None
-        missing_obs_base_dist = None
-        if prepared.example_missing_obs_values is not None:
-            missing_obs_shape = tuple(
-                jnp.asarray(prepared.example_missing_obs_values).shape
+
+        if exact_observations:
+            validated_state_path_params, state_path, state_path_times = (
+                reconstruct_state_path_from_exact_observations(
+                    state_path_params=state_path_param_site,
+                    latent_metadata=metadata,
+                    obs_times=obs_times,
+                    obs_values_filled=obs_values_filled,
+                )
             )
-            missing_obs_base_dist = (
-                dist.Normal(0.0, 1.0)
-                .expand(missing_obs_shape)
-                .to_event(len(missing_obs_shape))
+        else:
+            validated_state_path_params, state_path, state_path_times = (
+                reconstruct_state_path(
+                    dynamics,
+                    state_path_params=state_path_param_site,
+                    state_path_param_times=state_path_param_times,
+                    obs_times=obs_times,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                    ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
+                )
+            )
+
+        missing_obs_site = None
+        missing_obs_times = None
+        missing_obs_coordinate_indices = None
+        completed_obs_values = state_path if exact_observations else None
+        if use_observation_augmentation:
+            n_missing_obs = metadata.missing_flat_indices.shape[0]
+            validated_missing_obs_values = (
+                None
+                if missing_obs_values is None
+                else validate_missing_obs_values(
+                    missing_obs_values,
+                    n_missing_obs=n_missing_obs,
+                )
+            )
+            observation_forward_sampler = eqx.Partial(
+                _sample_missing_observation_prior,
+                dynamics,
+                state_path,
+                state_path_times,
+                obs_times,
+                ctrl_times,
+                ctrl_values,
+                metadata.missing_flat_indices,
             )
             missing_obs_site = numpyro.sample(
                 f"{name}_missing_obs_values",
-                missing_obs_base_dist,
-                obs=prepared.canonical_missing_obs_values,
+                _ForwardSimulationImproperUniform(
+                    observation_forward_sampler,
+                    event_shape=(n_missing_obs,),
+                ),
+                obs=validated_missing_obs_values,
+            )
+            completed_obs_values = assemble_completed_observations(
+                obs_values_filled=obs_values_filled,
+                missing_obs_values=missing_obs_site,
+                missing_obs_metadata=metadata,
+            )
+            missing_obs_times = metadata.missing_obs_times
+            missing_obs_coordinate_indices = metadata.missing_obs_coordinate_indices
+        elif missing_obs_values is not None:
+            raise ValueError(
+                "missing_obs_values was provided, but this request does not use "
+                "explicit missing-observation augmentation."
             )
 
-        assembled_state_path = prepared.layout.assemble_from_params(
-            dynamics=dynamics,
-            state_path_params=state_path_param_site,
-            obs_times=obs_times,
-            obs_values_filled=prepared.obs_values_filled,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
-        )
-        log_prob_terms = compute_state_path_log_prob_terms(
+        joint_log_prob = compute_state_path_log_prob(
             dynamics,
-            state_path=assembled_state_path.state_path,
-            state_path_times=assembled_state_path.state_path_times,
+            state_path=state_path,
+            state_path_times=state_path_times,
             obs_times=obs_times,
             obs_values=obs_values,
-            obs_values_filled=prepared.obs_values_filled,
-            obs_mask=prepared.obs_mask,
+            obs_values_filled=obs_values_filled,
+            obs_mask=obs_mask,
             missing_observation_strategy=self.missing_observation_strategy,
             missing_obs_values=missing_obs_site,
-            missing_obs_metadata=prepared.layout.missing_obs_metadata,
+            missing_obs_metadata=(metadata if use_observation_augmentation else None),
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             chunk_size=self.chunk_size,
-            observations_are_exact_constraints=prepared.layout.observations_are_exact_constraints,
+            observations_are_exact_constraints=exact_observations,
         )
 
-        state_path_param_base_log_prob = state_path_param_base_dist.log_prob(
-            state_path_param_site
-        )
-        numpyro.factor(
-            f"{name}_joint_log_prob_factor",
-            log_prob_terms.joint_log_prob,
-        )
-        numpyro.factor(
-            f"{name}_state_path_params_base_log_prob_correction",
-            -state_path_param_base_log_prob,
-        )
-        if missing_obs_site is not None and missing_obs_base_dist is not None:
-            numpyro.factor(
-                f"{name}_missing_obs_base_log_prob_correction",
-                -missing_obs_base_dist.log_prob(missing_obs_site),
-            )
+        numpyro.factor(f"{name}_joint_log_prob_factor", joint_log_prob)
         numpyro.deterministic(
             f"{name}_state_path_param_times",
-            assembled_state_path.state_path_param_times,
+            state_path_param_times,
         )
-        if assembled_state_path.state_path_param_coordinate_indices is not None:
+        if state_path_param_coordinate_indices is not None:
             numpyro.deterministic(
                 f"{name}_state_path_param_coordinate_indices",
-                assembled_state_path.state_path_param_coordinate_indices,
+                state_path_param_coordinate_indices,
             )
-        numpyro.deterministic(f"{name}_state_path", assembled_state_path.state_path)
-        numpyro.deterministic(
-            f"{name}_state_path_times",
-            assembled_state_path.state_path_times,
-        )
-        if log_prob_terms.missing_obs_times is not None:
-            numpyro.deterministic(
-                f"{name}_missing_obs_times",
-                log_prob_terms.missing_obs_times,
-            )
-        if log_prob_terms.missing_obs_coordinate_indices is not None:
+        numpyro.deterministic(f"{name}_state_path", state_path)
+        numpyro.deterministic(f"{name}_state_path_times", state_path_times)
+        if missing_obs_times is not None:
+            numpyro.deterministic(f"{name}_missing_obs_times", missing_obs_times)
+        if missing_obs_coordinate_indices is not None:
             numpyro.deterministic(
                 f"{name}_missing_obs_coordinate_indices",
-                log_prob_terms.missing_obs_coordinate_indices,
+                missing_obs_coordinate_indices,
             )
-        if log_prob_terms.completed_obs_values is not None:
+        if completed_obs_values is not None:
             numpyro.deterministic(
                 f"{name}_completed_obs_values",
-                log_prob_terms.completed_obs_values,
+                completed_obs_values,
             )
-        numpyro.deterministic(
-            f"{name}_joint_log_prob",
-            log_prob_terms.joint_log_prob,
-        )
+        numpyro.deterministic(f"{name}_joint_log_prob", joint_log_prob)
 
-        return _build_latent_state_result(
-            prepared=prepared,
-            assembled_state_path=assembled_state_path,
-            log_prob_terms=log_prob_terms,
-            state_dists=_build_state_path_distributions(
-                dynamics, assembled_state_path.state_path
-            ),
+        return LatentStateResult(
+            joint_log_prob=joint_log_prob,
+            state_path_params=validated_state_path_params,
+            state_path_param_times=state_path_param_times,
+            state_path_param_coordinate_indices=state_path_param_coordinate_indices,
+            state_path=state_path,
+            state_path_times=state_path_times,
+            missing_obs_values=missing_obs_site,
+            missing_obs_times=missing_obs_times,
+            missing_obs_coordinate_indices=missing_obs_coordinate_indices,
+            completed_obs_values=completed_obs_values,
+            state_dists=_build_state_path_distributions(dynamics, state_path),
         )
 
     @implements(_condition_intp)
@@ -359,7 +476,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
-        """Interpret ``dsx.sample(...)`` for latent-path inference."""
         if not _dsx_sample_mode:
             raise ValueError(
                 "LatentPathBuilder only supports dsx.sample(...) under NumPyro. "
@@ -372,21 +488,6 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
-                _obs_values_filled=_obs_values_filled,
-                _obs_mask=_obs_mask,
-                _obs_has_missing=_obs_has_missing,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                state_path_params=state_path_params,
-                missing_obs_values=missing_obs_values,
-            )
-        else:
-            member_specs = _plate_member_specs(
-                name=name,
-                dynamics=dynamics,
-                plate_shapes=plate_shapes,
-                obs_times=obs_times,
-                obs_values=obs_values,
                 obs_values_filled=_obs_values_filled,
                 obs_mask=_obs_mask,
                 ctrl_times=ctrl_times,
@@ -394,58 +495,80 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 state_path_params=state_path_params,
                 missing_obs_values=missing_obs_values,
             )
-
-            member_results = []
-            for member in member_specs:
+        else:
+            member_results: list[LatentStateResult] = []
+            for plate_idx in itertools.product(*[range(size) for size in plate_shapes]):
+                member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
                 with _suspend_numpyro_plate_frames():
                     member_results.append(
                         self._sample_single(
-                            member.name,
-                            member.dynamics,
-                            obs_times=member.obs_times,
-                            obs_values=member.obs_values,
-                            _obs_values_filled=member.obs_values_filled,
-                            _obs_mask=member.obs_mask,
-                            _obs_has_missing=_obs_has_missing,
-                            ctrl_times=member.ctrl_times,
-                            ctrl_values=member.ctrl_values,
-                            state_path_params=member.state_path_params,
-                            missing_obs_values=member.missing_obs_values,
+                            member_name,
+                            _slice_dynamics_for_plate_member(
+                                dynamics,
+                                plate_shapes,
+                                plate_idx,
+                            ),
+                            obs_times=_slice_array_for_plate_member(
+                                obs_times, plate_shapes, plate_idx
+                            ),
+                            obs_values=_slice_array_for_plate_member(
+                                obs_values, plate_shapes, plate_idx
+                            ),
+                            obs_values_filled=_slice_array_for_plate_member(
+                                _obs_values_filled, plate_shapes, plate_idx
+                            ),
+                            obs_mask=_slice_array_for_plate_member(
+                                _obs_mask, plate_shapes, plate_idx
+                            ),
+                            ctrl_times=_slice_array_for_plate_member(
+                                ctrl_times, plate_shapes, plate_idx
+                            ),
+                            ctrl_values=_slice_array_for_plate_member(
+                                ctrl_values, plate_shapes, plate_idx
+                            ),
+                            state_path_params=_slice_array_for_plate_member(
+                                state_path_params, plate_shapes, plate_idx
+                            ),
+                            missing_obs_values=_slice_array_for_plate_member(
+                                missing_obs_values, plate_shapes, plate_idx
+                            ),
                         )
                     )
 
-            state_path = _stack_member_attr(member_results, "state_path", plate_shapes)
-            result = LatentStateResult(
-                joint_log_prob=_stack_member_attr(
-                    member_results, "joint_log_prob", plate_shapes
-                ),
-                state_path_params=_stack_member_attr(
-                    member_results, "state_path_params", plate_shapes
-                ),
-                state_path_param_times=_stack_member_attr(
-                    member_results, "state_path_param_times", plate_shapes
-                ),
-                state_path_param_coordinate_indices=_stack_member_attr(
-                    member_results,
-                    "state_path_param_coordinate_indices",
+            stacked_member_values = {
+                attr: _stack_optional_member_values(
+                    [getattr(member, attr) for member in member_results],
                     plate_shapes,
-                ),
+                )
+                for attr in (
+                    "joint_log_prob",
+                    "state_path_params",
+                    "state_path_param_times",
+                    "state_path_param_coordinate_indices",
+                    "state_path",
+                    "state_path_times",
+                    "missing_obs_values",
+                    "missing_obs_times",
+                    "missing_obs_coordinate_indices",
+                    "completed_obs_values",
+                )
+            }
+            state_path = stacked_member_values["state_path"]
+            result = LatentStateResult(
+                joint_log_prob=stacked_member_values["joint_log_prob"],
+                state_path_params=stacked_member_values["state_path_params"],
+                state_path_param_times=stacked_member_values["state_path_param_times"],
+                state_path_param_coordinate_indices=stacked_member_values[
+                    "state_path_param_coordinate_indices"
+                ],
                 state_path=state_path,
-                state_path_times=_stack_member_attr(
-                    member_results, "state_path_times", plate_shapes
-                ),
-                missing_obs_values=_stack_member_attr(
-                    member_results, "missing_obs_values", plate_shapes
-                ),
-                missing_obs_times=_stack_member_attr(
-                    member_results, "missing_obs_times", plate_shapes
-                ),
-                missing_obs_coordinate_indices=_stack_member_attr(
-                    member_results, "missing_obs_coordinate_indices", plate_shapes
-                ),
-                completed_obs_values=_stack_member_attr(
-                    member_results, "completed_obs_values", plate_shapes
-                ),
+                state_path_times=stacked_member_values["state_path_times"],
+                missing_obs_values=stacked_member_values["missing_obs_values"],
+                missing_obs_times=stacked_member_values["missing_obs_times"],
+                missing_obs_coordinate_indices=stacked_member_values[
+                    "missing_obs_coordinate_indices"
+                ],
+                completed_obs_values=stacked_member_values["completed_obs_values"],
                 state_dists=(
                     None
                     if state_path is None
