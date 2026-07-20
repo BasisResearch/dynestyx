@@ -8,9 +8,9 @@ import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
-from dynestyx.inference.smoother_configs import ContinuousTimeKFSmootherConfig
+from dynestyx import Simulator
+from dynestyx.inference.configs.smoother import ContinuousTimeKFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
-from dynestyx.simulators import Simulator
 from tests.models import continuous_time_lti_simplified_model
 from tests.test_utils import get_output_dir
 

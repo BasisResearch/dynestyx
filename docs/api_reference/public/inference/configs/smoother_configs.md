@@ -11,7 +11,7 @@ recording fields such as `record_smoothed_states_mean`,
 ## Common Choices
 
 ```python
-from dynestyx.inference.smoother_configs import (
+from dynestyx.inference.configs.smoother import (
     ContinuousTimeKFSmootherConfig,
     KFSmootherConfig,
     PFSmootherConfig,
@@ -28,6 +28,6 @@ ct_kf = ContinuousTimeKFSmootherConfig()
 `cdlgssm_smoother_type` for the CD-Dynamax continuous-discrete linear
 Gaussian smoother variant.
 
-::: dynestyx.inference.smoother_configs
+::: dynestyx.inference.configs.smoother
     options:
       filters: []

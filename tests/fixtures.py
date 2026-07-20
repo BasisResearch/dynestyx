@@ -72,8 +72,13 @@ def _normalize_synthetic(synthetic: dict) -> dict:
 
 from numpyro.infer import Predictive
 
+from dynestyx import (
+    DiscreteTimeSimulator,
+    LatentPathBuilder,
+    Simulator,
+)
 from dynestyx.discretizers import Discretizer
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
@@ -87,10 +92,6 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.hmm_filters import HMMConfig
-from dynestyx.simulators import (
-    DiscreteTimeSimulator,
-    Simulator,
-)
 from tests.models import (
     continuous_time_deterministic_l63_model,
     continuous_time_LTI_gaussian,
@@ -230,7 +231,7 @@ def data_conditioned_discrete_time_l63(request):
     # Build conditioned model
     # ---------------------------------------------------------
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with LatentPathBuilder():
             return discrete_time_l63_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -661,7 +662,7 @@ def data_conditioned_stochastic_volatility(request):
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with LatentPathBuilder():
             return stochastic_volatility(
                 identity_observation=identity_observation,
                 obs_times=obs_times,
@@ -847,7 +848,7 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        with DiscreteTimeSimulator():
+        with LatentPathBuilder():
             with Discretizer():
                 return continuous_time_stochastic_l63_model_dirac_obs(
                     obs_times=obs_times,
@@ -906,7 +907,7 @@ def data_conditioned_discrete_time_l63_auto(request):
     obs_values = synthetic["observations"]
 
     def data_conditioned_model():
-        with Simulator():
+        with LatentPathBuilder():
             with Discretizer():
                 return continuous_time_stochastic_l63_model(
                     obs_times=obs_times,

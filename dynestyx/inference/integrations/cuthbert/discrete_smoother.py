@@ -13,7 +13,11 @@ from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
 
-from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
+from dynestyx.inference.configs.smoother import (
+    EKFSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
+)
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
@@ -24,10 +28,8 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )
-from dynestyx.inference.smoother_configs import (
-    EKFSmootherConfig,
-    KFSmootherConfig,
-    PFSmootherConfig,
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import (
     DynamicalModel,

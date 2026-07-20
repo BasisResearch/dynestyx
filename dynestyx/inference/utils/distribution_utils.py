@@ -1,17 +1,82 @@
+import math
+from collections.abc import Callable
 from typing import Literal
 
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
+from numpyro.distributions import constraints
 
 from dynestyx.inference.integrations.utils import (
     WeightedParticles,
     covariance_from_cholesky,
 )
-from dynestyx.inference.plate_utils import _slice_time_axis, _time_len_from_array
+from dynestyx.inference.utils.plate_utils import (
+    _slice_time_axis,
+    _time_len_from_array,
+)
 
 MissingPolicy = Literal["raise", "empty"]
+
+
+class _ForwardSimulationImproperUniform(dist.ImproperUniform):
+    """An improper distribution sampled by dynamical forward simulation.
+
+    The forward sampler is used only for initialization and forward execution.
+    Density evaluation is inherited from ``ImproperUniform`` and is always
+    zero; it does not evaluate the log density of the ``DynamicalModel``.
+    """
+
+    pytree_data_fields = ("forward_sampler", "sample_transform")
+    has_rsample = True
+
+    def __init__(
+        self,
+        forward_sampler: Callable[[Array], Array] | dist.Distribution,
+        *,
+        event_shape: tuple[int, ...],
+        sample_transform: Callable[[Array], Array] | None = None,
+        validate_args: bool | None = None,
+    ) -> None:
+        self.forward_sampler = forward_sampler
+        self.sample_transform = sample_transform
+        super().__init__(
+            constraints.real,
+            batch_shape=(),
+            event_shape=event_shape,
+            validate_args=validate_args,
+        )
+
+    def _sample_one(self, key: Array) -> Array:
+        sample = (
+            self.forward_sampler.sample(key)
+            if isinstance(self.forward_sampler, dist.Distribution)
+            else self.forward_sampler(key)
+        )
+        if self.sample_transform is not None:
+            sample = self.sample_transform(sample)
+        return jnp.reshape(jnp.asarray(sample), self.event_shape)
+
+    def sample(
+        self,
+        key: Array,
+        sample_shape: tuple[int, ...] = (),
+    ) -> Array:
+        if not sample_shape:
+            return self._sample_one(key)
+
+        n_samples = math.prod(sample_shape)
+        keys = jax.random.split(key, n_samples)
+        samples = jax.vmap(self._sample_one)(keys)
+        return jnp.reshape(samples, sample_shape + self.event_shape)
+
+    def rsample(
+        self,
+        key: Array,
+        sample_shape: tuple[int, ...] = (),
+    ) -> Array:
+        return self.sample(key, sample_shape=sample_shape)
 
 
 def _handle_missing_gaussian_sequence(

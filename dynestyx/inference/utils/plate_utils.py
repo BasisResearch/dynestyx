@@ -1,3 +1,6 @@
+from contextlib import contextmanager
+
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -147,3 +150,78 @@ def _slice_dist_for_plate_member(
     # plate dims we just sliced away so the per-member distribution is unbatched.
     object.__setattr__(member, "_batch_shape", batch_shape[n:])
     return member
+
+
+def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
+    """Slice plate-batched pytree leaves for one plate member."""
+
+    def _slice_leaf(path, leaf):
+        if isinstance(leaf, Diffusion):
+            if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
+                return eqx.tree_at(
+                    lambda d: d.coefficient,
+                    leaf,
+                    leaf.coefficient[plate_idx],
+                )
+            return leaf
+        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
+            return leaf[plate_idx]
+        return leaf
+
+    return jax.tree_util.tree_map_with_path(
+        _slice_leaf,
+        tree,
+        is_leaf=_is_opaque_plate_leaf,
+    )
+
+
+def _slice_dynamics_for_plate_member(
+    dynamics,
+    plate_shapes: tuple[int, ...],
+    plate_idx,
+):
+    """Slice a dynamics pytree and rebuild a plate-batched initial condition."""
+    member_dynamics = _slice_tree_for_plate_member(
+        dynamics,
+        plate_shapes,
+        plate_idx,
+    )
+    if not _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
+        return member_dynamics
+
+    member_initial_condition = _slice_dist_for_plate_member(
+        dynamics.initial_condition,
+        plate_shapes,
+        plate_idx,
+    )
+    return eqx.tree_at(
+        lambda model: model.initial_condition,
+        member_dynamics,
+        member_initial_condition,
+        is_leaf=lambda value: value is None,
+    )
+
+
+def _stack_optional_member_values(values: list, plate_shapes: tuple[int, ...]):
+    """Restore leading plate axes for an optional per-member array value."""
+    if any(value is None for value in values):
+        return None
+    first = jnp.asarray(values[0])
+    return jnp.stack([jnp.asarray(value) for value in values]).reshape(
+        *plate_shapes,
+        *first.shape,
+    )
+
+
+@contextmanager
+def _suspend_numpyro_plate_frames():
+    """Hide active NumPyro plates while registering per-member sample sites."""
+    stack = numpyro.primitives._PYRO_STACK
+    original = list(stack)
+    stack[:] = [
+        frame for frame in original if not isinstance(frame, numpyro.primitives.plate)
+    ]
+    try:
+        yield
+    finally:
+        stack[:] = original

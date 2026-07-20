@@ -6,7 +6,6 @@ from typing import cast
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -15,11 +14,19 @@ from jaxtyping import Array, PRNGKeyArray, Real
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.distribution_utils import (
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
+from dynestyx.inference.configs.smoother import (
+    BaseSmootherConfig,
+    ContinuousTimeEKFSmootherConfig,
+    ContinuousTimeKFSmootherConfig,
+    ContinuousTimeSmootherConfigs,
+    DiscreteTimeSmootherConfigs,
+    EKFSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
+    UKFSmootherConfig,
 )
 from dynestyx.inference.integrations.cd_dynamax.continuous_smoother import (
     compute_continuous_smoother,
@@ -38,25 +45,26 @@ from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
 from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
     run_discrete_smoother as run_cuthbert_discrete_smoother,
 )
-from dynestyx.inference.numpyro_sites import register_smoother_sites
-from dynestyx.inference.plate_utils import (
+from dynestyx.inference.posterior_rollout import (
+    _final_times_for_rollout,
+    _validate_future_only_predict_times,
+)
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
+from dynestyx.inference.utils.numpyro_sites import register_smoother_sites
+from dynestyx.inference.utils.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
 )
-from dynestyx.inference.smoother_configs import (
-    BaseSmootherConfig,
-    ContinuousTimeEKFSmootherConfig,
-    ContinuousTimeKFSmootherConfig,
-    ContinuousTimeSmootherConfigs,
-    DiscreteTimeSmootherConfigs,
-    EKFSmootherConfig,
-    KFSmootherConfig,
-    PFSmootherConfig,
-    UKFSmootherConfig,
-)
 from dynestyx.models import DynamicalModel
-from dynestyx.types import ConditionedResult, FunctionOfTime
+from dynestyx.types import (
+    ConditionedResult,
+    FunctionOfTime,
+    chain_numpyro_site_registrations,
+)
 from dynestyx.utils import _dist_has_plate_batch_dims
 
 DiscreteSmootherConfig = (
@@ -79,33 +87,6 @@ def _valid_smoother_config_names(*, continuous_time: bool) -> list[str]:
     if continuous_time:
         return [c.__name__ for c in ContinuousTimeSmootherConfigs]
     return [c.__name__ for c in DiscreteTimeSmootherConfigs]
-
-
-def _validate_future_only_predict_times(
-    predict_times: Real[Array, "*predict_time_plate predict_time"] | None,
-    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
-) -> Real[Array, "*predict_time_plate predict_time"] | None:
-    """Validate the current smoother prediction contract."""
-    if predict_times is None or obs_times is None:
-        return predict_times
-    obs_end = obs_times[..., -1:]
-    _ = eqx.error_if(
-        predict_times,
-        jnp.any(predict_times < obs_end),
-        "Smoother prediction only supports predict_times >= max(obs_times); in-window smoothing predictions are not implemented yet. Please use `Filter` for in-window predictions for now.",
-    )
-    return predict_times
-
-
-def _final_obs_times_for_rollout(
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-) -> Real[Array, "*obs_time_plate one"]:
-    """Return the final observation time while keeping simulator segmentation host-safe."""
-    try:
-        obs_times_host = np.asarray(jax.device_get(obs_times))
-        return jnp.asarray(obs_times_host[..., -1:], dtype=obs_times.dtype)
-    except Exception:
-        return obs_times[..., -1:]
 
 
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
@@ -142,21 +123,29 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
                 **kwargs,
             )
 
-        predict_times = _validate_future_only_predict_times(predict_times, obs_times)
+        predict_times = _validate_future_only_predict_times(
+            predict_times,
+            obs_times,
+            error_message=(
+                "Smoother prediction only supports predict_times >= max(obs_times); "
+                "in-window smoothing predictions are not implemented yet. "
+                "Please use `Filter` for in-window predictions for now."
+            ),
+        )
         filtered_times = None
         filtered_dists = None
         posterior_rollout_final_only = False
         smoothed_times = obs_times
         if predict_times is not None and smoothed_dists:
             assert obs_times is not None
-            filtered_times = _final_obs_times_for_rollout(obs_times)
+            filtered_times = _final_times_for_rollout(obs_times)
             filtered_dists = [smoothed_dists[-1]]
             posterior_rollout_final_only = True
             smoothed_times = None
             smoothed_dists = None
 
         # fwd() lets handlers above (e.g. Simulator) use smoothed_dists for rollout.
-        fwd(
+        forwarded_result = fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
@@ -173,7 +162,14 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             **kwargs,
         )
 
-        return self._build_infer_result(name, smoothed_dists)
+        result = self._build_infer_result(name, smoothed_dists)
+        forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
+        result._register_numpyro_sites = chain_numpyro_site_registrations(
+            result._register_numpyro_sites,
+            forwarded_register,
+        )
+
+        return result
 
     @abstractmethod
     def _add_log_factors(
@@ -230,6 +226,7 @@ class Smoother(BaseSmootherLogFactorAdder):
     ) -> list[numpyro.distributions.Distribution] | None:
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for smoothing.")
+        _validate_inference_supported_model_classes(dynamics)
 
         config = (
             self.smoother_config
@@ -242,7 +239,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             )
             raise ValueError(
                 f"Invalid smoother config: {type(config).__name__}. "
-                "Expected a smoother config class from dynestyx.inference.smoother_configs. "
+                "Expected a smoother config class from dynestyx.inference.configs.smoother. "
                 f"Valid types: {valid}"
             )
         _validate_missing_observation_support(

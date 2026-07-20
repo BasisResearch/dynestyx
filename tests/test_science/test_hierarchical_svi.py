@@ -14,10 +14,10 @@ from numpyro.infer import SVI, Predictive, Trace_ELBO
 from numpyro.infer.autoguide import AutoLowRankMultivariateNormal
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import KFConfig
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.filter import KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models.lti_dynamics import LTI_discrete
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True

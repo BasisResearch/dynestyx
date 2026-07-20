@@ -6,6 +6,7 @@ import numpyro.handlers as nhandlers
 import pytest
 
 import dynestyx as dsx
+from dynestyx import DiscreteTimeSimulator
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _as_cd_dynamax_diffusion_coefficient,
     dsx_to_cd_dynamax,
@@ -23,7 +24,6 @@ from dynestyx.models.diffusions import (
     FullDiffusion,
     ScalarDiffusion,
 )
-from dynestyx.simulators import DiscreteTimeSimulator
 
 
 def _initial_condition_2d() -> dist.MultivariateNormal:

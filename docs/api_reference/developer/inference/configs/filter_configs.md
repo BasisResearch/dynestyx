@@ -2,7 +2,8 @@
 
 The single `Filter()` handler is directed to the appropriate filtering algorithm via the provided `FilterConfig`.
 
-::: dynestyx.inference.filter_configs
+The canonical implementation module is `dynestyx.inference.configs.filter`.
+
+::: dynestyx.inference.configs.filter
     options:
       filters: []
-

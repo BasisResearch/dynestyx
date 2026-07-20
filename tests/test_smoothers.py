@@ -17,22 +17,22 @@ from dynestyx import (
     Simulator,
     Smoother,
 )
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeEnKFConfig,
     EnKFConfig,
     HMMConfig,
 )
-from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
-    _pf_backward_sampling_fn,
-    compute_cuthbert_smoother,
-)
-from dynestyx.inference.smoother_configs import (
+from dynestyx.inference.configs.smoother import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
     EKFSmootherConfig,
     KFSmootherConfig,
     PFBackwardSamplingMethod,
     PFSmootherConfig,
+)
+from dynestyx.inference.integrations.cuthbert.discrete_smoother import (
+    _pf_backward_sampling_fn,
+    compute_cuthbert_smoother,
 )
 from tests.models import (
     continuous_time_lti_simplified_model,
@@ -362,7 +362,7 @@ def test_smoother_rejects_filter_configs_as_invalid_input(invalid_config):
                     obs_values=obs_values,
                 )
     assert (
-        "Expected a smoother config class from dynestyx.inference.smoother_configs"
+        "Expected a smoother config class from dynestyx.inference.configs.smoother"
         in str(exc_info.value)
         or "smoother_config" in str(exc_info.value)
     )

@@ -11,15 +11,15 @@ from cd_dynamax import (
     cdnlgssm_smoother,
 )
 
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
+from dynestyx.inference.configs.smoother import (
+    ContinuousTimeEKFSmootherConfig,
+    ContinuousTimeKFSmootherConfig,
+)
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
-from dynestyx.inference.smoother_configs import (
-    ContinuousTimeEKFSmootherConfig,
-    ContinuousTimeKFSmootherConfig,
-)
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
 ContinuousTimeSmootherConfig = (

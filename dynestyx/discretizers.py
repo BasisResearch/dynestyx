@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -10,7 +12,6 @@ from dynestyx.models import (
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.solvers import euler_maruyama_loc_cov
-from dynestyx.types import FunctionOfTime
 
 
 class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
@@ -168,7 +169,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         **kwargs,
-    ) -> FunctionOfTime:
+    ) -> Any:
         if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
             discrete_evolution = self.discretize(dynamics.state_evolution)
             dynamics = DynamicalModel(

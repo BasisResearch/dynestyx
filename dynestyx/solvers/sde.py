@@ -15,6 +15,7 @@ from jaxtyping import Real
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.models.diffusions import EvaluatedDiffusion
 from dynestyx.types import as_scalar_time_array
+from dynestyx.utils import _build_control_path_eval
 
 
 def _early_return_states(
@@ -387,49 +388,52 @@ def _solve_sde_diffrax(
     return sol.ys
 
 
-def solve_sde(
+def solve_sde_state_path(
+    dynamics: DynamicalModel,
     *,
     source: Literal["diffrax", "em_scan"],
-    dynamics: DynamicalModel,
+    initial_state: Array,
     t0: float | int | Array,
-    saveat_times: Array,
-    x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
+    path_times: Array,
     diffeqsolve_settings: dict[str, Any],
     key: Array,
+    ctrl_times: Array | None = None,
+    ctrl_values: Array | None = None,
     tol_vbt: float | int | Array | None = None,
 ) -> Array:
-    """Dispatch between SDE solver backends.
+    """Solve one SDE state path with the requested backend.
 
     Args:
-        source: Backend name (`"diffrax"` or `"em_scan"`).
         dynamics: Dynamical model with continuous-time state evolution.
+        source: Backend name (`"diffrax"` or `"em_scan"`).
+        initial_state: Initial state.
         t0: Initial time.
-        saveat_times: Times at which to return states.
-        x0: Initial state.
-        control_path_eval: Optional control evaluator `u(t)`.
+        path_times: Times at which to return states.
         diffeqsolve_settings: Backend-specific solver settings.
         key: PRNG key for stochastic integration.
+        ctrl_times: Times at which controls are specified.
+        ctrl_values: Control values at `ctrl_times`.
         tol_vbt: VirtualBrownianTree tolerance for the diffrax backend.
 
     Returns:
-        Simulated state trajectory at `saveat_times`.
+        Simulated state trajectory at `path_times`.
     """
-    t0_arr = as_scalar_time_array(t0, name="t0", dtype=saveat_times.dtype)
-    needs_integration = t0_arr < saveat_times[-1]
+    control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, path_times)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=path_times.dtype)
+    needs_integration = t0_arr < path_times[-1]
 
     def _do_solve(_: Array) -> Array:
         if source == "diffrax":
             if tol_vbt is None:
                 raise ValueError("tol_vbt is required when source='diffrax'.")
             tol_vbt_arr = as_scalar_time_array(
-                tol_vbt, name="tol_vbt", dtype=saveat_times.dtype
+                tol_vbt, name="tol_vbt", dtype=path_times.dtype
             )
             return _solve_sde_diffrax(
                 dynamics,
                 t0_arr,
-                saveat_times,
-                x0,
+                path_times,
+                initial_state,
                 control_path_eval,
                 diffeqsolve_settings,
                 key=key,
@@ -440,14 +444,12 @@ def solve_sde(
             dt0_like = diffeqsolve_settings.get("dt0")
             if dt0_like is None:
                 raise ValueError("dt0 is required when source='em_scan'.")
-            dt0_arr = as_scalar_time_array(
-                dt0_like, name="dt0", dtype=saveat_times.dtype
-            )
+            dt0_arr = as_scalar_time_array(dt0_like, name="dt0", dtype=path_times.dtype)
             return _solve_sde_scan(
                 dynamics,
                 t0_arr,
-                saveat_times,
-                x0,
+                path_times,
+                initial_state,
                 control_path_eval,
                 dt0_arr,
                 key=key,
@@ -456,6 +458,6 @@ def solve_sde(
         raise ValueError(f"Unknown SDE solver source: {source}")
 
     def _do_early_return(_: Array) -> Array:
-        return _early_return_states(x0, saveat_times)
+        return _early_return_states(initial_state, path_times)
 
     return lax.cond(needs_integration, _do_solve, _do_early_return, t0_arr)

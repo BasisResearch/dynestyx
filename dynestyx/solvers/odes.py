@@ -2,31 +2,51 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import diffrax as dfx
 import jax.numpy as jnp
 from jax import Array, lax
-from jaxtyping import Real
 
 from dynestyx.types import as_scalar_time_array
+from dynestyx.utils import _build_control_path_eval
 
 
-def solve_ode(
+def default_ode_diffeqsolve_settings() -> dict[str, Any]:
+    """Return default settings for deterministic ODE path solves."""
+    return {
+        "solver": dfx.Tsit5(),
+        "stepsize_controller": dfx.ConstantStepSize(),
+        "adjoint": dfx.RecursiveCheckpointAdjoint(),
+        "dt0": jnp.asarray(1e-3),
+        "max_steps": 100_000,
+    }
+
+
+def solve_ode_state_path(
     dynamics: Any,
+    *,
+    initial_state: Array,
     t0: float | int | Array,
-    saveat_times: Array,
-    x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
-    diffeqsolve_settings: dict[str, Any],
+    path_times: Array,
+    ctrl_times: Array | None = None,
+    ctrl_values: Array | None = None,
+    diffeqsolve_settings: dict[str, Any] | None = None,
 ) -> Array:
-    """Solve one ODE trajectory with Diffrax and save at requested times."""
-    t0_arr = as_scalar_time_array(t0, name="t0", dtype=saveat_times.dtype)
-    t1 = saveat_times[-1]
+    """Solve one ODE state path with shared controls and default settings."""
+    control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, path_times)
+    settings = (
+        diffeqsolve_settings
+        if diffeqsolve_settings is not None
+        else default_ode_diffeqsolve_settings()
+    )
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=path_times.dtype)
+    t1 = path_times[-1]
 
     def _early_return() -> Array:
-        return jnp.broadcast_to(x0, (len(saveat_times),) + jnp.shape(x0))
+        return jnp.broadcast_to(
+            initial_state, (len(path_times),) + jnp.shape(initial_state)
+        )
 
     def _solve() -> Array:
         def _drift(t, y, args):
@@ -37,10 +57,10 @@ def solve_ode(
             dfx.ODETerm(_drift),
             t0=t0_arr,
             t1=t1,
-            y0=x0,
-            saveat=dfx.SaveAt(ts=saveat_times),
+            y0=initial_state,
+            saveat=dfx.SaveAt(ts=path_times),
             args=control_path_eval,
-            **diffeqsolve_settings,
+            **settings,
         )
         return sol.ys
 

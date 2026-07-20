@@ -66,10 +66,18 @@ In subsequent tutorials, we give concrete examples of defining many different ty
 
 ### Simulation of Dynamical Systems
 
-Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation. To specify how dynamical models are simulated, we must select a simulator from `dsx.simulators`. Pass observation times (and optionally controls) as kwargs to the model. For example, to simulate from a continuous-discrete model:
+Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation.
+
+There are now two conceptual paths:
+
+- `dsx.simulate(...)` for pure-JAX forward generation outside NumPyro
+- simulator handlers such as `SDESimulator` when you want `dsx.sample(...)` to
+  register NumPyro sites inside a model or predictive workflow
+
+To specify how dynamical models are simulated inside NumPyro, select a simulator handler and pass prediction times (and optionally controls) to the model. For example, to simulate from a continuous-discrete model:
 
 ```python
-from dynestyx.simulators import SDESimulator
+from dynestyx import SDESimulator
 
 import jax.random as jr
 
@@ -82,10 +90,20 @@ with SDESimulator():  # Specify how the SDE will be simulated/solved
 To instead simulate from a discrete-time system, we would write 
 
 ```python
-from dynestyx.simulators import DiscreteTimeSimulator
+from dynestyx import DiscreteTimeSimulator
 
 with DiscreteTimeSimulator():  # Specify how the discrete-time system will be simulated
     sampled_trajectory = discrete_time_model(predict_times=obs_times)  # Obtain samples
+```
+
+If you do not need NumPyro sites, the pure API is even simpler:
+
+```python
+simulation_result = dsx.simulate(
+    dynamics,
+    rng_key=jr.PRNGKey(0),
+    predict_times=obs_times,
+)
 ```
 
 Simulating from a dynamical model essentially "unrolls" it into a standard `numpyro` probabilistic program. For Bayesian inference of dynamical systems, however, this is a rather inefficient way to do things; in the next section, we review Bayesian inference of dynamical systems, and discuss the way we perform inference more efficiently in `dynestyx`.
@@ -128,7 +146,7 @@ A comprehensive collection of tutorials is available to help you get started wit
 
 ## API Reference
 
-Detailed API documentation is available for all modules, classes, and functions in `dynestyx`. The API reference provides comprehensive information about function signatures, parameters, return values, and usage examples. Visit the [API reference page](api_reference.md) to browse the complete documentation.
+Detailed API documentation is available for all modules, classes, and functions in `dynestyx`. The API reference provides comprehensive information about function signatures, parameters, return values, and usage examples. Visit the [API reference page](api_reference/index.md) to browse the complete documentation.
 
 ## References
 

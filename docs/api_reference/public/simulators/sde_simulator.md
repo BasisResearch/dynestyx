@@ -1,6 +1,6 @@
 # SDESimulator
 
-::: dynestyx.simulators.SDESimulator
+::: dynestyx.simulation.sde.SDESimulator
     options:
       show_root_heading: false
       show_root_toc_entry: true
@@ -26,7 +26,7 @@
     observation_dim = 1
     bm_dim = 1
 
-    def model(obs_times=None, obs_values=None):
+    def model(predict_times=None):
         theta = numpyro.sample("theta", dist.LogNormal(-0.5, 0.2))
         sigma_x = numpyro.sample("sigma_x", dist.LogNormal(-1.0, 0.2))
         sigma_y = numpyro.sample("sigma_y", dist.LogNormal(-1.5, 0.2))
@@ -45,38 +45,16 @@
                 sigma_y**2 * jnp.eye(observation_dim),
             ),
         )
-        return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        return dsx.sample("f", dynamics, predict_times=predict_times)
 
-    obs_times = jnp.linspace(0.0, 5.0, 51)
+    predict_times = jnp.linspace(0.0, 5.0, 51)
     with SDESimulator():
-        prior_pred = Predictive(model, num_samples=5)(jr.PRNGKey(0), predict_times=obs_times)
+        prior_pred = Predictive(model, num_samples=5)(jr.PRNGKey(0), predict_times=predict_times)
     print("Predictive keys:", sorted(prior_pred.keys()))  # e.g. ['f_observations', 'f_states', 'f_times', 'sigma_x', 'sigma_y', 'theta', ...]
     print("Predictive shapes:", {k: v.shape for k, v in prior_pred.items()})  # trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1
     ```
 
-??? example "NUTS with SDESimulator (small demonstration)"
-    ```python
-    import jax.random as jr
-    from dynestyx import SDESimulator
-    from numpyro.infer import MCMC, NUTS, Predictive
-
-    # Assume `model`, `obs_times`, and `obs_values` are defined as above.
-    # Note: this can be expensive; filtering is often preferred for inference.
-    def conditioned_model():
-        return model(obs_times=obs_times, obs_values=obs_values)
-
-    with SDESimulator():
-        mcmc = MCMC(NUTS(conditioned_model), num_warmup=50, num_samples=50)
-        mcmc.run(jr.PRNGKey(1))
-        posterior = mcmc.get_samples()
-    print("Posterior sample keys:", sorted(posterior.keys()))  # stochastic sites (typically parameters and x_0)
-    print("Posterior sample shapes:", {k: v.shape for k, v in posterior.items()})
-
-    # Deterministic trajectories are exposed as 'f_states'/'f_observations' in posterior predictive output.
-    with SDESimulator():
-        post_pred = Predictive(model, posterior_samples=posterior)(
-            jr.PRNGKey(2), predict_times=obs_times
-        )
-    print("Posterior predictive keys:", sorted(post_pred.keys()))  # includes 'f_states', 'f_observations', 'f_times'
-    print("Posterior predictive shapes:", {k: v.shape for k, v in post_pred.items()})
-    ```
+!!! note
+    `SDESimulator` is generation-only. Native SDE explicit latent-path
+    inference should currently go through a discretization step first, then
+    `LatentPathBuilder`; otherwise prefer `Filter` for marginalized inference.

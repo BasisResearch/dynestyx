@@ -15,8 +15,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     unscented_kalman_filter,
 )
 
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
     KFConfig,
@@ -27,6 +26,7 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     gaussian_to_nlgssm_params,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
