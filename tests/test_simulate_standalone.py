@@ -273,3 +273,21 @@ def test_discrete_simulator_backend_aligns_ctrl_values_using_ctrl_times():
 
     assert jnp.array_equal(states, expected_states)
     assert jnp.array_equal(observations, expected_states)
+
+
+def test_discrete_simulator_backend_rejects_missing_ctrl_times():
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_times = jnp.array([0.0, 1.0, 3.0])
+    ctrl_values = jnp.array([[1.0], [10.0], [1000.0]])
+
+    with pytest.raises(
+        ValueError,
+        match="ctrl_times must contain every discrete simulation time exactly",
+    ):
+        dsx.DiscreteTimeSimulator().simulate(
+            _make_controlled_deterministic_discrete_dynamics(),
+            rng_key=jr.PRNGKey(0),
+            predict_times=predict_times,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+        )
