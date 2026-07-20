@@ -225,6 +225,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 )
 
             predicted_states = _merge_attr("states")
+            # The outer handler automatically registers vector fields after segments
+            # (and any plate members) are aggregated. Preserve only unique,
+            # segment-level metadata such as each realized x_0 in this callback.
             return SimulatedResult(
                 predicted_states=predicted_states,
                 predicted_observations=_merge_attr("observations"),
