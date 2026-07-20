@@ -21,8 +21,7 @@ class ODESimulatorConfig:
 
     ``x = (x(t_0), x(t_1), ..., x(t_T))``
 
-    from path parameters such as an initial condition. It is the preferred
-    replacement for passing raw Diffrax kwargs directly into ``ODESimulator``.
+    from path parameters such as an initial condition.
     """
 
     solver: dfx.AbstractSolver = dataclasses.field(default_factory=dfx.Tsit5)
