@@ -1,8 +1,5 @@
 """ODE forward-simulation backend."""
 
-from typing import cast
-
-import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -11,11 +8,9 @@ from jax import Array
 from dynestyx.inference.configs.simulator import ODESimulatorConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import (
-    _SIMULATOR_CONFIG_UNSET,
     BaseSimulator,
     _sample_initial_states,
     _tile_times,
-    _validate_no_config_and_direct_kwargs,
 )
 from dynestyx.solvers import solve_ode_state_path
 from dynestyx.types import SimulatedResult
@@ -29,67 +24,20 @@ class ODESimulator(BaseSimulator):
         self,
         simulator_config: ODESimulatorConfig | None = None,
         *,
-        solver: dfx.AbstractSolver | object = _SIMULATOR_CONFIG_UNSET,
-        adjoint: dfx.AbstractAdjoint | object = _SIMULATOR_CONFIG_UNSET,
-        stepsize_controller: dfx.AbstractStepSizeController
-        | object = _SIMULATOR_CONFIG_UNSET,
-        dt0: float | int | Array | object = _SIMULATOR_CONFIG_UNSET,
-        max_steps: int | object = _SIMULATOR_CONFIG_UNSET,
         n_simulations: int = 1,
     ):
-        _validate_no_config_and_direct_kwargs(
-            simulator_config=simulator_config,
-            config_name="simulator_config",
-            direct_kwargs={
-                "solver": solver,
-                "adjoint": adjoint,
-                "stepsize_controller": stepsize_controller,
-                "dt0": dt0,
-                "max_steps": max_steps,
-            },
-        )
+        """Configure ODE integration.
 
+        Args:
+            simulator_config: Structured simulator settings. Defaults to
+                `ODESimulatorConfig()` when omitted.
+            n_simulations: Number of independent trajectories to simulate.
+        """
         if simulator_config is None:
-            solver_value: dfx.AbstractSolver = cast(
-                dfx.AbstractSolver,
-                dfx.Tsit5() if solver is _SIMULATOR_CONFIG_UNSET else solver,
-            )
-            adjoint_value: dfx.AbstractAdjoint = cast(
-                dfx.AbstractAdjoint,
-                (
-                    dfx.RecursiveCheckpointAdjoint()
-                    if adjoint is _SIMULATOR_CONFIG_UNSET
-                    else adjoint
-                ),
-            )
-            stepsize_controller_value: dfx.AbstractStepSizeController = cast(
-                dfx.AbstractStepSizeController,
-                (
-                    dfx.ConstantStepSize()
-                    if stepsize_controller is _SIMULATOR_CONFIG_UNSET
-                    else stepsize_controller
-                ),
-            )
-            dt0_value: float | int | Array
-            if dt0 is _SIMULATOR_CONFIG_UNSET:
-                dt0_value = 1e-3
-            else:
-                dt0_value = cast(float | int | Array, dt0)
-            max_steps_value: int
-            if max_steps is _SIMULATOR_CONFIG_UNSET:
-                max_steps_value = 100_000
-            else:
-                max_steps_value = cast(int, max_steps)
-            simulator_config = ODESimulatorConfig(
-                solver=solver_value,
-                adjoint=adjoint_value,
-                stepsize_controller=stepsize_controller_value,
-                dt0=dt0_value,
-                max_steps=max_steps_value,
-            )
+            simulator_config = ODESimulatorConfig()
 
         self.simulator_config = simulator_config
-        self.diffeqsolve_settings = simulator_config.diffeqsolve_settings()
+        self.diffeqsolve_settings = simulator_config.diffeqsolve_settings
         self.n_simulations = n_simulations
 
     def _simulate_forward_from_initial_state(

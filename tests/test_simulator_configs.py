@@ -107,20 +107,18 @@ def test_simulator_rejects_mismatched_config_for_routed_backend():
                 _ode_model(predict_times=predict_times)
 
 
-def test_odesimulator_rejects_mixed_config_and_direct_kwargs():
-    with pytest.raises(ValueError, match="either simulator_config or direct kwargs"):
-        dsx.ODESimulator(
-            simulator_config=dsx.ODESimulatorConfig(),
-            dt0=1e-2,
-        )
+def test_odesimulator_uses_default_structured_config():
+    simulator = dsx.ODESimulator()
+
+    assert isinstance(simulator.simulator_config, dsx.ODESimulatorConfig)
+    assert simulator.simulator_config.dt0 == 1e-3
 
 
-def test_sdesimulator_rejects_mixed_config_and_direct_kwargs():
-    with pytest.raises(ValueError, match="either simulator_config or direct kwargs"):
-        dsx.SDESimulator(
-            simulator_config=dsx.SDESimulatorConfig(),
-            source="em_scan",
-        )
+def test_sdesimulator_uses_default_structured_config():
+    simulator = dsx.SDESimulator()
+
+    assert isinstance(simulator.simulator_config, dsx.SDESimulatorConfig)
+    assert simulator.simulator_config.source == "em_scan"
 
 
 def test_sdesimulator_config_rejects_tol_vbt_not_smaller_than_dt0():
@@ -131,4 +129,4 @@ def test_sdesimulator_config_rejects_tol_vbt_not_smaller_than_dt0():
     )
 
     with pytest.raises(ValueError, match="tol_vbt must be smaller than dt0"):
-        config.resolved_tol_vbt()
+        config.resolved_tol_vbt

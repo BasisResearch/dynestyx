@@ -2,7 +2,7 @@
 
 import itertools
 from collections.abc import Callable
-from typing import Any, cast
+from typing import cast
 
 import equinox as eqx
 import jax
@@ -175,34 +175,6 @@ def _sample_observation_path(
         return obs_dist.sample(obs_keys[t_idx])
 
     return jax.vmap(_sample_at_time)(jnp.arange(len(times)))
-
-
-_SIMULATOR_CONFIG_UNSET = object()
-
-
-def _validate_no_config_and_direct_kwargs(
-    *,
-    simulator_config,
-    config_name: str,
-    direct_kwargs: dict[str, Any],
-) -> None:
-    """Reject ambiguous mixed config/direct simulator constructor usage."""
-    if simulator_config is None:
-        return
-
-    provided_direct = sorted(
-        name
-        for name, value in direct_kwargs.items()
-        if value is not _SIMULATOR_CONFIG_UNSET
-    )
-    if not provided_direct:
-        return
-
-    provided_str = ", ".join(provided_direct)
-    raise ValueError(
-        f"Received both {config_name} and direct simulator kwargs ({provided_str}). "
-        f"Please provide either {config_name} or direct kwargs, not both."
-    )
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -753,13 +725,12 @@ class Simulator(BaseSimulator):
 
     def __init__(
         self,
-        *args,
         simulator_config: SimulatorConfig | None = None,
-        **kwargs,
+        *,
+        n_simulations: int = 1,
     ):
-        self.args = args
-        self.kwargs = kwargs
         self.simulator_config = simulator_config
+        self.n_simulations = n_simulations
         self.simulator: BaseSimulator | None = None
 
     def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
@@ -779,12 +750,11 @@ class Simulator(BaseSimulator):
                 )
             if self.simulator_config is not None:
                 self.simulator = SDESimulator(
-                    *self.args,
                     simulator_config=self.simulator_config,
-                    **self.kwargs,
+                    n_simulations=self.n_simulations,
                 )
             else:
-                self.simulator = SDESimulator(*self.args, **self.kwargs)
+                self.simulator = SDESimulator(n_simulations=self.n_simulations)
         elif isinstance(
             dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
         ):
@@ -795,19 +765,18 @@ class Simulator(BaseSimulator):
                 )
             if self.simulator_config is not None:
                 self.simulator = ODESimulator(
-                    *self.args,
                     simulator_config=self.simulator_config,
-                    **self.kwargs,
+                    n_simulations=self.n_simulations,
                 )
             else:
-                self.simulator = ODESimulator(*self.args, **self.kwargs)
+                self.simulator = ODESimulator(n_simulations=self.n_simulations)
         else:
             if self.simulator_config is not None:
                 raise ValueError(
                     "Received a continuous-time SimulatorConfig for discrete-time "
                     "dynamics. Use direct DiscreteTimeSimulator settings instead."
                 )
-            self.simulator = DiscreteTimeSimulator(*self.args, **self.kwargs)
+            self.simulator = DiscreteTimeSimulator(n_simulations=self.n_simulations)
 
         return self.simulator
 

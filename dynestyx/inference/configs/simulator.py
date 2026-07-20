@@ -22,6 +22,29 @@ class ODESimulatorConfig:
     ``x = (x(t_0), x(t_1), ..., x(t_T))``
 
     from path parameters such as an initial condition.
+
+    Attributes:
+        solver (diffrax.AbstractSolver): Diffrax solver used for integration.
+            Defaults to `diffrax.Tsit5()`. See Diffrax's
+            [solver guide](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/)
+            when selecting an alternative.
+        adjoint (diffrax.AbstractAdjoint): Strategy used to differentiate
+            through the solve. Defaults to
+            `diffrax.RecursiveCheckpointAdjoint()`.
+        stepsize_controller (diffrax.AbstractStepSizeController): Step-size
+            policy used by Diffrax. Defaults to
+            `diffrax.ConstantStepSize()`; supply an adaptive controller when
+            error-controlled stepping is required.
+        dt0 (float | int | jax.Array): Initial step size passed to
+            `diffrax.diffeqsolve`. With the default constant-step controller,
+            this is the fixed integration step. Defaults to `1e-3`.
+        max_steps (int): Maximum number of integration steps permitted by
+            `diffrax.diffeqsolve`. Defaults to `100_000`.
+
+    Properties:
+        diffeqsolve_settings (dict[str, Any]): Normalized keyword arguments passed
+            to `diffrax.diffeqsolve`; scalar time values are converted to JAX
+            arrays.
     """
 
     solver: dfx.AbstractSolver = dataclasses.field(default_factory=dfx.Tsit5)
@@ -34,6 +57,7 @@ class ODESimulatorConfig:
     dt0: float | int | Array = 1e-3
     max_steps: int = 100_000
 
+    @property
     def diffeqsolve_settings(self) -> dict[str, Any]:
         """Return normalized Diffrax settings for ``diffeqsolve``."""
         return {
@@ -52,6 +76,39 @@ class SDESimulatorConfig:
     This config collects the backend and solver settings used to simulate an
     SDE path. It supports either a Diffrax-based solve or the faster
     Euler-Maruyama scan backend.
+
+    Attributes:
+        solver (diffrax.AbstractSolver): Diffrax SDE solver. Defaults to
+            `diffrax.Heun()`. This setting is used only when `source="diffrax"`.
+        stepsize_controller (diffrax.AbstractStepSizeController): Diffrax
+            step-size policy. Defaults to `diffrax.ConstantStepSize()` and is
+            used only when `source="diffrax"`.
+        adjoint (diffrax.AbstractAdjoint): Strategy used to differentiate
+            through the Diffrax solve. Defaults to
+            `diffrax.RecursiveCheckpointAdjoint()` and is used only when
+            `source="diffrax"`.
+        dt0 (float | int | jax.Array): Integration step size. It is passed to
+            Diffrax as the initial step size and used as the fixed
+            Euler-Maruyama step by the `"em_scan"` backend. Defaults to `1e-4`.
+        tol_vbt (float | int | jax.Array | None): Tolerance for Diffrax's
+            `VirtualBrownianTree`. When `source="diffrax"`, `None` resolves to
+            `dt0 / 2`; an explicit value must be smaller than `dt0` for
+            statistically correct simulation. Ignored by `"em_scan"`.
+        max_steps (int | None): Maximum number of Diffrax integration steps.
+            `None` leaves the Diffrax default in effect. The `"em_scan"`
+            backend does not use this setting.
+        source (Literal["diffrax", "em_scan"]): Simulation backend.
+            `"diffrax"` uses the configured Diffrax solver and a virtual
+            Brownian tree. `"em_scan"` uses a fixed-step Euler-Maruyama
+            `jax.lax.scan` and is the default for speed.
+
+    Properties:
+        diffeqsolve_settings (dict[str, Any]): Normalized Diffrax keyword
+            arguments derived from the config; scalar time values are
+            converted to JAX arrays.
+        resolved_tol_vbt (jax.Array | None): Effective virtual-Brownian-tree
+            tolerance for the selected backend. Returns `None` for `"em_scan"`
+            and validates the tolerance for `"diffrax"`.
     """
 
     solver: dfx.AbstractSolver = dataclasses.field(default_factory=dfx.Heun)
@@ -73,6 +130,7 @@ class SDESimulatorConfig:
                 f"got source={self.source!r}."
             )
 
+    @property
     def diffeqsolve_settings(self) -> dict[str, Any]:
         """Return normalized Diffrax-style backend settings."""
         return {
@@ -83,6 +141,7 @@ class SDESimulatorConfig:
             "max_steps": self.max_steps,
         }
 
+    @property
     def resolved_tol_vbt(self) -> Real[Array, ""] | None:
         """Return the resolved Brownian-tree tolerance for the active backend."""
         if self.source != "diffrax":

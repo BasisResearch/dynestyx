@@ -21,6 +21,7 @@ from dynestyx import (
     Filter,
     ODESimulator,
     SDESimulator,
+    SDESimulatorConfig,
 )
 from dynestyx.inference.configs.filter import (
     ContinuousTimeEKFConfig,
@@ -40,7 +41,9 @@ def _gen_obs_sde(source: Literal["diffrax", "em_scan"]):
     rng = jr.PRNGKey(42)
     obs_times = jnp.linspace(0.0, 1.0, 6)
     predict_times = jnp.linspace(0.0, 1.5, 10)
-    with SDESimulator(n_simulations=1, source=source):
+    with SDESimulator(
+        simulator_config=SDESimulatorConfig(source=source), n_simulations=1
+    ):
         pred = Predictive(
             continuous_time_stochastic_l63_model,
             params={"rho": jnp.array(28.0)},
@@ -108,7 +111,9 @@ def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim, source):
         num_samples=num_samples,
         exclude_deterministic=False,
     )
-    with SDESimulator(n_simulations=n_sim, source=source):
+    with SDESimulator(
+        simulator_config=SDESimulatorConfig(source=source), n_simulations=n_sim
+    ):
         with Filter(
             filter_config=ContinuousTimeEnKFConfig(
                 n_particles=8, record_filtered_states_mean=True

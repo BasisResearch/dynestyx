@@ -16,6 +16,7 @@ from dynestyx import (
     DiscreteTimeSimulator,
     Filter,
     SDESimulator,
+    SDESimulatorConfig,
     Simulator,
 )
 from dynestyx.inference.configs.filter import (
@@ -85,7 +86,7 @@ def test_filter_simulator_sde_explicit(source):
     """Filter + SDESimulator: explicit SDESimulator (not Simulator) works."""
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_sde()
     rng_key = jr.PRNGKey(42)
-    with SDESimulator(source=source):
+    with SDESimulator(simulator_config=SDESimulatorConfig(source=source)):
         with trace() as tr, seed(rng_seed=rng_key):
             data_conditioned_model()
     assert_trace_sites_exist_and_field_all_finite(
@@ -124,7 +125,9 @@ def test_filter_sdesimulator_predict_times_n_simulations(source):
     true_rho = 28.0
 
     # Generate observations
-    with SDESimulator(n_simulations=1, source=source):
+    with SDESimulator(
+        simulator_config=SDESimulatorConfig(source=source), n_simulations=1
+    ):
         pred = Predictive(
             continuous_time_stochastic_l63_model,
             params={"rho": jnp.array(true_rho)},
@@ -139,7 +142,9 @@ def test_filter_sdesimulator_predict_times_n_simulations(source):
         continuous_time_stochastic_l63_model, data={"rho": jnp.array(true_rho)}
     )
     n_sim = 2
-    with SDESimulator(n_simulations=n_sim, source=source):
+    with SDESimulator(
+        simulator_config=SDESimulatorConfig(source=source), n_simulations=n_sim
+    ):
         with Filter(
             filter_config=ContinuousTimeEnKFConfig(
                 n_particles=8, record_filtered_states_mean=True

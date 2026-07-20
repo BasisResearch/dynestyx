@@ -1,8 +1,5 @@
 """SDE simulator backend."""
 
-from typing import Literal, cast
-
-import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -11,11 +8,9 @@ from jax import Array
 from dynestyx.inference.configs.simulator import SDESimulatorConfig
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.simulation.base import (
-    _SIMULATOR_CONFIG_UNSET,
     BaseSimulator,
     _sample_initial_states,
     _tile_times,
-    _validate_no_config_and_direct_kwargs,
 )
 from dynestyx.solvers import solve_sde_state_path
 from dynestyx.types import SimulatedResult
@@ -50,126 +45,34 @@ class SDESimulator(BaseSimulator):
           `ContinuousTime*Config`) or particle methods instead.
 
     Tip for speed:
-        - Use `source="em_scan"` if you are happy with a simple Euler-Maruyama forward simulation
+        - Use `SDESimulatorConfig(source="em_scan")` if you are happy with a simple Euler-Maruyama forward simulation
           (10–20x faster than Diffrax's implementation; see
           [Diffrax Issue #517](https://github.com/patrick-kidger/diffrax/issues/517)).
-        - Use `source="diffrax"` if you want greater flexibility in the solver and step-size control.
+        - Use `SDESimulatorConfig(source="diffrax")` if you want greater flexibility in the solver and step-size control.
     """
 
     def __init__(
         self,
         simulator_config: SDESimulatorConfig | None = None,
         *,
-        solver: dfx.AbstractSolver | object = _SIMULATOR_CONFIG_UNSET,
-        stepsize_controller: dfx.AbstractStepSizeController
-        | object = _SIMULATOR_CONFIG_UNSET,
-        adjoint: dfx.AbstractAdjoint | object = _SIMULATOR_CONFIG_UNSET,
-        dt0: float | int | Array | object = _SIMULATOR_CONFIG_UNSET,
-        tol_vbt: float | int | Array | None | object = _SIMULATOR_CONFIG_UNSET,
-        max_steps: int | None | object = _SIMULATOR_CONFIG_UNSET,
         n_simulations: int = 1,
-        source: Literal["diffrax", "em_scan"] | object = _SIMULATOR_CONFIG_UNSET,
     ):
         """Configure SDE integration settings.
 
         Args:
-            simulator_config: Optional structured simulator config. When
-                provided, use it instead of direct solver kwargs.
-            solver: Diffrax solver for the SDE (e.g., [`dfx.Heun`](https://docs.kidger.site/diffrax/api/solvers/ode_solvers/)).
-                For solver guidance, see [How to choose a solver](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/).
-            stepsize_controller: Diffrax step-size controller. Use
-                [`dfx.ConstantStepSize`](https://docs.kidger.site/diffrax/api/stepsize_controller/)
-                for fixed-step simulation, or an adaptive controller for error-controlled stepping.
-            adjoint: Diffrax adjoint strategy used for differentiation through the
-                solver (relevant when used under gradient-based inference). See
-                [Adjoints](https://docs.kidger.site/diffrax/api/adjoints/).
-            dt0: Initial step size (float or JAX array) passed to
-                [`diffrax.diffeqsolve`](https://docs.kidger.site/diffrax/api/diffeqsolve/).
-            tol_vbt: Tolerance parameter for
-                [`diffrax.VirtualBrownianTree`](https://docs.kidger.site/diffrax/api/brownian/). If None,
-                defaults to `dt0 / 2`. For statistically correct simulation, this
-                must be smaller than `dt0`.
-            max_steps: Optional hard cap on solver steps.
+            simulator_config: Structured simulator settings. Defaults to
+                `SDESimulatorConfig()` when omitted.
             n_simulations: Number of independent trajectory simulations. When > 1,
                 states and observations have an extra leading dimension (n_simulations, T, ...).
-            source: SDE backend to use. `"diffrax"` uses Diffrax + Brownian tree.
-                `"em_scan"` uses a custom fixed-step Euler-Maruyama `lax.scan`
-                that advances at every `dt0` tick and also lands exactly on all
-                requested solve times. Default is `"em_scan"` for speed.
-
-        Notes:
-            - `VirtualBrownianTree` draws randomness via `numpyro.prng_key()`, so
-              `SDESimulator` must be executed inside a seeded NumPyro context.
         """
-        _validate_no_config_and_direct_kwargs(
-            simulator_config=simulator_config,
-            config_name="simulator_config",
-            direct_kwargs={
-                "solver": solver,
-                "stepsize_controller": stepsize_controller,
-                "adjoint": adjoint,
-                "dt0": dt0,
-                "tol_vbt": tol_vbt,
-                "max_steps": max_steps,
-                "source": source,
-            },
-        )
-
         if simulator_config is None:
-            solver_value: dfx.AbstractSolver = cast(
-                dfx.AbstractSolver,
-                dfx.Heun() if solver is _SIMULATOR_CONFIG_UNSET else solver,
-            )
-            stepsize_controller_value: dfx.AbstractStepSizeController = cast(
-                dfx.AbstractStepSizeController,
-                (
-                    dfx.ConstantStepSize()
-                    if stepsize_controller is _SIMULATOR_CONFIG_UNSET
-                    else stepsize_controller
-                ),
-            )
-            adjoint_value: dfx.AbstractAdjoint = cast(
-                dfx.AbstractAdjoint,
-                (
-                    dfx.RecursiveCheckpointAdjoint()
-                    if adjoint is _SIMULATOR_CONFIG_UNSET
-                    else adjoint
-                ),
-            )
-            dt0_value: float | int | Array
-            if dt0 is _SIMULATOR_CONFIG_UNSET:
-                dt0_value = 1e-4
-            else:
-                dt0_value = cast(float | int | Array, dt0)
-            tol_vbt_value: float | int | Array | None
-            if tol_vbt is _SIMULATOR_CONFIG_UNSET:
-                tol_vbt_value = None
-            else:
-                tol_vbt_value = cast(float | int | Array | None, tol_vbt)
-            max_steps_value: int | None
-            if max_steps is _SIMULATOR_CONFIG_UNSET:
-                max_steps_value = None
-            else:
-                max_steps_value = cast(int | None, max_steps)
-            source_value: Literal["diffrax", "em_scan"] = cast(
-                Literal["diffrax", "em_scan"],
-                "em_scan" if source is _SIMULATOR_CONFIG_UNSET else source,
-            )
-            simulator_config = SDESimulatorConfig(
-                solver=solver_value,
-                stepsize_controller=stepsize_controller_value,
-                adjoint=adjoint_value,
-                dt0=dt0_value,
-                tol_vbt=tol_vbt_value,
-                max_steps=max_steps_value,
-                source=source_value,
-            )
+            simulator_config = SDESimulatorConfig()
 
         self.simulator_config = simulator_config
-        self.diffeqsolve_settings = simulator_config.diffeqsolve_settings()
+        self.diffeqsolve_settings = simulator_config.diffeqsolve_settings
         self.n_simulations = n_simulations
         self.source = simulator_config.source
-        self.tol_vbt = simulator_config.resolved_tol_vbt()
+        self.tol_vbt = simulator_config.resolved_tol_vbt
 
     def _simulate_forward_from_initial_state(
         self,

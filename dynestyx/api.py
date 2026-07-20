@@ -5,6 +5,7 @@ from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
+from dynestyx.inference.configs.simulator import SimulatorConfig
 from dynestyx.inference.state_paths.reconstruct import reconstruct_state_path
 from dynestyx.inference.state_paths.score import compute_state_path_log_prob
 from dynestyx.models import DynamicalModel
@@ -32,8 +33,7 @@ def simulate(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     n_simulations: int = 1,
-    simulator_config=None,
-    **simulator_kwargs,
+    simulator_config: SimulatorConfig | None = None,
 ) -> SimulatedResult:
     """Run pure-JAX forward simulation and return a :class:`SimulatedResult`.
 
@@ -58,7 +58,6 @@ def simulate(
     simulator = Simulator(
         n_simulations=n_simulations,
         simulator_config=simulator_config,
-        **simulator_kwargs,
     )
     return simulator.simulate(
         dynamics_with_t0,

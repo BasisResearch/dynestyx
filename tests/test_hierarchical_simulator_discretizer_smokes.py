@@ -19,6 +19,7 @@ from dynestyx import (
     LatentPathBuilder,
     ODESimulator,
     SDESimulator,
+    SDESimulatorConfig,
 )
 from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
@@ -259,7 +260,7 @@ def test_plate_forward_discrete_ode_sde_shapes(source):
     assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
     assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
-    with SDESimulator(source=source):
+    with SDESimulator(simulator_config=SDESimulatorConfig(source=source)):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(2)):
             _plate_continuous_sde_model(predict_times=t, M=2)
     assert_trace_sites_exist_and_field_all_finite(
