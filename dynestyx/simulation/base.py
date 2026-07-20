@@ -206,7 +206,7 @@ def _validate_no_config_and_direct_kwargs(
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
-    """Base class for generation-only simulator/unroller handlers.
+    """Base class for generation-only simulator handlers.
 
     Interprets `dsx.sample(name, dynamics, predict_times=..., ...)` by running a
     pure-JAX forward simulation on the requested prediction grid, then
