@@ -17,20 +17,18 @@ from jaxtyping import Real
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
-from dynestyx.inference.configs.simulator import (
-    ODESimulatorConfig,
-    SDESimulatorConfig,
-    SimulatorConfig,
-)
 from dynestyx.inference.utils.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
     _slice_dynamics_for_plate_member,
 )
-from dynestyx.models import (
-    DeterministicContinuousTimeStateEvolution,
-    DynamicalModel,
-    StochasticContinuousTimeStateEvolution,
+from dynestyx.models import DynamicalModel
+from dynestyx.simulation.utils import (
+    _merge_segments,
+    _register_simulated_result_sites,
+    _sample_observation_path,
+    _stack_simulated_results,
+    _tile_times,
 )
 from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
 from dynestyx.utils import (
@@ -38,143 +36,6 @@ from dynestyx.utils import (
     _has_any_batched_plate_source,
     _validate_site_sorting,
 )
-
-
-def _tile_times(times: Array, n_sim: int) -> Array:
-    """Return times tiled to shape (n_sim, T)."""
-    return jnp.broadcast_to(jnp.expand_dims(times, axis=0), (n_sim, len(times)))
-
-
-def _ensure_trailing_dim(arr: Array) -> Array:
-    """Ensure simulator outputs follow shape (n_sim, T, dim)."""
-    return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
-
-
-def _merge_segments(
-    arr_list: list[Array],
-    seg_masks: list[Array],
-    n_pred: int,
-) -> Array:
-    """Merge segment outputs into one array in predict-time order.
-
-    Each segment contributes values only where its mask is True. Input arrays
-    must already be shaped (n_sim, T_seg, dim).
-    """
-    first = arr_list[0]
-    assert first.ndim == 3, (
-        f"_merge_segments expects ndim==3 arrays (n_sim, T, D), got ndim={first.ndim} "
-        f"with shape {first.shape}. Ensure _ensure_trailing_dim is applied before "
-        "calling this function."
-    )
-    out = jnp.zeros((first.shape[0], n_pred, first.shape[2]), dtype=first.dtype)
-    for arr, mask in zip(arr_list, seg_masks):
-        cumsum = jnp.cumsum(mask)
-        local_idx = jnp.where(mask, cumsum - 1, 0)
-        gathered = arr[:, local_idx, :]
-        mask_bc = jnp.expand_dims(jnp.expand_dims(mask, 0), -1)  # (1, T, 1)
-        out = jnp.where(mask_bc, gathered, out)
-    return out
-
-
-def _simulated_result_site_payload(result: SimulatedResult) -> dict[str, Array]:
-    """Convert a simulation result into deterministic-site payloads."""
-    payload: dict[str, Array] = {}
-    for field_name in (
-        "times",
-        "initial_states",
-        "states",
-        "observations",
-        "predicted_times",
-        "predicted_states",
-        "predicted_observations",
-    ):
-        value = getattr(result, field_name)
-        if value is not None:
-            payload[field_name] = jnp.asarray(value)
-    return payload
-
-
-def _stack_simulated_results(
-    results: list[SimulatedResult],
-    *,
-    plate_shapes: tuple[int, ...],
-) -> SimulatedResult:
-    """Stack per-member simulation results back onto the plate grid."""
-    payloads = [_simulated_result_site_payload(result) for result in results]
-    keys = payloads[0].keys()
-    for payload in payloads:
-        if payload.keys() != keys:
-            raise ValueError(
-                "Plate simulator members returned inconsistent result keys."
-            )
-
-    stacked_payload: dict[str, Array] = {}
-    for key in keys:
-        values = [payload[key] for payload in payloads]
-        flat = jnp.stack(values, axis=0)
-        stacked_payload[key] = flat.reshape(*plate_shapes, *values[0].shape)
-
-    return SimulatedResult(
-        times=stacked_payload.get("times"),
-        initial_states=stacked_payload.get("initial_states"),
-        states=stacked_payload.get("states"),
-        observations=stacked_payload.get("observations"),
-        predicted_times=stacked_payload.get("predicted_times"),
-        predicted_states=stacked_payload.get("predicted_states"),
-        predicted_observations=stacked_payload.get("predicted_observations"),
-        _register_numpyro_sites=chain_numpyro_site_registrations(
-            *(getattr(result, "_register_numpyro_sites", None) for result in results)
-        ),
-    )
-
-
-def _register_simulated_result_sites(
-    result: SimulatedResult, *, site_name: str
-) -> None:
-    """Register a simulation result's public trace sites under ``site_name``."""
-    site_suffixes = {
-        "times": "times",
-        "initial_states": "x_0",
-        "states": "states",
-        "observations": "observations",
-        "predicted_times": "predicted_times",
-        "predicted_states": "predicted_states",
-        "predicted_observations": "predicted_observations",
-    }
-    for field_name, value in _simulated_result_site_payload(result).items():
-        numpyro.deterministic(f"{site_name}_{site_suffixes[field_name]}", value)
-
-
-def _sample_initial_states(
-    initial_condition,
-    *,
-    rng_key: Array,
-    n_simulations: int,
-) -> Array:
-    """Draw independent initial states for each simulation member."""
-    keys = jr.split(rng_key, n_simulations)
-    return jax.vmap(initial_condition.sample)(keys)
-
-
-def _sample_observation_path(
-    dynamics: DynamicalModel,
-    *,
-    states: Array,
-    times: Array,
-    rng_key: Array,
-    control_path_eval: Callable[[Array], Array | None] | None = None,
-) -> Array:
-    """Sample one observation path conditional on a realized state path."""
-    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
-    obs_keys = jr.split(rng_key, len(times))
-
-    def _sample_at_time(t_idx):
-        x_t = states[t_idx]
-        t = times[t_idx]
-        obs_dist = dynamics.observation_model(x=x_t, u=ctrl(t), t=t)
-        return obs_dist.sample(obs_keys[t_idx])
-
-    return jax.vmap(_sample_at_time)(jnp.arange(len(times)))
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -298,7 +159,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 )
                 assert seg_result.states is not None
                 assert seg_result.observations is not None
-                predicted_states = cast(Array, seg_result.states)
+                predicted_states = seg_result.states
                 return SimulatedResult(
                     predicted_states=predicted_states,
                     predicted_observations=seg_result.observations,
@@ -307,7 +168,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     ),
                     _register_numpyro_sites=lambda _site_name: (
                         _register_simulated_result_sites(
-                            SimulatedResult(initial_states=seg_result.initial_states),
+                            SimulatedResult(x_0=seg_result.x_0),
                             site_name=seg_name,
                         )
                     ),
@@ -358,7 +219,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             # Scatter each segment's output into the global predict_times order.
             def _merge_attr(attr: str) -> Array:
                 return _merge_segments(
-                    [jnp.asarray(getattr(result, attr)) for result in seg_results],
+                    [cast(Array, getattr(result, attr)) for result in seg_results],
                     seg_masks,
                     n_pred,
                 )
@@ -373,9 +234,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                         (
                             lambda _site_name, seg_name=seg_name, seg_result=seg_result: (
                                 _register_simulated_result_sites(
-                                    SimulatedResult(
-                                        initial_states=seg_result.initial_states
-                                    ),
+                                    SimulatedResult(x_0=seg_result.x_0),
                                     site_name=seg_name,
                                 )
                             )
@@ -710,95 +569,3 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         _, observations = nscan(_step, None, jnp.arange(T))
         return observations
-
-
-class Simulator(BaseSimulator):
-    """Auto-selecting simulator wrapper.
-
-    Chooses a concrete simulator based on the structure of
-    ``dynamics.state_evolution``:
-
-    - stochastic continuous-time -> ``SDESimulator``
-    - deterministic continuous-time -> ``ODESimulator``
-    - otherwise -> ``DiscreteTimeSimulator``
-    """
-
-    def __init__(
-        self,
-        simulator_config: SimulatorConfig | None = None,
-        *,
-        n_simulations: int = 1,
-    ):
-        self.simulator_config = simulator_config
-        self.n_simulations = n_simulations
-        self.simulator: BaseSimulator | None = None
-
-    def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
-        """Instantiate and cache the concrete simulator for ``dynamics``."""
-        if self.simulator is not None:
-            return self.simulator
-
-        from dynestyx.simulation.discrete import DiscreteTimeSimulator
-        from dynestyx.simulation.ode import ODESimulator
-        from dynestyx.simulation.sde import SDESimulator
-
-        if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-            if isinstance(self.simulator_config, ODESimulatorConfig):
-                raise ValueError(
-                    "Received an ODESimulatorConfig for stochastic continuous-time "
-                    "dynamics. Pass an SDESimulatorConfig instead."
-                )
-            if self.simulator_config is not None:
-                self.simulator = SDESimulator(
-                    simulator_config=self.simulator_config,
-                    n_simulations=self.n_simulations,
-                )
-            else:
-                self.simulator = SDESimulator(n_simulations=self.n_simulations)
-        elif isinstance(
-            dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
-        ):
-            if isinstance(self.simulator_config, SDESimulatorConfig):
-                raise ValueError(
-                    "Received an SDESimulatorConfig for deterministic continuous-time "
-                    "dynamics. Pass an ODESimulatorConfig instead."
-                )
-            if self.simulator_config is not None:
-                self.simulator = ODESimulator(
-                    simulator_config=self.simulator_config,
-                    n_simulations=self.n_simulations,
-                )
-            else:
-                self.simulator = ODESimulator(n_simulations=self.n_simulations)
-        else:
-            if self.simulator_config is not None:
-                raise ValueError(
-                    "Received a continuous-time SimulatorConfig for discrete-time "
-                    "dynamics. Use direct DiscreteTimeSimulator settings instead."
-                )
-            self.simulator = DiscreteTimeSimulator(n_simulations=self.n_simulations)
-
-        return self.simulator
-
-    def simulate(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        rng_key: Array,
-        obs_times=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        **kwargs,
-    ) -> SimulatedResult:
-        """Auto-route to the appropriate pure-JAX simulator backend."""
-        simulator = self._ensure_simulator(dynamics)
-        return simulator.simulate(
-            dynamics,
-            rng_key=rng_key,
-            obs_times=obs_times,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
-            predict_times=predict_times,
-            **kwargs,
-        )

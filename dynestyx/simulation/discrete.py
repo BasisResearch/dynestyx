@@ -10,8 +10,8 @@ from jax import Array
 
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
-from dynestyx.simulation.base import (
-    BaseSimulator,
+from dynestyx.simulation.base import BaseSimulator
+from dynestyx.simulation.utils import (
     _ensure_trailing_dim,
     _sample_initial_states,
     _tile_times,
@@ -30,19 +30,16 @@ def _align_ctrl_values_to_times(
     if ctrl_times is None or ctrl_values is None:
         return ctrl_values
 
-    times_arr = jnp.asarray(times)
-    ctrl_times_arr = jnp.asarray(ctrl_times)
-    ctrl_values_arr = jnp.asarray(ctrl_values)
-    idx = jnp.searchsorted(ctrl_times_arr, times_arr, side="left")
-    max_idx = ctrl_times_arr.shape[0] - 1
+    idx = jnp.searchsorted(ctrl_times, times, side="left")
+    max_idx = ctrl_times.shape[0] - 1
     safe_idx = jnp.clip(idx, 0, max_idx)
-    matched = (idx < ctrl_times_arr.shape[0]) & (ctrl_times_arr[safe_idx] == times_arr)
+    matched = (idx < ctrl_times.shape[0]) & (ctrl_times[safe_idx] == times)
     _raise_now_or_error_if(
-        times_arr,
+        times,
         jnp.any(~matched),
         "ctrl_times must contain every discrete simulation time exactly.",
     )
-    return ctrl_values_arr[safe_idx]
+    return ctrl_values[safe_idx]
 
 
 def _sample_discrete_state_path_from_initial_state(
@@ -89,7 +86,7 @@ def _sample_discrete_state_path(
 ) -> Array:
     """Sample one state path from the discrete dynamical prior."""
     aligned_ctrl_values = _align_ctrl_values_to_times(
-        times=jnp.asarray(times),
+        times=times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
@@ -97,9 +94,9 @@ def _sample_discrete_state_path(
     initial_state = dynamics.initial_condition.sample(initial_key)
     return _sample_discrete_state_path_from_initial_state(
         dynamics,
-        initial_state=jnp.asarray(initial_state),
+        initial_state=initial_state,
         rng_key=transition_key,
-        times=jnp.asarray(times),
+        times=times,
         ctrl_values=aligned_ctrl_values,
     )
 
@@ -151,7 +148,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
         return SimulatedResult(
             times=_tile_times(times, n_sim),
-            initial_states=jnp.asarray(initial_state),
+            x_0=initial_state,
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
         )
@@ -173,7 +170,7 @@ class DiscreteTimeSimulator(BaseSimulator):
             raise ValueError("obs_times or predict_times must be provided")
 
         aligned_ctrl_values = _align_ctrl_values_to_times(
-            times=jnp.asarray(times),
+            times=times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
@@ -185,7 +182,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         )
         return self._simulate_forward_from_initial_state(
             dynamics,
-            initial_state=jnp.asarray(initial_state),
+            initial_state=initial_state,
             rng_key=rollout_key,
             times=times,
             ctrl_values=aligned_ctrl_values,

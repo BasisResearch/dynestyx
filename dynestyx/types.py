@@ -84,24 +84,24 @@ class LatentStateResult:
 class SimulatedResult:
     """Result of simulation without eager NumPyro side effects.
 
-    The simulator now conceptually owns data generation only. This result
-    therefore stores the realized state path ``x`` and observation path ``y``
+    This result therefore stores the realized state path ``x`` and observation path ``y``
     produced on the requested simulator time grid.
 
-    For raw forward simulation, ``times``, ``states``, and ``observations``
-    are populated. When a simulator is layered outside a Filter or Smoother
-    for posterior rollout, the same result object instead carries
+    For raw forward simulation, ``times``, ``x_0``, ``states``, and
+    ``observations`` are populated. The field names match their NumPyro site
+    suffixes. When a simulator is layered outside a Filter or Smoother for
+    posterior rollout, the same result object instead carries
     ``predicted_times``, ``predicted_states``, and
     ``predicted_observations``.
     """
 
-    times: object = None
-    initial_states: object = None
-    states: object = None
-    observations: object = None
-    predicted_times: object = None
-    predicted_states: object = None
-    predicted_observations: object = None
+    times: Array | None = None
+    x_0: Array | None = None
+    states: Array | None = None
+    observations: Array | None = None
+    predicted_times: Array | None = None
+    predicted_states: Array | None = None
+    predicted_observations: Array | None = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )

@@ -1,17 +1,13 @@
 """ODE forward-simulation backend."""
 
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 from jax import Array
 
 from dynestyx.inference.configs.simulator import ODESimulatorConfig
 from dynestyx.models import DynamicalModel
-from dynestyx.simulation.base import (
-    BaseSimulator,
-    _sample_initial_states,
-    _tile_times,
-)
+from dynestyx.simulation.base import BaseSimulator
+from dynestyx.simulation.utils import _sample_initial_states, _tile_times
 from dynestyx.solvers import solve_ode_state_path
 from dynestyx.types import SimulatedResult
 from dynestyx.utils import _build_control_path_eval
@@ -84,7 +80,7 @@ class ODESimulator(BaseSimulator):
         )
         return SimulatedResult(
             times=_tile_times(times, n_sim),
-            initial_states=jnp.asarray(initial_state),
+            x_0=initial_state,
             states=states,
             observations=observations,
         )
@@ -113,7 +109,7 @@ class ODESimulator(BaseSimulator):
         )
         return self._simulate_forward_from_initial_state(
             dynamics,
-            initial_state=jnp.asarray(initial_state),
+            initial_state=initial_state,
             rng_key=rollout_key,
             times=times,
             ctrl_times=ctrl_times,

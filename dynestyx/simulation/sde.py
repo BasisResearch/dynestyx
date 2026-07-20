@@ -1,17 +1,13 @@
 """SDE simulator backend."""
 
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 from jax import Array
 
 from dynestyx.inference.configs.simulator import SDESimulatorConfig
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
-from dynestyx.simulation.base import (
-    BaseSimulator,
-    _sample_initial_states,
-    _tile_times,
-)
+from dynestyx.simulation.base import BaseSimulator
+from dynestyx.simulation.utils import _sample_initial_states, _tile_times
 from dynestyx.solvers import solve_sde_state_path
 from dynestyx.types import SimulatedResult
 from dynestyx.utils import _build_control_path_eval
@@ -21,11 +17,6 @@ class SDESimulator(BaseSimulator):
     """Simulator for continuous-time stochastic dynamics (SDEs).
 
     This simulator integrates a `ContinuousTimeStateEvolution` with nonzero diffusion
-    using Diffrax and a `VirtualBrownianTree` (see the Diffrax docs on
-    [Brownian controls](https://docs.kidger.site/diffrax/api/brownian/)). The
-    rollout itself is pure JAX; when used through `dsx.sample(...)`, realized
-    outputs are attached afterward as NumPyro deterministic sites, including
-    `"x_0"`, `"times"`, `"states"`, and `"observations"`.
 
     Controls:
         If `ctrl_times` / `ctrl_values` are provided at the `dsx.sample(...)` site,
@@ -38,7 +29,6 @@ class SDESimulator(BaseSimulator):
         `numpyro.deterministic(...)` sites.
 
     Important:
-        - This is intended for **simulation / predictive checks** inside NumPyro.
         - Conditioning on `obs_values` with an SDE unroller typically yields a
           very high-dimensional latent path and is usually a **poor inference
           strategy** for parameters. Prefer filtering (`Filter` with
@@ -120,7 +110,7 @@ class SDESimulator(BaseSimulator):
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
         return SimulatedResult(
             times=_tile_times(times, n_sim),
-            initial_states=jnp.asarray(initial_state),
+            x_0=initial_state,
             states=states,
             observations=observations,
         )
@@ -162,7 +152,7 @@ class SDESimulator(BaseSimulator):
         )
         return self._simulate_forward_from_initial_state(
             dynamics,
-            initial_state=jnp.asarray(initial_state),
+            initial_state=initial_state,
             rng_key=rollout_key,
             times=times,
             ctrl_times=ctrl_times,

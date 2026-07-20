@@ -52,8 +52,8 @@ from dynestyx.observation_missingness import (
     resolve_missing_observation_strategy,
     validate_missing_obs_values,
 )
-from dynestyx.simulation.base import _sample_observation_path
 from dynestyx.simulation.discrete import _sample_discrete_state_path
+from dynestyx.simulation.utils import _sample_observation_path
 from dynestyx.types import LatentStateResult
 from dynestyx.utils import _build_control_path_eval
 

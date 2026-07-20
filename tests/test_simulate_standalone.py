@@ -108,7 +108,9 @@ def test_simulate_discrete_returns_simulated_result():
     observations = jnp.asarray(result.observations)
 
     assert isinstance(result, dsx.SimulatedResult)
+    assert result.x_0 is not None
     assert times.shape == (3, len(predict_times))
+    assert result.x_0.shape == (3, 2)
     assert states.shape == (3, len(predict_times), 2)
     assert observations.shape == (3, len(predict_times), 1)
     assert jnp.allclose(times[0], predict_times)
