@@ -1,6 +1,5 @@
 """SDE simulator backend."""
 
-from collections.abc import Callable
 from typing import Literal, cast
 
 import diffrax as dfx
@@ -18,9 +17,9 @@ from dynestyx.simulation.base import (
     _tile_times,
     _validate_no_config_and_direct_kwargs,
 )
-from dynestyx.solvers import solve_sde
+from dynestyx.solvers import solve_sde_state_path
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _build_control_path
+from dynestyx.utils import _build_control_path_eval
 
 
 class SDESimulator(BaseSimulator):
@@ -185,26 +184,21 @@ class SDESimulator(BaseSimulator):
         """Run pure forward SDE simulation from provided initial states."""
         n_sim = initial_state.shape[0]
 
-        if ctrl_times is not None and ctrl_values is not None:
-            control_path = _build_control_path(ctrl_times, ctrl_values, times)
-            control_path_eval: Callable[[Array], Array | None] = lambda t: (
-                control_path.evaluate(t, left=False)
-            )
-        else:
-            control_path_eval = lambda t: None
+        control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, times)
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
         sim_keys = jr.split(rng_key, n_sim)
 
         def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
             k_solve, k_obs = jr.split(key, 2)
-            states = solve_sde(
+            states = solve_sde_state_path(
                 source=self.source,
                 dynamics=dynamics,
                 t0=t0,
-                saveat_times=times,
-                x0=x0,
-                control_path_eval=control_path_eval,
+                path_times=times,
+                initial_state=x0,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
                 diffeqsolve_settings=self.diffeqsolve_settings,
                 key=k_solve,
                 tol_vbt=self.tol_vbt,

@@ -5,8 +5,8 @@ from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.state_paths.reconstruct import assemble_state_path
-from dynestyx.inference.state_paths.score import compute_state_path_log_prob_terms
+from dynestyx.inference.state_paths.reconstruct import reconstruct_state_path
+from dynestyx.inference.state_paths.score import compute_state_path_log_prob
 from dynestyx.models import DynamicalModel
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
@@ -134,7 +134,7 @@ def log_prob(
         )
     )
 
-    assembled = assemble_state_path(
+    _, state_path, state_path_times = reconstruct_state_path(
         dynamics_with_t0,
         state_path_params=state_path_params,
         state_path_param_times=state_path_param_times,
@@ -143,10 +143,10 @@ def log_prob(
         ctrl_values=ctrl_values,
         ode_diffeqsolve_settings=ode_diffeqsolve_settings,
     )
-    return compute_state_path_log_prob_terms(
+    return compute_state_path_log_prob(
         dynamics_with_t0,
-        state_path=assembled.state_path,
-        state_path_times=assembled.state_path_times,
+        state_path=state_path,
+        state_path_times=state_path_times,
         obs_times=obs_times,
         obs_values=obs_values,
         obs_values_filled=obs_values_filled,
@@ -157,7 +157,7 @@ def log_prob(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         chunk_size=chunk_size,
-    ).joint_log_prob
+    )
 
 
 __all__ = ["log_prob", "simulate"]

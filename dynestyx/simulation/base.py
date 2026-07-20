@@ -2,7 +2,6 @@
 
 import itertools
 from collections.abc import Callable
-from contextlib import contextmanager
 from typing import Any, cast
 
 import equinox as eqx
@@ -26,21 +25,17 @@ from dynestyx.inference.configs.simulator import (
 from dynestyx.inference.utils.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dist_for_plate_member,
+    _slice_dynamics_for_plate_member,
 )
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
-    Diffusion,
     DynamicalModel,
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
 from dynestyx.utils import (
-    _diffusion_coefficient_is_plate_batched,
-    _dist_has_plate_batch_dims,
     _get_val_or_None,
     _has_any_batched_plate_source,
-    _is_opaque_plate_leaf,
-    _leaf_is_plate_batched,
     _validate_site_sorting,
 )
 
@@ -161,6 +156,27 @@ def _sample_initial_states(
     return jax.vmap(initial_condition.sample)(keys)
 
 
+def _sample_observation_path(
+    dynamics: DynamicalModel,
+    *,
+    states: Array,
+    times: Array,
+    rng_key: Array,
+    control_path_eval: Callable[[Array], Array | None] | None = None,
+) -> Array:
+    """Sample one observation path conditional on a realized state path."""
+    ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
+    obs_keys = jr.split(rng_key, len(times))
+
+    def _sample_at_time(t_idx):
+        x_t = states[t_idx]
+        t = times[t_idx]
+        obs_dist = dynamics.observation_model(x=x_t, u=ctrl(t), t=t)
+        return obs_dist.sample(obs_keys[t_idx])
+
+    return jax.vmap(_sample_at_time)(jnp.arange(len(times)))
+
+
 _SIMULATOR_CONFIG_UNSET = object()
 
 
@@ -186,52 +202,6 @@ def _validate_no_config_and_direct_kwargs(
     raise ValueError(
         f"Received both {config_name} and direct simulator kwargs ({provided_str}). "
         f"Please provide either {config_name} or direct kwargs, not both."
-    )
-
-
-@contextmanager
-def _suspend_numpyro_plate_frames():
-    """Temporarily remove active numpyro.plate frames from the pyro stack.
-
-    LatentPathBuilder still uses this helper when it enumerates plate members
-    and then re-registers per-member NumPyro sites.
-    """
-    stack = numpyro.primitives._PYRO_STACK
-    original = list(stack)
-    stack[:] = [f for f in original if not isinstance(f, numpyro.primitives.plate)]
-    try:
-        yield
-    finally:
-        stack[:] = original
-
-
-def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
-    """Slice plate-batched dynamics leaves for one simulator plate member.
-
-    Shared leaves pass through unchanged; plate-batched leaves are selected by
-    ``plate_idx``. Distribution parameters, including initial conditions, are
-    sliced separately by ``_slice_dist_for_plate_member``.
-    """
-
-    def _slice_leaf(path, leaf):
-        # Only constant-coefficient diffusions are opaque leaves (see
-        # ``_is_opaque_plate_leaf``), so indexing the coefficient by ``plate_idx``
-        # is well-defined; a callable coefficient is recursed into and its array
-        # fields are sliced generically by the branch below.
-        if isinstance(leaf, Diffusion):
-            if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
-                return eqx.tree_at(
-                    lambda d: d.coefficient, leaf, leaf.coefficient[plate_idx]
-                )
-            return leaf
-        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
-            return leaf[plate_idx]
-        return leaf
-
-    return jax.tree_util.tree_map_with_path(
-        _slice_leaf,
-        tree,
-        is_leaf=_is_opaque_plate_leaf,
     )
 
 
@@ -522,22 +492,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         for member_idx, plate_idx in enumerate(plate_indices):
             member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
 
-            # We begin by slicing the dynamics tree for each plate member.
-            member_dynamics = _slice_tree_for_plate_member(
+            member_dynamics = _slice_dynamics_for_plate_member(
                 dynamics, plate_shapes, plate_idx
             )
-
-            # If initial conditions have plate dimensions, we also slice & apply them.
-            if _dist_has_plate_batch_dims(dynamics.initial_condition, plate_shapes):
-                member_initial_condition = _slice_dist_for_plate_member(
-                    dynamics.initial_condition, plate_shapes, plate_idx
-                )
-                member_dynamics = eqx.tree_at(
-                    lambda m: m.initial_condition,
-                    member_dynamics,
-                    member_initial_condition,
-                    is_leaf=lambda x: x is None,
-                )
 
             # We then slice each other source to find the member's times/values.
             member_obs_times = _slice_array_for_plate_member(
@@ -759,16 +716,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         T = len(times)
 
         if key is not None:
-            obs_keys = jr.split(key, T)
-
-            def _obs_step(t_idx):
-                x_t = states[t_idx]
-                t = times[t_idx]
-                u_t = ctrl(t)
-                obs_dist = dynamics.observation_model(x=x_t, u=u_t, t=t)
-                return obs_dist.sample(obs_keys[t_idx])
-
-            return jax.vmap(_obs_step)(jnp.arange(T))
+            return _sample_observation_path(
+                dynamics,
+                states=states,
+                times=times,
+                rng_key=key,
+                control_path_eval=control_path_eval,
+            )
 
         def _step(carry, t_idx):
             x_t = states[t_idx]

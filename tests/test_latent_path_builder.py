@@ -13,7 +13,9 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx.inference.state_paths.layout import prepare_latent_path_layout
+from dynestyx.inference.utils.distribution_utils import (
+    _ForwardSimulationImproperUniform,
+)
 from dynestyx.observation_missingness import prepare_missing_observation_metadata
 
 
@@ -102,6 +104,15 @@ def _make_deterministic_rollout_dynamics():
         initial_condition=dist.Delta(jnp.array(0.0)),
         state_evolution=lambda x, u, t_now, t_next: dist.Delta(x + 1.0),
         observation_model=lambda x, u, t: dist.Delta(2.0 * x),
+    )
+
+
+def _make_deterministic_prior_dynamics():
+    return dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Delta(jnp.array(3.0)),
+        state_evolution=lambda x, u, t_now, t_next: dist.Delta(x + 2.0),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.25),
     )
 
 
@@ -375,7 +386,7 @@ def test_prepare_missing_observation_metadata_matches_dirac_partial_missing_layo
         metadata.missing_obs_coordinate_indices,
         jnp.array([1, 0, 0, 1], dtype=jnp.int32),
     )
-    assert jnp.array_equal(metadata.free_flat_indices, jnp.array([1, 2, 4, 5]))
+    assert jnp.array_equal(metadata.missing_flat_indices, jnp.array([1, 2, 4, 5]))
     assert metadata.observation_shape == (3, 2)
 
 
@@ -413,7 +424,9 @@ def test_latent_path_builder_sample_registers_expected_sites():
 
     assert "f_state_path_params" in tr
     assert "f_joint_log_prob_factor" in tr
-    assert "f_state_path_params_base_log_prob_correction" in tr
+    assert isinstance(tr["f_state_path_params"]["fn"], dist.ImproperUniform)
+    assert tr["f_state_path_params"]["fn"].log_prob(state_path_params) == 0.0
+    assert "f_state_path_params_base_log_prob_correction" not in tr
     assert "f_state_path_param_times" in tr
     assert "f_state_path" in tr
     assert "f_state_path_times" in tr
@@ -421,22 +434,14 @@ def test_latent_path_builder_sample_registers_expected_sites():
     assert jnp.array_equal(tr["f_state_path_params"]["value"], state_path_params)
     assert jnp.array_equal(tr["f_state_path"]["value"], state_path_params)
 
-    base_dist = (
-        dist.Normal(0.0, 1.0)
-        .expand(state_path_params.shape)
-        .to_event(len(state_path_params.shape))
-    )
     expected = dsx.log_prob(
         dynamics,
         state_path_params=state_path_params,
         state_path_param_times=obs_times,
         obs_times=obs_times,
         obs_values=obs_values,
-    ) - base_dist.log_prob(state_path_params)
-    actual = (
-        tr["f_joint_log_prob_factor"]["fn"].log_factor
-        + tr["f_state_path_params_base_log_prob_correction"]["fn"].log_factor
     )
+    actual = tr["f_joint_log_prob_factor"]["fn"].log_factor
     assert jnp.allclose(actual, expected)
 
 
@@ -477,25 +482,15 @@ def test_latent_path_builder_sample_registers_dirac_index_metadata():
     )
     assert jnp.allclose(tr["f_state_path"]["value"], expected_states)
 
-    base_dist = (
-        dist.Normal(0.0, 1.0)
-        .expand(state_path_params.shape)
-        .to_event(len(state_path_params.shape))
-    )
-    expected = _manual_discrete_state_log_prob(
-        dynamics, expected_states, obs_times
-    ) - base_dist.log_prob(state_path_params)
-    actual = (
-        tr["f_joint_log_prob_factor"]["fn"].log_factor
-        + tr["f_state_path_params_base_log_prob_correction"]["fn"].log_factor
-    )
+    expected = _manual_discrete_state_log_prob(dynamics, expected_states, obs_times)
+    actual = tr["f_joint_log_prob_factor"]["fn"].log_factor
     assert jnp.allclose(actual, expected)
 
 
 def test_latent_path_builder_sample_can_draw_latents_when_unspecified():
-    dynamics = _make_discrete_dynamics()
-    obs_times = jnp.array([0.0, 1.0])
-    obs_values = jnp.array([0.2, -0.1])
+    dynamics = _make_deterministic_prior_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([3.0, 5.0, 7.0])
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
         with dsx.LatentPathBuilder():
@@ -508,7 +503,103 @@ def test_latent_path_builder_sample_can_draw_latents_when_unspecified():
 
     assert "f_state_path_params" in tr
     assert "f_state_path" in tr
-    assert tr["f_state_path_params"]["value"].shape == (len(obs_times),)
+    assert jnp.array_equal(
+        tr["f_state_path_params"]["value"],
+        jnp.array([3.0, 5.0, 7.0]),
+    )
+
+
+def test_forward_simulation_improper_uniform_rsample_and_sample_shape():
+    prior = _ForwardSimulationImproperUniform(
+        eqx.Partial(jr.normal, shape=(2,)),
+        event_shape=(2,),
+    )
+    key = jr.PRNGKey(12)
+
+    samples = prior.sample(key, sample_shape=(2, 3))
+    resamples = prior.rsample(key, sample_shape=(2, 3))
+
+    assert samples.shape == (2, 3, 2)
+    assert jnp.array_equal(samples, resamples)
+    assert jnp.array_equal(prior.log_prob(samples), jnp.zeros((2, 3)))
+
+
+def test_latent_path_builder_bare_predictive_draws_dynamical_prior_paths():
+    dynamics = _make_deterministic_prior_dynamics()
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([3.0, 5.0, 7.0])
+
+    def model():
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    predictive = Predictive(model, num_samples=3)(jr.PRNGKey(13))
+
+    expected = jnp.broadcast_to(jnp.array([3.0, 5.0, 7.0]), (3, 3))
+    assert jnp.array_equal(predictive["f_state_path_params"], expected)
+    assert jnp.array_equal(predictive["f_state_path"], expected)
+
+
+def test_latent_path_builder_ode_prior_site_samples_initial_condition():
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Delta(jnp.array(2.5)),
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x)
+        ),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.2),
+    )
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(14)):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=jnp.full((3,), 2.5),
+            )
+
+    assert tr["f_state_path_params"]["value"].shape == (1,)
+    assert jnp.array_equal(tr["f_state_path_params"]["value"], jnp.array([2.5]))
+    assert jnp.allclose(tr["f_state_path"]["value"], 2.5)
+
+
+def test_latent_path_builder_dirac_prior_projects_only_free_coordinates():
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Delta(jnp.array([0.0, 1.0]), event_dim=1),
+        state_evolution=lambda x, u, t_now, t_next: dist.Delta(
+            x + jnp.array([10.0, 20.0]),
+            event_dim=1,
+        ),
+        observation_model=dsx.DiracIdentityObservation(),
+    )
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([[0.0, jnp.nan], [jnp.nan, 21.0], [jnp.nan, jnp.nan]])
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(15)):
+        with dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    assert jnp.array_equal(
+        tr["f_state_path_params"]["value"],
+        jnp.array([1.0, 10.0, 20.0, 41.0]),
+    )
+    assert jnp.array_equal(
+        tr["f_state_path"]["value"],
+        jnp.array([[0.0, 1.0], [10.0, 21.0], [20.0, 41.0]]),
+    )
 
 
 def test_latent_path_builder_dirac_fully_observed_has_zero_free_latents():
@@ -628,41 +719,6 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
     )
 
 
-def test_prepare_latent_path_layout_dirac_partial_missing_augment_matches_auto():
-    dynamics = _make_dirac_discrete_dynamics()
-    obs_times = jnp.array([0.0, 1.0, 2.0])
-    obs_values = jnp.array(
-        [
-            [0.2, jnp.nan],
-            [jnp.nan, -0.1],
-            [jnp.nan, jnp.nan],
-        ]
-    )
-
-    auto_layout = prepare_latent_path_layout(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        missing_observation_strategy="auto",
-    )
-    augment_layout = prepare_latent_path_layout(
-        dynamics,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        missing_observation_strategy="augment",
-    )
-
-    assert jnp.array_equal(
-        auto_layout.state_path_param_times, augment_layout.state_path_param_times
-    )
-    assert auto_layout.state_path_param_coordinate_indices is not None
-    assert augment_layout.state_path_param_coordinate_indices is not None
-    assert jnp.array_equal(
-        auto_layout.state_path_param_coordinate_indices,
-        augment_layout.state_path_param_coordinate_indices,
-    )
-
-
 def test_latent_path_builder_dirac_partial_missing_explicit_augment_uses_state_path_params():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
@@ -760,24 +816,24 @@ def test_latent_path_builder_sample_registers_missing_observation_sites_under_au
             [0.3, 0.4],
         ]
     )
-    base_dist_x = dist.Normal(0.0, 1.0).expand(state_path_params.shape).to_event(2)
-    base_dist_y = dist.Normal(0.0, 1.0).expand(missing_obs_values.shape).to_event(1)
-    expected = (
-        dsx.log_prob(
-            dynamics,
-            state_path_params=state_path_params,
-            state_path_param_times=obs_times,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            missing_observation_strategy="augment",
-            missing_obs_values=missing_obs_values,
-            missing_obs_metadata=metadata,
-        )
-        - base_dist_x.log_prob(state_path_params)
-        - base_dist_y.log_prob(missing_obs_values)
+    expected = dsx.log_prob(
+        dynamics,
+        state_path_params=state_path_params,
+        state_path_param_times=obs_times,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        missing_observation_strategy="augment",
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=metadata,
     )
 
     assert "f_missing_obs_values" in tr
+    assert isinstance(tr["f_state_path_params"]["fn"], dist.ImproperUniform)
+    assert isinstance(tr["f_missing_obs_values"]["fn"], dist.ImproperUniform)
+    assert tr["f_state_path_params"]["fn"].log_prob(state_path_params) == 0.0
+    assert tr["f_missing_obs_values"]["fn"].log_prob(missing_obs_values) == 0.0
+    assert "f_state_path_params_base_log_prob_correction" not in tr
+    assert "f_missing_obs_base_log_prob_correction" not in tr
     assert "f_missing_obs_times" in tr
     assert "f_missing_obs_coordinate_indices" in tr
     assert "f_completed_obs_values" in tr
@@ -791,11 +847,7 @@ def test_latent_path_builder_sample_registers_missing_observation_sites_under_au
         jnp.array([1, 0], dtype=jnp.int32),
     )
     assert jnp.allclose(tr["f_completed_obs_values"]["value"], completed_obs)
-    actual = (
-        tr["f_joint_log_prob_factor"]["fn"].log_factor
-        + tr["f_state_path_params_base_log_prob_correction"]["fn"].log_factor
-        + tr["f_missing_obs_base_log_prob_correction"]["fn"].log_factor
-    )
+    actual = tr["f_joint_log_prob_factor"]["fn"].log_factor
     assert jnp.allclose(actual, expected)
 
 
@@ -817,6 +869,39 @@ def test_latent_path_builder_forced_augment_on_gaussian_partial_missing_creates_
     assert "f_missing_obs_values" in tr
     assert "f_completed_obs_values" in tr
     assert tr["f_missing_obs_values"]["value"].shape == (2,)
+
+
+def test_latent_path_builder_augmented_site_samples_conditional_observation_prior():
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Delta(jnp.array(0.0)),
+        state_evolution=lambda x, u, t_now, t_next: dist.Delta(x + 1.0),
+        observation_model=lambda x, u, t: dist.Delta(
+            jnp.stack([jnp.ravel(x)[0] + 5.0, jnp.ravel(x)[0] + 7.0]),
+            event_dim=1,
+        ),
+    )
+    obs_times = jnp.array([0.0, 1.0])
+    obs_values = jnp.array([[5.0, jnp.nan], [jnp.nan, 8.0]])
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(16)):
+        with dsx.LatentPathBuilder(missing_observation_strategy="augment"):
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    assert jnp.array_equal(tr["f_state_path"]["value"], jnp.array([0.0, 1.0]))
+    assert jnp.array_equal(
+        tr["f_missing_obs_values"]["value"],
+        jnp.array([7.0, 6.0]),
+    )
+    assert jnp.array_equal(
+        tr["f_completed_obs_values"]["value"],
+        jnp.array([[5.0, 7.0], [6.0, 8.0]]),
+    )
 
 
 def test_latent_path_builder_auto_augments_student_t_partial_missing_mcmc_smoke():

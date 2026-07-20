@@ -30,7 +30,28 @@ from dynestyx import (
 )
 ```
 
-Latent-path layout preparation happens automatically inside the builder. In
+Latent coordinates are registered as zero-log-density improper NumPyro sites.
+Their forward sampler is nevertheless meaningful: it draws from the actual
+dynamical prior instead of from an artificial Gaussian. Consequently:
+
+- discrete `state_path_params` form a coherent initial-condition/transition
+  draw;
+- ODE `state_path_params` are drawn from the initial-condition prior and then
+  solved on the requested time grid;
+- exact partially observed paths simulate densely and retain only their free
+  coordinates; and
+- augmented `missing_obs_values` are drawn from the observation model
+  conditional on the assembled state path.
+
+The complete `log p(x, y | ...)` target is registered once as
+`f_joint_log_prob_factor`. The improper sites themselves contribute exactly
+zero, so there are no Gaussian base-density correction sites.
+
+This also makes bare NumPyro `Predictive` useful: without posterior samples it
+returns dynamical-prior paths. With posterior samples it continues to replay the
+supplied latent values.
+
+Missing-coordinate preparation happens automatically inside the builder. In
 particular:
 
 - partially missing `DiracIdentityObservation` models use per-coordinate

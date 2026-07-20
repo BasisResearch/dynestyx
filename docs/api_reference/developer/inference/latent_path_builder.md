@@ -2,54 +2,66 @@
 
 Developer-facing reference for latent-path construction and scoring.
 
-The latent-path refactor now separates responsibilities across two layers:
-
-- `dynestyx.inference.latent`: NumPyro-facing orchestration
-- `dynestyx.inference.state_paths`: pure-JAX state-path layout, reconstruction,
-  and scoring
+`LatentPathBuilder` exposes latent trajectories as NumPyro sample sites while
+using pure array operations for state reconstruction and joint-density
+evaluation.
 
 ## Package roles
 
 - `dynestyx.inference.latent.builder`
-  `LatentPathBuilder` itself. This is the handler that interprets
-  `dsx.sample(...)` in NumPyro mode, creates the dummy latent sites, then
-  registers factors and deterministic outputs.
-- `dynestyx.inference.latent.prepare`
-  Request canonicalization for one latent-path call. This is where the builder
-  resolves the concrete latent layout and shape-only example arrays needed for
-  site creation.
-- `dynestyx.inference.latent.plate`
-  Plate-specific splitting and restacking logic for hierarchical latent-path
-  inference.
-- `dynestyx.inference.state_paths.layout`
-  Structural planning for `state_path_params`, optional
-  `missing_obs_values`, and the reconstruction rule `x = g(z)`.
+  Interprets `dsx.sample(...)`, determines free coordinates, creates the latent
+  sites, reconstructs once, scores once, and registers outputs. Plate iteration
+  is a short loop here using shared slicing and stacking helpers.
 - `dynestyx.inference.state_paths.reconstruct`
-  Pure-JAX reconstruction of the full state path once concrete latent values
-  are known.
+  Validates parameter shapes and reconstructs the full state path.
 - `dynestyx.inference.state_paths.score`
-  Pure-JAX scoring of `log p(x, y | ...)` from a fully assembled state path.
+  Returns the scalar `log p(x, y | ...)` for a fully assembled state path.
+- `dynestyx.solvers`
+  Owns continuous-time control-path evaluation plus the ODE and SDE trajectory
+  wrappers shared by reconstruction and forward simulation.
+- `dynestyx.observation_missingness`
+  Owns concrete missing-coordinate metadata, completion, strategy resolution,
+  and pure per-step observation scoring.
+- `dynestyx.inference.utils.distribution_utils`
+  Defines `_ForwardSimulationImproperUniform`: zero density with samples from
+  dynamical forward simulation for initialization and forward execution.
+- `dynestyx.inference.utils.plate_utils`
+  Provides slicing, stacking, and NumPyro plate-frame suspension shared by the
+  simulator and latent builder.
+- `dynestyx.simulation.discrete` and `dynestyx.simulation.base`
+  Provide the single-trajectory state sampler and conditional observation
+  sampler reused for latent-site initialization.
 
 ## Execution path
 
 The intended reviewer mental model is:
 
-1. `LatentPathBuilder._sample_ds(...)` routes one trajectory or plate member to
+1. `_sample_ds(...)` slices each plate member when necessary and calls
    `_sample_single(...)`.
-2. `_prepare_latent_path_request(...)` resolves the concrete layout from
-   `dynamics`, `obs_times`, and `obs_values`, and canonicalizes any provided
-   latent values.
-3. `LatentPathBuilder` creates dummy NumPyro sites for `state_path_params` and,
-   when needed, `missing_obs_values`.
-4. The builder reconstructs the full state path in pure JAX through
-   `prepared.layout.assemble_from_params(...)`.
-5. The builder scores that assembled path in pure JAX through
-   `compute_state_path_log_prob_terms(...)`.
-6. Only after the pure-JAX work is done does the builder attach NumPyro
-   `factor(...)` and `deterministic(...)` sites for the realized outputs.
+2. `_sample_single(...)` receives the observation views prepared by
+   `dsx.sample(...)`, resolves concrete `MissingObservationMetadata`, and then
+   chooses the ordinary, ODE, or exact-Dirac branch directly.
+3. It creates `state_path_params` as a `_ForwardSimulationImproperUniform`. The
+   distribution samples through the shared simulator state kernel and has zero
+   log density.
+4. It reconstructs the state path. If augmentation is active, it then creates a
+   second zero-density improper site whose sampler calls the observation model
+   conditional on that state path.
+5. `compute_state_path_log_prob(...)` evaluates the complete scalar joint
+   density once. The builder registers that value as the sole factor and emits
+   the existing deterministic results.
+6. Plate results are restacked, and any future-only rollout is forwarded to the
+   surrounding simulator as before.
 
-This is the key design point of the refactor: NumPyro owns site registration,
-but latent-path semantics live in pure JAX.
+Because both latent distributions have zero density, no artificial Gaussian
+terms are added and no base-log-probability corrections are subtracted.
+
+## Replay metadata
+
+Concrete calls compute `MissingObservationMetadata` from the observation mask.
+Traced replay reuses compatible metadata scoped by site name, latent role,
+observation shape, and requested strategy; replay without a compatible entry
+raises an error explaining that a concrete model execution is required first.
 
 ## Public surface
 
@@ -59,9 +71,8 @@ The supported user-facing route is:
   inference under NumPyro
 - `dsx.log_prob(...)` for pure-JAX scoring of user-supplied latent paths
 
-Lower-level helpers such as `prepare_latent_path_layout(...)` are still useful
-for tests and implementation work, but they should be treated as
-developer-oriented machinery rather than the primary public workflow.
+The reconstruction and scalar-scoring helpers remain available as
+developer-facing building blocks.
 
 ::: dynestyx.inference.latent.builder
     options:

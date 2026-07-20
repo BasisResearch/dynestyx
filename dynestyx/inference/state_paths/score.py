@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import math
 from collections.abc import Callable
 
@@ -15,30 +14,9 @@ from dynestyx.models import DeterministicContinuousTimeStateEvolution, Dynamical
 from dynestyx.observation_missingness import (
     MissingObservationMetadata,
     MissingObservationStrategy,
-    ObservationLogProb,
+    prepare_observation_log_prob,
 )
 from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
-
-
-@dataclasses.dataclass
-class TrajectoryLogProbTerms:
-    """Pure-JAX decomposition of ``log p(x, y | ...)``."""
-
-    initial_log_prob: Array
-    transition_log_probs: Array
-    observation_log_probs: Array
-    missing_obs_values: Array | None = None
-    missing_obs_times: Array | None = None
-    missing_obs_coordinate_indices: Array | None = None
-    completed_obs_values: Array | None = None
-
-    @property
-    def joint_log_prob(self) -> Array:
-        return (
-            self.initial_log_prob
-            + jnp.sum(self.transition_log_probs)
-            + jnp.sum(self.observation_log_probs)
-        )
 
 
 def _scan_chunked_vmap(
@@ -105,7 +83,7 @@ def _prepare_observation_log_prob(
     missing_observation_strategy: MissingObservationStrategy,
     missing_obs_values: Array | None,
     missing_obs_metadata: MissingObservationMetadata | None,
-) -> ObservationLogProb:
+):
     obs_values_for_helper = obs_values[:, None] if obs_values.ndim == 1 else obs_values
     obs_times_for_helper = jnp.asarray(obs_times)
     filled_obs_for_helper = (
@@ -127,7 +105,7 @@ def _prepare_observation_log_prob(
             else missing_obs_values
         )
     )
-    return ObservationLogProb(
+    return prepare_observation_log_prob(
         dynamics=dynamics,
         obs_values=obs_values_for_helper,
         obs_times=obs_times_for_helper,
@@ -154,7 +132,7 @@ def _control_values_at_times(
     )
 
 
-def compute_state_path_log_prob_terms(
+def compute_state_path_log_prob(
     dynamics: DynamicalModel,
     *,
     state_path: Array,
@@ -170,7 +148,7 @@ def compute_state_path_log_prob_terms(
     ctrl_values: Array | None = None,
     chunk_size: int | None = None,
     observations_are_exact_constraints: bool = False,
-) -> TrajectoryLogProbTerms:
+) -> Array:
     state_path_times = jnp.asarray(state_path_times)
     state_path = jnp.asarray(state_path)
     _raise_now_or_error_if(
@@ -212,12 +190,7 @@ def compute_state_path_log_prob_terms(
             )
 
     if obs_times is None or obs_values is None:
-        observation_log_probs = jnp.zeros((0,), dtype=initial_log_prob.dtype)
-        return TrajectoryLogProbTerms(
-            initial_log_prob=initial_log_prob,
-            transition_log_probs=transition_log_probs,
-            observation_log_probs=observation_log_probs,
-        )
+        return initial_log_prob + jnp.sum(transition_log_probs)
 
     state_at_obs_times = _gather_by_exact_time(
         state_path,
@@ -226,29 +199,10 @@ def compute_state_path_log_prob_terms(
         value_name="state_path",
     )
     if observations_are_exact_constraints:
-        observation_log_probs = jnp.zeros(
-            (jnp.asarray(obs_times).shape[0],), dtype=initial_log_prob.dtype
-        )
-        return TrajectoryLogProbTerms(
-            initial_log_prob=initial_log_prob,
-            transition_log_probs=transition_log_probs,
-            observation_log_probs=observation_log_probs,
-            missing_obs_values=missing_obs_values,
-            missing_obs_times=(
-                None
-                if missing_obs_metadata is None
-                else missing_obs_metadata.missing_obs_times
-            ),
-            missing_obs_coordinate_indices=(
-                None
-                if missing_obs_metadata is None
-                else missing_obs_metadata.missing_obs_coordinate_indices
-            ),
-            completed_obs_values=state_at_obs_times,
-        )
+        return initial_log_prob + jnp.sum(transition_log_probs)
 
     obs_ctrl_values = _control_values_at_times(ctrl_times, ctrl_values, obs_times)
-    observation_log_prob = _prepare_observation_log_prob(
+    observation_log_prob, _, _, _ = _prepare_observation_log_prob(
         dynamics,
         jnp.asarray(obs_times),
         jnp.asarray(obs_values),
@@ -260,7 +214,7 @@ def compute_state_path_log_prob_terms(
     )
 
     def _observation_at(i: Array) -> Array:
-        return observation_log_prob.log_prob_step(
+        return observation_log_prob(
             x=state_at_obs_times[i],
             u=_get_val_or_None(obs_ctrl_values, i),
             t=jnp.asarray(obs_times)[i],
@@ -274,20 +228,13 @@ def compute_state_path_log_prob_terms(
         dtype=initial_log_prob.dtype,
     )
 
-    return TrajectoryLogProbTerms(
-        initial_log_prob=initial_log_prob,
-        transition_log_probs=transition_log_probs,
-        observation_log_probs=observation_log_probs,
-        missing_obs_values=missing_obs_values,
-        missing_obs_times=observation_log_prob.missing_obs_times,
-        missing_obs_coordinate_indices=(
-            observation_log_prob.missing_obs_coordinate_indices
-        ),
-        completed_obs_values=observation_log_prob.completed_obs,
+    return (
+        initial_log_prob
+        + jnp.sum(transition_log_probs)
+        + jnp.sum(observation_log_probs)
     )
 
 
 __all__ = [
-    "TrajectoryLogProbTerms",
-    "compute_state_path_log_prob_terms",
+    "compute_state_path_log_prob",
 ]
