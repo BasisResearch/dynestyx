@@ -6,10 +6,8 @@ turned into a full state trajectory ``x = state_path = g(z)``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-import diffrax as dfx
 import jax.numpy as jnp
 from jax import Array
 
@@ -23,8 +21,8 @@ from dynestyx.observation_missingness import (
     assemble_completed_observations,
     validate_missing_obs_values,
 )
-from dynestyx.solvers import solve_ode
-from dynestyx.utils import _build_control_path, _raise_now_or_error_if
+from dynestyx.solvers import solve_ode_state_path
+from dynestyx.utils import _raise_now_or_error_if
 
 
 def validate_state_path_params(
@@ -71,51 +69,6 @@ def infer_state_path_param_times(
         obs_times_arr = jnp.asarray(obs_times)
         return jnp.asarray([jnp.asarray(dynamics.t0, dtype=obs_times_arr.dtype)])
     return jnp.asarray(obs_times)
-
-
-def default_ode_diffeqsolve_settings() -> dict[str, Any]:
-    """Return default solver settings for deterministic ODE path reconstruction."""
-    return {
-        "solver": dfx.Tsit5(),
-        "stepsize_controller": dfx.ConstantStepSize(),
-        "adjoint": dfx.RecursiveCheckpointAdjoint(),
-        "dt0": jnp.asarray(1e-3),
-        "max_steps": 100_000,
-    }
-
-
-def solve_ode_state_path(
-    dynamics: DynamicalModel,
-    *,
-    initial_state: Array,
-    t0: Array,
-    path_times: Array,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
-    diffeqsolve_settings: dict[str, Any] | None = None,
-) -> Array:
-    """Solve one ODE trajectory with shared control and solver settings."""
-    path_times = jnp.asarray(path_times)
-    if ctrl_times is not None and ctrl_values is not None:
-        control_path = _build_control_path(ctrl_times, ctrl_values, path_times)
-        control_path_eval: Callable[[Array], Array | None] = lambda t: (
-            control_path.evaluate(t, left=False)
-        )
-    else:
-        control_path_eval = lambda t: None
-
-    return solve_ode(
-        dynamics,
-        t0=t0,
-        saveat_times=path_times,
-        x0=initial_state,
-        control_path_eval=control_path_eval,
-        diffeqsolve_settings=(
-            diffeqsolve_settings
-            if diffeqsolve_settings is not None
-            else default_ode_diffeqsolve_settings()
-        ),
-    )
 
 
 def reconstruct_state_path_from_exact_observations(
@@ -208,8 +161,6 @@ def reconstruct_state_path(
 __all__ = [
     "reconstruct_state_path",
     "reconstruct_state_path_from_exact_observations",
-    "default_ode_diffeqsolve_settings",
     "infer_state_path_param_times",
-    "solve_ode_state_path",
     "validate_state_path_params",
 ]

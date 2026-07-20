@@ -9,7 +9,6 @@ import jax.random as jr
 from jax import Array
 
 from dynestyx.inference.configs.simulator import ODESimulatorConfig
-from dynestyx.inference.state_paths.reconstruct import solve_ode_state_path
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import (
     _SIMULATOR_CONFIG_UNSET,
@@ -18,8 +17,9 @@ from dynestyx.simulation.base import (
     _tile_times,
     _validate_no_config_and_direct_kwargs,
 )
+from dynestyx.solvers import solve_ode_state_path
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _build_control_path
+from dynestyx.utils import _build_control_path_eval
 
 
 class ODESimulator(BaseSimulator):
@@ -105,11 +105,7 @@ class ODESimulator(BaseSimulator):
         """Run pure forward simulation for a deterministic continuous-time model."""
         n_sim = initial_state.shape[0]
 
-        if ctrl_times is not None and ctrl_values is not None:
-            control_path = _build_control_path(ctrl_times, ctrl_values, times)
-            control_path_eval = lambda t: control_path.evaluate(t, left=False)
-        else:
-            control_path_eval = lambda t: None
+        control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, times)
 
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
         obs_keys = jr.split(rng_key, n_sim)

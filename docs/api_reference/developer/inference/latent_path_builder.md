@@ -16,6 +16,9 @@ evaluation.
   Validates parameter shapes and reconstructs the full state path.
 - `dynestyx.inference.state_paths.score`
   Returns the scalar `log p(x, y | ...)` for a fully assembled state path.
+- `dynestyx.solvers`
+  Owns continuous-time control-path evaluation plus the ODE and SDE trajectory
+  wrappers shared by reconstruction and forward simulation.
 - `dynestyx.observation_missingness`
   Owns concrete missing-coordinate metadata, completion, strategy resolution,
   and pure per-step observation scoring.
@@ -35,9 +38,9 @@ The intended reviewer mental model is:
 
 1. `_sample_ds(...)` slices each plate member when necessary and calls
    `_sample_single(...)`.
-2. `_sample_single(...)` prepares observation views and concrete
-   `MissingObservationMetadata`, then chooses the ordinary, ODE, or exact-Dirac
-   branch directly.
+2. `_sample_single(...)` receives the observation views prepared by
+   `dsx.sample(...)`, resolves concrete `MissingObservationMetadata`, and then
+   chooses the ordinary, ODE, or exact-Dirac branch directly.
 3. It creates `state_path_params` as a `_ForwardSimulationImproperUniform`. The
    distribution samples through the shared simulator state kernel and has zero
    log density.

@@ -49,14 +49,13 @@ from dynestyx.observation_missingness import (
     MissingObservationStrategy,
     assemble_completed_observations,
     prepare_missing_observation_metadata,
-    prepare_observation_views,
     resolve_missing_observation_strategy,
     validate_missing_obs_values,
 )
 from dynestyx.simulation.base import _sample_observation_path
 from dynestyx.simulation.discrete import _sample_discrete_state_path
 from dynestyx.types import LatentStateResult
-from dynestyx.utils import _build_control_path
+from dynestyx.utils import _build_control_path_eval
 
 _MISSING_OBSERVATION_METADATA_CACHE: dict[
     tuple[str, str, tuple[int, ...], MissingObservationStrategy],
@@ -123,11 +122,7 @@ def _sample_missing_observation_prior(
         obs_times,
         value_name="state_path",
     )
-    if ctrl_times is not None and ctrl_values is not None:
-        control_path = _build_control_path(ctrl_times, ctrl_values, obs_times)
-        control_path_eval = lambda t: control_path.evaluate(t, left=False)
-    else:
-        control_path_eval = None
+    control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, obs_times)
     dense_observations = _sample_observation_path(
         dynamics,
         states=states_at_observations,
@@ -215,12 +210,10 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             )
 
         if obs_values_filled is None or obs_mask is None:
-            obs_values_filled, obs_mask, _ = prepare_observation_views(
-                dynamics,
-                obs_values,
+            raise ValueError(
+                "LatentPathBuilder requires observation views prepared by "
+                "dsx.sample(...)."
             )
-        assert obs_values_filled is not None
-        assert obs_mask is not None
 
         metadata = _resolve_missing_observation_metadata(
             name=name,
