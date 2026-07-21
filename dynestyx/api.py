@@ -1,6 +1,7 @@
 """Top-level pure-JAX dynestyx APIs."""
 
 import jax.numpy as jnp
+import jax.random as jr
 from jaxtyping import Array, Real
 
 from dynestyx.handlers import _validate_and_prepare
@@ -59,9 +60,10 @@ def simulate(
         n_simulations=n_simulations,
         simulator_config=simulator_config,
     )
+    _, simulation_key = jr.split(rng_key)
     return simulator.simulate(
         dynamics_with_t0,
-        rng_key=rng_key,
+        rng_key=simulation_key,
         obs_times=obs_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,

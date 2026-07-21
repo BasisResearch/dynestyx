@@ -126,7 +126,13 @@ class SDESimulator(BaseSimulator):
         predict_times=None,
         **kwargs,
     ) -> SimulatedResult:
-        """Run pure-JAX forward simulation for stochastic continuous-time models."""
+        """Run pure-JAX forward simulation for stochastic continuous-time models.
+
+        Unlike :func:`dynestyx.simulate`, ``rng_key`` is consumed directly as an
+        already-allocated simulation key and is not pre-split. Therefore,
+        ``dynestyx.simulate(..., rng_key=root_key)`` is equivalent to
+        ``SDESimulator.simulate(..., rng_key=jax.random.split(root_key)[1])``.
+        """
         if not isinstance(
             dynamics.state_evolution, StochasticContinuousTimeStateEvolution
         ):
