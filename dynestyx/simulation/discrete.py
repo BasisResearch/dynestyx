@@ -164,7 +164,13 @@ class DiscreteTimeSimulator(BaseSimulator):
         predict_times=None,
         **kwargs,
     ) -> SimulatedResult:
-        """Run pure-JAX forward simulation for a discrete-time model."""
+        """Run pure-JAX forward simulation for a discrete-time model.
+
+        Unlike :func:`dynestyx.simulate`, ``rng_key`` is consumed directly as an
+        already-allocated simulation key and is not pre-split. Therefore,
+        ``dynestyx.simulate(..., rng_key=root_key)`` is equivalent to
+        ``DiscreteTimeSimulator.simulate(..., rng_key=jax.random.split(root_key)[1])``.
+        """
         times = obs_times if obs_times is not None else predict_times
         if times is None:
             raise ValueError("obs_times or predict_times must be provided")

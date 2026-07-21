@@ -5,6 +5,7 @@ import jax.random as jr
 import numpyro.distributions as dist
 import pytest
 from numpyro.handlers import seed, trace
+from numpyro.infer import Predictive
 
 import dynestyx as dsx
 
@@ -291,3 +292,92 @@ def test_discrete_simulator_backend_rejects_missing_ctrl_times():
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
+
+
+@pytest.mark.parametrize("n_simulations", [1, 2])
+@pytest.mark.parametrize(
+    ("dynamics_factory", "predict_times", "simulator_config"),
+    [
+        pytest.param(
+            _make_discrete_dynamics,
+            jnp.arange(5.0),
+            None,
+            id="discrete-time",
+        ),
+        pytest.param(
+            _make_ode_dynamics,
+            jnp.linspace(0.0, 1.0, 6),
+            dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
+            id="ode",
+        ),
+        pytest.param(
+            _make_sde_dynamics,
+            jnp.linspace(0.0, 0.5, 5),
+            dsx.SDESimulatorConfig(
+                dt0=0.01,
+                tol_vbt=0.005,
+                max_steps=2_000,
+                source="em_scan",
+            ),
+            id="sde",
+        ),
+    ],
+)
+def test_predictive_simulator_matches_standalone_simulate(
+    n_simulations,
+    dynamics_factory,
+    predict_times,
+    simulator_config,
+):
+    """The NumPyro and pure-JAX simulation entry points consume one key alike."""
+    dynamics = dynamics_factory()
+    rng_key = jr.PRNGKey(123)
+
+    standalone = dsx.simulate(
+        dynamics,
+        rng_key=rng_key,
+        predict_times=predict_times,
+        n_simulations=n_simulations,
+        simulator_config=simulator_config,
+    )
+
+    # Simulator.simulate accepts an already-allocated simulation key, whereas
+    # dsx.simulate accepts the same root key passed to Predictive.
+    _, simulation_key = jr.split(rng_key)
+    direct_simulator = dsx.Simulator(
+        n_simulations=n_simulations,
+        simulator_config=simulator_config,
+    ).simulate(
+        dynamics,
+        rng_key=simulation_key,
+        predict_times=predict_times,
+    )
+
+    def model():
+        return dsx.sample("f", dynamics, predict_times=predict_times)
+
+    with dsx.Simulator(
+        n_simulations=n_simulations,
+        simulator_config=simulator_config,
+    ):
+        predictive = Predictive(
+            model,
+            num_samples=1,
+            exclude_deterministic=False,
+        )(rng_key)
+
+    mismatched_fields = []
+    for field in ("x_0", "times", "states", "observations"):
+        standalone_value = getattr(standalone, field)
+        direct_simulator_value = getattr(direct_simulator, field)
+        predictive_value = predictive[f"f_{field}"][0]
+        if not (
+            jnp.array_equal(predictive_value, standalone_value)
+            and jnp.array_equal(direct_simulator_value, standalone_value)
+        ):
+            mismatched_fields.append(field)
+
+    assert not mismatched_fields, (
+        "Simulator + Predictive, dsx.simulate, and pre-split Simulator.simulate "
+        f"produced different values for {mismatched_fields}"
+    )
