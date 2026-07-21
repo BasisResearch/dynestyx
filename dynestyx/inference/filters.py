@@ -15,14 +15,10 @@ from jaxtyping import Array, PRNGKeyArray, Real
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.distribution_utils import (
-    _categorical_log_probs_to_dists,
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
-)
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
@@ -58,17 +54,26 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.numpyro_sites import (
+from dynestyx.inference.utils.distribution_utils import (
+    _categorical_log_probs_to_dists,
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
+from dynestyx.inference.utils.numpyro_sites import (
     register_filter_sites,
     register_hmm_filter_sites,
 )
-from dynestyx.inference.plate_utils import (
+from dynestyx.inference.utils.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.types import ConditionedResult, FunctionOfTime
+from dynestyx.types import (
+    ConditionedResult,
+    FunctionOfTime,
+    chain_numpyro_site_registrations,
+)
 from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
@@ -109,7 +114,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
 
         # Filter consumes obs_times and obs_values, so they are passed forward as None.
         # fwd() lets handlers above (e.g. Simulator) use filtered_dists for rollout.
-        fwd(
+        forwarded_result = fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
@@ -122,7 +127,14 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             **kwargs,
         )
 
-        return self._build_infer_result(name, filtered_dists)
+        result = self._build_infer_result(name, filtered_dists)
+        forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
+        result._register_numpyro_sites = chain_numpyro_site_registrations(
+            result._register_numpyro_sites,
+            forwarded_register,
+        )
+
+        return result
 
     @abstractmethod
     def _add_log_factors(
@@ -190,7 +202,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](../filter_configs.md).
+    [Available filter configurations](filter_configs.md).
 
     Defaults
     --------
@@ -245,6 +257,7 @@ class Filter(BaseLogFactorAdder):
         """
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
+        _validate_inference_supported_model_classes(dynamics)
 
         config = (
             self.filter_config

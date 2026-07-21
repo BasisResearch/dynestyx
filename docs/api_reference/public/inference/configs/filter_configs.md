@@ -18,9 +18,15 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 | `ContinuousTimeEnKFConfig` | Continuous-discrete | High-dimensional or expensive models with lower-dimensional structure and Gaussian observations (approximate). Performs reasonably as a default. *(default)* |
 | `ContinuousTimeDPFConfig`  | Continuous-discrete | Applicable for arbitrary state-space models, but quite expensive and noisy estimates (asymptotically exact in the limit of infinite particles, approximate in practice). |
 
+Canonical imports now live under `dynestyx.inference.configs.filter`:
+
+```python
+from dynestyx.inference.configs.filter import EKFConfig, KFConfig, PFConfig
+```
+
 ## Discrete Time Configuration Classes
 
-::: dynestyx.inference.filter_configs
+::: dynestyx.inference.configs.filter
     options:
       members:
         - BaseFilterConfig
@@ -32,7 +38,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 
 ## Continuous Time Configuration Classes
 
-::: dynestyx.inference.filter_configs
+::: dynestyx.inference.configs.filter
     options:
       members:
         - ContinuousTimeConfig
@@ -45,7 +51,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 
 ## Discrete State-Space Configuration Classes
 
-::: dynestyx.inference.filter_configs
+::: dynestyx.inference.configs.filter
     options:
       members:
         - HMMConfig

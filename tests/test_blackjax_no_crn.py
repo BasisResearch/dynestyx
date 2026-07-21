@@ -13,21 +13,21 @@ import numpyro.distributions as dist
 from numpyro import handlers
 from numpyro.infer import Predictive, init_to_median
 
-from dynestyx.inference.filter_configs import (
+from dynestyx import Simulator
+from dynestyx.inference.configs.filter import (
     ContinuousTimeEnKFConfig,
     EKFConfig,
     PFConfig,
 )
-from dynestyx.inference.filters import Filter
-from dynestyx.inference.integrations.blackjax.mcmc import init_model
-from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import (
+from dynestyx.inference.configs.mcmc import (
     HMCConfig,
     MALAConfig,
     NUTSConfig,
     SGLDConfig,
 )
-from dynestyx.simulators import Simulator
+from dynestyx.inference.filters import Filter
+from dynestyx.inference.integrations.blackjax.mcmc import init_model
+from dynestyx.inference.mcmc import MCMCInference
 from tests.fixtures import _squeeze_sim_dims
 from tests.models import (
     continuous_time_stochastic_l63_model,

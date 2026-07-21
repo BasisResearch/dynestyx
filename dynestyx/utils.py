@@ -1,5 +1,6 @@
 import math
 import warnings
+from collections.abc import Callable
 from typing import Literal
 
 import diffrax as dfx
@@ -199,8 +200,9 @@ def _is_opaque_plate_leaf(node) -> bool:
     per-member array fields, so the tree must recurse into it and handle those
     fields generically. NumPyro distributions are always opaque. The three
     consumers (:func:`_has_any_batched_plate_source`,
-    ``inference.plate_utils._make_plate_in_axes``,
-    ``simulators._slice_tree_for_plate_member``) must share this one predicate so
+    ``inference.utils.plate_utils._make_plate_in_axes``,
+    ``simulation._slice_tree_for_plate_member``) must share this one
+    predicate so
     a callable diffusion is never seen as batched by the slicer/vmap while being
     invisible to the alignment guard.
     """
@@ -377,24 +379,31 @@ def _validate_controls(
     )
 
 
-def _build_control_path(
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"],
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"],
+def _build_control_path_eval(
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None,
+    ctrl_values: (
+        Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None
+    ),
     obs_times: Real[Array, "*obs_time_plate obs_time"],
-) -> dfx.LinearInterpolation:
+) -> Callable[[Array], Array | None]:
     """
-    Build rectilinear control path for continuous-time simulators.
+    Build a right-continuous control evaluator for continuous-time paths.
 
     Extends the path past the final time so that evaluate(t_last, left=False)
     returns the last value instead of NaN (rectilinear path has no right piece
     at the boundary).
     """
+    if ctrl_times is None or ctrl_values is None:
+        return lambda t: None
+
     t_final = jnp.maximum(obs_times[-1], ctrl_times[-1]) + _CONTROL_EXTEND_EPSILON
     ctrl_times_ext = jnp.concatenate([ctrl_times, t_final[None]])
     ctrl_values_ext = jnp.concatenate([ctrl_values, ctrl_values[-1:]], axis=0)
     _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times_ext, ys=ctrl_values_ext)
-    return dfx.LinearInterpolation(ts=_ct, ys=_cv)
+    control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
+    return lambda t: control_path.evaluate(t, left=False)
 
 
 def _get_val_or_None(values: Array | None, t_idx: int | Array) -> Array | None:

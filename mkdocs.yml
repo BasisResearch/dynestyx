@@ -19,18 +19,20 @@ nav:
     - A Mathematical Introduction: math_intro.md
     - A Gentle Introduction:
       - tutorials/gentle_intro/00_index.ipynb
-      - NumPyro and Bayesian workflow: tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
-      - NumPyro + dynamical systems = Dynestyx: tutorials/gentle_intro/02_dynestyx_discrete_intro.ipynb
-      - Filtering and marginal likelihood: tutorials/gentle_intro/03_filtering_mll.ipynb
-      - Filtering for pseudo-marginal MCMC: tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb
-      - Stochastic variational inference: tutorials/gentle_intro/05_svi.ipynb
-      - Continuous-time dynamics (SDEs): tutorials/gentle_intro/06_continuous_time.ipynb
-      - Continuous-time dynamics (ODEs): tutorials/gentle_intro/06b_odes.ipynb
-      - Hidden Markov Models: tutorials/gentle_intro/07_hmm.ipynb
-      - Hierarchical inference: tutorials/gentle_intro/08_hierarchical_inference.ipynb
-      - Discrete-time smoothing: tutorials/gentle_intro/09_discrete_smoothing.ipynb
-      - Continuous-time smoothing: tutorials/gentle_intro/10_continuous_smoothing.ipynb
-      - Missing observations: tutorials/gentle_intro/11_missing_observations.ipynb
+      - "Part 1: NumPyro and Bayesian workflow": tutorials/gentle_intro/01_numpyro_bayesian_workflow.ipynb
+      - "Part 2: Dynestyx for discrete-time dynamical systems": tutorials/gentle_intro/02_dynestyx_discrete_intro.ipynb
+      - "Part 3: Filtering and marginal likelihood": tutorials/gentle_intro/03_filtering_mll.ipynb
+      - "Part 4: Filtering + NUTS for pseudo-marginal inference": tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb
+      - "Part 5: Stochastic variational inference": tutorials/gentle_intro/05_svi.ipynb
+      - "Part 6a: Continuous-time dynamical systems (SDEs)": tutorials/gentle_intro/06_continuous_time.ipynb
+      - "Part 6b: Continuous-time dynamical systems (ODEs)": tutorials/gentle_intro/06b_odes.ipynb
+      - "Part 7: Hidden Markov Models": tutorials/gentle_intro/07_hmm.ipynb
+      - "Part 8: Hierarchical inference": tutorials/gentle_intro/08_hierarchical_inference.ipynb
+      - "Part 9: Discrete-time smoothing": tutorials/gentle_intro/09_discrete_smoothing.ipynb
+      - "Part 10: Continuous-time smoothing": tutorials/gentle_intro/10_continuous_smoothing.ipynb
+      - "Part 11a: Missing observations with Filters and Smoothers": tutorials/gentle_intro/11_missing_observations.ipynb
+      - "Part 11b: Missing observations with Simulator + MCMC": tutorials/gentle_intro/11b_missing_observations_simulator_mcmc.ipynb
+      - "Part 11c: Missing observations in HMMs": tutorials/gentle_intro/11c_missing_observations_hmms.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -76,19 +78,19 @@ nav:
           - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
       - Inference:
         - Filters: api_reference/public/inference/filters.md
-        - FilterConfigs: api_reference/public/inference/filter_configs.md
+        - FilterConfigs: api_reference/public/inference/configs/filter_configs.md
+        - LatentPathBuilder: api_reference/public/inference/latent_path_builder.md
         - Smoothers: api_reference/public/inference/smoothers.md
-        - SmootherOptions: api_reference/public/inference/smoother_configs.md
+        - SmootherOptions: api_reference/public/inference/configs/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
-        - MCMCConfigs: api_reference/public/inference/mcmc_configs.md
+        - MCMCConfigs: api_reference/public/inference/configs/mcmc_configs.md
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
       - Handlers:
-        - Sample & Plate: api_reference/public/handlers.md
+        - Sample, Simulate, and Plate: api_reference/public/handlers.md
       - Simulators:
         - Simulator Classes:
           - Overview: api_reference/public/simulators/overview.md
-          - BaseSimulator: api_reference/public/simulators/overview/#basesimulator
           - Simulator: api_reference/public/simulators/simulator_wrapper.md
           - DiscreteTimeSimulator: api_reference/public/simulators/discrete_time_simulator.md
           - ODESimulator: api_reference/public/simulators/ode_simulator.md
@@ -105,12 +107,12 @@ nav:
       - Inference:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
-        - FilterConfigs: api_reference/developer/inference/filter_configs.md
+        - FilterConfigs: api_reference/developer/inference/configs/filter_configs.md
+        - LatentPathBuilder: api_reference/developer/inference/latent_path_builder.md
         - Smoothers: api_reference/developer/inference/smoothers.md
-        - SmootherOptions: api_reference/developer/inference/smoother_configs.md
-        - Smoothing Handoff: smoothing_handoff.md
+        - SmootherOptions: api_reference/developer/inference/configs/smoother_configs.md
         - MCMC: api_reference/developer/inference/mcmc.md
-        - MCMCConfigs: api_reference/developer/inference/mcmc_configs.md
+        - MCMCConfigs: api_reference/developer/inference/configs/mcmc_configs.md
         - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md
       - Discretizers:
         - Discretizer: api_reference/developer/discretizers/discretizer.md

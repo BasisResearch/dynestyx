@@ -3,10 +3,12 @@
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import numpyro.distributions as dist
 import optax
+import pytest
 
 import dynestyx as dsx
-from dynestyx.inference.smoother_configs import KFSmootherConfig
+from dynestyx.inference.configs.smoother import KFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.types import ConditionedResult
 
@@ -25,6 +27,17 @@ def _make_data():
     key = jr.PRNGKey(42)
     obs_values = jr.normal(key, (len(obs_times), 1))
     return obs_times, obs_values
+
+
+def _make_dirac_ode_dynamics():
+    return dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -0.1 * x
+        ),
+        observation_model=dsx.DiracIdentityObservation(),
+    )
 
 
 # --- dsx.condition tests (standalone, no numpyro) ---
@@ -111,6 +124,23 @@ def test_condition_smoother_no_observations():
     assert result.marginal_loglik is None
     assert result.states is None
     assert result.dists is None
+
+
+def test_smoother_rejects_dirac_ode_inference():
+    obs_times = jnp.array([0.0, 1.0, 2.0])
+    obs_values = jnp.array([[0.1], [0.2], [0.3]])
+
+    with pytest.raises(
+        ValueError,
+        match="Inference/scoring .* DiracIdentityObservation",
+    ):
+        with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+            dsx.condition(
+                "f",
+                _make_dirac_ode_dynamics(),
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
 
 
 # --- dsx.sample tests (numpyro model) ---

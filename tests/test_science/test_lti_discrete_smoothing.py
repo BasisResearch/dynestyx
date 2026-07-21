@@ -8,9 +8,9 @@ import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH, Predictive
 
-from dynestyx.inference.smoother_configs import KFSmootherConfig, PFSmootherConfig
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.smoother import KFSmootherConfig, PFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.models import discrete_time_lti_simplified_model
 from tests.test_utils import get_output_dir
 

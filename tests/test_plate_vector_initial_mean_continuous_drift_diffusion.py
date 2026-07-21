@@ -11,7 +11,7 @@ from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Discretizer, Filter, SDESimulator, Smoother
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
@@ -20,7 +20,7 @@ from dynestyx.inference.filter_configs import (
     EnKFConfig,
     PFConfig,
 )
-from dynestyx.inference.smoother_configs import ContinuousTimeEKFSmootherConfig
+from dynestyx.inference.configs.smoother import ContinuousTimeEKFSmootherConfig
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiagonalDiffusion,
@@ -29,7 +29,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     ScalarDiffusion,
 )
-from dynestyx.simulators import _slice_tree_for_plate_member
+from dynestyx.simulation import _slice_tree_for_plate_member
 from dynestyx.utils import _has_any_batched_plate_source
 
 

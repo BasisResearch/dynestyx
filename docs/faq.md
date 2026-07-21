@@ -24,10 +24,10 @@ with Filter(filter_config=HMMConfig()):
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Discrete-time**: Either a **Simulator** (NUTS samples both parameters and latent states) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
-For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), use the simulator approach (currently working reliably), do:
+- **Discrete-time**: Either **LatentPathBuilder** (explicit latent-state inference) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `LatentPathBuilder` is a NumPyro-side handler used through `dsx.sample(...)`; for pure-JAX scoring of fixed latent paths, use `dsx.log_prob(...)`. `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
+For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), do:
 ```python
-with DiscreteTimeSimulator():
+with dsx.LatentPathBuilder():
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 For filter-based marginalization with the default EnKF, do:
@@ -48,14 +48,14 @@ with Filter(filter_config=ContinuousTimeEnKFConfig()):
 
 If you happen to have high-frequency, fully-observed, low-noise data, then there IS a much faster option, as shown in this [deep dive](deep_dives/l63_speedup_dirac_vs_enkf.ipynb). Simply do:
 ```python
-with DiscreteTimeSimulator():
+with dsx.LatentPathBuilder():
     with Discretizer():
         return model(obs_times=obs_times, obs_values=obs_values, dirac_observation=True)
 ```
 
-- **Continuous-time ordinary differential equation**: You can use a **Simulator** or a **Filter**. The simulator simply rolls out solutions from the initial conditions and checks fit to data; see tutorial on [ODE inference](tutorials/gentle_intro/06b_odes.ipynb).
+- **Continuous-time ordinary differential equation**: Use **LatentPathBuilder** for explicit latent-state inference or a **Filter** for marginalized inference. `ODESimulator` is now generation-only; see the tutorial on [ODE inference](tutorials/gentle_intro/06b_odes.ipynb).
 ```python
-with ODESimulator():
+with dsx.LatentPathBuilder():
     return model(obs_times=obs_times, obs_values=obs_values)
 ```
 Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
@@ -89,7 +89,7 @@ The `n_simulations` parameter is available on `DiscreteTimeSimulator`, `SDESimul
 
 **Shape contract:** all trajectory outputs have shape `(num_samples, n_sim, T, dim)` — a leading `num_samples` axis from `Predictive`, a `n_sim` axis from the simulator, the time axis `T`, and then the state/observation dimension. Use `dynestyx.flatten_draws` to collapse the first two axes into a single draws axis for plotting or analysis.
 
-**Note:** conditioning on observations (`obs_values != None`) is only supported with `n_simulations=1`. For filter-based rollouts from a posterior (Filter + predict_times), `n_simulations > 1` is fully supported.
+**Note:** simulators are generation/rollout handlers, so direct observation conditioning should go through `LatentPathBuilder`, `Filter`, or `Smoother` instead. For posterior rollouts (`Simulator` stacked outside one of those handlers with `predict_times`), `n_simulations > 1` is fully supported.
 
 ## What about hierarchical models?
 

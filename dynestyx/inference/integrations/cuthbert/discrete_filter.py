@@ -15,8 +15,7 @@ from cuthbertlib.resampling import (
     systematic,
 )
 
-from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
     EnKFConfig,
@@ -25,6 +24,9 @@ from dynestyx.inference.filter_configs import (
 )
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
+)
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import (
     DynamicalModel,

@@ -12,10 +12,10 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import ContinuousTimeKFConfig
+from dynestyx import Simulator
+from dynestyx.inference.configs.filter import ContinuousTimeKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models.lti_dynamics import LTI_continuous
-from dynestyx.simulators import Simulator
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True

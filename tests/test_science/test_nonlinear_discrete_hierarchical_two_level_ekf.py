@@ -13,11 +13,11 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import EKFConfig
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import DynamicalModel, GaussianStateEvolution
 from dynestyx.models.observations import LinearGaussianObservation
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
