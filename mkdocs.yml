@@ -38,6 +38,14 @@ nav:
     - Examples:
       - Quick Example L63: quick_example.ipynb
       - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
+    - State Space Models:
+      - Linear Gaussian SSMs:
+        - Tracking an object with a Kalman filter: tutorials/state_space_models/kf_tracking.ipynb
+        - Online linear regression with a Kalman filter: tutorials/state_space_models/kf_linreg.ipynb
+        - Parameter estimation for an LGSSM (SGD and MCMC): tutorials/state_space_models/lgssm_learning.ipynb
+      - Nonlinear Gaussian SSMs:
+        - Tracking a spiraling object with an EKF: tutorials/state_space_models/ekf_spiral.ipynb
+        - Online learning of an MLP with an EKF: tutorials/state_space_models/ekf_mlp.ipynb
     - Deep Dives:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
       - Associative Cuthbert KF scaling: deep_dives/discrete_time_kf_associative_scaling.ipynb
@@ -357,7 +365,7 @@ theme:
 # +--------------------------------------------------------------------------------------------------------+
 extra_javascript:
   - javascripts/mathjax.js
-  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-svg.js
 
 # +--------------------------------------------------------------------------------------------------------+
 # |                                                                                                        |
