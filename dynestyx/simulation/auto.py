@@ -88,7 +88,13 @@ class Simulator(BaseSimulator):
         predict_times=None,
         **kwargs,
     ) -> SimulatedResult:
-        """Auto-route to the appropriate pure-JAX simulator backend."""
+        """Auto-route to the appropriate pure-JAX simulator backend.
+
+        Unlike :func:`dynestyx.simulate`, ``rng_key`` is consumed directly as an
+        already-allocated simulation key and is not pre-split. Therefore,
+        ``dynestyx.simulate(..., rng_key=root_key)`` is equivalent to
+        ``Simulator.simulate(..., rng_key=jax.random.split(root_key)[1])``.
+        """
         simulator = self._ensure_simulator(dynamics)
         return simulator.simulate(
             dynamics,

@@ -96,7 +96,13 @@ class ODESimulator(BaseSimulator):
         predict_times=None,
         **kwargs,
     ) -> SimulatedResult:
-        """Run pure-JAX forward simulation for deterministic continuous-time models."""
+        """Run pure-JAX forward simulation for deterministic continuous-time models.
+
+        Unlike :func:`dynestyx.simulate`, ``rng_key`` is consumed directly as an
+        already-allocated simulation key and is not pre-split. Therefore,
+        ``dynestyx.simulate(..., rng_key=root_key)`` is equivalent to
+        ``ODESimulator.simulate(..., rng_key=jax.random.split(root_key)[1])``.
+        """
         times = obs_times if obs_times is not None else predict_times
         if times is None:
             raise ValueError("obs_times or predict_times must be provided")
