@@ -47,6 +47,9 @@ nav:
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
       - Continuous-time LTI profile likelihood: deep_dives/continuous_time_lti_profile_likelihood.ipynb
       - GP prior on drift (FitzHugh-Nagumo): deep_dives/gp_drift.ipynb
+      - PDEs:
+        - "Heat equation: Inferring an initial condition": deep_dives/pde/heat_equation_inference.ipynb
+        - "Reaction-diffusion equation: Inferring a reaction rate": deep_dives/pde/reaction_diffusion_inference.ipynb
   - API Reference: 
     - api_reference/index.md
     - Public API:
