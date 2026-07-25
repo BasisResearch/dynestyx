@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import math
-from collections.abc import Callable
-
 import equinox as eqx
-import jax
 import jax.numpy as jnp
 from jax import Array, lax
 
@@ -17,36 +13,6 @@ from dynestyx.observation_missingness import (
     prepare_observation_log_prob,
 )
 from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
-
-
-def _scan_chunked_vmap(
-    fn: Callable[[Array], Array],
-    size: int,
-    *,
-    chunk_size: int | None,
-    dtype,
-) -> Array:
-    if size == 0:
-        return jnp.zeros((0,), dtype=dtype)
-
-    if chunk_size is None or chunk_size <= 0 or chunk_size >= size:
-        return jax.vmap(fn)(jnp.arange(size))
-
-    n_chunks = math.ceil(size / chunk_size)
-    padded_size = n_chunks * chunk_size
-    chunked_indices = jnp.arange(padded_size).reshape(n_chunks, chunk_size)
-
-    def _chunk_step(carry, idx_chunk):
-        safe_idx_chunk = jnp.minimum(idx_chunk, size - 1)
-        chunk_values = jax.vmap(fn)(safe_idx_chunk)
-        valid_mask = idx_chunk < size
-        masked_chunk_values = jnp.where(
-            valid_mask, chunk_values, jnp.zeros_like(chunk_values)
-        )
-        return carry, masked_chunk_values
-
-    _, chunk_outputs = lax.scan(_chunk_step, None, chunked_indices)
-    return chunk_outputs.reshape(padded_size)[:size]
 
 
 def _gather_by_exact_time(
@@ -182,11 +148,10 @@ def compute_state_path_log_prob(
                 )
                 return transition_dist.log_prob(x_next)
 
-            transition_log_probs = _scan_chunked_vmap(
+            transition_log_probs = lax.map(
                 _transition_at,
-                n_transitions,
-                chunk_size=chunk_size,
-                dtype=initial_log_prob.dtype,
+                jnp.arange(n_transitions),
+                batch_size=chunk_size,
             )
 
     if obs_times is None or obs_values is None:
@@ -221,12 +186,15 @@ def compute_state_path_log_prob(
             t_idx=i,
         )
 
-    observation_log_probs = _scan_chunked_vmap(
-        _observation_at,
-        jnp.asarray(obs_times).shape[0],
-        chunk_size=chunk_size,
-        dtype=initial_log_prob.dtype,
-    )
+    n_observations = jnp.asarray(obs_times).shape[0]
+    if n_observations == 0:
+        observation_log_probs = jnp.zeros((0,), dtype=initial_log_prob.dtype)
+    else:
+        observation_log_probs = lax.map(
+            _observation_at,
+            jnp.arange(n_observations),
+            batch_size=chunk_size,
+        )
 
     return (
         initial_log_prob
