@@ -162,9 +162,10 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         error for missing observations. Missing exact identity observations
         support automatic selection and explicit augmentation only.
 
-        ``chunk_size`` limits the number of transition or observation terms
-        evaluated in each ``lax.scan`` chunk. By default, all terms are
-        evaluated in one ``vmap``.
+        ``chunk_size`` is passed to ``jax.lax.map`` as ``batch_size`` while
+        scoring transition and observation terms. ``None`` maps one term at a
+        time. A positive integer evaluates batches of that size with
+        ``jax.vmap``.
         """
         self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
         self.missing_observation_strategy = missing_observation_strategy

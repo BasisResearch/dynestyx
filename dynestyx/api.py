@@ -116,7 +116,9 @@ def log_prob(
             marginalized observed-data target.
         missing_obs_metadata: Optional precomputed metadata defining the flat
             ordering of ``missing_obs_values`` for traced/JIT callers.
-        chunk_size: Optional host-level chunk size for scoring loops.
+        chunk_size: Batch size passed to `jax.lax.map` while scoring transition
+            and observation terms. `None` maps one term at a time. A positive
+            integer evaluates batches of that size with `jax.vmap`.
         ode_diffeqsolve_settings: Optional Diffrax solve settings used when
             reconstructing deterministic continuous-time trajectories.
     """
