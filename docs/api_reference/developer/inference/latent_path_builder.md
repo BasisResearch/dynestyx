@@ -1,78 +1,237 @@
 # LatentPathBuilder
 
-Developer-facing reference for latent-path construction and scoring.
+`LatentPathBuilder` performs joint inference on model parameters and the state
+path. A state path is the sequence of states \(x_{0:T}\) over time. State values
+that are not given by the observations are called *latent states*.
 
-`LatentPathBuilder` exposes latent trajectories as NumPyro sample sites while
-using pure array operations for state reconstruction and joint-density
-evaluation.
+## Mental model
 
-## Package roles
+One way to perform Bayesian inference on a dynamical system is to *unroll* the
+system over time. Consider a model with state transitions
 
-- `dynestyx.inference.latent.builder`
-  Interprets `dsx.sample(...)`, determines free coordinates, creates the latent
-  sites, reconstructs once, scores once, and registers outputs. Plate iteration
-  is a short loop here using shared slicing and stacking helpers.
-- `dynestyx.inference.state_paths.reconstruct`
-  Validates parameter shapes and reconstructs the full state path.
-- `dynestyx.inference.state_paths.score`
-  Returns the scalar `log p(x, y | ...)` for a fully assembled state path.
-- `dynestyx.solvers`
-  Owns continuous-time control-path evaluation plus the ODE and SDE trajectory
-  wrappers shared by reconstruction and forward simulation.
-- `dynestyx.observation_missingness`
-  Owns concrete missing-coordinate metadata, completion, strategy resolution,
-  and pure per-step observation scoring.
-- `dynestyx.inference.utils.distribution_utils`
-  Defines `_ForwardSimulationImproperUniform`: zero density with samples from
-  dynamical forward simulation for initialization and forward execution.
-- `dynestyx.inference.utils.plate_utils`
-  Provides slicing, stacking, and NumPyro plate-frame suspension shared by the
-  simulator and latent builder.
-- `dynestyx.simulation.discrete` and `dynestyx.simulation.base`
-  Provide the single-trajectory state sampler and conditional observation
-  sampler reused for latent-site initialization.
+$$
+x_{t+1} \sim p(x_{t+1} \mid x_t)
+$$
 
-## Execution path
+and observations
 
-The intended reviewer mental model is:
+$$
+y_t \sim p(y_t \mid x_t).
+$$
 
-1. `_sample_ds(...)` slices each plate member when necessary and calls
-   `_sample_single(...)`.
-2. `_sample_single(...)` receives the observation views prepared by
-   `dsx.sample(...)`, resolves concrete `MissingObservationMetadata`, and then
-   chooses the ordinary, ODE, or exact-Dirac branch directly.
-3. It creates `state_path_params` as a `_ForwardSimulationImproperUniform`. The
-   distribution samples through the shared simulator state kernel and has zero
-   log density.
-4. It reconstructs the state path. If augmentation is active, it then creates a
-   second zero-density improper site whose sampler calls the observation model
-   conditional on that state path.
-5. `compute_state_path_log_prob(...)` evaluates the complete scalar joint
-   density once. The builder registers that value as the sole factor and emits
-   the existing deterministic results.
-6. Plate results are restacked, and any future-only rollout is forwarded to the
-   surrounding simulator as before.
+Unrolling means writing one state transition and one observation step for each
+time point. We can then infer the model parameters \(\theta\) and the complete
+state path together from the posterior distribution
+\(p(x_{0:T}, \theta \mid y_{1:T})\).
 
-Because both latent distributions have zero density, no artificial Gaussian
-terms are added and no base-log-probability corrections are subtracted.
+A direct NumPyro program would look like this:
 
-## Replay metadata
+```python
+def model(ys):
+    theta = numpyro.sample("theta", p_theta)
+    x_i = numpyro.sample("x_0", p_initial(theta))
 
-Concrete calls compute `MissingObservationMetadata` from the observation mask.
-Traced replay reuses compatible metadata scoped by site name, latent role,
-observation shape, and requested strategy; replay without a compatible entry
-raises an error explaining that a concrete model execution is required first.
+    for i, y_i in enumerate(ys):
+        x_i = numpyro.sample(
+            f"x_{i + 1}",
+            p_transition(x_i, theta),
+        )
+        numpyro.sample(
+            f"y_{i + 1}",
+            p_observation(x_i, theta),
+            obs=y_i,
+        )
+```
 
-## Public surface
+`LatentPathBuilder` represents this same joint model, with support for arbitrary missingness.
+However, to support this arbitrary missingness, the actual implementation differs significantly, 
+and the `LatentPathBuilder` does not build
+one NumPyro sample site for each time point. Instead, it stores the state values in one
+array so that JAX can evaluate many density terms together.
 
-The supported user-facing route is:
+The state values that define the path are stored in `state_path_params`. The
+builder uses them to reconstruct the complete state path and then evaluates its
+joint log density with the observations.
 
-- `with dsx.LatentPathBuilder(): dsx.sample(...)` for explicit latent-path
-  inference under NumPyro
-- `dsx.log_prob(...)` for pure-JAX scoring of user-supplied latent paths
+## Joint density
 
-The reconstruction and scalar-scoring helpers remain available as
-developer-facing building blocks.
+For a discrete state-space model, the log density is
+
+$$
+\log p(x_0)
++ \sum_{i=0}^{T-1} \log p(x_{i+1} \mid x_i, u_i)
++ \sum_{j=0}^{N-1} \log p(y_j \mid x(\tau_j), u(\tau_j)).
+$$
+
+Here, \(x_i\) is a state, \(y_j\) is an observation at time \(\tau_j\), and
+\(u_i\) is a control input. The control terms are omitted when the model has no
+controls.
+
+A deterministic ODE has no transition-density terms because the initial state
+determines the rest of the path. A `DiracIdentityObservation` has
+\(y_t = x_t\). Each observation requires the state to have the same value, so
+the builder does not calculate a separate observation-density term.
+
+## Related handlers
+
+`LatentPathBuilder` is used when the state path should be represented directly
+in the NumPyro model. `Filter` and `Smoother` are used when the state path should
+instead be marginalized, which may be more efficient for large or complex state-space
+models. `Simulator` generates new state and observation paths without
+conditioning on observed data, and should not be used for inference.
+
+The output names reflect this difference:
+
+- `f_state_path` and `f_state_path_times` contain the path reconstructed by
+  `LatentPathBuilder`.
+- `f_states` and `f_times` contain a path generated by `Simulator` or
+  `dsx.simulate(...)`.
+
+## Supported models
+
+`LatentPathBuilder`:
+
+- runs through `dsx.sample(...)` inside a NumPyro model;
+- requires both `obs_times` and `obs_values`;
+- supports discrete, discretized, and deterministic continuous-time models;
+- requires continuous-time SDE models to be discretized first; and
+- supports rollout only at or after the end of the state path:
+  `predict_times >= max(state_path_times)`.
+
+The constructor accepts the following arguments:
+
+| Argument | Purpose |
+| --- | --- |
+| `ode_diffeqsolve_settings` | Settings passed to the ODE solver (if the model has a `DeterministicContinuousTimeEvolution`) when the state path is reconstructed. |
+| `missing_observation_strategy` | Chooses how missing observations are handled. The options are `"auto"`, `"marginalize"`, `"augment"`, and `"error"`. |
+| `chunk_size` | Splits transition and observation terms into smaller groups during scoring. The default, `None`, evaluates all terms with one `jax.vmap`. |
+
+## State-path parameters
+
+`state_path_params` contains the state values needed to construct the complete
+path. If the user does not provide these values, NumPyro infers them. Their
+meaning depends on the model:
+
+| Model | Values in `state_path_params` | Complete state path |
+| --- | --- | --- |
+| Discrete or discretized | One state at each observation time | The parameters are already the complete path. |
+| Deterministic ODE | The initial state at `dynamics.t0` | The builder solves the ODE at the observation times. |
+| `DiracIdentityObservation` | State components for missing observations | The builder combines these components with the observed state components. |
+
+A component is one entry of a vector-valued state. For exact identity
+observations, several missing components can belong to the same time.
+`state_path_param_coordinate_indices` records the component for each parameter,
+and `state_path_param_times` records its time. The time array can therefore
+contain repeated values.
+
+## Execution
+
+For one trajectory, `_sample_single(...)` performs these steps:
+
+1. Validate the model and read the filled observations and observation mask
+   prepared by `dsx.sample(...)`.
+2. Use the mask to determine which observations are missing.
+3. Create the `"{name}_state_path_params"` sample site.
+4. Reconstruct the complete state path.
+5. If NumPyro must infer missing observation values, create the
+   `"{name}_missing_obs_values"` sample site and fill those values into the
+   observation array.
+6. Call `compute_state_path_log_prob(...)` and add the result to the model as
+   `"{name}_joint_log_prob_factor"`.
+7. Record the reconstructed path and its metadata. If future times were
+   requested, pass the final state to the simulator for rollout.
+
+For `dsx.plate(...)`, `_sample_ds(...)` processes each plate member separately
+and stacks the results into the requested plate shape. A call named `"f"` uses
+member names such as `"f_p0_1"`.
+
+## NumPyro sites
+
+A sample site contains a value that NumPyro can infer. A deterministic site
+records a calculated value. A factor adds a log-density value to the model.
+
+For an unplated call named `"f"`, the builder can create the following sites:
+
+| Site | Type | When it is created |
+| --- | --- | --- |
+| `f_state_path_params` | Sample | Always. |
+| `f_missing_obs_values` | Sample | When NumPyro infers missing observations and the observation model is not `DiracIdentityObservation`. |
+| `f_joint_log_prob_factor` | Factor | Always. This is the builder's contribution to the model density. |
+| `f_state_path_param_times` | Deterministic | Always. |
+| `f_state_path_param_coordinate_indices` | Deterministic | For `DiracIdentityObservation`. |
+| `f_state_path` | Deterministic | Always. |
+| `f_state_path_times` | Deterministic | Always. |
+| `f_missing_obs_times` | Deterministic | When NumPyro infers missing observations. |
+| `f_missing_obs_coordinate_indices` | Deterministic | When NumPyro infers missing observations. |
+| `f_completed_obs_values` | Deterministic | For exact observations or when NumPyro infers missing observations. |
+| `f_joint_log_prob` | Deterministic | Always. It records the value added by `f_joint_log_prob_factor`. |
+
+## Sampling and density
+
+The sample sites use `_ForwardSimulationImproperUniform`. This distribution has
+a log density of zero, so it does not add a second density term to the model.
+Its `sample(...)` method still returns useful initial values:
+
+- discrete paths are sampled by forward simulation;
+- ODE paths start with a draw from the initial-condition distribution;
+- for exact identity observations, the complete path is simulated and only the
+  components that correspond to missing observations are kept; and
+- missing observation values are sampled from the observation model given the
+  reconstructed state path.
+
+The builder adds the actual joint density once through
+`f_joint_log_prob_factor`. This prevents the state and observation densities
+from being counted twice.
+
+A NumPyro `Predictive` call without posterior samples therefore draws paths
+from the model prior. When posterior samples are provided, `Predictive` uses
+their stored state-path values.
+
+## Missing observations
+
+The `missing_observation_strategy` options have the following behavior:
+
+- `"marginalize"` evaluates the density of the observed components without
+  creating values for the missing components;
+- `"augment"` asks NumPyro to infer the missing values, fills them into the
+  observation array, and evaluates the density of the completed observation;
+- `"auto"` selects between these two methods based on the observation model;
+  and
+- `"error"` raises an error when observations are missing.
+
+`DiracIdentityObservation` follows a different path. An observed value fixes
+the matching state component, while a missing value leaves that state component
+to be inferred through `state_path_params`. The builder does not create a
+separate `missing_obs_values` site in this case. Exact missing observations
+support `"auto"` and `"augment"`.
+
+Some JAX transformations trace a model before evaluating it. During tracing,
+the values in the observation mask may not be available to Python. The builder
+therefore creates `MissingObservationMetadata` during a normal model call and
+stores it for later traced calls. It matches the stored data by site name, its
+purpose, the observation shape, and the missing-observation strategy. If no
+match is available, run the model once with ordinary observation arrays before
+applying the JAX transformation.
+
+## Implementation modules
+
+- `dynestyx.inference.latent.builder` creates the sites, handles plates, records
+  results, and starts future rollout.
+- `dynestyx.inference.state_paths.reconstruct` checks parameter shapes and
+  reconstructs the state path.
+- `dynestyx.inference.state_paths.score` evaluates the initial, transition, and
+  observation density terms.
+- `dynestyx.observation_missingness` prepares observation masks, records missing
+  components, selects a missing-data strategy, and completes observations.
+- `dynestyx.inference.utils.distribution_utils` defines
+  `_ForwardSimulationImproperUniform`.
+- `dynestyx.inference.utils.plate_utils` slices and stacks plate values.
+- `dynestyx.simulation.discrete` and `dynestyx.simulation.utils` provide the
+  state and observation samplers used for initialization.
+
+Use `with dsx.LatentPathBuilder(): dsx.sample(...)` for joint inference with an
+explicit state path. Use `dsx.log_prob(...)` to evaluate a state path with pure
+JAX.
 
 ::: dynestyx.inference.latent.builder
     options:

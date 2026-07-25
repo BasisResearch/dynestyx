@@ -1,6 +1,6 @@
 # Overview
 
-Simulators (also called *unrollers*) run pure-JAX forward trajectories for a
+Simulators run pure-JAX forward trajectories for a
 `DynamicalModel` on a chosen time grid, then optionally attach the realized
 outputs to a NumPyro trace when used through `dsx.sample(...)`.
 

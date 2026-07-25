@@ -15,8 +15,6 @@ validated by `Smoother` before dispatch:
 Smoother-specific fields live on the concrete classes rather than a nested
 options object, which keeps handler dispatch and API docs aligned.
 
-The canonical implementation module is `dynestyx.inference.configs.smoother`.
-
 ::: dynestyx.inference.configs.smoother
     options:
       filters: []

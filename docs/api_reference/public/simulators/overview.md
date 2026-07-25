@@ -58,10 +58,6 @@ User code will usually choose between:
 - `with Simulator(): ...` or a concrete simulator handler inside a NumPyro model
 - `dsx.simulate(...)` for pure-JAX forward simulation without NumPyro sites
 
-Internally, the simulator implementation now lives under the
-`dynestyx.simulation` package, while `dynestyx` re-exports the public simulator
-classes at the top level.
-
 ## BaseSimulator
 
 ::: dynestyx.simulation.base.BaseSimulator
