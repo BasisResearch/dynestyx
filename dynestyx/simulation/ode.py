@@ -92,7 +92,6 @@ class ODESimulator(BaseSimulator):
         dynamics: DynamicalModel,
         *,
         rng_key: Array,
-        obs_times=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -105,9 +104,8 @@ class ODESimulator(BaseSimulator):
         ``dynestyx.simulate(..., rng_key=root_key)`` is equivalent to
         ``ODESimulator.simulate(..., rng_key=jax.random.split(root_key)[1])``.
         """
-        times = obs_times if obs_times is not None else predict_times
-        if times is None:
-            raise ValueError("obs_times or predict_times must be provided")
+        if predict_times is None:
+            raise ValueError("predict_times must be provided")
 
         initial_key, rollout_key = jr.split(rng_key)
         initial_state = _sample_initial_states(
@@ -119,7 +117,7 @@ class ODESimulator(BaseSimulator):
             dynamics,
             initial_state=initial_state,
             rng_key=rollout_key,
-            times=times,
+            times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )

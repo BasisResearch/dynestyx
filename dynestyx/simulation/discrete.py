@@ -161,7 +161,6 @@ class DiscreteTimeSimulator(BaseSimulator):
         dynamics: DynamicalModel,
         *,
         rng_key: Array,
-        obs_times=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -174,12 +173,11 @@ class DiscreteTimeSimulator(BaseSimulator):
         ``dynestyx.simulate(..., rng_key=root_key)`` is equivalent to
         ``DiscreteTimeSimulator.simulate(..., rng_key=jax.random.split(root_key)[1])``.
         """
-        times = obs_times if obs_times is not None else predict_times
-        if times is None:
-            raise ValueError("obs_times or predict_times must be provided")
+        if predict_times is None:
+            raise ValueError("predict_times must be provided")
 
         aligned_ctrl_values = _align_ctrl_values_to_times(
-            times=times,
+            times=predict_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
@@ -193,6 +191,6 @@ class DiscreteTimeSimulator(BaseSimulator):
             dynamics,
             initial_state=initial_state,
             rng_key=rollout_key,
-            times=times,
+            times=predict_times,
             ctrl_values=aligned_ctrl_values,
         )

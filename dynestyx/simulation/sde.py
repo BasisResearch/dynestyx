@@ -121,7 +121,6 @@ class SDESimulator(BaseSimulator):
         dynamics: DynamicalModel,
         *,
         rng_key: Array,
-        obs_times=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -140,11 +139,6 @@ class SDESimulator(BaseSimulator):
             raise NotImplementedError(
                 "SDESimulator only works with StochasticContinuousTimeStateEvolution, got "
                 f"{type(dynamics.state_evolution)}"
-            )
-        if obs_times is not None:
-            raise ValueError(
-                "obs_times must not be provided to an SDESimulator; use predict_times for "
-                "forward simulation, or use a filter / discretization workflow for inference."
             )
 
         times = predict_times

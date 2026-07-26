@@ -82,7 +82,6 @@ class Simulator(BaseSimulator):
         dynamics: DynamicalModel,
         *,
         rng_key: Array,
-        obs_times=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -99,7 +98,6 @@ class Simulator(BaseSimulator):
         return simulator.simulate(
             dynamics,
             rng_key=rng_key,
-            obs_times=obs_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
