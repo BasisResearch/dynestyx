@@ -1,3 +1,5 @@
+"""Slice and reshape values that carry NumPyro plate dimensions."""
+
 from contextlib import contextmanager
 
 import equinox as eqx
@@ -17,14 +19,28 @@ from dynestyx.utils import (
 
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
-    """Build ``in_axes`` for leaves whose leading dims match active plates.
+    """Build a `jax.vmap` axis tree for values with plate dimensions.
 
-    All numpyro distributions are treated as opaque leaves with ``in_axes=None``.
-    A plate-batched ``initial_condition`` is *not* sliced by ``vmap`` here; the
-    batched filter/smoother dispatch rebuilds it per member from the clean
-    original via ``_slice_dist_for_plate_member``. This avoids ``vmap`` leaving a
-    stale ``batch_shape`` in the distribution's static aux-data (which would make
-    ``.mean`` / ``.sample`` / ``.log_prob`` re-expand to the full plate shape).
+    Uses the following rules:
+    - Distributions are always marked unbatched, and handled separately
+    by `_slice_dist_for_plate_member`.
+    - Diffusion coefficients are marked batched based on a test by
+    `_diffusion_coefficient_is_plate_batched`.
+    - All other leaves are marked as batched based on a test by
+    `_leaf_is_plate_batched`.
+
+    Each of these tests varies a bit; at a basic level, each tests for
+    the presence of prepending `plate_shapes`, but have their own set
+    of exceptions. Please see the docuemntation for each test
+    for more details.
+
+    Args:
+        tree: Pytree whose leaves may contain plate dimensions.
+        plate_shapes: Sizes of the leading plate dimensions.
+
+    Returns:
+        PyTree: Tree with the same structure as `tree` and leaves set to `0` or
+            `None`.
     """
 
     def _axis(path, leaf):
@@ -49,26 +65,32 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
 
 
 def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
-    """Return 0 if arr has leading dims matching plate_shapes, else None."""
     return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
 
 
 def _get_time_axis(plate_shapes: tuple[int, ...]) -> int:
-    """Return the axis index corresponding to time after plate dimensions."""
     return len(plate_shapes)
 
 
 def _time_len_from_array(
     arr: Shaped[Array, "..."], plate_shapes: tuple[int, ...]
 ) -> int:
-    """Infer sequence length from an array with plate dims followed by time."""
     return int(arr.shape[_get_time_axis(plate_shapes)])
 
 
 def _slice_time_axis(
     arr: Shaped[Array, "..."], t: int, plate_shapes: tuple[int, ...]
 ) -> Shaped[Array, "..."]:
-    """Slice an array at time index t where time axis follows plate dims."""
+    """Select one time while preserving all leading plate dimensions.
+
+    Args:
+        arr: Array shaped as `(*plate_shapes, time, ...)`.
+        t: Index to select from the time axis.
+        plate_shapes: Sizes of the leading plate dimensions.
+
+    Returns:
+        Array: Selected values shaped as `(*plate_shapes, ...)`.
+    """
     time_axis = _get_time_axis(plate_shapes)
     return arr[(slice(None),) * time_axis + (t, ...)]
 
@@ -76,13 +98,20 @@ def _slice_time_axis(
 def _slice_array_for_plate_member(
     arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple
 ) -> Array | None:
-    """Slice leading plate dims if present; otherwise return unchanged.
+    """Select one plate member from an optional array.
 
-    Used both by the simulator enumerate loops and by the filter/smoother batched
-    dispatch to select the times/values/parameters for a particular plate member.
+    An array is sliced only when it starts with `plate_shapes` and has at least
+    one remaining dimension. Shared arrays and `None` are returned unchanged.
+    Entries in `plate_idx` may be Python integers or scalar JAX arrays.
 
-    ``plate_idx`` entries may be Python ints (simulator enumerate path) or traced
-    scalar arrays (filter/smoother ``vmap`` path), so it is intentionally untyped.
+    Args:
+        arr: Array that may contain leading plate dimensions, or `None`.
+        plate_shapes: Sizes of the leading plate dimensions.
+        plate_idx: One index for each plate dimension.
+
+    Returns:
+        Array | None: Array for the selected plate member, the unchanged shared
+            array, or `None`.
     """
     if arr is None:
         return None
@@ -94,25 +123,27 @@ def _slice_array_for_plate_member(
 def _slice_dist_for_plate_member(
     dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple
 ):
-    """Return the single-member distribution for plate index ``plate_idx``.
+    """Return a NumPyro distribution for one plate member.
 
-    Slicing a distribution leaf with ``jax.vmap`` leaves a stale ``batch_shape``
-    in NumPyro's static aux-data, so derived quantities (``.mean`` / ``.sample`` /
-    ``.log_prob``) re-expand to the full plate shape. To avoid that we rebuild the
-    member distribution from the clean original:
+    Direct `jax.vmap` slicing can leave the original `batch_shape` in a
+    distribution's static data. This can make `mean`, `sample`, and `log_prob`
+    expand back to the full plate shape. This function instead rebuilds wrapper
+    distributions recursively. For other distributions, it broadcasts their
+    parameter leaves to the full plate shape, selects `plate_idx`, and removes
+    the selected dimensions from `batch_shape`.
 
-    - **Structural** distributions (``MixtureSameFamily``, ``Independent``,
-      ``TransformedDistribution``) wrap sub-distributions whose own ``batch_shape``
-      would otherwise stay stale, so we recurse and rebuild via their constructors.
-    - **Flat** distributions are rebatched generically: broadcast each leaf's
-      leading ``n = len(plate_shapes)`` dims to the real plate sizes, slice out
-      ``plate_idx``, then trim the now-removed plate dims from ``batch_shape``.
-      Broadcasting first means even leaves NumPyro stored with a collapsed singleton
-      batch (e.g. an MVN ``scale_tril`` of shape ``(1, d, d)``) slice to a clean
-      per-member shape, so no stray ``batch_shape (1,)`` survives.
+    A distribution whose batch shape does not start with `plate_shapes` is
+    shared and returned unchanged. Entries in `plate_idx` may be Python
+    integers or scalar JAX arrays.
 
-    ``plate_idx`` entries may be Python ints (simulator) or traced scalar arrays
-    (filter/smoother ``vmap`` path); both index correctly via gather.
+    Args:
+        dist_obj: NumPyro distribution that may contain plate batch dimensions.
+        plate_shapes: Sizes of the leading plate dimensions.
+        plate_idx: One index for each plate dimension.
+
+    Returns:
+        numpyro.distributions.Distribution: Distribution for the selected plate
+            member, or the unchanged shared distribution.
     """
     if not _dist_has_plate_batch_dims(dist_obj, plate_shapes):
         return dist_obj
@@ -153,7 +184,22 @@ def _slice_dist_for_plate_member(
 
 
 def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
-    """Slice plate-batched pytree leaves for one plate member."""
+    """Select one plate member from every matching leaf in a pytree.
+
+    Member-specific array leaves are indexed by `plate_idx`. Classification
+    uses both shape and the leaf's location in the tree so shared vectors are
+    not sliced only because their length matches a plate size. For a
+    constant-coefficient `Diffusion`, only the coefficient is sliced. Shared
+    leaves are returned unchanged.
+
+    Args:
+        tree: Pytree whose leaves may contain leading plate dimensions.
+        plate_shapes: Sizes of the leading plate dimensions.
+        plate_idx: One index for each plate dimension.
+
+    Returns:
+        PyTree: Copy of `tree` containing values for the selected plate member.
+    """
 
     def _slice_leaf(path, leaf):
         if isinstance(leaf, Diffusion):
@@ -180,7 +226,21 @@ def _slice_dynamics_for_plate_member(
     plate_shapes: tuple[int, ...],
     plate_idx,
 ):
-    """Slice a dynamics pytree and rebuild a plate-batched initial condition."""
+    """Return a dynamical model for one plate member.
+
+    The function slices matching leaves in the model and separately rebuilds
+    its NumPyro initial-condition distribution. Rebuilding the distribution
+    prevents its static `batch_shape` from retaining the removed plate
+    dimensions.
+
+    Args:
+        dynamics: Dynamical model whose values may contain plate dimensions.
+        plate_shapes: Sizes of the leading plate dimensions.
+        plate_idx: One index for each plate dimension.
+
+    Returns:
+        DynamicalModel: Model containing values for the selected plate member.
+    """
     member_dynamics = _slice_tree_for_plate_member(
         dynamics,
         plate_shapes,
@@ -203,7 +263,18 @@ def _slice_dynamics_for_plate_member(
 
 
 def _stack_optional_member_values(values: list, plate_shapes: tuple[int, ...]):
-    """Restore leading plate axes for an optional per-member array value."""
+    """Stack per-member values and restore their leading plate dimensions.
+
+    Args:
+        values: One value per plate member, ordered by flattened plate index.
+            Each non-`None` value must have the same shape.
+        plate_shapes: Sizes of the plate dimensions to restore.
+
+    Returns:
+        Array | None: Stacked array shaped as
+            `(*plate_shapes, *member_shape)`. Returns `None` if any member value
+            is `None`.
+    """
     if any(value is None for value in values):
         return None
     first = jnp.asarray(values[0])
@@ -215,7 +286,12 @@ def _stack_optional_member_values(values: list, plate_shapes: tuple[int, ...]):
 
 @contextmanager
 def _suspend_numpyro_plate_frames():
-    """Hide active NumPyro plates while registering per-member sample sites."""
+    """Temporarily remove active NumPyro plate frames.
+
+    This allows per-member sample sites to be registered without NumPyro adding
+    the surrounding plate dimensions. The original effect stack is restored
+    when the context exits, including when an exception is raised.
+    """
     stack = numpyro.primitives._PYRO_STACK
     original = list(stack)
     stack[:] = [

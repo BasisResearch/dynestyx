@@ -1,4 +1,5 @@
-"""Top-level pure-JAX dynestyx APIs."""
+"""Top-level pure-JAX API for simulation and scoring. Consider using as an alternative
+to the NumPyro-based API if simulation and scoring are the only requirements."""
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -36,12 +37,40 @@ def simulate(
     n_simulations: int = 1,
     simulator_config: SimulatorConfig | None = None,
 ) -> SimulatedResult:
-    """Run pure-JAX forward simulation and return a :class:`SimulatedResult`.
+    """Simulate states and observations without registering NumPyro sites.
 
-    Unlike :func:`dynestyx.sample`, this entry point is for data generation only
-    and does not register any NumPyro sample/deterministic sites. The simulator
-    time grid is taken from ``predict_times`` when provided, else from
-    ``obs_times``.
+    The simulation uses `predict_times` when provided and otherwise uses
+    `obs_times`. Native SDE models require `predict_times` and do not accept
+    `obs_times`.
+
+    Args:
+        dynamics: Dynamical model to simulate.
+        rng_key: JAX pseudorandom number generator key.
+        obs_times: Fallback simulation times for discrete-time and
+            deterministic continuous-time models.
+        ctrl_times: Times associated with `ctrl_values`. If controls are
+            provided, these times must match the union of the supplied
+            observation and prediction times.
+        ctrl_values: Control values, or `None` for an uncontrolled model.
+        predict_times: Preferred simulation times. Native SDE models require
+            this argument.
+        n_simulations: Number of independent trajectories to simulate.
+        simulator_config: ODE or SDE solver configuration. Its type must match
+            the model's state evolution. Discrete-time models do not accept a
+            simulator configuration.
+
+    Returns:
+        SimulatedResult: Simulated times, initial states, state paths, and
+            observations.
+
+    Raises:
+        ValueError: If no simulation times are provided, controls are
+            incomplete or incompatible with the model, the simulator
+            configuration does not match the model, or a native SDE receives
+            `obs_times`.
+        equinox.EquinoxRuntimeError: If a time array is not strictly
+            increasing, `ctrl_times` does not match the required time grid, or
+            `dynamics.t0` does not match the earliest supplied time.
     """
     if obs_times is None and predict_times is None:
         raise ValueError("At least one of obs_times or predict_times must be provided")
@@ -87,40 +116,61 @@ def log_prob(
     missing_observation_strategy: MissingObservationStrategy = "auto",
     missing_obs_values=None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
-    chunk_size: int | None = None,
+    chunk_size: int | None = 0,
     ode_diffeqsolve_settings=None,
 ):
-    """Return the pure-JAX joint log density for a state path and observations.
+    """Evaluate the joint log density of a reconstructed state path.
 
-    Parameters:
+    The function reconstructs a complete state path from
+    `state_path_params`, then evaluates its initial, transition, and
+    observation terms. If observations are omitted, it evaluates only the
+    state-path density.
+
+    Args:
         dynamics: Dynamical model to score.
-        state_path_params: Concrete path-parameter values supplied by the
-            caller. Writing ``z = state_path_params`` and
-            ``x = g(z) = state_path``, this function evaluates ``log p(x, y)``
-            after reconstructing the path ``x``. For discrete / discretized
-            models ``z`` is the full latent path in v1. For ODE models ``z``
-            is the initial condition in v1.
-        state_path_param_times: Times attached to ``state_path_params``.
-        obs_times: Times at which observations are available.
-        obs_values: Observation values at ``obs_times``.
-        ctrl_times: Times at which controls are supplied.
-        ctrl_values: Control values aligned to ``ctrl_times``.
-        missing_observation_strategy: Strategy for handling missing
-            observation coordinates. `"auto"` prefers exact marginalization when
-            supported and otherwise falls back to explicit augmentation for
-            continuous observation families.
-        missing_obs_values: Explicit values for the missing observation
-            coordinates when augmentation is active. In that case this function
-            scores the augmented complete-data target
-            ``log p(x, y_observed, y_missing | ...)`` rather than the
-            marginalized observed-data target.
-        missing_obs_metadata: Optional precomputed metadata defining the flat
-            ordering of ``missing_obs_values`` for traced/JIT callers.
+        state_path_params: Values used to reconstruct the latent state path.
+            For a discrete or discretized model, provide the complete path. For
+            a deterministic ODE, provide its initial state.
+        state_path_param_times: Strictly increasing times associated with
+            `state_path_params`. A deterministic ODE expects one time.
+        obs_times: Strictly increasing times associated with `obs_values`.
+            Every observation time must occur in the reconstructed path.
+        obs_values: Observation values, including any missing entries. Provide
+            this argument together with `obs_times`.
+        ctrl_times: Strictly increasing times associated with `ctrl_values`.
+            When controls are provided, these times must match the union of
+            `obs_times` and `state_path_param_times`.
+        ctrl_values: Control values, or `None` for an uncontrolled model.
+        missing_observation_strategy: Method used to handle missing
+            observations. `"auto"` marginalizes supported observation
+            distributions and otherwise uses augmentation for continuous
+            distributions.
+        missing_obs_values: Values used to complete missing observations when
+            augmentation is active. In this case, the result includes the
+            density of these values instead of marginalizing them.
+        missing_obs_metadata: Positions, times, and component indices for
+            `missing_obs_values`. Precompute this metadata before JIT-compiled
+            augmentation when the missingness pattern cannot be inspected
+            eagerly.
         chunk_size: Batch size passed to `jax.lax.map` while scoring transition
-            and observation terms. `None` maps one term at a time. A positive
-            integer evaluates batches of that size with `jax.vmap`.
-        ode_diffeqsolve_settings: Optional Diffrax solve settings used when
-            reconstructing deterministic continuous-time trajectories.
+            and observation terms. The default, `0`, evaluates all terms with
+            one `jax.vmap`. `None` maps one term at a time. A positive integer
+            evaluates batches of that size with `jax.vmap`.
+        ode_diffeqsolve_settings: Diffrax settings used to reconstruct a
+            deterministic ODE path.
+
+    Returns:
+        Array: Scalar joint log density.
+
+    Raises:
+        ValueError: If time, path, control, observation, or
+            missing-observation inputs are inconsistent; if the model is not
+            supported for scoring; or if a native SDE has not been discretized.
+        equinox.EquinoxRuntimeError: If a time array is not strictly
+            increasing, `dynamics.t0` does not match the earliest supplied
+            time, or a required observation or control time is absent.
+        NotImplementedError: If the selected missing-observation strategy is
+            unsupported by the observation distribution.
     """
     state_path_param_times = jnp.asarray(state_path_param_times)
     _validate_site_sorting(state_path_param_times, name="state_path_param_times")

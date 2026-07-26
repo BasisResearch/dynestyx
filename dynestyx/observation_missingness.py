@@ -1,11 +1,4 @@
-"""Helpers for observation conditioning with missing data.
-
-These utilities support both simulator conditioning and inference backends
-when `obs_values` may contain NaNs. In that case we cannot always rely on
-`numpyro.sample(..., obs=...)` directly, because some observation dimensions
-or full rows may be missing. Instead, downstream code can evaluate only the
-observed part of each likelihood term while preserving fixed array shapes.
-"""
+"""Prepare and score observations that may contain missing values."""
 
 from __future__ import annotations
 
@@ -17,7 +10,7 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 import numpy as np
 import numpyro.distributions as dist
-from jax.errors import TracerBoolConversionError
+from jax.errors import TracerArrayConversionError, TracerBoolConversionError
 from jaxtyping import Array, Bool, Float, Real, Shaped
 
 from dynestyx.models.checkers import (
@@ -38,15 +31,24 @@ MissingObservationStrategy = Literal["auto", "marginalize", "augment", "error"]
 class MissingObservationMetadata:
     """Describe the missing entries in one observation array.
 
-    ``missing_flat_indices`` gives their positions after flattening the array
-    with time as the leading axis. ``missing_obs_times`` gives the observation
-    time for each position. For vector observations,
-    ``missing_obs_coordinate_indices`` gives the component within each
-    observation; it is ``None`` for scalar observations.
+    Flattened indices list missing entries by time and then by component.
+    A partly missing observation contains both observed and missing components.
+    A fully missing observation contains no observed components.
 
-    ``observation_shape`` records the original array shape. The boolean fields
-    report whether any entry is missing, whether any observation is partly
-    missing, and whether any observation is entirely missing.
+    Attributes:
+        missing_obs_times (Array): Observation time for each missing entry, in
+            flattened order.
+        missing_obs_coordinate_indices (Array | None): Component index for each
+            missing entry in a vector observation. This is `None` for scalar
+            observations.
+        missing_flat_indices (Array): Positions of missing entries after
+            flattening the observation array.
+        observation_shape (tuple[int, ...]): Original observation-array shape.
+        has_missing (bool): Whether any observation entry is missing.
+        has_partial_missing (bool): Whether any observation contains both
+            observed and missing components.
+        has_fully_missing_rows (bool): Whether any observation contains no
+            observed components.
     """
 
     missing_obs_times: Array
@@ -61,10 +63,10 @@ class MissingObservationMetadata:
 def _concrete_observation_mask(
     obs_values: Array | np.ndarray,
 ) -> np.ndarray | None:
-    """Return a concrete observation mask when raw values are NumPy-convertible."""
+    """Return an observed-value mask, or `None` for traced values."""
     try:
         obs_values_np = np.asarray(obs_values)
-    except Exception:  # pragma: no cover - defensive for traced callers
+    except TracerArrayConversionError:
         return None
 
     if np.issubdtype(obs_values_np.dtype, np.inexact):
@@ -77,7 +79,19 @@ def validate_missing_obs_values(
     *,
     n_missing_obs: int,
 ) -> Array:
-    """Validate missing-observation values and return them as a flat vector."""
+    """Validate values supplied for missing observation entries.
+
+    A single missing entry accepts either a scalar or a length-one vector.
+    Multiple entries require a flat vector of the exact expected length. If
+    there are no missing entries, the input must be empty.
+
+    Args:
+        missing_obs_values: Values supplied for missing observation entries.
+        n_missing_obs: Expected number of missing entries.
+
+    Returns:
+        Array: Validated flat vector of length `n_missing_obs`.
+    """
     values = jnp.asarray(missing_obs_values)
 
     if n_missing_obs == 0:
@@ -104,11 +118,24 @@ def infer_missing_observation_metadata(
     obs_times: Array,
     obs_mask: Array,
 ) -> MissingObservationMetadata:
-    """Infer explicit missing-observation indexing from a concrete mask."""
+    """Build missing-observation metadata from a concrete mask.
+
+    A one-dimensional mask represents scalar observations. A two-dimensional
+    mask represents vector observations with shape
+    `(time, observation_dim)`.
+
+    Args:
+        obs_times: Time for each observation row.
+        obs_mask: Boolean mask with `True` at observed entries.
+
+    Returns:
+        MissingObservationMetadata: Times, indices, shape, and summary flags for
+            the missing entries.
+    """
     try:
         obs_mask_np = np.asarray(obs_mask, dtype=bool)
         obs_times_np = np.asarray(obs_times)
-    except Exception as exc:  # pragma: no cover - defensive for traced callers
+    except TracerArrayConversionError as exc:
         raise ValueError(
             "Missing-observation augmentation currently requires a concrete "
             "missingness pattern. Precompute it eagerly with "
@@ -224,11 +251,19 @@ def _masked_multivariate_normal_log_prob(
     y: Float[Array, " observation_dim"],
     obs_mask: Bool[Array, " observation_dim"],
 ) -> Shaped[Array, ""]:
-    """Evaluate a masked multivariate Normal log-prob without changing array shape.
+    """Evaluate the observed marginal of a multivariate Normal distribution.
 
     The masked dimensions are replaced with an identity contribution so the
     Cholesky solve keeps a fixed shape across time, while the resulting scalar
     log-prob matches the exact Gaussian marginal over the observed components.
+
+    Args:
+        obs_dist: Multivariate Normal observation distribution.
+        y: One filled observation vector.
+        obs_mask: Boolean vector with `True` at observed components.
+
+    Returns:
+        Array: Scalar log probability of the observed components.
     """
     mask_f = obs_mask.astype(obs_dist.loc.dtype)
     residual = (y - obs_dist.loc) * mask_f
@@ -290,10 +325,10 @@ def prepare_observation_views(
 ]:
     """Return mask-aware observation views for downstream scoring.
 
-    Returns ``(obs_values_filled, obs_mask, has_missing)``. ``obs_values_filled``
+    Returns `(obs_values_filled, obs_mask, has_missing)`. `obs_values_filled`
     preserves the original array shape but replaces missing entries with
     neutral fillers so downstream scoring can keep static shapes while
-    consulting ``obs_mask`` to decide which entries were actually observed.
+    consulting `obs_mask` to decide which entries were actually observed.
     """
     if obs_values is None:
         return None, None, False
@@ -419,21 +454,21 @@ def summarize_observation_mask(
     bool,
     int,
 ]:
-    """Summarize row-wise missing-observation metadata from a boolean mask.
-
-    Returns:
-        row_has_any_observed: Boolean vector of shape ``(time,)`` marking rows
-            with at least one observed coordinate.
-        has_missing: True when any entry of ``obs_mask`` is False.
-        has_partial_missing: True when at least one row mixes observed and
-            missing coordinates.
-        has_fully_missing_rows: True when at least one row has no observed
-            coordinates at all.
-        observation_dim: Size of the trailing observation-event dimension.
+    """Summarize missing entries in a two-dimensional observation mask.
 
     For traced callers that cannot convert these summaries to Python bools, the
-    three scalar flags fall back to ``False`` while the row-wise
-    tensor summary remains available for downstream runtime checks.
+    three scalar flags are `False`. The row-wise JAX array remains available
+    for runtime checks.
+
+    Args:
+        obs_mask: Boolean matrix shaped `(time, observation_dim)`, with `True`
+            at observed entries.
+
+    Returns:
+        tuple[Array, bool, bool, bool, int]: A boolean vector marking rows with
+            at least one observed component, flags for any missing entries,
+            partly missing rows, and fully missing rows, and the observation
+            dimension.
     """
     if obs_mask.ndim != 2:
         raise ValueError(
@@ -666,11 +701,15 @@ def masked_observation_log_prob(
 
 def prepare_observation_log_prob(
     dynamics: DynamicalModel,
-    obs_values: Float[Array, "time observation_dim"],
+    obs_values: (Float[Array, " time"] | Float[Array, "time observation_dim"]),
     *,
     obs_times: Array | None = None,
-    precomputed_filled_obs: Array | None = None,
-    precomputed_obs_mask: Bool[Array, "time observation_dim"] | None = None,
+    precomputed_filled_obs: (
+        Float[Array, " time"] | Float[Array, "time observation_dim"] | None
+    ) = None,
+    precomputed_obs_mask: (
+        Bool[Array, " time"] | Bool[Array, "time observation_dim"] | None
+    ) = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
     missing_obs_values: Array | None = None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
@@ -680,7 +719,55 @@ def prepare_observation_log_prob(
     Array | None,
     Array | None,
 ]:
-    """Prepare a pure per-step observation scorer and completion outputs."""
+    """Prepare a per-time observation scorer for missing values.
+
+    Scalar observations may have shape `(time,)`. They are represented
+    internally as `(time, 1)`.
+
+    Args:
+        dynamics: Dynamical model that defines the observation distribution.
+        obs_values: Scalar or vector observations, including missing entries.
+        obs_times: Times associated with `obs_values`.
+        precomputed_filled_obs: Observation values with missing entries replaced
+            by shape-preserving filler values.
+        precomputed_obs_mask: Boolean array that marks observed entries.
+        missing_observation_strategy: Method used to handle missing entries.
+        missing_obs_values: Values used to complete missing observations when
+            augmentation is active.
+        missing_obs_metadata: Positions, times, and component indices for
+            `missing_obs_values`.
+
+    Returns:
+        tuple[Callable[..., Shaped[Array, ""]], Array | None, Array | None,
+            Array | None]: A per-time scorer, the completed observation array
+            when augmentation is active, the missing-observation times, and the
+            missing-observation component indices.
+    """
+    obs_values = jnp.asarray(obs_values)
+    scalar_observations = obs_values.ndim == 1
+    original_obs_shape = tuple(obs_values.shape)
+    if scalar_observations:
+        obs_values = obs_values[:, None]
+
+    if obs_times is not None:
+        obs_times = jnp.asarray(obs_times)
+    if precomputed_filled_obs is not None:
+        precomputed_filled_obs = jnp.asarray(precomputed_filled_obs)
+        if scalar_observations and precomputed_filled_obs.ndim == 1:
+            precomputed_filled_obs = precomputed_filled_obs[:, None]
+    if precomputed_obs_mask is not None:
+        precomputed_obs_mask = jnp.asarray(precomputed_obs_mask)
+        if scalar_observations and precomputed_obs_mask.ndim == 1:
+            precomputed_obs_mask = precomputed_obs_mask[:, None]
+    if missing_obs_values is not None:
+        missing_obs_values = jnp.asarray(missing_obs_values)
+        if (
+            scalar_observations
+            and missing_obs_metadata is None
+            and tuple(missing_obs_values.shape) == original_obs_shape
+        ):
+            missing_obs_values = missing_obs_values[:, None]
+
     if (precomputed_filled_obs is None) != (precomputed_obs_mask is None):
         raise ValueError(
             "precomputed_filled_obs and precomputed_obs_mask must be provided together."
@@ -708,16 +795,17 @@ def prepare_observation_log_prob(
             observation_dim,
         ) = summarize_observation_mask(obs_mask)
 
-    if missing_obs_metadata is not None:
-        metadata_shape = missing_obs_metadata.observation_shape
-        obs_shape = tuple(obs_mask.shape)
-        scalar_lift_compatible = metadata_shape == (
-            obs_mask.shape[0],
-        ) and obs_shape == (
-            obs_mask.shape[0],
-            1,
+    obs_shape = tuple(obs_mask.shape)
+
+    def _metadata_shape_matches(metadata: MissingObservationMetadata) -> bool:
+        return metadata.observation_shape == obs_shape or (
+            scalar_observations
+            and metadata.observation_shape == original_obs_shape
+            and obs_shape == (obs_mask.shape[0], 1)
         )
-        if metadata_shape != obs_shape and not scalar_lift_compatible:
+
+    if missing_obs_metadata is not None:
+        if not _metadata_shape_matches(missing_obs_metadata):
             raise ValueError(
                 "missing_obs_metadata.observation_shape does not match the "
                 "shape of obs_values for this observation scorer."
@@ -755,7 +843,7 @@ def prepare_observation_log_prob(
                     ),
                     obs_mask=obs_mask,
                 )
-            if metadata.observation_shape != tuple(obs_mask.shape):
+            if not _metadata_shape_matches(metadata):
                 raise ValueError(
                     "missing_obs_metadata.observation_shape does not match the "
                     "shape of obs_values for this observation scorer."
@@ -772,6 +860,7 @@ def prepare_observation_log_prob(
                 missing_obs_values=missing_obs_values,
                 missing_obs_metadata=metadata,
             )
+            completed_obs = jnp.reshape(completed_obs, filled_obs.shape)
             missing_obs_times = metadata.missing_obs_times
             missing_obs_coordinate_indices = metadata.missing_obs_coordinate_indices
         distribution_mode = "augment"
@@ -814,9 +903,17 @@ def prepare_observation_log_prob(
             expected_event_shape=expected_event_shape,
         )
 
+    returned_completed_obs = (
+        completed_obs[:, 0]
+        if scalar_observations and completed_obs is not None
+        else completed_obs
+    )
+    returned_coordinate_indices = (
+        None if scalar_observations else missing_obs_coordinate_indices
+    )
     return (
         _log_prob_step,
-        completed_obs,
+        returned_completed_obs,
         missing_obs_times,
-        missing_obs_coordinate_indices,
+        returned_coordinate_indices,
     )

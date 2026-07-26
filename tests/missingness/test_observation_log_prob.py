@@ -110,11 +110,28 @@ def test_observation_log_prob_scalar_rows_zero_out_full_missing_steps():
     )
 
 
-def test_observation_log_prob_requires_time_by_observation_dim_inputs():
+def test_observation_log_prob_accepts_scalar_time_series():
+    obs_values = jnp.array([jnp.nan, 1.25])
+    log_prob, _, _, _ = prepare_observation_log_prob(
+        _build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
+        obs_values,
+    )
+
+    assert jnp.allclose(
+        log_prob(x=jnp.array(0.2), u=None, t=jnp.array(0.0), t_idx=0),
+        0.0,
+    )
+    assert jnp.allclose(
+        log_prob(x=jnp.array(0.2), u=None, t=jnp.array(1.0), t_idx=1),
+        dist.Normal(1.2, 0.4).log_prob(1.25),
+    )
+
+
+def test_observation_log_prob_rejects_more_than_two_dimensions():
     with pytest.raises(TypeCheckError, match="parameter 'obs_values'"):
         prepare_observation_log_prob(
             _build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4)),
-            jnp.array([jnp.nan, 1.25]),
+            jnp.zeros((1, 1, 1)),
         )
 
 
@@ -222,3 +239,35 @@ def test_observation_log_prob_augment_student_t_matches_completed_data_reference
         jnp.array([1], dtype=jnp.int32),
     )
     assert jnp.allclose(actual, expected)
+
+
+def test_observation_log_prob_scalar_augmentation_preserves_scalar_shape():
+    obs_times = jnp.array([0.0, 1.0])
+    obs_values = jnp.array([1.0, jnp.nan])
+    dynamics = _build_scalar_dynamics(lambda x, u, t: dist.Normal(x + t, 0.4))
+    metadata = prepare_missing_observation_metadata(
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+    log_prob, completed, missing_times, coordinate_indices = (
+        prepare_observation_log_prob(
+            dynamics,
+            obs_values,
+            obs_times=obs_times,
+            missing_observation_strategy="augment",
+            missing_obs_values=jnp.array([0.3]),
+            missing_obs_metadata=metadata,
+        )
+    )
+
+    assert completed is not None
+    assert missing_times is not None
+    assert completed.shape == obs_values.shape
+    assert jnp.allclose(completed, jnp.array([1.0, 0.3]))
+    assert jnp.array_equal(missing_times, jnp.array([1.0]))
+    assert coordinate_indices is None
+    assert jnp.allclose(
+        log_prob(x=jnp.array(0.2), u=None, t=jnp.array(1.0), t_idx=1),
+        dist.Normal(1.2, 0.4).log_prob(0.3),
+    )

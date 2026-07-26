@@ -73,9 +73,27 @@ def _resolve_missing_observation_metadata(
     obs_mask: Array,
     strategy: MissingObservationStrategy,
 ) -> MissingObservationMetadata:
-    """Resolve missing-observation metadata.
+    """Return missing-observation metadata for concrete or traced inputs.
 
-    Concrete calls compute and cache it; traced calls retrieve it from the cache.
+    Concrete inputs create and cache the metadata. Traced inputs reuse a
+    compatible cached value.
+
+    Args:
+        name: Name of the `dsx.sample(...)` site.
+        role: Purpose of the latent values. This value separates cache entries
+            that belong to the same sample site.
+        dynamics: Dynamical model associated with the observations.
+        obs_times: Observation times.
+        obs_values: Observation values. Their shape identifies the cache entry.
+        obs_mask: Boolean array that marks observed entries.
+        strategy: Requested missing-observation strategy.
+
+    Returns:
+        MissingObservationMetadata: Prepared metadata for the observation mask.
+
+    Raises:
+        ValueError: If traced inputs have no compatible cached metadata, or if
+            the cached observation shape does not match `obs_values`.
     """
     cache_key = (name, role, tuple(obs_values.shape), strategy)
     if any(isinstance(value, Tracer) for value in (obs_times, obs_values, obs_mask)):
@@ -112,7 +130,22 @@ def _sample_missing_observation_prior(
     missing_flat_indices: Array,
     key: Array,
 ) -> Array:
-    """Sample missing observations conditional on the assembled state path."""
+    """Sample missing observations conditional on the reconstructed state path.
+
+    Args:
+        dynamics: Dynamical model that defines the observation distribution.
+        state_path: Reconstructed state values.
+        state_path_times: Times associated with `state_path`.
+        obs_times: Times at which observations are required.
+        ctrl_times: Times associated with `ctrl_values`.
+        ctrl_values: Control values, or `None` for an uncontrolled model.
+        missing_flat_indices: Positions of missing values in the flattened
+            observation array.
+        key: JAX pseudorandom key.
+
+    Returns:
+        Array: Sampled missing values ordered by `missing_flat_indices`.
+    """
     if missing_flat_indices.shape[0] == 0:
         return jnp.zeros((0,), dtype=jnp.asarray(state_path).dtype)
 
@@ -137,7 +170,15 @@ def _build_state_path_distributions(
     dynamics,
     state_path: Array,
 ) -> list[dist.Distribution]:
-    """Wrap each inferred state in a Delta distribution for rollout forwarding."""
+    """Create one Delta distribution for each state in a reconstructed path.
+
+    Args:
+        dynamics: Dynamical model that defines the state event shape.
+        state_path: Reconstructed state values.
+
+    Returns:
+        list[dist.Distribution]: Delta distributions used for posterior rollout.
+    """
     event_dim = len(dynamics.initial_condition.event_shape)
     time_major_state_path = jnp.moveaxis(jnp.asarray(state_path), -(event_dim + 1), 0)
     return [
@@ -146,26 +187,67 @@ def _build_state_path_distributions(
 
 
 class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
-    """Build explicit latent paths and score ``log p(x, y | ...)``."""
+    """Construct and score explicit latent state paths in a NumPyro model.
+
+    Use this handler as a context manager around `dsx.sample(...)`. The builder
+    creates array-valued sample sites, reconstructs the complete state path, and
+    adds the joint state-observation log density to the NumPyro model.
+
+    Several different strategies are provided for missing data, specified by the
+    `missing_observation_strategy` parameter:
+
+    - `"marginalize"` evaluates the observation density using only the observed
+      components. The observation distribution must support this calculation
+      (namely, a `MultivariateNormal` or `IndependentDistribution`).
+    - `"augment"` creates a `"{name}_missing_obs_values"` sample site, fills the
+      missing components, and evaluates the completed observation. This method
+      requires a continuous observation distribution.
+    - `"auto"` uses marginalization when supported and otherwise uses
+      augmentation for a continuous observation distribution.
+    - `"error"` rejects partially observed vectors.
+
+    `DiracIdentityObservation` uses a separate path. Its missing components are
+    inferred through `state_path_params`, and missing data support only
+    `"auto"` or `"augment"`.
+
+    Attributes:
+        ode_diffeqsolve_settings: Settings passed to the ODE solver during path
+            reconstruction.
+        missing_observation_strategy: Method used to handle missing entries in
+            `obs_values`.
+        chunk_size: Batch size passed to `jax.lax.map` while scoring transition
+            and observation terms. The default, `0`, evaluates all terms with
+            one `jax.vmap`. `None` maps one term at a time. A positive integer
+            evaluates batches of that size with `jax.vmap`.
+
+    Examples:
+        >>> with dsx.LatentPathBuilder():
+        ...     result = dsx.sample(
+        ...         "f",
+        ...         dynamics,
+        ...         obs_times=obs_times,
+        ...         obs_values=obs_values,
+        ...     )
+    """
 
     def __init__(
         self,
         ode_diffeqsolve_settings: dict[str, Any] | None = None,
         missing_observation_strategy: MissingObservationStrategy = "auto",
-        chunk_size: int | None = None,
+        chunk_size: int | None = 0,
     ) -> None:
         """Initialize explicit latent-path inference.
 
-        ``ode_diffeqsolve_settings`` configures ODE reconstruction from a
-        sampled initial condition. ``missing_observation_strategy`` selects
-        marginalization, explicit augmentation, automatic selection, or an
-        error for missing observations. Missing exact identity observations
-        support automatic selection and explicit augmentation only.
-
-        ``chunk_size`` is passed to ``jax.lax.map`` as ``batch_size`` while
-        scoring transition and observation terms. ``None`` maps one term at a
-        time. A positive integer evaluates batches of that size with
-        ``jax.vmap``.
+        Args:
+            ode_diffeqsolve_settings: Settings passed to the ODE solver during
+                path reconstruction.
+            missing_observation_strategy: Method used to handle missing entries
+                in `obs_values`, as described in the class documentation.
+            chunk_size: Batch size passed to `jax.lax.map` while scoring
+                transition and observation terms. The default, `0`, evaluates
+                all terms with one `jax.vmap`. `None` maps one term at a time. A
+                positive integer evaluates batches of that size with
+                `jax.vmap`.
         """
         self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
         self.missing_observation_strategy = missing_observation_strategy
@@ -185,6 +267,33 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         state_path_params: Array | None,
         missing_obs_values: Array | None,
     ) -> LatentStateResult:
+        """Construct and score one latent state path.
+
+        Args:
+            name: Prefix used for NumPyro site names.
+            dynamics: Dynamical model to condition on observations.
+            obs_times: Observation times. This argument is required.
+            obs_values: Observation values. This argument is required.
+            obs_values_filled: Observation values with missing entries replaced
+                by shape-preserving filler values.
+            obs_mask: Boolean array that marks observed entries.
+            ctrl_times: Times associated with `ctrl_values`.
+            ctrl_values: Control values, or `None` for an uncontrolled model.
+            state_path_params: State values used to construct the path. `None`
+                creates an unconditioned NumPyro sample site.
+            missing_obs_values: Values used to fill missing observations when
+                augmentation is active. `None` creates an unconditioned sample
+                site when these values are required.
+
+        Returns:
+            LatentStateResult: Reconstructed path, joint log density, and
+            metadata used for missing observations and posterior rollout.
+
+        Raises:
+            ValueError: If the model is unsupported, required observations are
+                absent, the missing-observation strategy is invalid, or the
+                supplied latent values have incompatible shapes or semantics.
+        """
         _validate_inference_supported_model_classes(dynamics)
         if isinstance(
             dynamics.state_evolution,
@@ -470,6 +579,39 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
+        """Construct latent paths for one trajectory or a plate of trajectories.
+
+        Args:
+            name: Prefix used for NumPyro site names.
+            dynamics: Dynamical model to condition on observations.
+            plate_shapes: Leading plate dimensions for independent trajectories.
+            obs_times: Observation times.
+            obs_values: Observation values.
+            _obs_values_filled: Internal observation values with missing entries
+                replaced by shape-preserving filler values.
+            _obs_mask: Internal boolean array that marks observed entries.
+            _obs_has_missing: Internal flag indicating whether any observations
+                are missing.
+            ctrl_times: Times associated with `ctrl_values`.
+            ctrl_values: Control values, or `None` for an uncontrolled model.
+            predict_times: Future times used for posterior rollout. Each time
+                must be at or after the end of the reconstructed path.
+            state_path_params: Optional state-path values used to condition the
+                corresponding NumPyro sample site.
+            missing_obs_values: Optional values used to condition the
+                missing-observation sample site when augmentation is active.
+            _dsx_sample_mode: Internal flag set by `dsx.sample(...)`.
+            **kwargs: Additional arguments forwarded to the next handler.
+
+        Returns:
+            LatentStateResult: Path values and metadata. Plate dimensions are
+            leading dimensions in array-valued fields.
+
+        Raises:
+            ValueError: If called outside `dsx.sample(...)`, if observations or
+                latent values are invalid, or if `predict_times` contains an
+                unsupported in-window time.
+        """
         if not _dsx_sample_mode:
             raise ValueError(
                 "LatentPathBuilder only supports dsx.sample(...) under NumPyro. "

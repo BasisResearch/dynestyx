@@ -15,7 +15,7 @@ def _validate_future_only_predict_times(
     *,
     error_message: str,
 ) -> Real[Array, "*predict_time_plate predict_time"] | None:
-    """Validate the current future-only posterior-rollout contract."""
+    """Validate the future-only posterior-rollout contract."""
     if predict_times is None or anchor_times is None:
         return predict_times
     anchor_end = anchor_times[..., -1:]

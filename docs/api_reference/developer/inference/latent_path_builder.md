@@ -104,7 +104,7 @@ The constructor accepts the following arguments:
 | --- | --- |
 | `ode_diffeqsolve_settings` | Settings passed to the ODE solver (if the model has a `DeterministicContinuousTimeEvolution`) when the state path is reconstructed. |
 | `missing_observation_strategy` | Chooses how missing observations are handled. The options are `"auto"`, `"marginalize"`, `"augment"`, and `"error"`. |
-| `chunk_size` | Splits transition and observation terms into smaller groups during scoring. The default, `None`, evaluates all terms with one `jax.vmap`. |
+| `chunk_size` | Batch size passed to `jax.lax.map` while scoring transition and observation terms. The default, `0`, evaluates all terms with one `jax.vmap`. `None` maps one term at a time. A positive integer evaluates batches of that size with `jax.vmap`. |
 
 ## State-path parameters
 

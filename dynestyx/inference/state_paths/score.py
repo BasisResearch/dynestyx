@@ -22,6 +22,26 @@ def _gather_by_exact_time(
     *,
     value_name: str,
 ) -> Array:
+    """Select values whose source times exactly match query times.
+
+    `source_times` must be sorted in ascending order, and its leading axis must
+    align with the leading axis of `values`. The function uses exact equality;
+    it does not interpolate or choose a nearby time. These shape and sorting
+    requirements are not checked directly.
+
+    Args:
+        values: Values indexed by `source_times`.
+        source_times: Sorted times associated with the leading axis of `values`.
+        query_times: Times to select.
+        value_name: Name used in the error message.
+
+    Returns:
+        Array: Selected values in `query_times` order. An empty query returns an
+            empty slice of `values`.
+
+    Raises:
+        eqx.EquinoxRuntimeError: If any query time is absent from `source_times`.
+    """
     source = jnp.asarray(source_times)
     query = jnp.asarray(query_times)
     if query.size == 0:
@@ -39,55 +59,25 @@ def _gather_by_exact_time(
     return values[safe_idx]
 
 
-def _prepare_observation_log_prob(
-    dynamics: DynamicalModel,
-    obs_times: Array,
-    obs_values: Array,
-    *,
-    obs_values_filled: Array | None,
-    obs_mask: Array | None,
-    missing_observation_strategy: MissingObservationStrategy,
-    missing_obs_values: Array | None,
-    missing_obs_metadata: MissingObservationMetadata | None,
-):
-    obs_values_for_helper = obs_values[:, None] if obs_values.ndim == 1 else obs_values
-    obs_times_for_helper = jnp.asarray(obs_times)
-    filled_obs_for_helper = (
-        None
-        if obs_values_filled is None
-        else (obs_values_filled[:, None] if obs_values.ndim == 1 else obs_values_filled)
-    )
-    obs_mask_for_helper = (
-        None
-        if obs_mask is None
-        else (obs_mask[:, None] if obs_values.ndim == 1 else obs_mask)
-    )
-    missing_obs_values_for_helper = (
-        None
-        if missing_obs_values is None
-        else (
-            missing_obs_values[:, None]
-            if obs_values.ndim == 1 and jnp.asarray(missing_obs_values).ndim == 1
-            else missing_obs_values
-        )
-    )
-    return prepare_observation_log_prob(
-        dynamics=dynamics,
-        obs_values=obs_values_for_helper,
-        obs_times=obs_times_for_helper,
-        precomputed_filled_obs=filled_obs_for_helper,
-        precomputed_obs_mask=obs_mask_for_helper,
-        missing_observation_strategy=missing_observation_strategy,
-        missing_obs_values=missing_obs_values_for_helper,
-        missing_obs_metadata=missing_obs_metadata,
-    )
-
-
 def _control_values_at_times(
     ctrl_times: Array | None,
     ctrl_values: Array | None,
     query_times: Array | None,
 ) -> Array | None:
+    """Return control values at exact query times.
+
+    Args:
+        ctrl_times: Times associated with `ctrl_values`.
+        ctrl_values: Control values.
+        query_times: Times at which controls are required.
+
+    Returns:
+        Array | None: Control values in `query_times` order. Returns `None` if
+            any argument is `None`.
+
+    Raises:
+        eqx.EquinoxRuntimeError: If a query time is absent from `ctrl_times`.
+    """
     if ctrl_times is None or ctrl_values is None or query_times is None:
         return None
     return _gather_by_exact_time(
@@ -112,9 +102,54 @@ def compute_state_path_log_prob(
     missing_obs_metadata: MissingObservationMetadata | None = None,
     ctrl_times: Array | None = None,
     ctrl_values: Array | None = None,
-    chunk_size: int | None = None,
+    chunk_size: int | None = 0,
     observations_are_exact_constraints: bool = False,
 ) -> Array:
+    """Evaluate the joint log density of a reconstructed state path.
+
+    If either `obs_times` or `obs_values` is `None`, observation terms
+    are omitted.
+
+    Args:
+        dynamics: Dynamical model that defines the initial, transition, and
+            observation distributions.
+        state_path: Complete state values. Its leading axis must align with
+            `state_path_times`.
+        state_path_times: Times associated with `state_path`. This array must
+            contain at least one entry.
+        obs_times: Times associated with `obs_values`. Every observation time
+            must occur exactly in `state_path_times`.
+        obs_values: Observation values, including any missing entries.
+        obs_values_filled: Observation values with missing entries replaced by
+            shape-preserving filler values.
+        obs_mask: Boolean array that marks observed entries.
+        missing_observation_strategy: Method used to handle missing entries in
+            `obs_values`.
+        missing_obs_values: Values used to complete missing observations when
+            augmentation is active.
+        missing_obs_metadata: Positions, times, and component indices for
+            `missing_obs_values`.
+        ctrl_times: Times associated with `ctrl_values`. Required control times
+            must occur exactly in this array.
+        ctrl_values: Control values, or `None` for an uncontrolled model.
+        chunk_size: Batch size passed to `jax.lax.map` while scoring transition
+            and observation terms. The default, `0`, evaluates all terms with
+            one `jax.vmap`. `None` maps one term at a time. A positive integer
+            evaluates batches of that size with `jax.vmap`.
+        observations_are_exact_constraints: Whether observations directly fix
+            state values. If `True`, their density is not added.
+
+    Returns:
+        Array: Scalar joint log density.
+
+    Raises:
+        ValueError: If `state_path_times` is empty or missing-observation inputs
+            are inconsistent.
+        eqx.EquinoxRuntimeError: If a required observation or control time is
+            absent from its source time array.
+        NotImplementedError: If the selected missing-observation strategy is
+            unsupported by the observation distribution.
+    """
     state_path_times = jnp.asarray(state_path_times)
     state_path = jnp.asarray(state_path)
     _raise_now_or_error_if(
@@ -167,12 +202,12 @@ def compute_state_path_log_prob(
         return initial_log_prob + jnp.sum(transition_log_probs)
 
     obs_ctrl_values = _control_values_at_times(ctrl_times, ctrl_values, obs_times)
-    observation_log_prob, _, _, _ = _prepare_observation_log_prob(
-        dynamics,
-        jnp.asarray(obs_times),
-        jnp.asarray(obs_values),
-        obs_values_filled=obs_values_filled,
-        obs_mask=obs_mask,
+    observation_log_prob, _, _, _ = prepare_observation_log_prob(
+        dynamics=dynamics,
+        obs_values=jnp.asarray(obs_values),
+        obs_times=jnp.asarray(obs_times),
+        precomputed_filled_obs=obs_values_filled,
+        precomputed_obs_mask=obs_mask,
         missing_observation_strategy=missing_observation_strategy,
         missing_obs_values=missing_obs_values,
         missing_obs_metadata=missing_obs_metadata,
