@@ -63,6 +63,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
     n_simulations: int = 1
 
+    def __init__(self, *, n_simulations: int = 1):
+        if n_simulations < 1:
+            raise ValueError(
+                "n_simulations must be greater than or equal to 1, "
+                f"got {n_simulations}."
+            )
+        self.n_simulations = n_simulations
+
     def _run_single_member_simulation(
         self,
         name: str,

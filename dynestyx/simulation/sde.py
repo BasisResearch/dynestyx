@@ -52,15 +52,16 @@ class SDESimulator(BaseSimulator):
         Args:
             simulator_config: Structured simulator settings. Defaults to
                 `SDESimulatorConfig()` when omitted.
-            n_simulations: Number of independent trajectory simulations. When > 1,
-                states and observations have an extra leading dimension (n_simulations, T, ...).
+            n_simulations: Number of independent trajectories to simulate. State
+                and observation paths have shape `(n_simulations, T, ...)`. Must
+                be greater than or equal to one.
         """
+        super().__init__(n_simulations=n_simulations)
         if simulator_config is None:
             simulator_config = SDESimulatorConfig()
 
         self.simulator_config = simulator_config
         self.diffeqsolve_settings = simulator_config.diffeqsolve_settings
-        self.n_simulations = n_simulations
         self.source = simulator_config.source
         self.tol_vbt = simulator_config.resolved_tol_vbt
 

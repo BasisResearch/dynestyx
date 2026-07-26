@@ -27,14 +27,16 @@ class ODESimulator(BaseSimulator):
         Args:
             simulator_config: Structured simulator settings. Defaults to
                 `ODESimulatorConfig()` when omitted.
-            n_simulations: Number of independent trajectories to simulate.
+            n_simulations: Number of independent trajectories to simulate. State
+                and observation paths have shape `(n_simulations, T, ...)`. Must
+                be greater than or equal to one.
         """
+        super().__init__(n_simulations=n_simulations)
         if simulator_config is None:
             simulator_config = ODESimulatorConfig()
 
         self.simulator_config = simulator_config
         self.diffeqsolve_settings = simulator_config.diffeqsolve_settings
-        self.n_simulations = n_simulations
 
     def _simulate_forward_from_initial_state(
         self,

@@ -1,6 +1,5 @@
 """Discrete-time forward-simulation backend."""
 
-import dataclasses
 from typing import cast
 
 import jax
@@ -101,11 +100,15 @@ def _sample_discrete_state_path(
     )
 
 
-@dataclasses.dataclass
 class DiscreteTimeSimulator(BaseSimulator):
     """Forward simulator for discrete-time dynamical models."""
 
-    n_simulations: int = 1
+    def __init__(
+        self,
+        *,
+        n_simulations: int = 1,
+    ):
+        super().__init__(n_simulations=n_simulations)
 
     def _simulate_forward_from_initial_state(
         self,

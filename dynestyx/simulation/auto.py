@@ -36,8 +36,8 @@ class Simulator(BaseSimulator):
         *,
         n_simulations: int = 1,
     ):
+        super().__init__(n_simulations=n_simulations)
         self.simulator_config = simulator_config
-        self.n_simulations = n_simulations
         self.simulator: BaseSimulator | None = None
 
     def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
