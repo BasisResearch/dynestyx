@@ -28,7 +28,6 @@ def simulate(
     dynamics: DynamicalModel,
     *,
     rng_key,
-    obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -39,21 +38,15 @@ def simulate(
 ) -> SimulatedResult:
     """Simulate states and observations without registering NumPyro sites.
 
-    The simulation uses `predict_times` when provided and otherwise uses
-    `obs_times`. Native SDE models require `predict_times` and do not accept
-    `obs_times`.
+    The simulation runs on the grid specified by `predict_times`.
 
     Args:
         dynamics: Dynamical model to simulate.
         rng_key: JAX pseudorandom number generator key.
-        obs_times: Fallback simulation times for discrete-time and
-            deterministic continuous-time models.
         ctrl_times: Times associated with `ctrl_values`. If controls are
-            provided, these times must match the union of the supplied
-            observation and prediction times.
+            provided, these times must match `predict_times`.
         ctrl_values: Control values, or `None` for an uncontrolled model.
-        predict_times: Preferred simulation times. Native SDE models require
-            this argument.
+        predict_times: Times at which to simulate states and observations.
         n_simulations: Number of independent trajectories to simulate.
         simulator_config: ODE or SDE solver configuration. Its type must match
             the model's state evolution. Discrete-time models do not accept a
@@ -64,24 +57,22 @@ def simulate(
             observations.
 
     Raises:
-        ValueError: If no simulation times are provided, controls are
-            incomplete or incompatible with the model, the simulator
-            configuration does not match the model, or a native SDE receives
-            `obs_times`.
+        ValueError: If `predict_times` is not provided, controls are incomplete
+            or incompatible with the model, or the simulator configuration does
+            not match the model.
         equinox.EquinoxRuntimeError: If a time array is not strictly
             increasing, `ctrl_times` does not match the required time grid, or
-            `dynamics.t0` does not match the earliest supplied time.
+            `dynamics.t0` does not match the first prediction time.
     """
-    if obs_times is None and predict_times is None:
-        raise ValueError("At least one of obs_times or predict_times must be provided")
+    if predict_times is None:
+        raise ValueError("predict_times must be provided")
 
-    _validate_site_sorting(obs_times, name="obs_times")
     _validate_site_sorting(ctrl_times, name="ctrl_times")
     _validate_site_sorting(predict_times, name="predict_times")
-    _validate_controls(obs_times, predict_times, ctrl_times, ctrl_values)
+    _validate_controls(None, predict_times, ctrl_times, ctrl_values)
     _validate_control_dim(dynamics, ctrl_values)
 
-    dynamics_with_t0 = _get_dynamics_with_t0(dynamics, obs_times, predict_times)
+    dynamics_with_t0 = _get_dynamics_with_t0(dynamics, None, predict_times)
 
     from dynestyx.simulation import Simulator
 
@@ -93,7 +84,6 @@ def simulate(
     return simulator.simulate(
         dynamics_with_t0,
         rng_key=simulation_key,
-        obs_times=obs_times,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         predict_times=predict_times,

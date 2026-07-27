@@ -77,11 +77,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         rng_key: Array | None = None,
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -115,11 +110,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 "Plate-aware rollout requires posterior distributions from Filter/Smoother."
             )
 
-        # Need times to simulate: predict_times or obs_times
-        # For posterior rollout, need predict_times
         if predict_times is None:
-            if obs_times is None or rollout_times is not None:
-                return None
+            return None
 
         posterior_rollout = rollout_times is not None and rollout_dists is not None
 
@@ -257,23 +249,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ),
             )
 
-        if self.n_simulations > 1 and obs_values is not None:
-            raise ValueError(
-                "n_simulations > 1 is only supported when obs_values is None "
-                "(forward simulation only)"
-            )
         if rng_key is None:
             raise ValueError("PRNG key required for simulation.")
-        if obs_times is not None or obs_values is not None:
-            raise ValueError(
-                f"{type(self).__name__} is generation-only. Use predict_times for "
-                "simulation, or LatentPathBuilder / Filter / Smoother for inference "
-                "with observations."
-            )
         return self.simulate(
             dynamics,
             rng_key=rng_key,
-            obs_times=obs_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -287,11 +267,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         *,
         rng_key: Array | None = None,
         plate_shapes: tuple[int, ...],
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
@@ -307,12 +282,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         Plated simulation enumerates over all plate members and runs
         individual simulations. This is somewhat slower than vmapping,
         but maintains full compatibility with NumPyro's sample semantics."""
+        if predict_times is None:
+            return None
+
         if not _has_any_batched_plate_source(
             dynamics,
             plate_shapes,
             arrays=(
-                obs_times,
-                obs_values,
                 ctrl_times,
                 ctrl_values,
                 predict_times,
@@ -339,18 +315,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             )
 
             # We then slice each other source to find the member's times/values.
-            member_obs_times = _slice_array_for_plate_member(
-                obs_times, plate_shapes, plate_idx
-            )
-            member_obs_values = _slice_array_for_plate_member(
-                obs_values, plate_shapes, plate_idx
-            )
-            member_obs_values_filled = _slice_array_for_plate_member(
-                _obs_values_filled, plate_shapes, plate_idx
-            )
-            member_obs_mask = _slice_array_for_plate_member(
-                _obs_mask, plate_shapes, plate_idx
-            )
             member_ctrl_times = _slice_array_for_plate_member(
                 ctrl_times, plate_shapes, plate_idx
             )
@@ -385,11 +349,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 member_name,
                 member_dynamics,
                 rng_key=(None if member_keys is None else member_keys[member_idx]),
-                obs_times=member_obs_times,
-                obs_values=member_obs_values,
-                _obs_values_filled=member_obs_values_filled,
-                _obs_mask=member_obs_mask,
-                _obs_has_missing=_obs_has_missing,
                 ctrl_times=member_ctrl_times,
                 ctrl_values=member_ctrl_values,
                 predict_times=member_predict_times,
@@ -437,13 +396,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
-        raw_simulator_request = (
-            filtered_times is None
-            and filtered_dists is None
-            and smoothed_times is None
-            and smoothed_dists is None
-        )
-        if raw_simulator_request and (obs_times is not None or obs_values is not None):
+        if obs_times is not None or obs_values is not None:
             raise ValueError(
                 "Simulator handlers are generation-only and no longer accept "
                 "obs_times/obs_values directly. Use predict_times for forward "
@@ -462,11 +415,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 dynamics,
                 rng_key=simulation_key,
                 plate_shapes=plate_shapes,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                _obs_values_filled=_obs_values_filled,
-                _obs_mask=_obs_mask,
-                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -482,11 +430,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 name,
                 dynamics,
                 rng_key=simulation_key,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                _obs_values_filled=_obs_values_filled,
-                _obs_mask=_obs_mask,
-                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -502,11 +445,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             name,
             dynamics,
             plate_shapes=plate_shapes,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            _obs_values_filled=_obs_values_filled,
-            _obs_mask=_obs_mask,
-            _obs_has_missing=_obs_has_missing,
+            obs_times=None,
+            obs_values=None,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -534,7 +474,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         *,
         rng_key: Array,
-        obs_times=None,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
