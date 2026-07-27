@@ -12,6 +12,7 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
+from dynestyx.distributions import MixedStateDistribution
 from dynestyx.models.core import DiscreteTimeStateEvolution
 
 
@@ -185,6 +186,70 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
             loc = loc + jnp.dot(B, u)
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+
+
+class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
+    """
+    Switching linear-Gaussian discrete-time transition for SLDS models.
+
+    z_t | z_{t-1} ~ Categorical(P[z_{t-1}]) ## discrete switching latent
+    x_t | x_{t-1}, z_t ~ Normal(A[z_t] x_{t-1} + B[z_t] u_t + b[z_t], Q[z_t]) ## continuous linear dynamics latent
+    state = [z, x_0, ..., x_{D-1}]
+
+    The full simulator state is represented as [z, x...], where z is a
+    discrete regime encoded as the first scalar entry and `x` is the continuous
+    latent state.
+    """
+
+    transition_matrix: Float[Array, "num_regimes num_regimes"]
+    A: Float[Array, "num_regimes state_dim state_dim"]
+    cov: Float[Array, "num_regimes state_dim state_dim"]
+    B: Float[Array, "num_regimes state_dim control_dim"] | None = None
+    bias: Float[Array, "num_regimes state_dim"] | None = None
+
+    def __init__(
+        self,
+        transition_matrix,
+        A,
+        cov,
+        B=None,
+        bias=None,
+    ):
+        """
+        Args:
+            transition_matrix: Regime transition matrix with shape `(K, K)`.
+            A: Regime-specific dynamics matrices with shape `(K, D, D)`.
+            cov: Regime-specific process covariances with shape `(K, D, D)`.
+            B: Optional regime-specific control matrices with shape `(K, D, U)`.
+            bias: Optional regime-specific dynamics biases with shape `(K, D)`.
+        """
+        self.transition_matrix = transition_matrix
+        self.A = A
+        self.cov = cov
+        self.B = B
+        self.bias = bias
+
+    @property
+    def num_regimes(self) -> int:
+        return int(self.transition_matrix.shape[0])
+
+    @property
+    def continuous_state_dim(self) -> int:
+        return int(self.A.shape[-1])
+
+    def __call__(self, x, u, t_now, t_next):
+        z = jnp.rint(x[..., 0]).astype(jnp.int32)
+        x_cont = x[..., 1:]
+        locs = jnp.einsum("kij,j->ki", self.A, x_cont)
+        if self.bias is not None:
+            locs = locs + self.bias
+        if self.B is not None and u is not None:
+            locs = locs + jnp.einsum("kij,j->ki", self.B, u)
+        return MixedStateDistribution(
+            categorical_probs=self.transition_matrix[z],
+            continuous_locs=locs,
+            continuous_covs=self.cov,
+        )
 
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):

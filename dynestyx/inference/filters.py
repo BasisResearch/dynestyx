@@ -37,6 +37,7 @@ from dynestyx.inference.filter_configs import (
     KFConfig,
     PFConfig,
     PFResamplingConfig,
+    RBPFConfig,
     UKFConfig,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
@@ -408,6 +409,7 @@ class Filter(BaseLogFactorAdder):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
+                        key=k,
                         obs_times=ot,
                         obs_values=ov,
                         ctrl_times=ct,
@@ -531,8 +533,13 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
-        if output_kind in {"continuous", "cd_dynamax_discrete"}:
+        if output_kind == "continuous":
             marginal_logliks = outputs.marginal_loglik
+        elif output_kind == "cd_dynamax_discrete":
+            if isinstance(config, RBPFConfig):
+                marginal_logliks = outputs["marginal_loglik"]
+            else:
+                marginal_logliks = outputs.marginal_loglik
         elif output_kind == "hmm":
             marginal_logliks, log_filt_seq = outputs
         elif output_kind == "cuthbert":
@@ -561,7 +568,7 @@ class Filter(BaseLogFactorAdder):
                 means_attr="filtered_means",
                 covariances_attr="filtered_covariances",
                 plate_shapes=plate_shapes,
-                particle_mode=False,
+                particle_mode=isinstance(config, RBPFConfig),
                 missing_message=(
                     "Filtered means/covariances were unavailable for a Gaussian rollout path."
                 ),
@@ -633,6 +640,7 @@ def _filter_discrete_time(
             name,
             dynamics,
             filter_config,
+            key=key,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,

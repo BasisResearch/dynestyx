@@ -173,6 +173,53 @@ class LinearGaussianObservation(ObservationModel):
         return dist.MultivariateNormal(loc=loc, covariance_matrix=R)
 
 
+class SwitchingLinearGaussianObservation(ObservationModel):
+    """
+    Switching linear-Gaussian observation model for SLDS joint states.
+
+    The incoming state is [z, x...], where z selects the regime-specific
+    observation parameters and x is the continuous latent state.
+
+    y_t | x_t, z_t ~ Normal(H[z_t] x_t + D[z_t] u_t + bias[z_t], R[z_t])
+    """
+
+    H: Float[Array, "num_regimes observation_dim state_dim"]
+    R: Float[Array, "num_regimes observation_dim observation_dim"]
+    D: Float[Array, "num_regimes observation_dim control_dim"] | None
+    bias: Float[Array, "num_regimes observation_dim"] | None
+
+    def __init__(self, H, R, D=None, bias=None):
+        """
+        Args:
+            H: Regime-specific observation matrices with shape `(K, N, D)`.
+            R: Regime-specific observation covariances with shape `(K, N, N)`.
+            D: Optional regime-specific control matrices with shape `(K, N, U)`.
+            bias: Optional regime-specific observation biases with shape `(K, N)`.
+        """
+        self.H = H
+        self.R = R
+        self.D = D
+        self.bias = bias
+
+    @property
+    def num_regimes(self) -> int:
+        return int(self.H.shape[0])
+
+    @property
+    def continuous_state_dim(self) -> int:
+        return int(self.H.shape[-1])
+
+    def __call__(self, x, u, t):
+        z = jnp.rint(x[..., 0]).astype(jnp.int32)
+        x_cont = x[..., 1:]
+        return LinearGaussianObservation(
+            H=self.H[z],
+            R=self.R[z],
+            D=None if self.D is None else self.D[z],
+            bias=None if self.bias is None else self.bias[z],
+        )(x_cont, u, t)
+
+
 class GaussianObservation(ObservationModel):
     """
     Nonlinear Gaussian observation model.
