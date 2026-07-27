@@ -101,20 +101,22 @@ def hmm_log_emission_probs_masked(
 
 def hmm_log_components(
     dynamics: DynamicalModel,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"],
+    _obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
     | None = None,
-    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
-    | Bool[Array, "*obs_value_plate obs_time"]
+    _obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
     | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+    ctrl_values: Real[Array, "obs_time control_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
 ) -> tuple[
     Float[Array, " n_states"],
-    Float[Array, "*plate time_minus_1 n_states n_states"],
-    Float[Array, "*plate time n_states"],
+    Float[Array, "time_minus_1 n_states n_states"],
+    Float[Array, "time n_states"],
 ]:
     """
     Returns:
@@ -216,9 +218,9 @@ def hmm_log_components(
 
 def hmm_filter(
     log_pi: Float[Array, " n_states"],
-    log_A_seq: Float[Array, "*plate time_minus_1 n_states n_states"],
-    log_emit_seq: Float[Array, "*plate time n_states"],
-) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
+    log_A_seq: Float[Array, "time_minus_1 n_states n_states"],
+    log_emit_seq: Float[Array, "time n_states"],
+) -> tuple[Float[Array, ""], Float[Array, "time n_states"]]:
     """
     Exact HMM filtering.
 
@@ -265,17 +267,19 @@ def hmm_filter(
 def compute_hmm_filter(
     dynamics: DynamicalModel,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"],
+    _obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
     | None = None,
-    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
-    | Bool[Array, "*obs_value_plate obs_time"]
+    _obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
     | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
-) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
+    ctrl_values: Real[Array, "obs_time control_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+) -> tuple[Float[Array, ""], Float[Array, "time n_states"]]:
     """Pure-JAX HMM filter computation (no numpyro side-effects).
 
     Returns:
@@ -303,19 +307,25 @@ def _filter_hmm(
     dynamics: DynamicalModel,
     filter_config: HMMConfig,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"],
+    _obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
     | None = None,
-    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
-    | Bool[Array, "*obs_value_plate obs_time"]
+    _obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
     | None = None,
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "obs_time control_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
     **kwargs,
-) -> tuple[jax.Array, Float[Array, "*plate time n_states"], list[dist.Distribution]]:
+) -> tuple[
+    Float[Array, ""],
+    Float[Array, "time n_states"],
+    list[dist.Distribution],
+]:
     """Exact HMM marginal likelihood via forward filtering.
 
     Args:

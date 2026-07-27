@@ -223,7 +223,7 @@ class Filter(BaseLogFactorAdder):
     """
 
     filter_config: BaseFilterConfig | None = None
-    marginal_loglik: jax.Array | None = dataclasses.field(
+    marginal_loglik: Real[Array, "*plate"] | None = dataclasses.field(
         default=None, repr=False, init=False
     )
     filtered_states: object = dataclasses.field(default=None, repr=False, init=False)

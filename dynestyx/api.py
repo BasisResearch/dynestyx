@@ -30,11 +30,11 @@ def simulate(
     dynamics: DynamicalModel,
     *,
     rng_key: PRNGKeyArray,
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
     | None = None,
-    predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
+    predict_times: Real[Array, " predict_time"] | None = None,
     n_simulations: int = 1,
     simulator_config: SimulatorConfig | None = None,
 ) -> SimulatedResult:
@@ -99,16 +99,20 @@ def log_prob(
     | Real[Array, " _"]
     | Real[Array, ""],
     state_path_param_times: Real[Array, " state_path_param_time"],
-    obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
+    obs_times: Real[Array, " obs_time"] | None = None,
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
     | None = None,
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
     | None = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""] | None = None,
+    missing_obs_values: Real[Array, " n_missing_obs"]
+    | Real[Array, " obs_time"]
+    | Real[Array, "obs_time observation_dim"]
+    | Real[Array, ""]
+    | None = None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
     chunk_size: int | None = 0,
     ode_diffeqsolve_settings: dict[str, Any] | None = None,
@@ -140,8 +144,11 @@ def log_prob(
             distributions and otherwise uses augmentation for continuous
             distributions.
         missing_obs_values: Values used to complete missing observations when
-            augmentation is active. In this case, the result includes the
-            density of these values instead of marginalizing them.
+            augmentation is active. Supply either a flat vector ordered by
+            `missing_obs_metadata`, a scalar for one missing entry, or a dense
+            array shaped like `obs_values`; observed entries in a dense array
+            are ignored. In this case, the result includes the density of these
+            values instead of marginalizing them.
         missing_obs_metadata: Positions, times, and component indices for
             `missing_obs_values`. Precompute this metadata before JIT-compiled
             augmentation when the missingness pattern cannot be inspected

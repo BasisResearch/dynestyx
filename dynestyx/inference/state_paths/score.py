@@ -108,7 +108,11 @@ def compute_state_path_log_prob(
     | Bool[Array, " obs_time"]
     | None = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""] | None = None,
+    missing_obs_values: Real[Array, " n_missing_obs"]
+    | Real[Array, " obs_time"]
+    | Real[Array, "obs_time observation_dim"]
+    | Real[Array, ""]
+    | None = None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"]
@@ -138,7 +142,10 @@ def compute_state_path_log_prob(
         missing_observation_strategy: Method used to handle missing entries in
             `obs_values`.
         missing_obs_values: Values used to complete missing observations when
-            augmentation is active.
+            augmentation is active. Supply either a flat vector ordered by
+            `missing_obs_metadata`, a scalar for one missing entry, or a dense
+            array shaped like `obs_values`; observed entries in a dense array
+            are ignored.
         missing_obs_metadata: Positions, times, and component indices for
             `missing_obs_values`.
         ctrl_times: Times associated with `ctrl_values`. Required control times

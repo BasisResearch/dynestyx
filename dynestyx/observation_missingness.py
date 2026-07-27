@@ -744,7 +744,10 @@ def prepare_observation_log_prob(
         precomputed_obs_mask: Boolean array that marks observed entries.
         missing_observation_strategy: Method used to handle missing entries.
         missing_obs_values: Values used to complete missing observations when
-            augmentation is active.
+            augmentation is active. Supply either a flat vector ordered by
+            `missing_obs_metadata`, a scalar for one missing entry, or a dense
+            array shaped like `obs_values`; observed entries in a dense array
+            are ignored.
         missing_obs_metadata: Positions, times, and component indices for
             `missing_obs_values`.
 

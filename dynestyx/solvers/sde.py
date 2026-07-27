@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import diffrax as dfx
 import equinox as eqx
@@ -16,6 +16,13 @@ from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvoluti
 from dynestyx.models.diffusions import EvaluatedDiffusion
 from dynestyx.types import as_scalar_time_array
 from dynestyx.utils import _build_control_path_eval
+
+
+class EulerMaruyamaMoments(TypedDict):
+    """One-step Euler-Maruyama Gaussian moments."""
+
+    loc: Real[Array, "*batch state_dim"]
+    cov: Real[Array, "*batch state_dim state_dim"]
 
 
 def _early_return_states(
@@ -170,9 +177,9 @@ def euler_maruyama_loc_cov(
     state_evolution: StochasticContinuousTimeStateEvolution,
     x: Real[Array, "*batch state_dim"],
     u: Real[Array, "*batch control_dim"] | None,
-    t_now: Real[Array, "*batch"],
-    t_next: Real[Array, "*batch"],
-) -> dict[str, Array]:
+    t_now: Real[Array, ""] | Real[Array, "*batch"],
+    t_next: Real[Array, ""] | Real[Array, "*batch"],
+) -> EulerMaruyamaMoments:
     """Compute one-step Euler-Maruyama transition moments.
 
     Args:
