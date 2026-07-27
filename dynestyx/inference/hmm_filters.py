@@ -104,9 +104,7 @@ def hmm_log_components(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Real[
-        Array, "*obs_value_plate obs_time observation_dim"
-    ]
+    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
     _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
@@ -270,9 +268,7 @@ def compute_hmm_filter(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Real[
-        Array, "*obs_value_plate obs_time observation_dim"
-    ]
+    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
     _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
@@ -310,9 +306,7 @@ def _filter_hmm(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Real[
-        Array, "*obs_value_plate obs_time observation_dim"
-    ]
+    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
     _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]

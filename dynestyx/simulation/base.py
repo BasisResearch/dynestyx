@@ -275,11 +275,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-        filtered_times: Real[Array, "*filtered_time_plate filtered_time"]
-        | None = None,
+        filtered_times: Real[Array, "*filtered_time_plate filtered_time"] | None = None,
         filtered_dists: list[numpyro.distributions.Distribution] | None = None,
-        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"]
-        | None = None,
+        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"] | None = None,
         smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
@@ -386,9 +384,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_filled: Real[
-            Array, "*obs_value_plate obs_time observation_dim"
-        ]
+        _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
         _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
@@ -400,11 +396,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-        filtered_times: Real[Array, "*filtered_time_plate filtered_time"]
-        | None = None,
+        filtered_times: Real[Array, "*filtered_time_plate filtered_time"] | None = None,
         filtered_dists: list[numpyro.distributions.Distribution] | None = None,
-        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"]
-        | None = None,
+        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"] | None = None,
         smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
         **kwargs,
     ) -> object:
@@ -505,12 +499,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         dynamics: DynamicalModel,
         states: Real[Array, "time state_dim"] | Real[Array, " time"],
         times: Real[Array, " time"],
-        obs_values: Real[Array, "time observation_dim"]
-        | Real[Array, " time"]
-        | None,
-        control_path_eval: Callable[
-            [Real[Array, ""]], Real[Array, "..."] | None
-        ]
+        obs_values: Real[Array, "time observation_dim"] | Real[Array, " time"] | None,
+        control_path_eval: Callable[[Real[Array, ""]], Real[Array, "..."] | None]
         | None,
         key: PRNGKeyArray | None = None,
     ) -> Real[Array, "time observation_dim"] | Real[Array, " time"]:

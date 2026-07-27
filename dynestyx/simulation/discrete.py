@@ -49,9 +49,7 @@ def _sample_discrete_state_path_from_initial_state(
     initial_state: Real[Array, " state_dim"] | Real[Array, ""],
     rng_key: PRNGKeyArray,
     times: Real[Array, " time"],
-    ctrl_values: Real[Array, "time control_dim"]
-    | Real[Array, " time"]
-    | None,
+    ctrl_values: Real[Array, "time control_dim"] | Real[Array, " time"] | None,
 ) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
     """Sample one canonical discrete state path from a fixed initial state."""
     if len(times) == 1:
@@ -252,9 +250,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         | Real[Array, " n_simulations"],
         rng_key: PRNGKeyArray,
         times: Real[Array, " time"],
-        ctrl_values: Real[Array, "time control_dim"]
-        | Real[Array, " time"]
-        | None,
+        ctrl_values: Real[Array, "time control_dim"] | Real[Array, " time"] | None,
     ) -> SimulatedResult:
         """Run pure forward simulation for a discrete-time model."""
         n_sim = initial_state.shape[0]

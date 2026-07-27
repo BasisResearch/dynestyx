@@ -119,8 +119,7 @@ def reconstruct_state_path_from_exact_observations(
     state_path_params: Real[Array, " n_missing_state"] | Real[Array, ""],
     latent_metadata: MissingObservationMetadata,
     obs_times: Real[Array, " obs_time"],
-    obs_values_filled: Real[Array, "obs_time state_dim"]
-    | Real[Array, " obs_time"],
+    obs_values_filled: Real[Array, "obs_time state_dim"] | Real[Array, " obs_time"],
 ) -> tuple[
     Real[Array, " n_missing_state"],
     Real[Array, "obs_time state_dim"] | Real[Array, " obs_time"],

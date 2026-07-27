@@ -70,10 +70,8 @@ def _resolve_missing_observation_metadata(
     role: str,
     dynamics: DynamicalModel,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"]
-    | Real[Array, " obs_time"],
-    obs_mask: Bool[Array, "obs_time observation_dim"]
-    | Bool[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_mask: Bool[Array, "obs_time observation_dim"] | Bool[Array, " obs_time"],
     strategy: MissingObservationStrategy,
 ) -> MissingObservationMetadata:
     """Return missing-observation metadata for concrete or traced inputs.
@@ -581,9 +579,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_filled: Real[
-            Array, "*obs_value_plate obs_time observation_dim"
-        ]
+        _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
         _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]

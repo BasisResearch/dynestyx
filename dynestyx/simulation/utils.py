@@ -23,8 +23,7 @@ def _tile_times(
 
 
 def _ensure_trailing_dim(
-    arr: Real[Array, "n_simulations time"]
-    | Real[Array, "n_simulations time dim"],
+    arr: Real[Array, "n_simulations time"] | Real[Array, "n_simulations time dim"],
 ) -> Real[Array, "n_simulations time dim"]:
     """Ensure simulator outputs follow shape (n_sim, T, dim)."""
     return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
@@ -97,9 +96,7 @@ def _sample_initial_states(
     *,
     rng_key: PRNGKeyArray,
     n_simulations: int,
-) -> (
-    Real[Array, "n_simulations state_dim"] | Real[Array, " n_simulations"]
-):
+) -> Real[Array, "n_simulations state_dim"] | Real[Array, " n_simulations"]:
     """Draw independent initial states for each simulation member."""
     keys = jr.split(rng_key, n_simulations)
     return jax.vmap(initial_condition.sample)(keys)
@@ -111,9 +108,7 @@ def _sample_observation_path(
     states: Real[Array, "time state_dim"] | Real[Array, " time"],
     times: Real[Array, " time"],
     rng_key: PRNGKeyArray,
-    control_path_eval: Callable[
-        [Real[Array, ""]], Real[Array, "..."] | None
-    ]
+    control_path_eval: Callable[[Real[Array, ""]], Real[Array, "..."] | None]
     | None = None,
 ) -> Real[Array, "time observation_dim"] | Real[Array, " time"]:
     """Sample one observation path conditional on a realized state path."""

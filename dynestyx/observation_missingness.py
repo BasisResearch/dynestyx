@@ -116,8 +116,7 @@ def validate_missing_obs_values(
 def infer_missing_observation_metadata(
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_mask: Bool[Array, "obs_time observation_dim"]
-    | Bool[Array, " obs_time"],
+    obs_mask: Bool[Array, "obs_time observation_dim"] | Bool[Array, " obs_time"],
 ) -> MissingObservationMetadata:
     """Build missing-observation metadata from a concrete mask.
 

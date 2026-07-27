@@ -17,8 +17,7 @@ from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
 
 
 def _gather_by_exact_time(
-    values: Shaped[Array, "source_time value_dim"]
-    | Shaped[Array, " source_time"],
+    values: Shaped[Array, "source_time value_dim"] | Shaped[Array, " source_time"],
     source_times: Real[Array, " source_time"],
     query_times: Real[Array, " query_time"],
     *,
@@ -67,9 +66,7 @@ def _control_values_at_times(
     | Real[Array, " ctrl_time"]
     | None,
     query_times: Real[Array, " query_time"] | None,
-) -> (
-    Real[Array, "query_time control_dim"] | Real[Array, " query_time"] | None
-):
+) -> Real[Array, "query_time control_dim"] | Real[Array, " query_time"] | None:
     """Return control values at exact query times.
 
     Args:

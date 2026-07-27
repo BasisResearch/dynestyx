@@ -37,9 +37,7 @@ class _ForwardSimulationImproperUniform(dist.ImproperUniform):
         | dist.Distribution,
         *,
         event_shape: tuple[int, ...],
-        sample_transform: Callable[
-            [Shaped[Array, "..."]], Shaped[Array, "..."]
-        ]
+        sample_transform: Callable[[Shaped[Array, "..."]], Shaped[Array, "..."]]
         | None = None,
         validate_args: bool | None = None,
     ) -> None:

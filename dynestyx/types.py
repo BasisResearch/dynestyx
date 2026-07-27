@@ -79,9 +79,9 @@ class LatentStateResult:
         None
     )
     missing_obs_values: Real[Array, "*missing_obs_shape"] | None = None
-    missing_obs_times: (
-        Real[Array, "*missing_obs_time_plate n_missing_obs"] | None
-    ) = None
+    missing_obs_times: Real[Array, "*missing_obs_time_plate n_missing_obs"] | None = (
+        None
+    )
     missing_obs_coordinate_indices: (
         Int[Array, "*missing_obs_plate n_missing_obs"] | None
     ) = None
