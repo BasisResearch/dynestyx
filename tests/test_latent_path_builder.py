@@ -197,9 +197,13 @@ def test_latent_path_builder_sample_ode_reconstructs_state_path():
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array([0.1, 0.1, 0.1])
     state_path_params = jnp.array(0.1)
+    ode_simulator_config = dsx.ODESimulatorConfig(dt0=0.25, max_steps=100)
+    latent_path_builder = dsx.LatentPathBuilder(
+        ode_simulator_config=ode_simulator_config
+    )
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-        with dsx.LatentPathBuilder():
+        with latent_path_builder:
             dsx.sample(
                 "f",
                 dynamics,
@@ -208,6 +212,7 @@ def test_latent_path_builder_sample_ode_reconstructs_state_path():
                 state_path_params=state_path_params,
             )
 
+    assert latent_path_builder.ode_simulator_config is ode_simulator_config
     assert jnp.array_equal(tr["f_state_path_param_times"]["value"], jnp.array([0.0]))
     assert jnp.array_equal(
         tr["f_state_path_times"]["value"], jnp.array([0.0, 0.0, 1.0, 2.0])

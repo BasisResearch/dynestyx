@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import itertools
-from typing import Any
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -16,6 +15,7 @@ from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
+from dynestyx.inference.configs.simulator import ODESimulatorConfig
 from dynestyx.inference.posterior_rollout import (
     _final_times_for_rollout,
     _validate_future_only_predict_times,
@@ -216,8 +216,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     `"auto"` or `"augment"`.
 
     Attributes:
-        ode_diffeqsolve_settings: Settings passed to the ODE solver during path
-            reconstruction.
+        ode_simulator_config: ODE solver and integration settings used during
+            deterministic continuous-time path reconstruction.
         missing_observation_strategy: Method used to handle missing entries in
             `obs_values`.
         chunk_size: Batch size passed to `jax.lax.map` while scoring transition
@@ -237,15 +237,16 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
 
     def __init__(
         self,
-        ode_diffeqsolve_settings: dict[str, Any] | None = None,
+        ode_simulator_config: ODESimulatorConfig | None = None,
         missing_observation_strategy: MissingObservationStrategy = "auto",
         chunk_size: int | None = 0,
     ) -> None:
         """Initialize explicit latent-path inference.
 
         Args:
-            ode_diffeqsolve_settings: Settings passed to the ODE solver during
-                path reconstruction.
+            ode_simulator_config: ODE solver and integration settings used
+                during deterministic continuous-time path reconstruction.
+                Defaults to `ODESimulatorConfig()` when omitted.
             missing_observation_strategy: Method used to handle missing entries
                 in `obs_values`, as described in the class documentation.
             chunk_size: Batch size passed to `jax.lax.map` while scoring
@@ -254,7 +255,10 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 positive integer evaluates batches of that size with
                 `jax.vmap`.
         """
-        self.ode_diffeqsolve_settings = ode_diffeqsolve_settings
+        if ode_simulator_config is None:
+            ode_simulator_config = ODESimulatorConfig()
+
+        self.ode_simulator_config = ode_simulator_config
         self.missing_observation_strategy = missing_observation_strategy
         self.chunk_size = chunk_size
 
@@ -462,7 +466,9 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                     obs_times=obs_times,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
-                    ode_diffeqsolve_settings=self.ode_diffeqsolve_settings,
+                    ode_diffeqsolve_settings=(
+                        self.ode_simulator_config.diffeqsolve_settings
+                    ),
                 )
             )
 
