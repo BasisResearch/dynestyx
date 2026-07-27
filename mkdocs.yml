@@ -95,6 +95,7 @@ nav:
           - DiscreteTimeSimulator: api_reference/public/simulators/discrete_time_simulator.md
           - ODESimulator: api_reference/public/simulators/ode_simulator.md
           - SDESimulator: api_reference/public/simulators/sde_simulator.md
+          - Simulator Configurations: api_reference/public/simulators/simulator_configs.md
       - Diagnostics:
         - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
     - Developer API:
