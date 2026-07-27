@@ -102,8 +102,7 @@ def hmm_log_emission_probs_masked(
 def hmm_log_components(
     dynamics: DynamicalModel,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"]
-    | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
     _obs_values_filled: Real[Array, "obs_time observation_dim"]
     | Real[Array, " obs_time"]
     | None = None,
@@ -268,8 +267,7 @@ def compute_hmm_filter(
     dynamics: DynamicalModel,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"]
-    | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
     _obs_values_filled: Real[Array, "obs_time observation_dim"]
     | Real[Array, " obs_time"]
     | None = None,
@@ -308,8 +306,7 @@ def _filter_hmm(
     filter_config: HMMConfig,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"]
-    | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
     _obs_values_filled: Real[Array, "obs_time observation_dim"]
     | Real[Array, " obs_time"]
     | None = None,
