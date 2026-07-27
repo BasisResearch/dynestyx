@@ -4,92 +4,348 @@
 
 `ObservationModel` is a convenience class that wraps a callable `(x, u, t) -> Distribution` into a standard interface with `log_prob` and `sample` methods. You don't strictly need it: you can pass any callable that returns a NumPyro distribution to `DynamicalModel`'s `observation_model` argument. The built-in `LinearGaussianObservation` and `DiracIdentityObservation` implement this interface for common cases. See the [observations API reference](api_reference/public/models/core/observation_model.md) for details.
 
+## Why isn't the math rendering on this website?
+
+We don't know, but usually a refresh fixes it :)
+
 ## What are the most common ways to condition models on data for system identification?
 
-Say you have a dynestyx model `model` that accepts `obs_times`, `obs_values` (and optionally `ctrl_times`, `ctrl_values` for controlled systems) and passes them to `dsx.sample`:
+Say you have a dynestyx model `model` that accepts `obs_times`, `obs_values`
+(and optionally controls and prediction times) and passes them to `dsx.sample`:
+
 ```python
-def model(obs_times=None, obs_values=None, ctrl_times=None, ctrl_values=None):
+def model(
+    obs_times=None,
+    obs_values=None,
+    ctrl_times=None,
+    ctrl_values=None,
+    predict_times=None,
+):
     params = numpyro.sample(...)
-    dynamics = DynamicalModel(...)
-    return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values, ctrl_times=ctrl_times, ctrl_values=ctrl_values)
+    dynamics = dsx.DynamicalModel(...)
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        predict_times=predict_times,
+    )
 ```
+
 Omit `ctrl_times` and `ctrl_values` when the model has no controls.
 
+- **HMM**: Use the HMM filter with an `HMMConfig`.
 
-- **HMM**: Use the HMM filter (using an `HMMConfig` configuation). See [HMM inference](tutorials/gentle_intro/07_hmm.ipynb).
 ```python
-from dynestyx.inference.filters import Filter, HMMConfig
+from dynestyx.inference.filters import HMMConfig
 
-with Filter(filter_config=HMMConfig()):
-    return model(obs_times=obs_times, obs_values=obs_values)
+with dsx.Filter(filter_config=HMMConfig()):
+    model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Discrete-time**: Either **LatentPathBuilder** (explicit latent-state inference) or a **Filter** (parameters only, with latent states marginalized by a filtering algorithm). `LatentPathBuilder` is a NumPyro-side handler used through `dsx.sample(...)`; for pure-JAX scoring of fixed latent paths, use `dsx.log_prob(...)`. `Filter()` defaults to the cuthbert-backed EnKF for Gaussian observation models. Use `PFConfig` when you need non-Gaussian observations or a fully particle-based approximation.
-For explicit representation of latent states (NUTS / SVI do all the work of parameter and latent state inference), do:
+  See the [HMM inference tutorial](tutorials/gentle_intro/07_hmm.ipynb).
+
+- **Discrete-time**: Use `LatentPathBuilder` for explicit joint inference over
+  parameters and latent states, or a `Filter` to marginalize the latent states
+  while inferring parameters. `dsx.Filter()` defaults to an EnKF for a
+  discrete-time model; pass a filter config to select another algorithm.
+
+```python
+# Explicit latent path
+with dsx.LatentPathBuilder():
+    model(obs_times=obs_times, obs_values=obs_values)
+
+# Marginalized latent path
+with dsx.Filter():
+    model(obs_times=obs_times, obs_values=obs_values)
+```
+
+  See the [filtering and marginal-likelihood
+  tutorial](tutorials/gentle_intro/03_filtering_mll.ipynb).
+
+- **Continuous-time stochastic differential equation**: Use a `Discretizer`
+  with `LatentPathBuilder` for explicit latent-state inference, or a `Filter`
+  for marginalized inference. The continuous-time EnKF is the default filter.
+
+```python
+# Explicit latent path
+with dsx.LatentPathBuilder():
+    with dsx.Discretizer(discretize=dsx.euler_maruyama):
+        model(obs_times=obs_times, obs_values=obs_values)
+
+# Marginalized latent path
+with dsx.Filter():
+    model(obs_times=obs_times, obs_values=obs_values)
+```
+
+  Use a particle filter for non-Gaussian observations;
+  see [SDE inference with non-Gaussian
+  observations](tutorials/sde_non_gaussian_observations.ipynb). See the
+  [continuous-time
+  tutorial](tutorials/gentle_intro/06_continuous_time.ipynb) for the full
+  workflow.
+
+  With high-frequency, low-noise data, the explicit-path approach can be
+  especially attractive when it is reasonable to treat measurements as exact
+  using `dsx.DiracIdentityObservation`, dramatically simplifying inference and
+  improving its efficiency. For example, if the model selects that observation
+  model when `dirac_observation=True`:
+
 ```python
 with dsx.LatentPathBuilder():
-    return model(obs_times=obs_times, obs_values=obs_values)
-```
-For filter-based marginalization with the default EnKF, do:
-```python
-with Filter():
-    return model(obs_times=obs_times, obs_values=obs_values)
-```
-
-
-- **Continuous-time stochastic differential equation**: **Filter** is the main choice. EnKF is the default and works well for nonlinear models, but only works if your initial condition and observation model are linear/gaussian. Use the particle filter (PF) only if you have non-Gaussian initial conditions or observation models—see [SDE with non-Gaussian observations](tutorials/sde_non_gaussian_observations.ipynb). We stand by these implementations, and they appear to be working well currently (especially EnKF).
-```python
-from dynestyx.inference.filters import Filter, ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig
-
-with Filter(filter_config=ContinuousTimeEnKFConfig()):
-# with Filter(filter_config=ContinuousTimeDPFConfig(n_particles=1000)):
-    return model(obs_times=obs_times, obs_values=obs_values)
+    with dsx.Discretizer(discretize=dsx.euler_maruyama):
+        model(
+            obs_times=obs_times,
+            obs_values=obs_values,
+            dirac_observation=True,
+        )
 ```
 
-If you happen to have high-frequency, fully-observed, low-noise data, then there IS a much faster option, as shown in this [deep dive](deep_dives/l63_speedup_dirac_vs_enkf.ipynb). Simply do:
+  In this Dirac setting, observed state coordinates are fixed exactly while
+  unobserved or missing coordinates remain latent. Full observation is not
+  required, although the largest speedups occur when most of the path is
+  observed. See the [Discretizer
+  reference](api_reference/public/discretizers/discretizer.md) and the
+  [Dirac-observation deep dive](deep_dives/l63_speedup_dirac_vs_enkf.ipynb).
+
+- **Continuous-time ordinary differential equation**: Use
+  `LatentPathBuilder` for explicit latent-state inference or a `Filter` for
+  marginalized inference.
+
 ```python
+# Explicit latent path
 with dsx.LatentPathBuilder():
-    with Discretizer():
-        return model(obs_times=obs_times, obs_values=obs_values, dirac_observation=True)
+    model(obs_times=obs_times, obs_values=obs_values)
+
+# Marginalized latent path
+with dsx.Filter():
+    model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-- **Continuous-time ordinary differential equation**: Use **LatentPathBuilder** for explicit latent-state inference or a **Filter** for marginalized inference. `ODESimulator` is now generation-only; see the tutorial on [ODE inference](tutorials/gentle_intro/06b_odes.ipynb).
+Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). Continuous-time filters work directly with diffusion equal to zero, but you can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE. See the [ODE inference tutorial](tutorials/gentle_intro/06b_odes.ipynb).
+
+
+
+You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
+
+Finally, wrap any `dsx.Filter()` configuration around MCMC to infer the
+parameters in `model`:
+
 ```python
-with dsx.LatentPathBuilder():
-    return model(obs_times=obs_times, obs_values=obs_values)
+import jax.random as jr
+from dynestyx.inference.configs.mcmc import NUTSConfig
+from dynestyx.inference.mcmc import MCMCInference
+
+with dsx.Filter(filter_config=my_filter_config):
+    inference = MCMCInference(
+        mcmc_config=NUTSConfig(
+            num_samples=1_000,
+            num_warmup=1_000,
+            num_chains=1,
+            mcmc_source="numpyro",
+        ),
+        model=model,
+    )
+    posterior_samples = inference.run(
+        rng_key=jr.PRNGKey(0),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 ```
-Despite the deterministic nature of an ODE, sometimes a filtering-algorithm helps a lot (especially for long timeseries rollouts, partial/noisy observations, systems with large sensitivities to intial conditions). You can modify the model definition to have a small diffusion coefficient to "relax" the ODE problem to an SDE.
-```python
-from dynestyx.inference.filters import Filter, ContinuousTimeEnKFConfig
 
-with Filter(filter_config=ContinuousTimeEnKFConfig()):
-    return model(obs_times=obs_times, obs_values=obs_values, diffusion_coefficient=0.01)
+The filter supplies the marginal likelihood used by MCMC, so the sampler
+targets model parameters without explicitly sampling the latent state path.
+
+You can also use NumPyro's MCMC classes directly:
+
+```python
+from numpyro.infer import MCMC, NUTS
+
+with dsx.Filter(filter_config=my_filter_config):
+    mcmc = MCMC(
+        NUTS(model),
+        num_warmup=1_000,
+        num_samples=1_000,
+    )
+    mcmc.run(
+        jr.PRNGKey(0),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+    posterior_samples = mcmc.get_samples()
 ```
 
+See the [filtering with NUTS
+tutorial](tutorials/gentle_intro/04_filtering_nuts_pseudomarginal.ipynb) and
+the [`MCMCInference` API
+reference](api_reference/public/inference/mcmc.md).
 
+## What if my data has missingness?
 
+All primary inference workflows support missing data. Use `jnp.nan` for missing
+entries in `obs_values`; filters, smoothers, `LatentPathBuilder`, HMM inference,
+and direct `dsx.log_prob` scoring can handle fully missing time points and
+partially missing observation coordinates. The exact treatment and compatible
+backend depend on the observation distribution.
 
-## What about multiple trajectories?
+See the tutorials on missing observations with [filters and
+smoothers](tutorials/gentle_intro/11_missing_observations.ipynb),
+[`LatentPathBuilder`](tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc.ipynb),
+and [HMMs](tutorials/gentle_intro/11c_missing_observations_hmms.ipynb).
 
-All three simulators support generating multiple independent trajectories in a single call via the `n_simulations` parameter:
+## How do I simulate multiple trajectories?
+
+For a concrete `dynamics` object, use
+[`dsx.simulate(...)`](api_reference/public/handlers.md#dynestyx.api.simulate)
+and set
+`n_simulations`:
 
 ```python
-from dynestyx import SDESimulator, flatten_draws
+import jax.random as jr
+
+result = dsx.simulate(
+    dynamics,
+    rng_key=jr.PRNGKey(0),
+    predict_times=times,
+    n_simulations=100,
+)
+states = result.states  # (100, T, state_dim)
+```
+
+This returns a
+[`SimulatedResult`](api_reference/public/result_types.md#dynestyx.types.SimulatedResult).
+`dsx.simulate` auto-routes to the discrete-time, ODE, or SDE backend. For a
+differential equation, pass an
+[`ODESimulatorConfig` or
+`SDESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+through `simulator_config`. The same `n_simulations` contract holds for all
+three lower-level simulators.
+
+For prior or posterior `Predictive` workflows, use the
+[`dsx.Simulator`](api_reference/public/simulators/simulator_wrapper.md) handler
+in the same way:
+
+```python
 from numpyro.infer import Predictive
 
-with SDESimulator(n_simulations=100):
-    samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), predict_times=times)
-
-# f_states shape: (num_samples=1, n_sim=100, T, state_dim)
-# flatten_draws merges the (num_samples, n_sim) prefix into one axis:
-states = flatten_draws(samples["f_states"])  # (100, T, state_dim)
+with dsx.Simulator(n_simulations=100):
+    samples = Predictive(
+        model, num_samples=1, exclude_deterministic=False
+    )(jr.PRNGKey(0), predict_times=times)
 ```
 
-The `n_simulations` parameter is available on `DiscreteTimeSimulator`, `SDESimulator`, and `ODESimulator`.
+Here `n_simulations` draws trajectories conditional on each parameter
+realization, while `Predictive(num_samples=...)` controls the number of NumPyro
+model executions. The corresponding trajectory shape is
+`(num_samples, n_simulations, T, *event_shape)`.
 
-**Shape contract:** all trajectory outputs have shape `(num_samples, n_sim, T, dim)` — a leading `num_samples` axis from `Predictive`, a `n_sim` axis from the simulator, the time axis `T`, and then the state/observation dimension. Use `dynestyx.flatten_draws` to collapse the first two axes into a single draws axis for plotting or analysis.
+## What if I do not want to use NumPyro or `Predictive`?
 
-**Note:** simulators are generation/rollout handlers, so direct observation conditioning should go through `LatentPathBuilder`, `Filter`, or `Smoother` instead. For posterior rollouts (`Simulator` stacked outside one of those handlers with `predict_times`), `n_simulations > 1` is fully supported.
+Call the result-returning APIs directly on a `dynamics` object constructed at
+concrete parameter values. For simulation, use
+[`dsx.simulate(...)`](api_reference/public/handlers.md#dynestyx.api.simulate)
+as shown above; filtering, smoothing, and latent-path scoring use:
+
+```python
+# Auto-routed filtering and its marginal log likelihood.
+with dsx.Filter():
+    filtered = dsx.condition(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+# Auto-routed smoothing and its marginal log likelihood.
+with dsx.Smoother():
+    smoothed = dsx.condition(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+# Joint density of fixed latent-state parameters and observations.
+joint_log_prob = dsx.log_prob(
+    dynamics,
+    state_path_params=state_path_params,
+    state_path_param_times=state_path_param_times,
+    obs_times=obs_times,
+    obs_values=obs_values,
+)
+```
+
+`dsx.condition` returns a
+[`ConditionedResult`](api_reference/public/result_types.md#dynestyx.types.ConditionedResult)
+containing the
+marginal log likelihood and state summaries requested by the active handler.
+Pass a filter or smoother config when you need a specific algorithm.
+`dsx.log_prob` returns the joint density of a fixed latent path. For a native
+SDE latent-path workflow, first choose a
+[`Discretizer`](api_reference/public/discretizers/discretizer.md); see the
+[discretized latent-path
+tutorial](deep_dives/l63_speedup_dirac_vs_enkf.ipynb).
+
+These APIs are compatible with `jax.jit`, `jax.vmap`, and `jax.grad` when the
+selected algorithm is itself differentiable. They do not provide NumPyro
+priors or parameter inference: construct `dynamics` at concrete parameter
+values and use the optimizer or inference library of your choice.
+
+For NumPyro-free system identification, put an optimizer or sampler around a
+loss that constructs `dynamics` from the current parameters. With marginalized
+latent states, minimize the negative marginal log likelihood returned by a
+filter:
+
+```python
+def filter_loss(parameters):
+    dynamics = build_dynamics(parameters)
+    with dsx.Filter(filter_config=my_filter_config):
+        result = dsx.condition(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+    return -result.marginal_loglik
+
+
+# Pseudocode: use an optimizer such as Optax or SciPy.
+parameters = optimizer_loop(filter_loss, initial_parameters)
+```
+
+For explicit latent-path system identification, optimize or sample parameters
+and the latent path using `dsx.log_prob`:
+
+```python
+def latent_path_loss(parameters, state_path):
+    dynamics = build_dynamics(parameters)
+    return -dsx.log_prob(
+        dynamics,
+        state_path_params=state_path,
+        state_path_param_times=state_times,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+
+# Pseudocode: use the optimizer or sampler of your choice.
+parameters, state_path = optimizer_or_sampler_loop(
+    latent_path_loss,
+    initial_parameters,
+    initial_state_path,
+)
+```
+
+See the [NumPyro-free filtering and marginal-likelihood
+tutorial](tutorials/gentle_intro/03_filtering_mll_no_numpyro.ipynb), the
+[direct filtering and smoothing
+example](tutorials/state_space_models/kf_tracking.ipynb), and the
+[NumPyro-free differentiable optimization
+tutorial](tutorials/gentle_intro/05_svi_no_numpyro.ipynb). The [result-type
+reference](api_reference/public/result_types.md) documents
+`SimulatedResult` and `ConditionedResult`.
 
 ## What about hierarchical models?
 

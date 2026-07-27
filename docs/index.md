@@ -34,7 +34,8 @@ pip install dynestyx
 
 ## Quick Example: Simulation
 
-Define a dynamical model, wrap it with a simulator, and generate synthetic trajectories by passing observation times (and optionally controls) as kwargs:
+Define a dynamical model, wrap it with the auto-routing simulator, and generate
+synthetic trajectories at `predict_times`:
 
 ```python
 import jax.numpy as jnp
@@ -42,38 +43,54 @@ import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 import dynestyx as dsx
-from dynestyx import DynamicalModel, DiscreteTimeSimulator
 from numpyro.infer import Predictive
 
-def model(phi=None, obs_times=None, obs_values=None):
-    phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
-    dynamics = DynamicalModel(
-        control_dim=0,
-        initial_condition=dist.Normal(0.0, 1.0),
-        state_evolution=lambda x, u, t_n, t_next: dist.Normal(phi * x, 0.5),
-        observation_model=lambda x, u, t: dist.Normal(0.0, jnp.exp(x / 2.0)),
-    )
-    return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
-obs_times = jnp.arange(0.0, 100.0, 1.0)
-with DiscreteTimeSimulator():
-    samples = Predictive(model, num_samples=1)(jr.PRNGKey(0), phi=0.9, predict_times=obs_times)
+def model(
+    phi=None,
+    obs_times=None,
+    obs_values=None,
+    predict_times=None,
+):
+    phi = numpyro.sample("phi", dist.Uniform(0.0, 1.0), obs=phi)
+    dynamics = dsx.DynamicalModel(
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(phi * x, 0.5),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.2),
+    )
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        predict_times=predict_times,
+    )
+
+
+predict_times = jnp.arange(0.0, 100.0, 1.0)
+with dsx.Simulator():
+    samples = Predictive(
+        model,
+        num_samples=1,
+        exclude_deterministic=False,
+    )(jr.PRNGKey(0), phi=0.9, predict_times=predict_times)
 ```
 
 ## Quick Example: Inference
 
-Using the simulated `samples` and `obs_times` from above, condition on the data and infer parameters with a filter plus NUTS (no explicit state sampling):
+Using the simulated `samples` from above, condition on the
+data and infer parameters with a filter plus NUTS (no explicit state sampling):
 
 ```python
-from dynestyx import Filter
-from dynestyx.inference.filters import ContinuousTimeEnKFConfig
 from numpyro.infer import MCMC, NUTS
+from dynestyx.inference.filters import ContinuousTimeEnKFConfig
 
-obs_values = samples["f_observations"][0]
+obs_times = samples["f_times"][0, 0]
+obs_values = samples["f_observations"][0, 0]
 
 def inference_model():
-    with Filter(filter_config=ContinuousTimeEnKFConfig(n_particles=25)):
-        return model(obs_times=obs_times, obs_values=obs_values)
+    with dsx.Filter(filter_config=ContinuousTimeEnKFConfig(n_particles=25)):
+        model(obs_times=obs_times, obs_values=obs_values)
 
 mcmc = MCMC(NUTS(inference_model), num_warmup=100, num_samples=100)
 mcmc.run(jr.PRNGKey(1))
