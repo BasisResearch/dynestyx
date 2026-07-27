@@ -5,7 +5,7 @@ from typing import cast
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-from jax import Array
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
@@ -21,10 +21,12 @@ from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
 
 def _align_ctrl_values_to_times(
     *,
-    times: Array,
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
-) -> Array | None:
+    times: Real[Array, " time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None,
+) -> Real[Array, "time control_dim"] | Real[Array, " time"] | None:
     """Return control values aligned to the simulator time grid."""
     if ctrl_times is None or ctrl_values is None:
         return ctrl_values
@@ -44,11 +46,13 @@ def _align_ctrl_values_to_times(
 def _sample_discrete_state_path_from_initial_state(
     dynamics: DynamicalModel,
     *,
-    initial_state: Array,
-    rng_key: Array,
-    times: Array,
-    ctrl_values: Array | None,
-) -> Array:
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    rng_key: PRNGKeyArray,
+    times: Real[Array, " time"],
+    ctrl_values: Real[Array, "time control_dim"]
+    | Real[Array, " time"]
+    | None,
+) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
     """Sample one canonical discrete state path from a fixed initial state."""
     if len(times) == 1:
         return jnp.expand_dims(initial_state, axis=0)
@@ -76,13 +80,15 @@ def _sample_discrete_state_path_from_initial_state(
 
 
 def _sample_discrete_state_path(
-    rng_key: Array,
+    rng_key: PRNGKeyArray,
     *,
     dynamics: DynamicalModel,
-    times: Array,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
-) -> Array:
+    times: Real[Array, " time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None = None,
+) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
     """Sample one state path from the discrete dynamical prior."""
     aligned_ctrl_values = _align_ctrl_values_to_times(
         times=times,
@@ -235,17 +241,20 @@ class DiscreteTimeSimulator(BaseSimulator):
         self,
         *,
         n_simulations: int = 1,
-    ):
+    ) -> None:
         super().__init__(n_simulations=n_simulations)
 
     def _simulate_forward_from_initial_state(
         self,
         dynamics: DynamicalModel,
         *,
-        initial_state: Array,
-        rng_key: Array,
-        times: Array,
-        ctrl_values: Array | None,
+        initial_state: Real[Array, "n_simulations state_dim"]
+        | Real[Array, " n_simulations"],
+        rng_key: PRNGKeyArray,
+        times: Real[Array, " time"],
+        ctrl_values: Real[Array, "time control_dim"]
+        | Real[Array, " time"]
+        | None,
     ) -> SimulatedResult:
         """Run pure forward simulation for a discrete-time model."""
         n_sim = initial_state.shape[0]
@@ -256,7 +265,10 @@ class DiscreteTimeSimulator(BaseSimulator):
             else None
         )
 
-        def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
+        def _sim_one_trajectory(
+            key: PRNGKeyArray,
+            x0: Real[Array, " state_dim"] | Real[Array, ""],
+        ):
             key_states, key_obs = jr.split(key)
             states = _sample_discrete_state_path_from_initial_state(
                 dynamics,
@@ -288,10 +300,12 @@ class DiscreteTimeSimulator(BaseSimulator):
         self,
         dynamics: DynamicalModel,
         *,
-        rng_key: Array,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        rng_key: PRNGKeyArray,
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, " predict_time"] | None = None,
         **kwargs,
     ) -> SimulatedResult:
         """Run pure-JAX forward simulation for a discrete-time model.

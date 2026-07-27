@@ -6,8 +6,7 @@ import dataclasses
 from typing import Any, Literal
 
 import diffrax as dfx
-from jax import Array
-from jaxtyping import Real
+from jaxtyping import Array, Real
 
 from dynestyx.types import as_scalar_time_array
 
@@ -47,7 +46,7 @@ class ODESimulatorConfig:
     stepsize_controller: dfx.AbstractStepSizeController = dataclasses.field(
         default_factory=dfx.ConstantStepSize
     )
-    dt0: float | int | Array = 1e-3
+    dt0: float | int | Real[Array, ""] = 1e-3
     max_steps: int = 100_000
 
     @property
@@ -113,8 +112,8 @@ class SDESimulatorConfig:
     adjoint: dfx.AbstractAdjoint = dataclasses.field(
         default_factory=dfx.RecursiveCheckpointAdjoint
     )
-    dt0: float | int | Array = 1e-4
-    tol_vbt: float | int | Array | None = None
+    dt0: float | int | Real[Array, ""] = 1e-4
+    tol_vbt: float | int | Real[Array, ""] | None = None
     max_steps: int | None = None
     source: Literal["diffrax", "em_scan"] = "em_scan"
 

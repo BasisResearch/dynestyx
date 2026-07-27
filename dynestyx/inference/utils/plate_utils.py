@@ -6,9 +6,9 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
-from jaxtyping import Array, Shaped
+from jaxtyping import Array, Int, Shaped
 
-from dynestyx.models import Diffusion
+from dynestyx.models import Diffusion, DynamicalModel
 from dynestyx.utils import (
     _array_has_plate_dims,
     _diffusion_coefficient_is_plate_batched,
@@ -16,6 +16,8 @@ from dynestyx.utils import (
     _is_opaque_plate_leaf,
     _leaf_is_plate_batched,
 )
+
+type PlateIndex = tuple[int | Int[Array, ""], ...]
 
 
 def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
@@ -64,7 +66,9 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     )
 
 
-def _array_plate_axis(arr, plate_shapes: tuple[int, ...]):
+def _array_plate_axis(
+    arr: Shaped[Array, "..."] | None, plate_shapes: tuple[int, ...]
+) -> int | None:
     return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
 
 
@@ -96,8 +100,10 @@ def _slice_time_axis(
 
 
 def _slice_array_for_plate_member(
-    arr: Array | None, plate_shapes: tuple[int, ...], plate_idx: tuple
-) -> Array | None:
+    arr: Shaped[Array, "..."] | None,
+    plate_shapes: tuple[int, ...],
+    plate_idx: PlateIndex,
+) -> Shaped[Array, "..."] | None:
     """Select one plate member from an optional array.
 
     An array is sliced only when it starts with `plate_shapes` and has at least
@@ -121,8 +127,10 @@ def _slice_array_for_plate_member(
 
 
 def _slice_dist_for_plate_member(
-    dist_obj, plate_shapes: tuple[int, ...], plate_idx: tuple
-):
+    dist_obj: numpyro.distributions.Distribution,
+    plate_shapes: tuple[int, ...],
+    plate_idx: PlateIndex,
+) -> numpyro.distributions.Distribution:
     """Return a NumPyro distribution for one plate member.
 
     Direct `jax.vmap` slicing can leave the original `batch_shape` in a
@@ -183,7 +191,11 @@ def _slice_dist_for_plate_member(
     return member
 
 
-def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx):
+def _slice_tree_for_plate_member(
+    tree,
+    plate_shapes: tuple[int, ...],
+    plate_idx: PlateIndex,
+):
     """Select one plate member from every matching leaf in a pytree.
 
     Member-specific array leaves are indexed by `plate_idx`. Classification
@@ -222,10 +234,10 @@ def _slice_tree_for_plate_member(tree, plate_shapes: tuple[int, ...], plate_idx)
 
 
 def _slice_dynamics_for_plate_member(
-    dynamics,
+    dynamics: DynamicalModel,
     plate_shapes: tuple[int, ...],
-    plate_idx,
-):
+    plate_idx: PlateIndex,
+) -> DynamicalModel:
     """Return a dynamical model for one plate member.
 
     The function slices matching leaves in the model and separately rebuilds
@@ -262,7 +274,10 @@ def _slice_dynamics_for_plate_member(
     )
 
 
-def _stack_optional_member_values(values: list, plate_shapes: tuple[int, ...]):
+def _stack_optional_member_values(
+    values: list[Shaped[Array, "..."] | None],
+    plate_shapes: tuple[int, ...],
+) -> Shaped[Array, "..."] | None:
     """Stack per-member values and restore their leading plate dimensions.
 
     Args:

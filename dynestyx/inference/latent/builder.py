@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import Any, cast
+from typing import Any
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -12,7 +12,7 @@ import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jax.core import Tracer
-from jaxtyping import Array, Real
+from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
@@ -42,6 +42,7 @@ from dynestyx.inference.utils.plate_utils import (
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DiracIdentityObservation,
+    DynamicalModel,
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.observation_missingness import (
@@ -67,10 +68,12 @@ def _resolve_missing_observation_metadata(
     *,
     name: str,
     role: str,
-    dynamics,
-    obs_times: Array,
-    obs_values: Array,
-    obs_mask: Array,
+    dynamics: DynamicalModel,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"],
+    obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"],
     strategy: MissingObservationStrategy,
 ) -> MissingObservationMetadata:
     """Return missing-observation metadata for concrete or traced inputs.
@@ -121,15 +124,18 @@ def _resolve_missing_observation_metadata(
 
 
 def _sample_missing_observation_prior(
-    dynamics,
-    state_path: Array,
-    state_path_times: Array,
-    obs_times: Array,
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
-    missing_flat_indices: Array,
-    key: Array,
-) -> Array:
+    dynamics: DynamicalModel,
+    state_path: Real[Array, "state_path_time state_dim"]
+    | Real[Array, " state_path_time"],
+    state_path_times: Real[Array, " state_path_time"],
+    obs_times: Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None,
+    missing_flat_indices: Int[Array, " n_missing_obs"],
+    key: PRNGKeyArray,
+) -> Real[Array, " n_missing_obs"]:
     """Sample missing observations conditional on the reconstructed state path.
 
     Args:
@@ -167,8 +173,9 @@ def _sample_missing_observation_prior(
 
 
 def _build_state_path_distributions(
-    dynamics,
-    state_path: Array,
+    dynamics: DynamicalModel,
+    state_path: Real[Array, "*state_path_plate state_path_time state_dim"]
+    | Real[Array, "*state_path_plate state_path_time"],
 ) -> list[dist.Distribution]:
     """Create one Delta distribution for each state in a reconstructed path.
 
@@ -256,16 +263,24 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     def _sample_single(
         self,
         name: str,
-        dynamics,
+        dynamics: DynamicalModel,
         *,
-        obs_times: Array | None,
-        obs_values: Array | None,
-        obs_values_filled: Array | None,
-        obs_mask: Array | None,
-        ctrl_times: Array | None,
-        ctrl_values: Array | None,
-        state_path_params: Array | None,
-        missing_obs_values: Array | None,
+        obs_times: Real[Array, " obs_time"] | None,
+        obs_values: Real[Array, "obs_time observation_dim"]
+        | Real[Array, " obs_time"]
+        | None,
+        obs_values_filled: Real[Array, "obs_time observation_dim"]
+        | Real[Array, " obs_time"]
+        | None,
+        obs_mask: Bool[Array, "obs_time observation_dim"]
+        | Bool[Array, " obs_time"]
+        | None,
+        ctrl_times: Real[Array, " ctrl_time"] | None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None,
+        state_path_params: Real[Array, "*state_path_param_shape"] | None,
+        missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""] | None,
     ) -> LatentStateResult:
         """Construct and score one latent state path.
 
@@ -559,23 +574,29 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     def _sample_ds(
         self,
         name: str,
-        dynamics,
+        dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
+        _obs_values_filled: Real[
+            Array, "*obs_value_plate obs_time observation_dim"
+        ]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-        state_path_params: Array | None = None,
-        missing_obs_values: Array | None = None,
+        state_path_params: Real[Array, "*state_path_param_shape"] | None = None,
+        missing_obs_values: Real[Array, "*missing_obs_shape"] | None = None,
         _dsx_sample_mode: bool = False,
         **kwargs,
     ) -> LatentStateResult:
@@ -714,7 +735,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
 
         predict_times = _validate_future_only_predict_times(
             predict_times,
-            cast(Array | None, result.state_path_times),
+            result.state_path_times,
             error_message=(
                 "LatentPathBuilder rollout only supports predict_times >= "
                 "max(state_path_times); in-window latent-path predictions are "
@@ -728,9 +749,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         smoothed_dists = result.state_dists
         if predict_times is not None and smoothed_dists:
             assert result.state_path_times is not None
-            filtered_times = _final_times_for_rollout(
-                cast(Array, result.state_path_times)
-            )
+            filtered_times = _final_times_for_rollout(result.state_path_times)
             filtered_dists = [smoothed_dists[-1]]
             posterior_rollout_final_only = True
             smoothed_times = None

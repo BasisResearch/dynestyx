@@ -104,8 +104,14 @@ def hmm_log_components(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Array | None = None,
-    _obs_mask: Array | None = None,
+    _obs_values_filled: Real[
+        Array, "*obs_value_plate obs_time observation_dim"
+    ]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[
     Float[Array, " n_states"],
@@ -264,8 +270,14 @@ def compute_hmm_filter(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Array | None = None,
-    _obs_mask: Array | None = None,
+    _obs_values_filled: Real[
+        Array, "*obs_value_plate obs_time observation_dim"
+    ]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
 ) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
     """Pure-JAX HMM filter computation (no numpyro side-effects).
@@ -298,8 +310,14 @@ def _filter_hmm(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Array | None = None,
-    _obs_mask: Array | None = None,
+    _obs_values_filled: Real[
+        Array, "*obs_value_plate obs_time observation_dim"
+    ]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
     **kwargs,

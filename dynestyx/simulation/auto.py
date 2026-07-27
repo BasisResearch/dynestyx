@@ -1,6 +1,6 @@
 """Auto-routing simulator handler."""
 
-from jax import Array
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
@@ -193,7 +193,7 @@ class Simulator(BaseSimulator):
         simulator_config: SimulatorConfig | None = None,
         *,
         n_simulations: int = 1,
-    ):
+    ) -> None:
         super().__init__(n_simulations=n_simulations)
         self.simulator_config = simulator_config
         self.simulator: BaseSimulator | None = None
@@ -239,10 +239,12 @@ class Simulator(BaseSimulator):
         self,
         dynamics: DynamicalModel,
         *,
-        rng_key: Array,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        rng_key: PRNGKeyArray,
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, " predict_time"] | None = None,
         **kwargs,
     ) -> SimulatedResult:
         """Auto-route to the appropriate pure-JAX simulator backend.

@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpyro
+from jaxtyping import Array, Float, Real
 
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
@@ -22,7 +23,7 @@ from dynestyx.utils import _should_record_field
 
 def register_filter_sites(
     name: str,
-    marginal_loglik: jax.Array,
+    marginal_loglik: Real[Array, "*plate"],
     states: object,
     filter_config: BaseFilterConfig,
 ) -> None:
@@ -61,8 +62,8 @@ def register_filter_sites(
 
 def register_hmm_filter_sites(
     name: str,
-    loglik: jax.Array,
-    log_filt_seq: jax.Array,
+    loglik: Real[Array, "*plate"],
+    log_filt_seq: Float[Array, "*plate time n_states"],
     filter_config: HMMConfig,
 ) -> None:
     """Register the likelihood and requested outputs from an HMM filter run.
@@ -99,7 +100,7 @@ def register_hmm_filter_sites(
 
 def register_smoother_sites(
     name: str,
-    marginal_loglik: jax.Array,
+    marginal_loglik: Real[Array, "*plate"],
     states: object,
     smoother_config: BaseSmootherConfig,
 ) -> None:

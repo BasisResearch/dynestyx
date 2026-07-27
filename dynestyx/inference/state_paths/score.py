@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import equinox as eqx
 import jax.numpy as jnp
-from jax import Array, lax
+from jax import lax
+from jaxtyping import Array, Bool, Int, Real, Shaped
 
 from dynestyx.models import DeterministicContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.observation_missingness import (
@@ -16,12 +17,13 @@ from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
 
 
 def _gather_by_exact_time(
-    values: Array,
-    source_times: Array,
-    query_times: Array,
+    values: Shaped[Array, "source_time value_dim"]
+    | Shaped[Array, " source_time"],
+    source_times: Real[Array, " source_time"],
+    query_times: Real[Array, " query_time"],
     *,
     value_name: str,
-) -> Array:
+) -> Shaped[Array, "query_time value_dim"] | Shaped[Array, " query_time"]:
     """Select values whose source times exactly match query times.
 
     `source_times` must be sorted in ascending order, and its leading axis must
@@ -60,10 +62,14 @@ def _gather_by_exact_time(
 
 
 def _control_values_at_times(
-    ctrl_times: Array | None,
-    ctrl_values: Array | None,
-    query_times: Array | None,
-) -> Array | None:
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None,
+    query_times: Real[Array, " query_time"] | None,
+) -> (
+    Real[Array, "query_time control_dim"] | Real[Array, " query_time"] | None
+):
     """Return control values at exact query times.
 
     Args:
@@ -91,20 +97,29 @@ def _control_values_at_times(
 def compute_state_path_log_prob(
     dynamics: DynamicalModel,
     *,
-    state_path: Array,
-    state_path_times: Array,
-    obs_times: Array | None = None,
-    obs_values: Array | None = None,
-    obs_values_filled: Array | None = None,
-    obs_mask: Array | None = None,
+    state_path: Real[Array, "state_path_time state_dim"]
+    | Real[Array, " state_path_time"],
+    state_path_times: Real[Array, " state_path_time"],
+    obs_times: Real[Array, " obs_time"] | None = None,
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+    obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+    obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
+    | None = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values: Array | None = None,
+    missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""] | None = None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None = None,
     chunk_size: int | None = 0,
     observations_are_exact_constraints: bool = False,
-) -> Array:
+) -> Real[Array, "*log_prob_batch"]:
     """Evaluate the joint log density of a reconstructed state path.
 
     If either `obs_times` or `obs_values` is `None`, observation terms
@@ -140,7 +155,7 @@ def compute_state_path_log_prob(
             state values. If `True`, their density is not added.
 
     Returns:
-        Array: Scalar joint log density.
+        Array: Joint log density, retaining any distribution batch axes.
 
     Raises:
         ValueError: If `state_path_times` is empty or missing-observation inputs
@@ -171,7 +186,9 @@ def compute_state_path_log_prob(
             transition_log_probs = jnp.zeros((0,), dtype=initial_log_prob.dtype)
         else:
 
-            def _transition_at(i: Array) -> Array:
+            def _transition_at(
+                i: Int[Array, ""],
+            ) -> Real[Array, "*transition_log_prob_batch"]:
                 x_prev = state_path[i]
                 x_next = state_path[i + 1]
                 u_prev = _get_val_or_None(state_ctrl_values, i)
@@ -213,7 +230,9 @@ def compute_state_path_log_prob(
         missing_obs_metadata=missing_obs_metadata,
     )
 
-    def _observation_at(i: Array) -> Array:
+    def _observation_at(
+        i: Int[Array, ""],
+    ) -> Real[Array, "*observation_log_prob_batch"]:
         return observation_log_prob(
             x=state_at_obs_times[i],
             u=_get_val_or_None(obs_ctrl_values, i),

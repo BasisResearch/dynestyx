@@ -10,7 +10,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
@@ -241,8 +241,14 @@ class Filter(BaseLogFactorAdder):
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
+        _obs_values_filled: Real[
+            Array, "*obs_value_plate obs_time observation_dim"
+        ]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
@@ -404,8 +410,14 @@ class Filter(BaseLogFactorAdder):
         obs_times: Real[Array, "*obs_time_plate obs_time"],
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"],
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
+        _obs_values_filled: Real[
+            Array, "*obs_value_plate obs_time observation_dim"
+        ]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]

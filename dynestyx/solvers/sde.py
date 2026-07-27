@@ -9,8 +9,8 @@ import diffrax as dfx
 import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
-from jax import Array, lax, vmap
-from jaxtyping import Real
+from jax import lax, vmap
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.models.diffusions import EvaluatedDiffusion
@@ -19,8 +19,9 @@ from dynestyx.utils import _build_control_path_eval
 
 
 def _early_return_states(
-    x0: Real[Array, " state_dim"] | Real[Array, ""], saveat_times: Array
-) -> Array:
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
+    saveat_times: Real[Array, " path_time"],
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Build no-op solve output by repeating the initial state.
 
     Args:
@@ -36,10 +37,10 @@ def _early_return_states(
 def _em_local_terms(
     state_evolution: StochasticContinuousTimeStateEvolution,
     diffusion,
-    x: Array,
-    u: Array | None,
-    t_now: Array,
-) -> tuple[Array, EvaluatedDiffusion]:
+    x: Real[Array, " state_dim"],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_now: Real[Array, ""],
+) -> tuple[Real[Array, " state_dim"], EvaluatedDiffusion]:
     """Compute local EM drift and diffusion terms.
 
     Args:
@@ -56,8 +57,14 @@ def _em_local_terms(
 
 
 def _em_moments_from_terms(
-    x: Array, dt: Array, drift: Array, diffusion: EvaluatedDiffusion
-) -> tuple[Array, Array]:
+    x: Real[Array, " state_dim"],
+    dt: Real[Array, ""],
+    drift: Real[Array, " state_dim"],
+    diffusion: EvaluatedDiffusion,
+) -> tuple[
+    Real[Array, " state_dim"],
+    Real[Array, "state_dim state_dim"],
+]:
     """Convert local EM terms to one-step Gaussian moments.
 
     Args:
@@ -75,14 +82,14 @@ def _em_moments_from_terms(
 
 
 def _em_sample_from_terms(
-    x: Array,
-    dt: Array,
-    drift: Array,
+    x: Real[Array, " state_dim"],
+    dt: Real[Array, ""],
+    drift: Real[Array, " state_dim"],
     diffusion: EvaluatedDiffusion,
     *,
-    key: Array,
+    key: PRNGKeyArray,
     bm_dim: int,
-) -> tuple[Array, Array]:
+) -> tuple[Real[Array, " state_dim"], PRNGKeyArray]:
     """Sample one EM next-state from local drift/diffusion terms.
 
     Args:
@@ -105,14 +112,18 @@ def _em_sample_from_terms(
 
 def euler_maruyama_integrate_state_to_time(
     state_evolution: StochasticContinuousTimeStateEvolution,
-    x_init: Array,
+    x_init: Real[Array, " state_dim"],
     t_init: Real[Array, ""],
-    key_init: Array,
+    key_init: PRNGKeyArray,
     t_target: Real[Array, ""],
     *,
     dt0: Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None] | None = None,
-) -> tuple[Array, Array, Array]:
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ]
+    | None = None,
+) -> tuple[Real[Array, " state_dim"], Real[Array, ""], PRNGKeyArray]:
     """Integrate a sampled EM path from `t_init` to `t_target`.
 
     Args:
@@ -157,10 +168,10 @@ def euler_maruyama_integrate_state_to_time(
 
 def euler_maruyama_loc_cov(
     state_evolution: StochasticContinuousTimeStateEvolution,
-    x: Array,
-    u: Array | None,
-    t_now: Array,
-    t_next: Array,
+    x: Real[Array, "*batch state_dim"],
+    u: Real[Array, "*batch control_dim"] | None,
+    t_now: Real[Array, "*batch"],
+    t_next: Real[Array, "*batch"],
 ) -> dict[str, Array]:
     """Compute one-step Euler-Maruyama transition moments.
 
@@ -261,13 +272,16 @@ def euler_maruyama_loc_cov(
 def _solve_sde_scan(
     dynamics: DynamicalModel,
     t0: Real[Array, ""],
-    saveat_times: Array,
+    saveat_times: Real[Array, " path_time"],
     x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ],
     dt0: Real[Array, ""],
     *,
-    key: Array | None,
-) -> Array:
+    key: PRNGKeyArray | None,
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Solve an SDE with fixed-step Euler-Maruyama scan integration.
 
     Args:
@@ -326,14 +340,17 @@ def _solve_sde_scan(
 def _solve_sde_diffrax(
     dynamics: DynamicalModel,
     t0: Real[Array, ""],
-    saveat_times: Array,
+    saveat_times: Real[Array, " path_time"],
     x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ],
     diffeqsolve_settings: dict[str, Any],
     *,
-    key: Array | None,
+    key: PRNGKeyArray | None,
     tol_vbt: Real[Array, ""],
-) -> Array:
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Solve an SDE with Diffrax and a VirtualBrownianTree control.
 
     Args:
@@ -392,15 +409,17 @@ def solve_sde_state_path(
     dynamics: DynamicalModel,
     *,
     source: Literal["diffrax", "em_scan"],
-    initial_state: Array,
-    t0: float | int | Array,
-    path_times: Array,
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    t0: float | int | Real[Array, ""],
+    path_times: Real[Array, " path_time"],
     diffeqsolve_settings: dict[str, Any],
-    key: Array,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
-    tol_vbt: float | int | Array | None = None,
-) -> Array:
+    key: PRNGKeyArray,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None = None,
+    tol_vbt: float | int | Real[Array, ""] | None = None,
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Solve one SDE state path with the requested backend.
 
     Args:

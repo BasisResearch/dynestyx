@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import diffrax as dfx
 import jax.numpy as jnp
-from jax import Array, lax
+from jax import lax
+from jaxtyping import Array, Real
 
+from dynestyx.models import DeterministicContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.types import as_scalar_time_array
 from dynestyx.utils import _build_control_path_eval
 
@@ -24,15 +26,17 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
 
 
 def solve_ode_state_path(
-    dynamics: Any,
+    dynamics: DynamicalModel,
     *,
-    initial_state: Array,
-    t0: float | int | Array,
-    path_times: Array,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    t0: float | int | Real[Array, ""],
+    path_times: Real[Array, " path_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None = None,
     diffeqsolve_settings: dict[str, Any] | None = None,
-) -> Array:
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Solve one ODE state path with shared controls and default settings."""
     control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, path_times)
     settings = (
@@ -42,16 +46,20 @@ def solve_ode_state_path(
     )
     t0_arr = as_scalar_time_array(t0, name="t0", dtype=path_times.dtype)
     t1 = path_times[-1]
+    state_evolution = cast(
+        DeterministicContinuousTimeStateEvolution,
+        dynamics.state_evolution,
+    )
 
-    def _early_return() -> Array:
+    def _early_return():
         return jnp.broadcast_to(
             initial_state, (len(path_times),) + jnp.shape(initial_state)
         )
 
-    def _solve() -> Array:
+    def _solve():
         def _drift(t, y, args):
             u_t = args(t) if args is not None else None
-            return dynamics.state_evolution.total_drift(x=y, u=u_t, t=t)
+            return state_evolution.total_drift(x=y, u=u_t, t=t)
 
         sol = dfx.diffeqsolve(
             dfx.ODETerm(_drift),

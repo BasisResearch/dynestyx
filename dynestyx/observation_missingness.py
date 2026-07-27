@@ -11,7 +11,7 @@ import jax.scipy as jsp
 import numpy as np
 import numpyro.distributions as dist
 from jax.errors import TracerArrayConversionError, TracerBoolConversionError
-from jaxtyping import Array, Bool, Float, Real, Shaped
+from jaxtyping import Array, Bool, Int, Real
 
 from dynestyx.models.checkers import (
     _is_categorical_distribution,
@@ -51,9 +51,9 @@ class MissingObservationMetadata:
             observed components.
     """
 
-    missing_obs_times: Array
-    missing_obs_coordinate_indices: Array | None
-    missing_flat_indices: Array
+    missing_obs_times: Real[Array, " n_missing_obs"]
+    missing_obs_coordinate_indices: Int[Array, " n_missing_obs"] | None
+    missing_flat_indices: Int[Array, " n_missing_obs"]
     observation_shape: tuple[int, ...]
     has_missing: bool
     has_partial_missing: bool
@@ -75,10 +75,10 @@ def _concrete_observation_mask(
 
 
 def validate_missing_obs_values(
-    missing_obs_values: Array,
+    missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""],
     *,
     n_missing_obs: int,
-) -> Array:
+) -> Real[Array, " n_missing_obs"]:
     """Validate values supplied for missing observation entries.
 
     A single missing entry accepts either a scalar or a length-one vector.
@@ -115,8 +115,9 @@ def validate_missing_obs_values(
 
 def infer_missing_observation_metadata(
     *,
-    obs_times: Array,
-    obs_mask: Array,
+    obs_times: Real[Array, " obs_time"],
+    obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"],
 ) -> MissingObservationMetadata:
     """Build missing-observation metadata from a concrete mask.
 
@@ -193,9 +194,13 @@ def infer_missing_observation_metadata(
 def prepare_missing_observation_metadata(
     dynamics: DynamicalModel,
     *,
-    obs_times: Array,
-    obs_values: Array | None = None,
-    obs_mask: Array | None = None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+    obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
+    | None = None,
 ) -> MissingObservationMetadata:
     """Precompute augmentation metadata outside traced NumPyro/JIT contexts.
 
@@ -229,10 +234,11 @@ def prepare_missing_observation_metadata(
 
 def assemble_completed_observations(
     *,
-    obs_values_filled: Array,
-    missing_obs_values: Array,
+    obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"],
+    missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""],
     missing_obs_metadata: MissingObservationMetadata,
-) -> Array:
+) -> Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"]:
     """Fill explicit missing-observation values into a dense observation array."""
     validated_values = validate_missing_obs_values(
         missing_obs_values,
@@ -248,9 +254,9 @@ def assemble_completed_observations(
 
 def _masked_multivariate_normal_log_prob(
     obs_dist: dist.MultivariateNormal,
-    y: Float[Array, " observation_dim"],
+    y: Real[Array, " observation_dim"],
     obs_mask: Bool[Array, " observation_dim"],
-) -> Shaped[Array, ""]:
+) -> Real[Array, ""]:
     """Evaluate the observed marginal of a multivariate Normal distribution.
 
     The masked dimensions are replaced with an identity contribution so the
@@ -317,7 +323,9 @@ def prepare_observation_views(
     | Real[Array, "*obs_value_plate obs_time"]
     | None,
 ) -> tuple[
-    Array | None,
+    Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
     Bool[Array, "*obs_value_plate obs_time observation_dim"]
     | Bool[Array, "*obs_value_plate obs_time"]
     | None,
@@ -407,9 +415,9 @@ def prepare_observation_views(
 
 
 def prepare_observation_mask(
-    obs_values: Float[Array, "time observation_dim"],
+    obs_values: Real[Array, "time observation_dim"],
 ) -> tuple[
-    Float[Array, "time observation_dim"],
+    Real[Array, "time observation_dim"],
     Bool[Array, "time observation_dim"],
     Bool[Array, " time"],
     bool,
@@ -646,14 +654,14 @@ def probe_observation_distribution_contract(
 def masked_observation_log_prob(
     obs_dist: dist.Distribution,
     *,
-    y: Array,
+    y: Real[Array, " observation_dim"],
     obs_mask: Bool[Array, " observation_dim"],
     row_has_any_observed: Bool[Array, ""],
     observation_dim: int,
     has_partial_missing: bool,
     expected_mode: ObservationDistributionMode,
     expected_event_shape: tuple[int, ...],
-) -> Shaped[Array, ""]:
+) -> Real[Array, "*log_prob_batch"]:
     """Score only the observed portion of one observation row."""
     obs_dist = _canonicalize_observation_distribution(
         obs_dist, observation_dim=observation_dim
@@ -701,23 +709,27 @@ def masked_observation_log_prob(
 
 def prepare_observation_log_prob(
     dynamics: DynamicalModel,
-    obs_values: (Float[Array, " time"] | Float[Array, "time observation_dim"]),
+    obs_values: Real[Array, " time"] | Real[Array, "time observation_dim"],
     *,
-    obs_times: Array | None = None,
+    obs_times: Real[Array, " time"] | None = None,
     precomputed_filled_obs: (
-        Float[Array, " time"] | Float[Array, "time observation_dim"] | None
+        Real[Array, " time"] | Real[Array, "time observation_dim"] | None
     ) = None,
     precomputed_obs_mask: (
         Bool[Array, " time"] | Bool[Array, "time observation_dim"] | None
     ) = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values: Array | None = None,
+    missing_obs_values: Real[Array, " n_missing_obs"]
+    | Real[Array, " time"]
+    | Real[Array, "time observation_dim"]
+    | Real[Array, ""]
+    | None = None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
 ) -> tuple[
-    Callable[..., Shaped[Array, ""]],
-    Array | None,
-    Array | None,
-    Array | None,
+    Callable[..., Real[Array, "*log_prob_batch"]],
+    Real[Array, " time"] | Real[Array, "time observation_dim"] | None,
+    Real[Array, " n_missing_obs"] | None,
+    Int[Array, " n_missing_obs"] | None,
 ]:
     """Prepare a per-time observation scorer for missing values.
 
@@ -738,10 +750,11 @@ def prepare_observation_log_prob(
             `missing_obs_values`.
 
     Returns:
-        tuple[Callable[..., Shaped[Array, ""]], Array | None, Array | None,
-            Array | None]: A per-time scorer, the completed observation array
-            when augmentation is active, the missing-observation times, and the
-            missing-observation component indices.
+        tuple[Callable[..., Real[Array, "*log_prob_batch"]], Array | None,
+            Array | None, Array | None]: A per-time scorer, the completed
+            observation array when augmentation is active, the
+            missing-observation times, and the missing-observation component
+            indices.
     """
     obs_values = jnp.asarray(obs_values)
     scalar_observations = obs_values.ndim == 1
@@ -873,7 +886,13 @@ def prepare_observation_log_prob(
             )
         )
 
-    def _log_prob_step(*, x, u, t, t_idx) -> Shaped[Array, ""]:
+    def _log_prob_step(
+        *,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: Real[Array, ""],
+        t_idx: int | Int[Array, ""],
+    ) -> Real[Array, "*log_prob_batch"]:
         obs_dist = dynamics.observation_model(x=x, u=u, t=t)
         if distribution_mode == "augment":
             canonical_dist = _canonicalize_observation_distribution(

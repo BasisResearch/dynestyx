@@ -5,7 +5,7 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
-from jaxtyping import Array, Float, Real
+from jaxtyping import Array, Float, PRNGKeyArray, Real, Shaped
 from numpyro.distributions import constraints
 
 from dynestyx.inference.integrations.utils import (
@@ -33,10 +33,14 @@ class _ForwardSimulationImproperUniform(dist.ImproperUniform):
 
     def __init__(
         self,
-        forward_sampler: Callable[[Array], Array] | dist.Distribution,
+        forward_sampler: Callable[[PRNGKeyArray], Shaped[Array, "..."]]
+        | dist.Distribution,
         *,
         event_shape: tuple[int, ...],
-        sample_transform: Callable[[Array], Array] | None = None,
+        sample_transform: Callable[
+            [Shaped[Array, "..."]], Shaped[Array, "..."]
+        ]
+        | None = None,
         validate_args: bool | None = None,
     ) -> None:
         self.forward_sampler = forward_sampler
@@ -48,7 +52,7 @@ class _ForwardSimulationImproperUniform(dist.ImproperUniform):
             validate_args=validate_args,
         )
 
-    def _sample_one(self, key: Array) -> Array:
+    def _sample_one(self, key: PRNGKeyArray) -> Shaped[Array, "..."]:
         sample = (
             self.forward_sampler.sample(key)
             if isinstance(self.forward_sampler, dist.Distribution)
@@ -60,9 +64,9 @@ class _ForwardSimulationImproperUniform(dist.ImproperUniform):
 
     def sample(
         self,
-        key: Array,
+        key: PRNGKeyArray,
         sample_shape: tuple[int, ...] = (),
-    ) -> Array:
+    ) -> Shaped[Array, "..."]:
         if not sample_shape:
             return self._sample_one(key)
 
@@ -73,9 +77,9 @@ class _ForwardSimulationImproperUniform(dist.ImproperUniform):
 
     def rsample(
         self,
-        key: Array,
+        key: PRNGKeyArray,
         sample_shape: tuple[int, ...] = (),
-    ) -> Array:
+    ) -> Shaped[Array, "..."]:
         return self.sample(key, sample_shape=sample_shape)
 
 

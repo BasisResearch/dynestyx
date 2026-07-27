@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import jax.numpy as jnp
-from jax import Array
+from jaxtyping import Array, Real
 
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
@@ -27,10 +27,15 @@ from dynestyx.utils import _raise_now_or_error_if
 
 def validate_state_path_params(
     dynamics: DynamicalModel,
-    state_path_params: Array,
+    state_path_params: Real[Array, "state_path_param_time state_dim"]
+    | Real[Array, " _"]
+    | Real[Array, ""],
     *,
     n_times: int,
-) -> Array:
+) -> (
+    Real[Array, "state_path_param_time state_dim"]
+    | Real[Array, " state_path_param_time"]
+):
     """Validate the time axis of state-path parameters.
 
     If `n_times == 1`, this function accepts either one state value (determined
@@ -78,8 +83,8 @@ def validate_state_path_params(
 def infer_state_path_param_times(
     dynamics: DynamicalModel,
     *,
-    obs_times: Array,
-) -> Array:
+    obs_times: Real[Array, " obs_time"],
+) -> Real[Array, " state_path_param_time"]:
     """Return the times associated with `state_path_params`.
 
     A deterministic ODE has one state-path parameter: its initial state at
@@ -111,11 +116,16 @@ def infer_state_path_param_times(
 
 def reconstruct_state_path_from_exact_observations(
     *,
-    state_path_params: Array,
+    state_path_params: Real[Array, " n_missing_state"] | Real[Array, ""],
     latent_metadata: MissingObservationMetadata,
-    obs_times: Array,
-    obs_values_filled: Array,
-) -> tuple[Array, Array, Array]:
+    obs_times: Real[Array, " obs_time"],
+    obs_values_filled: Real[Array, "obs_time state_dim"]
+    | Real[Array, " obs_time"],
+) -> tuple[
+    Real[Array, " n_missing_state"],
+    Real[Array, "obs_time state_dim"] | Real[Array, " obs_time"],
+    Real[Array, " obs_time"],
+]:
     """Reconstruct a state path from exact identity observations.
 
     With `DiracIdentityObservation`, each observed value is also a state value.
@@ -167,13 +177,22 @@ def reconstruct_state_path_from_exact_observations(
 def reconstruct_state_path(
     dynamics: DynamicalModel,
     *,
-    state_path_params: Array,
-    state_path_param_times: Array,
-    obs_times: Array | None = None,
-    ctrl_times: Array | None = None,
-    ctrl_values: Array | None = None,
+    state_path_params: Real[Array, "state_path_param_time state_dim"]
+    | Real[Array, " _"]
+    | Real[Array, ""],
+    state_path_param_times: Real[Array, " state_path_param_time"],
+    obs_times: Real[Array, " obs_time"] | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None = None,
     ode_diffeqsolve_settings: dict[str, Any] | None = None,
-) -> tuple[Array, Array, Array]:
+) -> tuple[
+    Real[Array, "state_path_param_time state_dim"]
+    | Real[Array, " state_path_param_time"],
+    Real[Array, "state_path_time state_dim"] | Real[Array, " state_path_time"],
+    Real[Array, " state_path_time"],
+]:
     """Reconstruct a complete state path from its parameter values.
 
     For a discrete or discretized model, `state_path_params` is already the

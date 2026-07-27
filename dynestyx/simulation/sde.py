@@ -2,7 +2,7 @@
 
 import jax
 import jax.random as jr
-from jax import Array
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.simulator import SDESimulatorConfig
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
@@ -184,7 +184,7 @@ class SDESimulator(BaseSimulator):
         simulator_config: SDESimulatorConfig | None = None,
         *,
         n_simulations: int = 1,
-    ):
+    ) -> None:
         """Configure SDE integration settings.
 
         Args:
@@ -207,11 +207,14 @@ class SDESimulator(BaseSimulator):
         self,
         dynamics: DynamicalModel,
         *,
-        initial_state: Array,
-        rng_key: Array,
-        times: Array,
-        ctrl_times=None,
-        ctrl_values=None,
+        initial_state: Real[Array, "n_simulations state_dim"]
+        | Real[Array, " n_simulations"],
+        rng_key: PRNGKeyArray,
+        times: Real[Array, " time"],
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
     ) -> SimulatedResult:
         """Run pure forward SDE simulation from provided initial states."""
         n_sim = initial_state.shape[0]
@@ -221,7 +224,10 @@ class SDESimulator(BaseSimulator):
         t0 = dynamics.t0 if dynamics.t0 is not None else times[0]
         sim_keys = jr.split(rng_key, n_sim)
 
-        def _sim_one_trajectory(key: Array, x0: Array) -> tuple[Array, Array]:
+        def _sim_one_trajectory(
+            key: PRNGKeyArray,
+            x0: Real[Array, " state_dim"] | Real[Array, ""],
+        ):
             k_solve, k_obs = jr.split(key, 2)
             states = solve_sde_state_path(
                 source=self.source,
@@ -258,10 +264,12 @@ class SDESimulator(BaseSimulator):
         self,
         dynamics: DynamicalModel,
         *,
-        rng_key: Array,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        rng_key: PRNGKeyArray,
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, " predict_time"] | None = None,
         **kwargs,
     ) -> SimulatedResult:
         """Run pure-JAX forward simulation for stochastic continuous-time models.

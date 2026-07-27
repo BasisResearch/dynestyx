@@ -1,9 +1,11 @@
 """Top-level pure-JAX API for simulation and scoring. Consider using as an alternative
 to the NumPyro-based API if simulation and scoring are the only requirements."""
 
+from typing import Any
+
 import jax.numpy as jnp
 import jax.random as jr
-from jaxtyping import Array, Real
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
@@ -27,7 +29,7 @@ from dynestyx.utils import (
 def simulate(
     dynamics: DynamicalModel,
     *,
-    rng_key,
+    rng_key: PRNGKeyArray,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -93,8 +95,10 @@ def simulate(
 def log_prob(
     dynamics: DynamicalModel,
     *,
-    state_path_params,
-    state_path_param_times,
+    state_path_params: Real[Array, "state_path_param_time state_dim"]
+    | Real[Array, " _"]
+    | Real[Array, ""],
+    state_path_param_times: Real[Array, " state_path_param_time"],
     obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
@@ -104,11 +108,11 @@ def log_prob(
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
-    missing_obs_values=None,
+    missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""] | None = None,
     missing_obs_metadata: MissingObservationMetadata | None = None,
     chunk_size: int | None = 0,
-    ode_diffeqsolve_settings=None,
-):
+    ode_diffeqsolve_settings: dict[str, Any] | None = None,
+) -> Real[Array, "*log_prob_batch"]:
     """Evaluate the joint log density of a reconstructed state path.
 
     The function reconstructs a complete state path from
@@ -150,7 +154,7 @@ def log_prob(
             deterministic ODE path.
 
     Returns:
-        Array: Scalar joint log density.
+        Array: Joint log density, retaining any distribution batch axes.
 
     Raises:
         ValueError: If time, path, control, observation, or
