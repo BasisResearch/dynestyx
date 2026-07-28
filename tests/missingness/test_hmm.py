@@ -361,6 +361,26 @@ def test_plated_hmm_gaussian_missingness_matches_memberwise_filter():
     assert jnp.allclose(actual_filtered, jnp.exp(expected_log_filtered))
 
 
+def test_plated_hmm_condition_defers_numpyro_sites():
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.zeros((2, 3, 2))
+
+    with trace() as tr:
+        with Filter(
+            filter_config=HMMConfig(record_filtered=True, record_log_filtered=True)
+        ):
+            with dsx.plate("trajectories", 2):
+                result = dsx.condition(
+                    "f",
+                    _build_hmm_dynamics(_mvn_observation_model),
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+
+    assert result.marginal_loglik.shape == (2,)
+    assert not any(site_name.startswith("f_") for site_name in tr)
+
+
 def test_plated_hmm_independent_categorical_missingness_matches_memberwise_filter():
     M = 2
     obs_times = jnp.arange(4.0)

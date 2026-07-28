@@ -74,7 +74,7 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
+from dynestyx.utils import _dist_has_plate_batch_dims
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -377,17 +377,18 @@ class Filter(BaseLogFactorAdder):
         def _register(site_name: str) -> None:
             if marginal_loglik is None or config is None:
                 return
-            if _is_batched:
-                # TODO: support per-field recording for batched (plate) states
-                numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
-                numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
-            elif isinstance(config, HMMConfigs):
+            if isinstance(config, HMMConfigs):
+                log_filt_seq = cast(tuple, states)[1] if _is_batched else states
                 register_hmm_filter_sites(
                     site_name,
                     marginal_loglik,
-                    cast(jax.Array, states),
+                    cast(jax.Array, log_filt_seq),
                     cast(HMMConfig, config),
                 )
+            elif _is_batched:
+                # TODO: support per-field recording for batched (plate) states
+                numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
+                numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             else:
                 register_filter_sites(site_name, marginal_loglik, states, config)
 
@@ -646,23 +647,6 @@ class Filter(BaseLogFactorAdder):
                 ),
             )
         if output_kind == "hmm":
-            hmm_config = cast(HMMConfig, config)
-            record_max_elems = hmm_config.record_max_elems
-            if _should_record_field(
-                hmm_config.record_log_filtered,
-                log_filt_seq.shape,
-                record_max_elems,
-            ):
-                numpyro.deterministic(f"{name}_log_filtered_states", log_filt_seq)
-            if _should_record_field(
-                hmm_config.record_filtered,
-                log_filt_seq.shape,
-                record_max_elems,
-            ):
-                numpyro.deterministic(
-                    f"{name}_filtered_states",
-                    jnp.exp(log_filt_seq),
-                )
             return _categorical_log_probs_to_dists(
                 log_filt_seq,
                 plate_shapes=plate_shapes,
