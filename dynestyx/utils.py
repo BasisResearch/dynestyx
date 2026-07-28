@@ -45,26 +45,26 @@ _CONTROL_EXTEND_EPSILON = 1e-5
 
 
 def _raise_now_or_error_if(
-    anchor,
+    anchor: Array,
     predicate,
     message: str,
     *,
     action: Literal["raise", "warn"] = "raise",
-) -> None:
-    """Raise or warn when a predicate is true, handling traced predicates safely."""
+) -> Array:
+    """Raise or warn for a predicate, returning the anchor to preserve JIT checks."""
     try:
         should_handle = bool(predicate)
     except jax.errors.TracerBoolConversionError:
         if action == "raise":
-            _ = eqx.error_if(anchor, predicate, message)
-        return
+            return eqx.error_if(anchor, predicate, message)
+        return anchor
 
     if not should_handle:
-        return
+        return anchor
 
     if action == "warn":
         warnings.warn(message, stacklevel=2)
-        return
+        return anchor
 
     if action == "raise":
         raise ValueError(message)

@@ -52,8 +52,8 @@ def _gather_by_exact_time(
     max_idx = source.shape[0] - 1
     safe_idx = jnp.clip(idx, 0, max_idx)
     matched = (idx < source.shape[0]) & (source[safe_idx] == query)
-    _ = eqx.error_if(
-        query,
+    safe_idx = eqx.error_if(
+        safe_idx,
         jnp.any(~matched),
         f"{value_name} must be defined exactly at every requested query time.",
     )

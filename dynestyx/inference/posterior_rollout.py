@@ -19,12 +19,11 @@ def _validate_future_only_predict_times(
     if predict_times is None or anchor_times is None:
         return predict_times
     anchor_end = anchor_times[..., -1:]
-    _ = eqx.error_if(
+    return eqx.error_if(
         predict_times,
         jnp.any(predict_times < anchor_end),
         error_message,
     )
-    return predict_times
 
 
 def _final_times_for_rollout(
