@@ -203,7 +203,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](filter_configs.md).
+    [Available filter configurations](configs/filter_configs.md).
 
     Defaults
     --------
