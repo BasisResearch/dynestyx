@@ -100,6 +100,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         **kwargs,
     ) -> FunctionOfTime:
         filtered_dists = None
+        self.marginal_loglik = self.filtered_states = self._filter_config_used = None
         if not (obs_times is None or obs_values is None):
             filtered_dists = self._add_log_factors(
                 name,

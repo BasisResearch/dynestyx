@@ -111,6 +111,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         **kwargs,
     ) -> FunctionOfTime:
         smoothed_dists = None
+        self.marginal_loglik = self.smoothed_states = self._smoother_config_used = None
         if not (obs_times is None or obs_values is None):
             smoothed_dists = self._add_log_factors(
                 name,

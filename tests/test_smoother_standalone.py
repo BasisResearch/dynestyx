@@ -110,8 +110,10 @@ def test_infer_smoother_does_not_register_numpyro_sites():
 def test_condition_smoother_no_observations():
     """dsx.condition with Smoother and no obs returns ConditionedResult with marginal_loglik=None."""
     dynamics = _make_lti_dynamics(0.5)
+    obs_times, obs_values = _make_data()
 
     with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
         result = dsx.condition(
             "f",
             dynamics,
