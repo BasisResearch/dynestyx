@@ -545,7 +545,7 @@ def test_latent_path_builder_bare_predictive_draws_dynamical_prior_paths():
     def model():
         with dsx.LatentPathBuilder():
             dsx.sample(
-                "f",
+                "bare_predictive",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -554,8 +554,8 @@ def test_latent_path_builder_bare_predictive_draws_dynamical_prior_paths():
     predictive = Predictive(model, num_samples=3)(jr.PRNGKey(13))
 
     expected = jnp.broadcast_to(jnp.array([3.0, 5.0, 7.0]), (3, 3))
-    assert jnp.array_equal(predictive["f_state_path_params"], expected)
-    assert jnp.array_equal(predictive["f_state_path"], expected)
+    assert jnp.array_equal(predictive["bare_predictive_state_path_params"], expected)
+    assert jnp.array_equal(predictive["bare_predictive_state_path"], expected)
 
 
 def test_latent_path_builder_ode_prior_site_samples_initial_condition():
@@ -690,7 +690,7 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
     assert posterior["f_state_path"].shape == (10, 3, 2)
 
 
-def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_layout():
+def test_latent_path_builder_dirac_partial_missing_predictive_uses_current_layout():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array(
@@ -704,7 +704,7 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
     def conditioned_model(obs_times=None, obs_values=None):
         with dsx.LatentPathBuilder():
             dsx.sample(
-                "f",
+                "dirac_predictive",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -713,22 +713,34 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
         conditioned_model(obs_times=obs_times, obs_values=obs_values)
 
-    assert tr["f_state_path_params"]["value"].shape == (4,)
+    assert tr["dirac_predictive_state_path_params"]["value"].shape == (4,)
     assert jnp.array_equal(
-        tr["f_state_path_param_coordinate_indices"]["value"],
+        tr["dirac_predictive_state_path_param_coordinate_indices"]["value"],
         jnp.array([1, 0, 0, 1], dtype=jnp.int32),
     )
 
+    replay_times = jnp.array([10.0, 11.0, 12.0])
+    replay_values = jnp.array(
+        [
+            [jnp.nan, 0.2],
+            [0.3, jnp.nan],
+            [jnp.nan, jnp.nan],
+        ]
+    )
     predictive = Predictive(conditioned_model, num_samples=2)(
         jr.PRNGKey(1),
-        obs_times=obs_times,
-        obs_values=obs_values,
+        obs_times=replay_times,
+        obs_values=replay_values,
     )
 
-    assert predictive["f_state_path_params"].shape == (2, 4)
+    assert predictive["dirac_predictive_state_path_params"].shape == (2, 4)
     assert jnp.array_equal(
-        predictive["f_state_path_param_coordinate_indices"][0],
-        jnp.array([1, 0, 0, 1], dtype=jnp.int32),
+        predictive["dirac_predictive_state_path_param_times"][0],
+        jnp.array([10.0, 11.0, 12.0, 12.0]),
+    )
+    assert jnp.array_equal(
+        predictive["dirac_predictive_state_path_param_coordinate_indices"][0],
+        jnp.array([0, 1, 0, 1], dtype=jnp.int32),
     )
 
 

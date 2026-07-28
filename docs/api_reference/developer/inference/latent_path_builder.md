@@ -205,13 +205,10 @@ to be inferred through `state_path_params`. The builder does not create a
 separate `missing_obs_values` site in this case. Exact missing observations
 support `"auto"` and `"augment"`.
 
-Some JAX transformations trace a model before evaluating it. During tracing,
-the values in the observation mask may not be available to Python. The builder
-therefore creates `MissingObservationMetadata` during a normal model call and
-stores it for later traced calls. It matches the stored data by site name, its
-purpose, the observation shape, and the missing-observation strategy. If no
-match is available, run the model once with ordinary observation arrays before
-applying the JAX transformation.
+Missingness determines NumPyro site shapes, so its pattern must remain static
+while JAX traces a model. The builder evaluates closed-over observation values
+at compile time and derives missing-observation times from the current time
+array. Do not pass observation values as a dynamic argument to `jax.jit`.
 
 ## Implementation modules
 

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jax.core import Tracer
 from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
@@ -58,67 +59,37 @@ from dynestyx.simulation.utils import _sample_observation_path
 from dynestyx.types import LatentStateResult
 from dynestyx.utils import _build_control_path_eval
 
-_MISSING_OBSERVATION_METADATA_CACHE: dict[
-    tuple[str, str, tuple[int, ...], MissingObservationStrategy],
-    MissingObservationMetadata,
-] = {}
-
 
 def _resolve_missing_observation_metadata(
     *,
-    name: str,
-    role: str,
     dynamics: DynamicalModel,
     obs_times: Real[Array, " obs_time"],
     obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
-    obs_mask: Bool[Array, "obs_time observation_dim"] | Bool[Array, " obs_time"],
-    strategy: MissingObservationStrategy,
 ) -> MissingObservationMetadata:
-    """Return missing-observation metadata for concrete or traced inputs.
-
-    Concrete inputs create and cache the metadata. Traced inputs reuse a
-    compatible cached value.
-
-    Args:
-        name: Name of the `dsx.sample(...)` site.
-        role: Purpose of the latent values. This value separates cache entries
-            that belong to the same sample site.
-        dynamics: Dynamical model associated with the observations.
-        obs_times: Observation times.
-        obs_values: Observation values. Their shape identifies the cache entry.
-        obs_mask: Boolean array that marks observed entries.
-        strategy: Requested missing-observation strategy.
-
-    Returns:
-        MissingObservationMetadata: Prepared metadata for the observation mask.
-
-    Raises:
-        ValueError: If traced inputs have no compatible cached metadata, or if
-            the cached observation shape does not match `obs_values`.
-    """
-    cache_key = (name, role, tuple(obs_values.shape), strategy)
-    if any(isinstance(value, Tracer) for value in (obs_times, obs_values, obs_mask)):
-        metadata = _MISSING_OBSERVATION_METADATA_CACHE.get(cache_key)
-        if metadata is None:
-            raise ValueError(
-                "LatentPathBuilder encountered traced observation missingness before "
-                "a compatible concrete model execution. Run the model once with "
-                "concrete obs_times/obs_values before traced replay."
+    """Prepare static missingness layout while retaining the current times."""
+    try:
+        with jax.ensure_compile_time_eval():
+            metadata = prepare_missing_observation_metadata(
+                dynamics,
+                obs_times=jnp.arange(obs_values.shape[0]),
+                obs_values=obs_values,
             )
-        if metadata.observation_shape != tuple(obs_values.shape):
-            raise ValueError(
-                "Cached LatentPathBuilder missingness metadata does not match the "
-                "current observation shape."
-            )
-        return metadata
+    except ValueError as exc:
+        if not isinstance(exc.__cause__, jax.errors.TracerArrayConversionError):
+            raise
+        raise ValueError(
+            "LatentPathBuilder requires a fixed observation missingness pattern "
+            "while tracing. Close over obs_values instead of passing it as a "
+            "dynamic jax.jit argument."
+        ) from exc
 
-    metadata = prepare_missing_observation_metadata(
-        dynamics,
-        obs_times=obs_times,
-        obs_mask=obs_mask,
+    time_indices = metadata.missing_flat_indices
+    if len(metadata.observation_shape) > 1:
+        time_indices = time_indices // metadata.observation_shape[-1]
+    return dataclasses.replace(
+        metadata,
+        missing_obs_times=jnp.take(obs_times, time_indices, axis=0),
     )
-    _MISSING_OBSERVATION_METADATA_CACHE[cache_key] = metadata
-    return metadata
 
 
 def _sample_missing_observation_prior(
@@ -343,13 +314,9 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             )
 
         metadata = _resolve_missing_observation_metadata(
-            name=name,
-            role="observations",
             dynamics=dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
-            obs_mask=obs_mask,
-            strategy=self.missing_observation_strategy,
         )
         exact_observations = isinstance(
             dynamics.observation_model,
@@ -658,6 +625,10 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             member_results: list[LatentStateResult] = []
             for plate_idx in itertools.product(*[range(size) for size in plate_shapes]):
                 member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
+                with jax.ensure_compile_time_eval():
+                    member_obs_values = _slice_array_for_plate_member(
+                        obs_values, plate_shapes, plate_idx
+                    )
                 with _suspend_numpyro_plate_frames():
                     member_results.append(
                         self._sample_single(
@@ -670,9 +641,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                             obs_times=_slice_array_for_plate_member(
                                 obs_times, plate_shapes, plate_idx
                             ),
-                            obs_values=_slice_array_for_plate_member(
-                                obs_values, plate_shapes, plate_idx
-                            ),
+                            obs_values=member_obs_values,
                             obs_values_filled=_slice_array_for_plate_member(
                                 _obs_values_filled, plate_shapes, plate_idx
                             ),
