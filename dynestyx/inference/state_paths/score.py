@@ -211,7 +211,7 @@ def compute_state_path_log_prob(
             )
 
     if obs_times is None or obs_values is None:
-        return initial_log_prob + jnp.sum(transition_log_probs)
+        return initial_log_prob + jnp.sum(transition_log_probs, axis=0)
 
     state_at_obs_times = _gather_by_exact_time(
         state_path,
@@ -220,7 +220,7 @@ def compute_state_path_log_prob(
         value_name="state_path",
     )
     if observations_are_exact_constraints:
-        return initial_log_prob + jnp.sum(transition_log_probs)
+        return initial_log_prob + jnp.sum(transition_log_probs, axis=0)
 
     obs_ctrl_values = _control_values_at_times(ctrl_times, ctrl_values, obs_times)
     observation_log_prob, _, _, _ = prepare_observation_log_prob(
@@ -256,8 +256,8 @@ def compute_state_path_log_prob(
 
     return (
         initial_log_prob
-        + jnp.sum(transition_log_probs)
-        + jnp.sum(observation_log_probs)
+        + jnp.sum(transition_log_probs, axis=0)
+        + jnp.sum(observation_log_probs, axis=0)
     )
 
 
