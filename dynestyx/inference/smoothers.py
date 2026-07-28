@@ -244,7 +244,7 @@ class Smoother(BaseSmootherLogFactorAdder):
                 "Expected a smoother config class from dynestyx.inference.configs.smoother. "
                 f"Valid types: {valid}"
             )
-        _validate_missing_observation_support(
+        obs_values = _validate_missing_observation_support(
             config,
             obs_values=obs_values,
             mode="smoother",

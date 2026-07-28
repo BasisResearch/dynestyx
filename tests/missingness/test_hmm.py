@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -11,6 +12,7 @@ from dynestyx import DiscreteTimeSimulator, Filter
 from dynestyx.inference.configs.filter import HMMConfig
 from dynestyx.inference.hmm_filters import compute_hmm_filter, hmm_log_components
 from dynestyx.models import DynamicalModel
+from dynestyx.observation_missingness import prepare_observation_views
 from tests.missingness.models import GAUSSIAN_R, INDEPENDENT_SCALE
 from tests.missingness.utils import (
     manual_masked_independent_normal_log_prob,
@@ -622,4 +624,24 @@ def test_hmm_categorical_observations_reject_out_of_range_labels_early():
             _build_hmm_dynamics(_joint_categorical_observation_model),
             obs_times,
             obs_values,
+        )
+
+
+@pytest.mark.parametrize(
+    ("bad_value", "error_match"),
+    [
+        pytest.param(1.5, "zero-based integer labels\\.", id="non-integer"),
+        pytest.param(-1.0, "zero-based integer labels 0..K-1", id="negative"),
+        pytest.param(4.0, "probed observation distribution with K=4", id="too-large"),
+    ],
+)
+def test_hmm_categorical_observation_guards_survive_jit(bad_value, error_match):
+    dynamics = _build_hmm_dynamics(_joint_categorical_observation_model)
+    obs_values = jnp.array([0.0, bad_value, 2.0])
+
+    with pytest.raises(Exception, match=error_match):
+        jax.block_until_ready(
+            jax.jit(lambda values: prepare_observation_views(dynamics, values)[0])(
+                obs_values
+            )
         )

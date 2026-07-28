@@ -1,4 +1,5 @@
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
@@ -156,6 +157,16 @@ def test_cuthbert_gaussian_discrete_time_missing_observation_support_matrix(
         with pytest.raises(_EQX_ERRORS, match=error_match):
             with context:
                 _identity_lti_model(obs_times=obs_times, obs_values=missing_obs_values)
+        with pytest.raises(Exception, match=error_match):
+            jax.block_until_ready(
+                jax.jit(
+                    lambda values: _validate_missing_observation_support(
+                        config,
+                        obs_values=values,
+                        mode=mode,
+                    )
+                )(missing_obs_values)
+            )
         return
 
     with trace() as tr:

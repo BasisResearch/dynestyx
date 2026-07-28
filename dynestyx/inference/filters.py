@@ -270,7 +270,7 @@ class Filter(BaseLogFactorAdder):
             else _default_filter_config(dynamics)
         )
         if isinstance(config, BaseFilterConfig):
-            _validate_missing_observation_support(
+            obs_values = _validate_missing_observation_support(
                 config,
                 obs_values=obs_values,
                 mode="filter",
