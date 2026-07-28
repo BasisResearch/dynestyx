@@ -137,6 +137,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         filtered_dists = None
         posterior_rollout_final_only = False
         smoothed_times = obs_times
+        result_smoothed_dists = smoothed_dists
         if predict_times is not None and smoothed_dists:
             assert obs_times is not None
             filtered_times = _final_times_for_rollout(obs_times)
@@ -163,7 +164,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             **kwargs,
         )
 
-        result = self._build_infer_result(name, smoothed_dists)
+        result = self._build_infer_result(name, result_smoothed_dists)
         forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
         result._register_numpyro_sites = chain_numpyro_site_registrations(
             result._register_numpyro_sites,

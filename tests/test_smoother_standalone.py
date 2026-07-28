@@ -50,7 +50,11 @@ def test_infer_smoother_returns_infer_result():
 
     with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
         result = dsx.condition(
-            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=jnp.arange(obs_times[-1], obs_times[-1] + 3.0),
         )
 
     assert isinstance(result, ConditionedResult)
