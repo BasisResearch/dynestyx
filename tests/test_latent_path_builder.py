@@ -133,6 +133,7 @@ def test_stack_optional_member_values_broadcasts_members():
     actual = _stack_optional_member_values(
         [jnp.array([0.1, 0.2]), jnp.array([0.3])], (2,)
     )
+    assert actual is not None
     assert jnp.array_equal(actual, jnp.array([[0.1, 0.2], [0.3, 0.3]]))
 
 
