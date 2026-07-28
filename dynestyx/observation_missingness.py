@@ -74,6 +74,16 @@ def _concrete_observation_mask(
     return np.ones(obs_values_np.shape, dtype=bool)
 
 
+def _observation_mask_from_values(
+    obs_values: Array | np.ndarray,
+) -> Bool[Array, " *obs_shape"]:
+    """Return the JAX observation mask used throughout missingness handling."""
+    obs_arr = jnp.asarray(obs_values)
+    if jnp.issubdtype(obs_arr.dtype, jnp.inexact):
+        return ~jnp.isnan(obs_arr)
+    return jnp.ones(obs_arr.shape, dtype=bool)
+
+
 def validate_missing_obs_values(
     missing_obs_values: Real[Array, " n_missing_obs"] | Real[Array, ""],
     *,
@@ -342,10 +352,7 @@ def prepare_observation_views(
 
     obs_arr = jnp.asarray(obs_values)
     concrete_obs_mask = _concrete_observation_mask(obs_values)
-    if jnp.issubdtype(obs_arr.dtype, jnp.inexact):
-        obs_mask = ~jnp.isnan(obs_arr)
-    else:
-        obs_mask = jnp.ones(obs_arr.shape, dtype=bool)
+    obs_mask = _observation_mask_from_values(obs_arr)
     if concrete_obs_mask is not None:
         has_missing = bool(np.any(~concrete_obs_mask))
     else:
