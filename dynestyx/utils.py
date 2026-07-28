@@ -387,7 +387,7 @@ def _build_control_path_eval(
         | None
     ),
     obs_times: Real[Array, "*obs_time_plate obs_time"],
-) -> Callable[[Array], Array | None]:
+) -> Callable[[Real[Array, ""]], Real[Array, "..."] | None]:
     """
     Build a right-continuous control evaluator for continuous-time paths.
 

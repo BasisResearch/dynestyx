@@ -6,22 +6,14 @@ import dataclasses
 from typing import Any, Literal
 
 import diffrax as dfx
-from jax import Array
-from jaxtyping import Real
+from jaxtyping import Array, Real
 
 from dynestyx.types import as_scalar_time_array
 
 
 @dataclasses.dataclass
 class ODESimulatorConfig:
-    """Structured ODE simulator settings.
-
-    This config collects the solver settings used to reconstruct a deterministic
-    state path
-
-    ``x = (x(t_0), x(t_1), ..., x(t_T))``
-
-    from path parameters such as an initial condition.
+    """Configuration object for ODE simulators.
 
     Attributes:
         solver (diffrax.AbstractSolver): Diffrax solver used for integration.
@@ -54,7 +46,7 @@ class ODESimulatorConfig:
     stepsize_controller: dfx.AbstractStepSizeController = dataclasses.field(
         default_factory=dfx.ConstantStepSize
     )
-    dt0: float | int | Array = 1e-3
+    dt0: float | int | Real[Array, ""] = 1e-3
     max_steps: int = 100_000
 
     @property
@@ -71,11 +63,13 @@ class ODESimulatorConfig:
 
 @dataclasses.dataclass
 class SDESimulatorConfig:
-    """Structured SDE simulator settings.
+    """SDE Solver Settings for SDE Simulation. Supports diffrax-based solvers
+    or a faster, hand-rolled Euler-Maruyama scan backend.
 
-    This config collects the backend and solver settings used to simulate an
-    SDE path. It supports either a Diffrax-based solve or the faster
-    Euler-Maruyama scan backend.
+    !! Note: The choice of solver can imply convergence to different paths
+       for the same model. For example, the default `diffrax.Heun()` converges
+       to the Stratonovich SDE, while `diffrax.EulerMaruyama()` converges to the Ito SDE.
+       This likely doesn't matter for most models, but can cause issues with state-dependent diffusions.
 
     Attributes:
         solver (diffrax.AbstractSolver): Diffrax SDE solver. Defaults to
@@ -118,8 +112,8 @@ class SDESimulatorConfig:
     adjoint: dfx.AbstractAdjoint = dataclasses.field(
         default_factory=dfx.RecursiveCheckpointAdjoint
     )
-    dt0: float | int | Array = 1e-4
-    tol_vbt: float | int | Array | None = None
+    dt0: float | int | Real[Array, ""] = 1e-4
+    tol_vbt: float | int | Real[Array, ""] | None = None
     max_steps: int | None = None
     source: Literal["diffrax", "em_scan"] = "em_scan"
 

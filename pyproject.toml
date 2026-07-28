@@ -49,8 +49,8 @@ dependencies = [
     "numpy>=2.0",
     # NumPyro 0.20.1 currently fails to import with JAX 0.10.0
     # (removed xla_pmap_p); cap until upstream compatibility lands.
-    "jax>=0.6.2,<0.10",
-    "jaxlib>=0.6.2,<0.10",
+    "jax>=0.8.2,<0.10",
+    "jaxlib>=0.8.2,<0.10",
     "tfp-nightly>=0.26.0dev20250530",
     "orbax-checkpoint<0.11.3; sys_platform == 'win32'"
 ]

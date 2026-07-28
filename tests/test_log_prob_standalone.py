@@ -1,10 +1,14 @@
 """Tests for the pure-JAX ``dsx.log_prob`` API."""
 
+import inspect
+
 import jax.numpy as jnp
 import numpyro.distributions as dist
 import pytest
 
 import dynestyx as dsx
+from dynestyx.inference.state_paths.score import compute_state_path_log_prob
+from dynestyx.observation_missingness import prepare_missing_observation_metadata
 from tests.missingness.utils import manual_masked_mvn_log_prob
 
 
@@ -17,6 +21,14 @@ def _make_dirac_ode_dynamics() -> dsx.DynamicalModel:
         ),
         observation_model=dsx.DiracIdentityObservation(),
     )
+
+
+@pytest.mark.parametrize(
+    "callable_",
+    [dsx.log_prob, dsx.LatentPathBuilder, compute_state_path_log_prob],
+)
+def test_chunk_size_defaults_to_full_vmap(callable_):
+    assert inspect.signature(callable_).parameters["chunk_size"].default == 0
 
 
 def test_log_prob_discrete_matches_manual_joint_density():
@@ -114,6 +126,55 @@ def test_log_prob_discrete_missingness_matches_manual_masking():
         obs_values[1],
         jnp.array([True, True]),
     )
+
+    assert jnp.allclose(actual, expected)
+
+
+def test_log_prob_scalar_augmentation_matches_completed_data_density():
+    state_times = jnp.array([0.0, 1.0])
+    state_path_params = jnp.array([0.2, 0.4])
+    obs_values = jnp.array([0.1, jnp.nan])
+    missing_obs_values = jnp.array([0.3])
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.5),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.25),
+    )
+    metadata = prepare_missing_observation_metadata(
+        dynamics,
+        obs_times=state_times,
+        obs_values=obs_values,
+    )
+
+    actual = dsx.log_prob(
+        dynamics,
+        state_path_params=state_path_params,
+        state_path_param_times=state_times,
+        obs_times=state_times,
+        obs_values=obs_values,
+        missing_observation_strategy="augment",
+        missing_obs_values=missing_obs_values,
+        missing_obs_metadata=metadata,
+    )
+
+    expected = dynamics.initial_condition.log_prob(state_path_params[0])
+    expected += dynamics.state_evolution(
+        state_path_params[0],
+        None,
+        state_times[0],
+        state_times[1],
+    ).log_prob(state_path_params[1])
+    expected += dynamics.observation_model(
+        state_path_params[0],
+        None,
+        state_times[0],
+    ).log_prob(obs_values[0])
+    expected += dynamics.observation_model(
+        state_path_params[1],
+        None,
+        state_times[1],
+    ).log_prob(missing_obs_values[0])
 
     assert jnp.allclose(actual, expected)
 

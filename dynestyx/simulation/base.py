@@ -12,8 +12,7 @@ import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jax import Array
-from jaxtyping import Real
+from jaxtyping import Array, Bool, PRNGKeyArray, Real
 from numpyro.contrib.control_flow import scan as nscan
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
@@ -63,24 +62,29 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
     n_simulations: int = 1
 
+    def __init__(self, *, n_simulations: int = 1) -> None:
+        if n_simulations < 1:
+            raise ValueError(
+                "n_simulations must be greater than or equal to 1, "
+                f"got {n_simulations}."
+            )
+        self.n_simulations = n_simulations
+
     def _run_single_member_simulation(
         self,
         name: str,
         dynamics: DynamicalModel,
         *,
-        rng_key: Array | None = None,
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        filtered_times=None,
-        filtered_dists=None,
-        smoothed_times=None,
-        smoothed_dists=None,
+        rng_key: PRNGKeyArray | None = None,
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, " predict_time"] | None = None,
+        filtered_times: Real[Array, " filtered_time"] | None = None,
+        filtered_dists: list[numpyro.distributions.Distribution] | None = None,
+        smoothed_times: Real[Array, " smoothed_time"] | None = None,
+        smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> SimulatedResult | None:
@@ -107,11 +111,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 "Plate-aware rollout requires posterior distributions from Filter/Smoother."
             )
 
-        # Need times to simulate: predict_times or obs_times
-        # For posterior rollout, need predict_times
         if predict_times is None:
-            if obs_times is None or rollout_times is not None:
-                return None
+            return None
 
         posterior_rollout = rollout_times is not None and rollout_dists is not None
 
@@ -183,7 +184,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             seg_ids_host = np.searchsorted(ft_host, pt_host, side="right") - 1
 
             seg_results: list[SimulatedResult] = []
-            seg_masks = []
+            seg_masks: list[Bool[Array, " predict_time"]] = []
             seg_names: list[str] = []
             nonempty_seg_ids = [int(s) for s in np.unique(seg_ids_host)]
             seg_keys = jr.split(rng_key, len(nonempty_seg_ids))
@@ -217,7 +218,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 seg_masks.append(mask_seg)
 
             # Scatter each segment's output into the global predict_times order.
-            def _merge_attr(attr: str) -> Array:
+            def _merge_attr(
+                attr: str,
+            ) -> Real[Array, "n_simulations predict_time dim"]:
                 return _merge_segments(
                     [cast(Array, getattr(result, attr)) for result in seg_results],
                     seg_masks,
@@ -249,23 +252,11 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ),
             )
 
-        if self.n_simulations > 1 and obs_values is not None:
-            raise ValueError(
-                "n_simulations > 1 is only supported when obs_values is None "
-                "(forward simulation only)"
-            )
         if rng_key is None:
             raise ValueError("PRNG key required for simulation.")
-        if obs_times is not None or obs_values is not None:
-            raise ValueError(
-                f"{type(self).__name__} is generation-only. Use predict_times for "
-                "simulation, or LatentPathBuilder / Filter / Smoother for inference "
-                "with observations."
-            )
         return self.simulate(
             dynamics,
             rng_key=rng_key,
-            obs_times=obs_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -277,20 +268,17 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
-        rng_key: Array | None = None,
+        rng_key: PRNGKeyArray | None = None,
         plate_shapes: tuple[int, ...],
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
-        filtered_times=None,
-        filtered_dists=None,
-        smoothed_times=None,
-        smoothed_dists=None,
+        ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
+        filtered_times: Real[Array, "*filtered_time_plate filtered_time"] | None = None,
+        filtered_dists: list[numpyro.distributions.Distribution] | None = None,
+        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"] | None = None,
+        smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> SimulatedResult | None:
@@ -299,12 +287,13 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         Plated simulation enumerates over all plate members and runs
         individual simulations. This is somewhat slower than vmapping,
         but maintains full compatibility with NumPyro's sample semantics."""
+        if predict_times is None:
+            return None
+
         if not _has_any_batched_plate_source(
             dynamics,
             plate_shapes,
             arrays=(
-                obs_times,
-                obs_values,
                 ctrl_times,
                 ctrl_values,
                 predict_times,
@@ -331,18 +320,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             )
 
             # We then slice each other source to find the member's times/values.
-            member_obs_times = _slice_array_for_plate_member(
-                obs_times, plate_shapes, plate_idx
-            )
-            member_obs_values = _slice_array_for_plate_member(
-                obs_values, plate_shapes, plate_idx
-            )
-            member_obs_values_filled = _slice_array_for_plate_member(
-                _obs_values_filled, plate_shapes, plate_idx
-            )
-            member_obs_mask = _slice_array_for_plate_member(
-                _obs_mask, plate_shapes, plate_idx
-            )
             member_ctrl_times = _slice_array_for_plate_member(
                 ctrl_times, plate_shapes, plate_idx
             )
@@ -377,11 +354,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 member_name,
                 member_dynamics,
                 rng_key=(None if member_keys is None else member_keys[member_idx]),
-                obs_times=member_obs_times,
-                obs_values=member_obs_values,
-                _obs_values_filled=member_obs_values_filled,
-                _obs_mask=member_obs_mask,
-                _obs_has_missing=_obs_has_missing,
                 ctrl_times=member_ctrl_times,
                 ctrl_values=member_ctrl_values,
                 predict_times=member_predict_times,
@@ -407,35 +379,33 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
+        _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-        filtered_times=None,
-        filtered_dists=None,
-        smoothed_times=None,
-        smoothed_dists=None,
+        filtered_times: Real[Array, "*filtered_time_plate filtered_time"] | None = None,
+        filtered_dists: list[numpyro.distributions.Distribution] | None = None,
+        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"] | None = None,
+        smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
         **kwargs,
     ) -> object:
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
-        raw_simulator_request = (
-            filtered_times is None
-            and filtered_dists is None
-            and smoothed_times is None
-            and smoothed_dists is None
-        )
-        if raw_simulator_request and (obs_times is not None or obs_values is not None):
+        if obs_times is not None or obs_values is not None:
             raise ValueError(
                 "Simulator handlers are generation-only and no longer accept "
                 "obs_times/obs_values directly. Use predict_times for forward "
@@ -454,11 +424,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 dynamics,
                 rng_key=simulation_key,
                 plate_shapes=plate_shapes,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                _obs_values_filled=_obs_values_filled,
-                _obs_mask=_obs_mask,
-                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -474,11 +439,6 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 name,
                 dynamics,
                 rng_key=simulation_key,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                _obs_values_filled=_obs_values_filled,
-                _obs_mask=_obs_mask,
-                _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
@@ -494,11 +454,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             name,
             dynamics,
             plate_shapes=plate_shapes,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            _obs_values_filled=_obs_values_filled,
-            _obs_mask=_obs_mask,
-            _obs_has_missing=_obs_has_missing,
+            obs_times=None,
+            obs_values=None,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
@@ -525,11 +482,12 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         self,
         dynamics: DynamicalModel,
         *,
-        rng_key: Array,
-        obs_times=None,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        rng_key: PRNGKeyArray,
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, " predict_time"] | None = None,
         **kwargs,
     ) -> SimulatedResult:
         """Run pure-JAX forward simulation without registering NumPyro sites."""
@@ -538,13 +496,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
     def _emit_observations(
         self,
         name: str,
-        dynamics,
-        states: Array,
-        times: Array,
-        obs_values: Array | None,
-        control_path_eval: Callable[[Array], Array | None] | None,
-        key=None,
-    ) -> Array:
+        dynamics: DynamicalModel,
+        states: Real[Array, "time state_dim"] | Real[Array, " time"],
+        times: Real[Array, " time"],
+        obs_values: Real[Array, "time observation_dim"] | Real[Array, " time"] | None,
+        control_path_eval: Callable[[Real[Array, ""]], Real[Array, "..."] | None]
+        | None,
+        key: PRNGKeyArray | None = None,
+    ) -> Real[Array, "time observation_dim"] | Real[Array, " time"]:
         """Emit observations in pure-JAX or NumPyro mode."""
         ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
         T = len(times)

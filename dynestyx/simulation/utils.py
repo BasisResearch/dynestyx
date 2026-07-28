@@ -9,27 +9,31 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
-from jax import Array
+from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
 
 from dynestyx.models import DynamicalModel
 from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
 
 
-def _tile_times(times: Array, n_sim: int) -> Array:
+def _tile_times(
+    times: Real[Array, " time"], n_sim: int
+) -> Real[Array, "n_simulations time"]:
     """Return times tiled to shape (n_sim, T)."""
     return jnp.broadcast_to(jnp.expand_dims(times, axis=0), (n_sim, len(times)))
 
 
-def _ensure_trailing_dim(arr: Array) -> Array:
+def _ensure_trailing_dim(
+    arr: Real[Array, "n_simulations time"] | Real[Array, "n_simulations time dim"],
+) -> Real[Array, "n_simulations time dim"]:
     """Ensure simulator outputs follow shape (n_sim, T, dim)."""
     return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
 
 
 def _merge_segments(
-    arr_list: list[Array],
-    seg_masks: list[Array],
+    arr_list: list[Real[Array, "n_simulations _ dim"]],
+    seg_masks: list[Bool[Array, " predict_time"]],
     n_pred: int,
-) -> Array:
+) -> Real[Array, "n_simulations predict_time dim"]:
     """Merge segment outputs into one array in predict-time order."""
     first = arr_list[0]
     assert first.ndim == 3, (
@@ -88,11 +92,11 @@ def _register_simulated_result_sites(
 
 
 def _sample_initial_states(
-    initial_condition,
+    initial_condition: numpyro.distributions.Distribution,
     *,
-    rng_key: Array,
+    rng_key: PRNGKeyArray,
     n_simulations: int,
-) -> Array:
+) -> Real[Array, "n_simulations state_dim"] | Real[Array, " n_simulations"]:
     """Draw independent initial states for each simulation member."""
     keys = jr.split(rng_key, n_simulations)
     return jax.vmap(initial_condition.sample)(keys)
@@ -101,16 +105,17 @@ def _sample_initial_states(
 def _sample_observation_path(
     dynamics: DynamicalModel,
     *,
-    states: Array,
-    times: Array,
-    rng_key: Array,
-    control_path_eval: Callable[[Array], Array | None] | None = None,
-) -> Array:
+    states: Real[Array, "time state_dim"] | Real[Array, " time"],
+    times: Real[Array, " time"],
+    rng_key: PRNGKeyArray,
+    control_path_eval: Callable[[Real[Array, ""]], Real[Array, "..."] | None]
+    | None = None,
+) -> Real[Array, "time observation_dim"] | Real[Array, " time"]:
     """Sample one observation path conditional on a realized state path."""
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     obs_keys = jr.split(rng_key, len(times))
 
-    def _sample_at_time(t_idx):
+    def _sample_at_time(t_idx: Int[Array, ""]):
         x_t = states[t_idx]
         t = times[t_idx]
         obs_dist = dynamics.observation_model(x=x_t, u=ctrl(t), t=t)

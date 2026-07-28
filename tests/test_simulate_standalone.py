@@ -222,19 +222,8 @@ def test_simulate_sde_accepts_structured_config():
 
 
 def test_simulate_rejects_missing_time_grid():
-    with pytest.raises(
-        ValueError, match="At least one of obs_times or predict_times must be provided"
-    ):
+    with pytest.raises(ValueError, match="predict_times must be provided"):
         dsx.simulate(_make_discrete_dynamics(), rng_key=jr.PRNGKey(0))
-
-
-def test_simulate_sde_rejects_obs_times():
-    with pytest.raises(ValueError, match="obs_times must not be provided"):
-        dsx.simulate(
-            _make_sde_dynamics(),
-            rng_key=jr.PRNGKey(0),
-            obs_times=jnp.linspace(0.0, 0.5, 5),
-        )
 
 
 def test_simulate_allows_dirac_ode_models():

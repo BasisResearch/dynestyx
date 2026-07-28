@@ -9,6 +9,23 @@ from numpyro.handlers import seed, trace
 import dynestyx as dsx
 
 
+@pytest.mark.parametrize(
+    "simulator_cls",
+    [
+        dsx.Simulator,
+        dsx.DiscreteTimeSimulator,
+        dsx.ODESimulator,
+        dsx.SDESimulator,
+    ],
+)
+@pytest.mark.parametrize("n_simulations", [0, -1])
+def test_simulators_reject_nonpositive_n_simulations(simulator_cls, n_simulations):
+    with pytest.raises(
+        ValueError, match="n_simulations must be greater than or equal to 1"
+    ):
+        simulator_cls(n_simulations=n_simulations)
+
+
 def _ode_model(*, predict_times=None):
     dynamics = dsx.DynamicalModel(
         control_dim=0,

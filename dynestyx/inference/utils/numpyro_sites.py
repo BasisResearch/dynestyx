@@ -1,13 +1,9 @@
-"""NumPyro site registration for filter and smoother outputs.
-
-All numpyro.factor and numpyro.deterministic calls live here,
-keeping the integration backends (cuthbert, cd-dynamax) free of numpyro
-side effects (they still use numpyro.distributions for return types).
-"""
+"""Register NumPyro sites for filter and smoother outputs."""
 
 import jax
 import jax.numpy as jnp
 import numpyro
+from jaxtyping import Array, Float, Real
 
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
@@ -27,11 +23,27 @@ from dynestyx.utils import _should_record_field
 
 def register_filter_sites(
     name: str,
-    marginal_loglik: jax.Array,
+    marginal_loglik: Real[Array, "*plate"],
     states: object,
     filter_config: BaseFilterConfig,
 ) -> None:
-    """Register numpyro.factor and deterministic sites for a filter run."""
+    """Register the likelihood and requested outputs from a filter run.
+
+    The marginal log likelihood is recorded as a factor in the NumPyro model
+    and deterministic site. Other fields are recorded as a deterministic site
+    if they are marked as `True` in the corresponding `record_*` field of the config,
+    or if their size does not exceed `record_max_elems` and `record_*` is `None`.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        marginal_loglik: Marginal log likelihood computed by the filter.
+        states: Backend result containing the filtered states.
+        filter_config: Filter configuration that identifies the result format
+            and selects the outputs to record.
+
+    Returns:
+        None.
+    """
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
 
@@ -50,11 +62,26 @@ def register_filter_sites(
 
 def register_hmm_filter_sites(
     name: str,
-    loglik: jax.Array,
-    log_filt_seq: jax.Array,
+    loglik: Real[Array, "*plate"],
+    log_filt_seq: Float[Array, "*plate time n_states"],
     filter_config: HMMConfig,
 ) -> None:
-    """Register numpyro sites for HMM filter output."""
+    """Register the likelihood and requested outputs from an HMM filter run.
+
+    The `loglik` is recorded as a factor and deterministic site. Other fields
+    are recorded as a deterministic site if they are marked as `True` in the
+    corresponding `record_*` field of the config, or if their size does not
+    exceed `record_max_elems` and `record_*` is `None`.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        loglik: Marginal log likelihood computed by the HMM filter.
+        log_filt_seq: Log filtering probabilities at each time.
+        filter_config: HMM configuration that selects the outputs to record.
+
+    Returns:
+        None.
+    """
     numpyro.factor(f"{name}_marginal_log_likelihood", loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", loglik)
 
@@ -73,11 +100,27 @@ def register_hmm_filter_sites(
 
 def register_smoother_sites(
     name: str,
-    marginal_loglik: jax.Array,
+    marginal_loglik: Real[Array, "*plate"],
     states: object,
     smoother_config: BaseSmootherConfig,
 ) -> None:
-    """Register numpyro.factor and deterministic sites for a smoother run."""
+    """Register the likelihood and requested outputs from a smoother run.
+
+    The marginal log likelihood is recorded as a factor in the NumPyro model
+    and deterministic site. Other fields are recorded as a deterministic site
+    if they are marked as `True` in the corresponding `record_*` field of the config,
+    or if their size does not exceed `record_max_elems` and `record_*` is `None`.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        marginal_loglik: Marginal log likelihood computed during smoothing.
+        states: Backend result containing the smoothed states.
+        smoother_config: Smoother configuration that identifies the result
+            format and selects the outputs to record.
+
+    Returns:
+        None.
+    """
     numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
     numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
 
@@ -92,6 +135,17 @@ def register_smoother_sites(
 
 
 def _add_continuous_filter_sites(name: str, filtered, record_kwargs: dict) -> None:
+    """Register requested outputs from a continuous-time Gaussian filter.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        filtered: Backend result with `filtered_means` and
+            `filtered_covariances` arrays.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        None.
+    """
     max_elems = record_kwargs["record_max_elems"]
     means_shape = filtered.filtered_means.shape
     cov_shape = filtered.filtered_covariances.shape
@@ -118,6 +172,21 @@ def _add_continuous_filter_sites(name: str, filtered, record_kwargs: dict) -> No
 
 
 def _add_cuthbert_pf_sites(name: str, states, record_kwargs: dict) -> None:
+    """Register requested outputs from a Cuthbert particle filter.
+
+    If a mean or covariance is requested, the function computes weighted
+    moments from the particles and their log weights. Scalar-state particles
+    receive a trailing state dimension before they are recorded.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        states: Particle-filter result with `particles` and `log_weights`
+            arrays.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        None.
+    """
     log_weights = states.log_weights
     particles = states.particles
     if particles.ndim == 2:
@@ -175,7 +244,22 @@ def _add_cuthbert_pf_sites(name: str, states, record_kwargs: dict) -> None:
 def _add_gaussian_filter_sites(
     name: str, states, filter_config: BaseFilterConfig, record_kwargs: dict
 ) -> None:
-    """Sites for cuthbert Gaussian filters (KF, EKF, EnKF) or cd-dynamax discrete."""
+    """Register requested outputs from a discrete-time Gaussian filter.
+
+    Results from cd-dynamax expose `filtered_means` and
+    `filtered_covariances`. Cuthbert results expose `mean` and `chol_cov`; this
+    function derives the full covariance or its diagonal only when requested.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        states: Gaussian-filter result in the format returned by its backend.
+        filter_config: Configuration that selected the Gaussian registration
+            path.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        None.
+    """
     max_elems = record_kwargs["record_max_elems"]
 
     if hasattr(states, "filtered_means"):
@@ -244,6 +328,21 @@ def _add_gaussian_filter_sites(
 
 
 def _add_cuthbert_pf_smoother_sites(name: str, states, record_kwargs: dict) -> None:
+    """Register requested outputs from a Cuthbert particle smoother.
+
+    If a mean or covariance is requested, the function computes weighted
+    moments from the particles and their log weights. Scalar-state particles
+    receive a trailing state dimension before they are recorded.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        states: Particle-smoother result with `particles` and `log_weights`
+            arrays.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        None.
+    """
     log_weights = states.log_weights
     particles = states.particles
     if particles.ndim == 2:
@@ -296,6 +395,20 @@ def _add_cuthbert_pf_smoother_sites(name: str, states, record_kwargs: dict) -> N
 
 
 def _add_cd_dynamax_smoother_sites(name: str, posterior, record_kwargs: dict) -> None:
+    """Register requested outputs from a cd-dynamax Gaussian smoother.
+
+    No state sites are registered if the posterior does not contain both
+    smoothed means and smoothed covariances.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        posterior: Smoother result with `smoothed_means` and
+            `smoothed_covariances` arrays.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        None.
+    """
     max_elems = record_kwargs["record_max_elems"]
     means = posterior.smoothed_means
     covs = posterior.smoothed_covariances
@@ -325,6 +438,19 @@ def _add_cd_dynamax_smoother_sites(name: str, posterior, record_kwargs: dict) ->
 def _add_cuthbert_gaussian_smoother_sites(
     name: str, states, record_kwargs: dict
 ) -> None:
+    """Register requested outputs from a Cuthbert Gaussian smoother.
+
+    The function records the Cholesky covariance directly when requested. It
+    derives the full covariance or its diagonal only when either is requested.
+
+    Args:
+        name: Prefix for each NumPyro site name.
+        states: Gaussian-smoother result with `mean` and `chol_cov` arrays.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        None.
+    """
     max_elems = record_kwargs["record_max_elems"]
     mean = states.mean
     chol_cov = states.chol_cov

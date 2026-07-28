@@ -139,6 +139,24 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
     assert jnp.allclose(d_dict["cov"], d.covariance_matrix)
 
 
+def test_euler_maruyama_loc_cov_batched_state_accepts_scalar_times():
+    cte = _ctse_1d_zero_drift_unit_diffusion()
+    x = jnp.array([[0.0], [1.0], [2.0]])
+
+    out = euler_maruyama_loc_cov(
+        cte,
+        x,
+        None,
+        jnp.array(1.0),
+        jnp.array(1.5),
+    )
+
+    assert out["loc"].shape == (3, 1)
+    assert out["cov"].shape == (3, 1, 1)
+    assert jnp.allclose(out["loc"], x)
+    assert jnp.allclose(out["cov"][:, 0, 0], 0.5)
+
+
 @pytest.mark.parametrize(
     "diffusion_form",
     ["full", "diag", "scalar", "callable_full", "callable_diag", "callable_scalar"],

@@ -4,9 +4,8 @@ import dataclasses
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
-import jax
 import jax.numpy as jnp
-from jaxtyping import Array, Real
+from jaxtyping import Array, Int, Real
 
 
 @runtime_checkable
@@ -25,7 +24,7 @@ class ConditionedResult:
     without registering any numpyro sites.
     """
 
-    marginal_loglik: jax.Array | None = None
+    marginal_loglik: Real[Array, "*plate"] | None = None
     states: object = None
     dists: list | None = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
@@ -67,16 +66,26 @@ class LatentStateResult:
       missing entries are filled back in.
     """
 
-    joint_log_prob: jax.Array | None = None
-    state_path_params: object = None
-    state_path_param_times: object = None
-    state_path_param_coordinate_indices: object = None
-    state_path: object = None
-    state_path_times: object = None
-    missing_obs_values: object = None
-    missing_obs_times: object = None
-    missing_obs_coordinate_indices: object = None
-    completed_obs_values: object = None
+    joint_log_prob: Real[Array, "*plate"] | None = None
+    state_path_params: Real[Array, "*state_path_param_shape"] | None = None
+    state_path_param_times: (
+        Real[Array, "*state_path_param_time_plate state_path_param_time"] | None
+    ) = None
+    state_path_param_coordinate_indices: (
+        Int[Array, "*state_path_param_plate n_state_path_params"] | None
+    ) = None
+    state_path: Real[Array, "*state_path_shape"] | None = None
+    state_path_times: Real[Array, "*state_path_time_plate state_path_time"] | None = (
+        None
+    )
+    missing_obs_values: Real[Array, "*missing_obs_shape"] | None = None
+    missing_obs_times: Real[Array, "*missing_obs_time_plate n_missing_obs"] | None = (
+        None
+    )
+    missing_obs_coordinate_indices: (
+        Int[Array, "*missing_obs_plate n_missing_obs"] | None
+    ) = None
+    completed_obs_values: Real[Array, "*completed_obs_shape"] | None = None
     state_dists: list | None = None
 
 
@@ -95,20 +104,40 @@ class SimulatedResult:
     ``predicted_observations``.
     """
 
-    times: Array | None = None
-    x_0: Array | None = None
-    states: Array | None = None
-    observations: Array | None = None
-    predicted_times: Array | None = None
-    predicted_states: Array | None = None
-    predicted_observations: Array | None = None
+    times: Real[Array, "*plate n_simulations time"] | None = None
+    x_0: (
+        Real[Array, "*plate n_simulations state_dim"]
+        | Real[Array, "*plate n_simulations"]
+        | None
+    ) = None
+    states: (
+        Real[Array, "*plate n_simulations time state_dim"]
+        | Real[Array, "*plate n_simulations time"]
+        | None
+    ) = None
+    observations: (
+        Real[Array, "*plate n_simulations time observation_dim"]
+        | Real[Array, "*plate n_simulations time"]
+        | None
+    ) = None
+    predicted_times: Real[Array, "*plate n_simulations predict_time"] | None = None
+    predicted_states: (
+        Real[Array, "*plate n_simulations predict_time state_dim"]
+        | Real[Array, "*plate n_simulations predict_time"]
+        | None
+    ) = None
+    predicted_observations: (
+        Real[Array, "*plate n_simulations predict_time observation_dim"]
+        | Real[Array, "*plate n_simulations predict_time"]
+        | None
+    ) = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )
 
 
 def as_scalar_time_array(
-    value: float | int | Array, *, name: str, dtype=None
+    value: float | int | Real[Array, ""], *, name: str, dtype=None
 ) -> Real[Array, ""]:
     """Normalize a scalar time-like value to a 0-D JAX array."""
     arr = jnp.asarray(value, dtype=dtype)
