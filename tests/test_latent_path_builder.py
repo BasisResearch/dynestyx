@@ -16,6 +16,7 @@ import dynestyx as dsx
 from dynestyx.inference.utils.distribution_utils import (
     _ForwardSimulationImproperUniform,
 )
+from dynestyx.inference.utils.plate_utils import _stack_optional_member_values
 from dynestyx.observation_missingness import prepare_missing_observation_metadata
 
 
@@ -126,6 +127,13 @@ def _manual_discrete_state_log_prob(dynamics, state_path, state_path_times):
             state_path_times[idx + 1],
         ).log_prob(state_path[idx + 1])
     return expected
+
+
+def test_stack_optional_member_values_broadcasts_members():
+    actual = _stack_optional_member_values(
+        [jnp.array([0.1, 0.2]), jnp.array([0.3])], (2,)
+    )
+    assert jnp.array_equal(actual, jnp.array([[0.1, 0.2], [0.3, 0.3]]))
 
 
 def test_latent_path_builder_sample_discrete_matches_log_prob():

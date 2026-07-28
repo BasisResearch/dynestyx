@@ -282,7 +282,7 @@ def _stack_optional_member_values(
 
     Args:
         values: One value per plate member, ordered by flattened plate index.
-            Each non-`None` value must have the same shape.
+            Non-`None` values must have broadcast-compatible shapes.
         plate_shapes: Sizes of the plate dimensions to restore.
 
     Returns:
@@ -292,8 +292,9 @@ def _stack_optional_member_values(
     """
     if any(value is None for value in values):
         return None
-    first = jnp.asarray(values[0])
-    return jnp.stack([jnp.asarray(value) for value in values]).reshape(
+    arrays = jnp.broadcast_arrays(*[jnp.asarray(value) for value in values])
+    first = arrays[0]
+    return jnp.stack(arrays).reshape(
         *plate_shapes,
         *first.shape,
     )
