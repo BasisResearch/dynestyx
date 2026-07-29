@@ -38,6 +38,7 @@ from dynestyx.inference.utils.plate_utils import (
     _slice_array_for_plate_member,
     _slice_dynamics_for_plate_member,
     _stack_optional_member_values,
+    _stack_or_list_optional_member_values,
     _suspend_numpyro_plate_frames,
 )
 from dynestyx.models import (
@@ -714,40 +715,48 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                         )
                     )
 
-            stacked_member_values = {
+            dense_member_values = {
                 attr: _stack_optional_member_values(
                     [getattr(member, attr) for member in member_results],
                     plate_shapes,
                 )
                 for attr in (
                     "joint_log_prob",
-                    "state_path_params",
-                    "state_path_param_times",
-                    "state_path_param_coordinate_indices",
                     "state_path",
                     "state_path_times",
-                    "missing_obs_values",
-                    "missing_obs_times",
-                    "missing_obs_coordinate_indices",
                     "completed_obs_values",
                 )
             }
-            state_path = stacked_member_values["state_path"]
+            ragged_member_values = {
+                attr: _stack_or_list_optional_member_values(
+                    [getattr(member, attr) for member in member_results],
+                    plate_shapes,
+                )
+                for attr in (
+                    "state_path_params",
+                    "state_path_param_times",
+                    "state_path_param_coordinate_indices",
+                    "missing_obs_values",
+                    "missing_obs_times",
+                    "missing_obs_coordinate_indices",
+                )
+            }
+            state_path = dense_member_values["state_path"]
             result = LatentStateResult(
-                joint_log_prob=stacked_member_values["joint_log_prob"],
-                state_path_params=stacked_member_values["state_path_params"],
-                state_path_param_times=stacked_member_values["state_path_param_times"],
-                state_path_param_coordinate_indices=stacked_member_values[
+                joint_log_prob=dense_member_values["joint_log_prob"],
+                state_path_params=ragged_member_values["state_path_params"],
+                state_path_param_times=ragged_member_values["state_path_param_times"],
+                state_path_param_coordinate_indices=ragged_member_values[
                     "state_path_param_coordinate_indices"
                 ],
                 state_path=state_path,
-                state_path_times=stacked_member_values["state_path_times"],
-                missing_obs_values=stacked_member_values["missing_obs_values"],
-                missing_obs_times=stacked_member_values["missing_obs_times"],
-                missing_obs_coordinate_indices=stacked_member_values[
+                state_path_times=dense_member_values["state_path_times"],
+                missing_obs_values=ragged_member_values["missing_obs_values"],
+                missing_obs_times=ragged_member_values["missing_obs_times"],
+                missing_obs_coordinate_indices=ragged_member_values[
                     "missing_obs_coordinate_indices"
                 ],
-                completed_obs_values=stacked_member_values["completed_obs_values"],
+                completed_obs_values=dense_member_values["completed_obs_values"],
                 state_dists=(
                     None
                     if state_path is None

@@ -300,6 +300,37 @@ def _stack_optional_member_values(
     )
 
 
+def _stack_or_list_optional_member_values(
+    values: list[Shaped[Array, "..."] | None],
+    plate_shapes: tuple[int, ...],
+) -> Shaped[Array, "..."] | list[Shaped[Array, "..."]] | None:
+    """Stack uniform member values or preserve ragged values as a flat list.
+
+    The list order matches ``itertools.product`` over ``plate_shapes``: the
+    rightmost plate index varies fastest.
+
+    Args:
+        values: One value per flattened plate member.
+        plate_shapes: Sizes of the plate dimensions to restore for uniform
+            values.
+
+    Returns:
+        Array | list[Array] | None: A stacked array when all member shapes
+            match, the original member arrays when their shapes differ, or
+            `None` if any member value is `None`.
+    """
+    if any(value is None for value in values):
+        return None
+    arrays = [jnp.asarray(value) for value in values]
+    if any(array.shape != arrays[0].shape for array in arrays[1:]):
+        return arrays
+    first = arrays[0]
+    return jnp.stack(arrays).reshape(
+        *plate_shapes,
+        *first.shape,
+    )
+
+
 @contextmanager
 def _suspend_numpyro_plate_frames():
     """Temporarily remove active NumPyro plate frames.
