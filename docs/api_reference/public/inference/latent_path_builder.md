@@ -44,57 +44,107 @@ The main output names are intentionally distinct from simulator rollout names:
   from `LatentPathBuilder`
 - `f_states` / `f_times`: rollout outputs from `Simulator` and `dsx.simulate(...)`
 
-## JIT and handler lifetime
+## JIT and the builder cache
 
-The observation missingness layout can determine NumPyro sample-site shapes.
-`LatentPathBuilder` infers and caches the layout whenever observations are
-concrete. An ordinary MCMC or `Predictive` call usually supplies such a call;
-reuse the same builder for later outer-jitted calls.
+The shapes of NumPyro sites constructed by `LatentPathBuilder` depend on the
+missingness pattern. They must therefore be known at compile time.
 
-JAX does not make a concrete call before tracing `jax.jit`. For a cold outer-JIT
-call, prepare the metadata eagerly and close it over in the model:
+There are three paths:
+
+1. Run `LatentPathBuilder` concretely to compute the missingness.
+2. Run it concretely once to fill its cache, and then run it under JIT. NumPyro
+   MCMC routines typically do this automatically.
+3. Provide the missingness metadata directly.
+
+Path 2 must use the same `LatentPathBuilder` object because that object stores
+the cache. The recommended pattern is to define the model first and apply the
+handler when the model runs. Examples of the three paths follow.
+
+### 1. Concrete execution
 
 ```python
-metadata = dsx.prepare_missing_observation_metadata(
-    dynamics,
-    obs_times=obs_times,
-    obs_values=obs_values,
-)
+def conditioned_model(obs_times=None, obs_values=None):
+    return dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 
-def conditioned_model(obs_times=None, obs_values=None, predict_times=None):
-    with dsx.DiscreteTimeSimulator(), dsx.LatentPathBuilder():
-        return dsx.sample(
-            "f",
-            dynamics,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            predict_times=predict_times,
-            missing_obs_metadata=metadata,
-        )
+predictive = Predictive(conditioned_model, num_samples=10)
+with dsx.LatentPathBuilder():
+    result = predictive(
+        prediction_key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+```
 
-predictive = jax.jit(Predictive(conditioned_model, num_samples=10))
-result = predictive(
-    prediction_key,
-    obs_times=obs_times,
-    obs_values=obs_values,
-    predict_times=predict_times,
+### 2. Cached metadata
+
+```python
+builder = dsx.LatentPathBuilder()
+with builder:
+    predictive(
+        warmup_key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+    result = jax.jit(predictive)(
+        prediction_key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+```
+
+### 3. Explicit metadata
+
+`dsx.prepare_missing_observation_metadata(...)` can create the metadata from
+concrete data. You can also create it directly:
+
+```python
+obs_times = jnp.array([0.0, 1.0])
+obs_values = jnp.array([[0.0, jnp.nan], [jnp.nan, 1.0]])
+
+metadata = dsx.MissingObservationMetadata(
+    missing_obs_times=jnp.array([0.0, 1.0]),
+    missing_obs_coordinate_indices=jnp.array([1, 0], dtype=jnp.int32),
+    missing_flat_indices=jnp.array([1, 2], dtype=jnp.int32),
+    observation_shape=(2, 2),
+    has_missing=True,
+    has_partial_missing=True,
+    has_fully_missing_rows=False,
 )
 ```
 
-Without explicit metadata, construct the builder outside the model so its cache
-persists. If neither metadata nor a cached layout is available, the traced call
-raises an error explaining both options. Observation times and finite values may
-remain dynamic, but their missingness pattern must match the cached or supplied
-layout. One supplied metadata object represents a layout shared by all plate
-members.
+All fields must match the layout of `obs_values`.
 
-For plated observations whose members have different missingness layouts,
-construct one builder outside the model and reuse it during MCMC or other traced
-execution. The builder retains a separate layout for each generated member site.
-Ragged per-member latent metadata cannot be represented by one rectangular result
-array, so the corresponding `LatentStateResult` fields are flat lists of
-per-member arrays. The rightmost plate index varies fastest. Member-specific
-NumPyro sites retain the same native shapes.
+```python
+def conditioned_model(obs_times=None, obs_values=None):
+    return dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        missing_obs_metadata=metadata,
+    )
+
+predictive = jax.jit(Predictive(conditioned_model, num_samples=10))
+with dsx.LatentPathBuilder():
+    result = predictive(
+        prediction_key,
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+```
+
+Observation times and finite values can change. The missing-observation layout
+must agree with the cached or supplied layout. If you supply one metadata
+object, all plate members use its layout.
+
+For plate members with different layouts, use one builder for all traced calls.
+Ragged `LatentStateResult` fields are flat lists of per-member arrays. Each
+NumPyro site keeps its shape, and the rightmost plate index varies fastest.
 
 ## Implementation Details 
 

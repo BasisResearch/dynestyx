@@ -205,26 +205,27 @@ to be inferred through `state_path_params`. The builder does not create a
 separate `missing_obs_values` site in this case. Exact missing observations
 support `"auto"` and `"augment"`.
 
-Missingness determines NumPyro site shapes, so its pattern must remain static
-while JAX traces a model. The builder first attempts to infer the layout from
-concrete observations and caches it by sample site and observation shape. If
-the observations are traced, it uses that cache instead.
+The missingness pattern can determine NumPyro site shapes, so it must remain
+static while JAX traces the model. With concrete observations, the builder
+caches the layout by sample site and observation shape.
 
-For a cold outer-JIT call, pass metadata produced by
-`dsx.prepare_missing_observation_metadata(...)` through
-`dsx.sample(..., missing_obs_metadata=metadata)`. If neither inference nor the
-explicit or cached layout is available, the builder raises an error describing
-both remedies. Missing-observation times are always derived from the current
-`obs_times`; finite values and times may therefore change, while the dynamic
-mask is checked against the retained layout. One explicit metadata object is
-shared across plate members.
+There are three supported paths: run concretely, reuse a cache from a concrete
+run, or pass `missing_obs_metadata` directly. The metadata can come from
+`dsx.prepare_missing_observation_metadata(...)` or a manually constructed
+`dsx.MissingObservationMetadata` object.
 
-When plate members have different missingness layouts, create the builder
-outside the model and reuse it so the per-member cache entries survive traced
-MCMC execution. Member-specific sample and deterministic sites retain their
-native shapes. If a ragged field cannot be stacked without changing those
-shapes, its aggregate `LatentStateResult` field is a flat list of per-member
-arrays, ordered with the rightmost plate index varying fastest.
+The recommended pattern defines the model first and applies
+`LatentPathBuilder` when the model runs. Cache reuse requires the same builder
+object for the concrete and traced calls. NumPyro MCMC routines typically make
+the concrete call automatically.
+
+The test suite covers all three paths and ragged MCMC. The builder derives
+missing-observation times from the current `obs_times`, so values and times can
+change while the layout stays fixed.
+
+For plate members with different layouts, use one builder for all traced calls.
+Ragged aggregate fields are flat lists of per-member arrays. Member sites keep
+their shapes, and the rightmost plate index varies fastest.
 
 ## Implementation modules
 
