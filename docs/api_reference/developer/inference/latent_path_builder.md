@@ -206,9 +206,18 @@ separate `missing_obs_values` site in this case. Exact missing observations
 support `"auto"` and `"augment"`.
 
 Missingness determines NumPyro site shapes, so its pattern must remain static
-while JAX traces a model. The builder evaluates closed-over observation values
-at compile time and derives missing-observation times from the current time
-array. Do not pass observation values as a dynamic argument to `jax.jit`.
+while JAX traces a model. The builder first attempts to infer the layout from
+concrete observations and caches it by sample site and observation shape. If
+the observations are traced, it uses that cache instead.
+
+For a cold outer-JIT call, pass metadata produced by
+`dsx.prepare_missing_observation_metadata(...)` through
+`dsx.sample(..., missing_obs_metadata=metadata)`. If neither inference nor the
+explicit or cached layout is available, the builder raises an error describing
+both remedies. Missing-observation times are always derived from the current
+`obs_times`; finite values and times may therefore change, while the dynamic
+mask is checked against the retained layout. One explicit metadata object is
+shared across plate members.
 
 ## Implementation modules
 

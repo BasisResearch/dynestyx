@@ -59,29 +59,50 @@ from dynestyx.simulation.utils import _sample_observation_path
 from dynestyx.types import LatentStateResult
 from dynestyx.utils import _build_control_path_eval
 
+_MissingObservationMetadataCache = dict[
+    tuple[str, tuple[int, ...]],
+    MissingObservationMetadata,
+]
+
 
 def _resolve_missing_observation_metadata(
     *,
+    name: str,
     dynamics: DynamicalModel,
     obs_times: Real[Array, " obs_time"],
     obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    missing_obs_metadata: MissingObservationMetadata | None,
+    cache: _MissingObservationMetadataCache,
 ) -> MissingObservationMetadata:
     """Prepare static missingness layout while retaining the current times."""
-    try:
-        with jax.ensure_compile_time_eval():
-            metadata = prepare_missing_observation_metadata(
-                dynamics,
-                obs_times=jnp.arange(obs_values.shape[0]),
-                obs_values=obs_values,
-            )
-    except ValueError as exc:
-        if not isinstance(exc.__cause__, jax.errors.TracerArrayConversionError):
-            raise
+    cache_key = (name, tuple(obs_values.shape))
+    metadata = missing_obs_metadata
+    if metadata is None:
+        try:
+            with jax.ensure_compile_time_eval():
+                metadata = prepare_missing_observation_metadata(
+                    dynamics,
+                    obs_times=jnp.arange(obs_values.shape[0]),
+                    obs_values=obs_values,
+                )
+        except ValueError as exc:
+            if not isinstance(exc.__cause__, jax.errors.TracerArrayConversionError):
+                raise
+            metadata = cache.get(cache_key)
+            if metadata is None:
+                raise ValueError(
+                    f"LatentPathBuilder sample site {name!r} needs a fixed "
+                    "observation missingness pattern, but cannot infer one from "
+                    "traced obs_values. Reuse a builder that has first seen concrete "
+                    "observations, or pass metadata prepared with "
+                    "dsx.prepare_missing_observation_metadata(...) to "
+                    "dsx.sample(..., missing_obs_metadata=...)."
+                ) from exc
+    if metadata.observation_shape != tuple(obs_values.shape):
         raise ValueError(
-            "LatentPathBuilder requires a fixed observation missingness pattern "
-            "while tracing. Close over obs_values instead of passing it as a "
-            "dynamic jax.jit argument."
-        ) from exc
+            "missing_obs_metadata.observation_shape must match obs_values.shape."
+        )
+    cache[cache_key] = metadata
 
     time_indices = metadata.missing_flat_indices
     if len(metadata.observation_shape) > 1:
@@ -186,6 +207,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     inferred through `state_path_params`, and missing data support only
     `"auto"` or `"augment"`.
 
+    A missingness layout can determine NumPyro site shapes. The builder infers
+    and caches this layout whenever observations are concrete. Before an outer
+    `jax.jit` passes `obs_values` dynamically, either reuse a builder that has
+    seen concrete observations or pass eagerly prepared `missing_obs_metadata`
+    to `dsx.sample(...)`. JAX itself does not run the function eagerly before
+    tracing.
+
     Attributes:
         ode_simulator_config: ODE solver and integration settings used during
             deterministic continuous-time path reconstruction.
@@ -197,7 +225,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             evaluates batches of that size with `jax.vmap`.
 
     Examples:
-        >>> with dsx.LatentPathBuilder():
+        >>> builder = dsx.LatentPathBuilder()
+        >>> with builder:
         ...     result = dsx.sample(
         ...         "f",
         ...         dynamics,
@@ -232,6 +261,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         self.ode_simulator_config = ode_simulator_config
         self.missing_observation_strategy = missing_observation_strategy
         self.chunk_size = chunk_size
+        self._missing_observation_metadata_cache: _MissingObservationMetadataCache = {}
 
     def _sample_single(
         self,
@@ -248,6 +278,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         obs_mask: Bool[Array, "obs_time observation_dim"]
         | Bool[Array, " obs_time"]
         | None,
+        missing_obs_metadata: MissingObservationMetadata | None,
         ctrl_times: Real[Array, " ctrl_time"] | None,
         ctrl_values: Real[Array, "ctrl_time control_dim"]
         | Real[Array, " ctrl_time"]
@@ -265,6 +296,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             obs_values_filled: Observation values with missing entries replaced
                 by shape-preserving filler values.
             obs_mask: Boolean array that marks observed entries.
+            missing_obs_metadata: Optional concrete missingness layout.
             ctrl_times: Times associated with `ctrl_values`.
             ctrl_values: Control values, or `None` for an uncontrolled model.
             state_path_params: State values used to construct the path. `None`
@@ -314,9 +346,24 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             )
 
         metadata = _resolve_missing_observation_metadata(
+            name=name,
             dynamics=dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
+            missing_obs_metadata=missing_obs_metadata,
+            cache=self._missing_observation_metadata_cache,
+        )
+        expected_obs_mask = (
+            jnp.ones((obs_values.size,), dtype=bool)
+            .at[metadata.missing_flat_indices]
+            .set(False)
+            .reshape(obs_values.shape)
+        )
+        obs_values_filled = eqx.error_if(
+            obs_values_filled,
+            jnp.any(obs_mask != expected_obs_mask),
+            f"obs_values missingness for sample site {name!r} does not match "
+            "the LatentPathBuilder layout.",
         )
         exact_observations = isinstance(
             dynamics.observation_model,
@@ -559,6 +606,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         | Bool[Array, "*obs_value_plate obs_time"]
         | None = None,
         _obs_has_missing: bool | None = None,
+        missing_obs_metadata: MissingObservationMetadata | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -582,6 +630,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             _obs_mask: Internal boolean array that marks observed entries.
             _obs_has_missing: Internal flag indicating whether any observations
                 are missing.
+            missing_obs_metadata: Optional concrete missingness layout. One
+                layout is shared by all plate members.
             ctrl_times: Times associated with `ctrl_values`.
             ctrl_values: Control values, or `None` for an uncontrolled model.
             predict_times: Future times used for posterior rollout. Each time
@@ -616,6 +666,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 obs_values=obs_values,
                 obs_values_filled=_obs_values_filled,
                 obs_mask=_obs_mask,
+                missing_obs_metadata=missing_obs_metadata,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 state_path_params=state_path_params,
@@ -625,10 +676,9 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             member_results: list[LatentStateResult] = []
             for plate_idx in itertools.product(*[range(size) for size in plate_shapes]):
                 member_name = f"{name}_p{'_'.join(str(i) for i in plate_idx)}"
-                with jax.ensure_compile_time_eval():
-                    member_obs_values = _slice_array_for_plate_member(
-                        obs_values, plate_shapes, plate_idx
-                    )
+                member_obs_values = _slice_array_for_plate_member(
+                    obs_values, plate_shapes, plate_idx
+                )
                 with _suspend_numpyro_plate_frames():
                     member_results.append(
                         self._sample_single(
@@ -648,6 +698,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                             obs_mask=_slice_array_for_plate_member(
                                 _obs_mask, plate_shapes, plate_idx
                             ),
+                            missing_obs_metadata=missing_obs_metadata,
                             ctrl_times=_slice_array_for_plate_member(
                                 ctrl_times, plate_shapes, plate_idx
                             ),

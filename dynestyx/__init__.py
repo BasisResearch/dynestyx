@@ -37,6 +37,10 @@ from dynestyx.models import (
     ScalarDiffusion,
     StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.observation_missingness import (
+    MissingObservationMetadata,
+    prepare_missing_observation_metadata,
+)
 from dynestyx.simulation import (
     DiscreteTimeSimulator,
     ODESimulator,
@@ -67,6 +71,7 @@ __all__ = [
     "ObservationModel",
     "Filter",
     "LatentPathBuilder",
+    "MissingObservationMetadata",
     "Smoother",
     "flatten_draws",
     "condition",
@@ -74,6 +79,7 @@ __all__ = [
     "SimulatedResult",
     "log_prob",
     "plate",
+    "prepare_missing_observation_metadata",
     "sample",
     "simulate",
     "DiracIdentityObservation",

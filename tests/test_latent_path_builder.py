@@ -3,6 +3,7 @@
 from typing import cast
 
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -402,6 +403,122 @@ def test_prepare_missing_observation_metadata_matches_dirac_partial_missing_layo
     )
     assert jnp.array_equal(metadata.missing_flat_indices, jnp.array([1, 2, 4, 5]))
     assert metadata.observation_shape == (3, 2)
+
+
+def test_latent_path_builder_outer_jit_predictive_refreshes_handler_metadata():
+    dynamics = _make_dirac_discrete_dynamics()
+    template_values = jnp.array([[0.2, jnp.nan], [jnp.nan, -0.1], [jnp.nan, jnp.nan]])
+    builder = dsx.LatentPathBuilder()
+
+    def model(obs_times=None, obs_values=None, predict_times=None):
+        with dsx.DiscreteTimeSimulator():
+            with builder:
+                dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=predict_times,
+                )
+
+    Predictive(model, num_samples=1)(
+        jr.PRNGKey(0),
+        obs_times=jnp.arange(3.0),
+        obs_values=template_values,
+        predict_times=jnp.array([3.0]),
+    )
+    refreshed_values = template_values.at[0, 1].set(0.3)
+    Predictive(model, num_samples=1)(
+        jr.PRNGKey(1),
+        obs_times=jnp.arange(3.0),
+        obs_values=refreshed_values,
+        predict_times=jnp.array([3.0]),
+    )
+    predictive = jax.jit(Predictive(model, num_samples=2, exclude_deterministic=False))
+    samples = predictive(
+        jr.PRNGKey(0),
+        obs_times=jnp.array([10.0, 11.0, 12.0]),
+        obs_values=jnp.array([[0.4, 0.5], [jnp.nan, 0.7], [jnp.nan, jnp.nan]]),
+        predict_times=jnp.array([13.0, 14.0]),
+    )
+
+    assert jnp.array_equal(
+        samples["f_state_path_param_times"][0],
+        jnp.array([11.0, 12.0, 12.0]),
+    )
+    with pytest.raises(
+        jax.errors.JaxRuntimeError,
+        match="does not match the LatentPathBuilder layout",
+    ):
+        jax.block_until_ready(
+            predictive(
+                jr.PRNGKey(1),
+                obs_times=jnp.arange(3.0),
+                obs_values=template_values,
+                predict_times=jnp.array([3.0]),
+            )["f_state_path"]
+        )
+
+
+def test_latent_path_builder_outer_jit_predictive_accepts_explicit_metadata():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_values = jnp.array([[0.0, jnp.nan], [jnp.nan, 1.0]])
+    metadata = dsx.prepare_missing_observation_metadata(
+        dynamics,
+        obs_times=jnp.arange(2.0),
+        obs_values=obs_values,
+    )
+
+    def model(obs_times=None, obs_values=None, predict_times=None):
+        with dsx.DiscreteTimeSimulator(), dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                predict_times=predict_times,
+                missing_obs_metadata=metadata,
+            )
+
+    samples = jax.jit(Predictive(model, num_samples=1, exclude_deterministic=False))(
+        jr.PRNGKey(0),
+        obs_times=jnp.array([10.0, 11.0]),
+        obs_values=obs_values,
+        predict_times=jnp.array([12.0]),
+    )
+
+    assert jnp.array_equal(
+        samples["f_state_path_param_times"][0],
+        jnp.array([10.0, 11.0]),
+    )
+    assert jnp.array_equal(
+        samples["f_state_path_param_coordinate_indices"][0],
+        jnp.array([1, 0]),
+    )
+
+
+def test_latent_path_builder_outer_jit_predictive_requires_a_layout():
+    dynamics = _make_dirac_discrete_dynamics()
+    builder = dsx.LatentPathBuilder()
+
+    def model(obs_times=None, obs_values=None):
+        with builder:
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    with pytest.raises(
+        ValueError,
+        match="traced obs_values.*concrete observations.*missing_obs_metadata",
+    ):
+        jax.jit(Predictive(model, num_samples=1))(
+            jr.PRNGKey(0),
+            obs_times=jnp.arange(2.0),
+            obs_values=jnp.array([[0.0, jnp.nan], [jnp.nan, 1.0]]),
+        )
 
 
 def test_latent_path_builder_rejects_dsx_condition():

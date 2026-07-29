@@ -44,6 +44,50 @@ The main output names are intentionally distinct from simulator rollout names:
   from `LatentPathBuilder`
 - `f_states` / `f_times`: rollout outputs from `Simulator` and `dsx.simulate(...)`
 
+## JIT and handler lifetime
+
+The observation missingness layout can determine NumPyro sample-site shapes.
+`LatentPathBuilder` infers and caches the layout whenever observations are
+concrete. An ordinary MCMC or `Predictive` call usually supplies such a call;
+reuse the same builder for later outer-jitted calls.
+
+JAX does not make a concrete call before tracing `jax.jit`. For a cold outer-JIT
+call, prepare the metadata eagerly and close it over in the model:
+
+```python
+metadata = dsx.prepare_missing_observation_metadata(
+    dynamics,
+    obs_times=obs_times,
+    obs_values=obs_values,
+)
+
+def conditioned_model(obs_times=None, obs_values=None, predict_times=None):
+    with dsx.DiscreteTimeSimulator(), dsx.LatentPathBuilder():
+        return dsx.sample(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=predict_times,
+            missing_obs_metadata=metadata,
+        )
+
+predictive = jax.jit(Predictive(conditioned_model, num_samples=10))
+result = predictive(
+    prediction_key,
+    obs_times=obs_times,
+    obs_values=obs_values,
+    predict_times=predict_times,
+)
+```
+
+Without explicit metadata, construct the builder outside the model so its cache
+persists. If neither metadata nor a cached layout is available, the traced call
+raises an error explaining both options. Observation times and finite values may
+remain dynamic, but their missingness pattern must match the cached or supplied
+layout. One supplied metadata object represents a layout shared by all plate
+members.
+
 ## Implementation Details 
 
 To support arbitrary missingness, and for efficiency, the actual implementation of the `LatentPathBuilder` differs from the simple "unrolling" mental model. In particular, the entire `state_path` is intiialized as a `numpyro` site, via an improper uniform prior. The improper uniform prior is modifying so that calling its `sample` method (for example, as used in `numpyro` MCMC samplers by default) provides draws from the actual SSM prior. In particular:
