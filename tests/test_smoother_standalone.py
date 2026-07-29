@@ -117,6 +117,7 @@ def test_condition_smoother_no_observations():
     obs_times, obs_values = _make_data()
 
     with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        # Reusing the handler must not leak the first call's cached likelihood.
         dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
         result = dsx.condition(
             "f",
