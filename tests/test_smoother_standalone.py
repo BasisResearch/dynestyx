@@ -64,6 +64,32 @@ def test_infer_smoother_returns_infer_result():
     assert result.dists is not None
 
 
+def test_plated_condition_returns_backend_smoother_states():
+    obs_times, obs_values = _make_data()
+    dynamics = _make_lti_dynamics(0.5)
+
+    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        unplated_result = dsx.condition(
+            "unplated",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+
+    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        with dsx.plate("members", 2):
+            result = dsx.condition(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=jnp.stack([obs_values, obs_values]),
+            )
+
+    assert result.marginal_loglik.shape == (2,)
+    assert type(result.states) is type(unplated_result.states)
+    assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
+
+
 def test_infer_smoother_optax_mle():
     """Use dsx.condition + Smoother + optax to do MLE without numpyro."""
     obs_times, obs_values = _make_data()

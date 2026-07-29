@@ -510,13 +510,14 @@ class Smoother(BaseSmootherLogFactorAdder):
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
+            states = outputs
         elif output_kind == "cuthbert":
             marginal_logliks, states = outputs
         else:
             raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
         self.marginal_loglik = marginal_logliks
-        self.smoothed_states = outputs
+        self.smoothed_states = states
         self._smoother_config_used = config
 
         if output_kind == "continuous":

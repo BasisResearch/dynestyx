@@ -378,11 +378,10 @@ class Filter(BaseLogFactorAdder):
             if marginal_loglik is None or config is None:
                 return
             if isinstance(config, HMMConfigs):
-                log_filt_seq = cast(tuple, states)[1] if _is_batched else states
                 register_hmm_filter_sites(
                     site_name,
                     marginal_loglik,
-                    cast(jax.Array, log_filt_seq),
+                    cast(jax.Array, states),
                     cast(HMMConfig, config),
                 )
             elif _is_batched:
@@ -612,15 +611,17 @@ class Filter(BaseLogFactorAdder):
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
+            states = outputs
         elif output_kind == "hmm":
-            marginal_logliks, log_filt_seq = outputs
+            marginal_logliks, states = outputs
+            log_filt_seq = states
         elif output_kind == "cuthbert":
             marginal_logliks, states = outputs
         else:
             raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
         self.marginal_loglik = marginal_logliks
-        self.filtered_states = outputs
+        self.filtered_states = states
         self._filter_config_used = config
 
         if output_kind == "continuous":
