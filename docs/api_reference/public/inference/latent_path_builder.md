@@ -88,6 +88,14 @@ remain dynamic, but their missingness pattern must match the cached or supplied
 layout. One supplied metadata object represents a layout shared by all plate
 members.
 
+For plated observations whose members have different missingness layouts,
+construct one builder outside the model and reuse it during MCMC or other traced
+execution. The builder retains a separate layout for each generated member site.
+Ragged per-member latent metadata cannot be represented by one rectangular result
+array, so the corresponding `LatentStateResult` fields are flat lists of
+per-member arrays. The rightmost plate index varies fastest. Member-specific
+NumPyro sites retain the same native shapes.
+
 ## Implementation Details 
 
 To support arbitrary missingness, and for efficiency, the actual implementation of the `LatentPathBuilder` differs from the simple "unrolling" mental model. In particular, the entire `state_path` is intiialized as a `numpyro` site, via an improper uniform prior. The improper uniform prior is modifying so that calling its `sample` method (for example, as used in `numpyro` MCMC samplers by default) provides draws from the actual SSM prior. In particular:

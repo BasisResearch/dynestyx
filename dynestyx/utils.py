@@ -51,7 +51,11 @@ def _raise_now_or_error_if(
     *,
     action: Literal["raise", "warn"] = "raise",
 ) -> Array:
-    """Raise or warn for a predicate, returning the anchor to preserve JIT checks."""
+    """Raise or warn for a predicate, returning the anchor to preserve JIT checks.
+
+    Warnings are emitted only for eager predicates. A traced warning predicate
+    returns the anchor unchanged rather than introducing a JAX runtime callback.
+    """
     try:
         should_handle = bool(predicate)
     except jax.errors.TracerBoolConversionError:

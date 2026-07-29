@@ -219,6 +219,13 @@ both remedies. Missing-observation times are always derived from the current
 mask is checked against the retained layout. One explicit metadata object is
 shared across plate members.
 
+When plate members have different missingness layouts, create the builder
+outside the model and reuse it so the per-member cache entries survive traced
+MCMC execution. Member-specific sample and deterministic sites retain their
+native shapes. If a ragged field cannot be stacked without changing those
+shapes, its aggregate `LatentStateResult` field is a flat list of per-member
+arrays, ordered with the rightmost plate index varying fastest.
+
 ## Implementation modules
 
 - `dynestyx.inference.latent.builder` creates the sites, handles plates, records
