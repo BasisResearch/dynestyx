@@ -3,6 +3,7 @@ from typing import NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 from cuthbert import filter as cuthbert_filter
@@ -154,6 +155,134 @@ def _drop_cuthbert_dummy_step(states, *, obs_len: int):
     return jax.tree.map(_drop_if_time_leaf, states)
 
 
+def _build_cuthbert_filter_obj(
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    filter_kwargs: dict,
+    key: jax.Array | None,
+    *,
+    want_parallel: bool,
+):
+    """Dispatch on filter_config type to build the cuthbert Filter object.
+
+    Shared by compute_cuthbert_filter (whole-trajectory) and
+    compute_cuthbert_filter_update (single-step): the Filter object itself
+    (init_prepare/filter_prepare/filter_combine) only depends on `dynamics`,
+    never on trajectory data, so both callers build it the same way.
+    """
+    if isinstance(filter_config, PFConfig):
+        if key is None:
+            raise ValueError(
+                "Particle filter requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, EnKFConfig):
+        if key is None:
+            raise ValueError(
+                "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, KFConfig):
+        filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
+    elif isinstance(filter_config, EKFConfig):
+        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
+    else:
+        raise ValueError(
+            f"Unsupported cuthbert config: {type(filter_config).__name__}. "
+            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
+        )
+
+    parallel = (
+        want_parallel
+        and isinstance(filter_config, KFConfig)
+        and filter_config.associative
+    )
+    if parallel and not filter_obj.associative:
+        raise ValueError(
+            "Associative filtering was requested, but the constructed cuthbert "
+            f"filter is not associative: {type(filter_config).__name__}."
+        )
+    return filter_obj, parallel
+
+
+def compute_cuthbert_filter_update(
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    prev_state,
+    key: jax.Array,
+    *,
+    y: jax.Array,
+    u: jax.Array | None,
+    t: jax.Array,
+    t_prev: jax.Array | None = None,
+):
+    r"""One-step FilterUpdate: state_k + u_k + y_{k+1} -> state_{k+1}.
+
+    Unlike `compute_cuthbert_filter` (whole-trajectory), this performs exactly
+    one predict+update step using cuthbert's `Filter.filter_prepare`/
+    `filter_combine` primitives directly, without requiring future
+    observations. This is what makes online control possible: the state
+    returned here can be consumed by a policy to choose the next control
+    before the next observation exists.
+
+    Pass `prev_state=None` for the bootstrap call (computing the filtering
+    state after only the first observation, with no control history yet);
+    this internally calls the cuthbert filter's `init_prepare` first.
+
+    Control convention (important, and different from `compute_cuthbert_filter`
+    / `DiscreteTimeSimulator`): `u` is the control that drove the transition
+    *into* the state being filtered, i.e. u_k when producing state_{k+1} from
+    state_k and y_{k+1} -- matching `FilterUpdate(x_hat_k, u_k, y_{k+1}, ...)`
+    in the control-loop equations. `compute_cuthbert_filter`/
+    `DiscreteTimeSimulator` instead pair `ctrl_values[t]` with *both* the
+    observation and the outgoing transition at the same index t, which is
+    only valid when the whole control trajectory is already known in advance.
+    For online control this is impossible: u_{k+1} cannot exist before
+    y_{k+1} is observed, since it is computed by the policy from the filtered
+    state that itself depends on y_{k+1}. So `u` here is used for both
+    `CuthbertInputs.u` and `CuthbertInputs.u_prev` in the single-row input
+    built for this step. Pass `u=None` for the bootstrap call, matching y_0's
+    lack of a control argument in the control-loop equations (numerically
+    equivalent to zeros for models with a control-input matrix, since D=None
+    or u=None are both treated as "no control contribution").
+    """
+    filter_kwargs = _config_to_filter_kwargs(filter_config)
+    key_state, key_prep = jr.split(key)
+    filter_obj, _ = _build_cuthbert_filter_obj(
+        dynamics, filter_config, filter_kwargs, key_state, want_parallel=False
+    )
+
+    control_dim = dynamics.control_dim
+    u_arr = jnp.zeros((control_dim,)) if u is None else jnp.asarray(u)
+    is_first_step = prev_state is None
+    t_arr = jnp.asarray(t)
+    t_prev_arr = t_arr if t_prev is None else jnp.asarray(t_prev)
+
+    if is_first_step:
+        dummy_mi = CuthbertInputs(
+            y=jnp.zeros_like(jnp.asarray(y)),
+            u=jnp.zeros_like(u_arr),
+            u_prev=jnp.zeros_like(u_arr),
+            time=t_arr,
+            time_prev=t_arr,
+            is_first_step=jnp.asarray(False),
+        )
+        prev_state = filter_obj.init_prepare(dummy_mi, key=key_state)
+
+    mi_t = CuthbertInputs(
+        y=jnp.asarray(y),
+        u=u_arr,
+        u_prev=u_arr,
+        time=t_arr,
+        time_prev=t_prev_arr,
+        is_first_step=jnp.asarray(is_first_step),
+    )
+    prep_state = filter_obj.filter_prepare(mi_t, key=key_prep)
+    return filter_obj.filter_combine(prev_state, prep_state)
+
+
 def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
@@ -203,36 +332,9 @@ def compute_cuthbert_filter(
         is_first_step=jnp.arange(obs_len + 1) == 1,
     )
 
-    if isinstance(filter_config, PFConfig):
-        if key is None:
-            raise ValueError(
-                "Particle filter requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-            )
-        filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
-    elif isinstance(filter_config, EnKFConfig):
-        if key is None:
-            raise ValueError(
-                "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-            )
-        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
-    elif isinstance(filter_config, KFConfig):
-        filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
-    elif isinstance(filter_config, EKFConfig):
-        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
-    else:
-        raise ValueError(
-            f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
-        )
-
-    parallel = isinstance(filter_config, KFConfig) and filter_config.associative
-    if parallel and not filter_obj.associative:
-        raise ValueError(
-            "Associative filtering was requested, but the constructed cuthbert "
-            f"filter is not associative: {type(filter_config).__name__}."
-        )
+    filter_obj, parallel = _build_cuthbert_filter_obj(
+        dynamics, filter_config, filter_kwargs, key, want_parallel=True
+    )
 
     raw_states = cuthbert_filter(
         filter_obj,
