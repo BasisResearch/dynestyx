@@ -20,7 +20,6 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 import numpyro.distributions as dist
-from numpyro.infer import Predictive
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
 from scipy.ndimage import binary_erosion
@@ -31,7 +30,6 @@ from dynestyx import (
     DiracIdentityObservation,
     DynamicalModel,
     FullDiffusion,
-    SDESimulator,
 )
 
 # -----------------------------
@@ -272,46 +270,46 @@ def simulate_boundary_orbit_gif(
     total_steps = frames * steps_per_frame
     obs_times = jnp.arange(total_steps + 1, dtype=jnp.float32) * dt
 
-    def logo_model(obs_times=None, obs_values=None):
-        def drift_fn(x, u, t):
-            dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
-            vhatx = bilinear_sample_jax(vhatx_grid_j, x[0], x[1])
-            vhaty = bilinear_sample_jax(vhaty_grid_j, x[0], x[1])
+    def drift_fn(x, u, t):
+        dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
+        vhatx = bilinear_sample_jax(vhatx_grid_j, x[0], x[1])
+        vhaty = bilinear_sample_jax(vhaty_grid_j, x[0], x[1])
 
-            tx = -vhaty
-            ty = vhatx
-            wloc = omega * jnp.exp(
-                -((dist_to_boundary - ring) ** 2) / (2.0 * swirl_width * swirl_width)
-            )
-            return jnp.array([wloc * tx, wloc * ty], dtype=jnp.float32)
-
-        def potential_fn(x, u, t):
-            dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
-            return 0.5 * kappa * (dist_to_boundary - ring) ** 2
-
-        dynamics = DynamicalModel(
-            control_dim=0,
-            initial_condition=dist.Uniform(
-                low=jnp.array([0.0, 0.0], dtype=jnp.float32),
-                high=jnp.array([W - 1.0, H - 1.0], dtype=jnp.float32),
-            ).to_event(1),
-            state_evolution=ContinuousTimeStateEvolution(
-                drift=drift_fn,
-                potential=potential_fn,
-                use_negative_gradient=True,
-                diffusion=FullDiffusion(sigma * jnp.eye(2, dtype=jnp.float32)),
-            ),
-            observation_model=DiracIdentityObservation(),
+        tx = -vhaty
+        ty = vhatx
+        wloc = omega * jnp.exp(
+            -((dist_to_boundary - ring) ** 2) / (2.0 * swirl_width * swirl_width)
         )
-        return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+        return jnp.array([wloc * tx, wloc * ty], dtype=jnp.float32)
 
-    with SDESimulator(simulator_config=dsx.SDESimulatorConfig(dt0=dt)):
-        samples = Predictive(logo_model, num_samples=n_particles)(
-            jr.PRNGKey(seed),
-            predict_times=obs_times,
-        )
+    def potential_fn(x, u, t):
+        dist_to_boundary = bilinear_sample_jax(dist_grid_j, x[0], x[1])
+        return 0.5 * kappa * (dist_to_boundary - ring) ** 2
 
-    states = np.asarray(samples["f_states"], dtype=np.float32)  # (N, T, 2)
+    dynamics = DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Uniform(
+            low=jnp.array([0.0, 0.0], dtype=jnp.float32),
+            high=jnp.array([W - 1.0, H - 1.0], dtype=jnp.float32),
+        ).to_event(1),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=drift_fn,
+            potential=potential_fn,
+            use_negative_gradient=True,
+            diffusion=FullDiffusion(sigma * jnp.eye(2, dtype=jnp.float32)),
+        ),
+        observation_model=DiracIdentityObservation(),
+    )
+    simulation = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(seed),
+        predict_times=obs_times,
+        n_simulations=n_particles,
+        simulator_config=dsx.SDESimulatorConfig(dt0=dt),
+    )
+    if simulation.states is None:
+        raise RuntimeError("SDE simulation returned no state trajectories.")
+    states = np.asarray(simulation.states, dtype=np.float32)  # (N, T, 2)
 
     # Fixed particle colors based on STARTING point nearest-letter field
     x0 = states[:, 0, 0]
