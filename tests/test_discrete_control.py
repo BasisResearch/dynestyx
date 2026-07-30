@@ -14,7 +14,7 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_mean,
 )
 from dynestyx.discretizers import Discretizer, euler_maruyama
-from dynestyx.inference.filter_configs import EKFConfig, EnKFConfig, KFConfig, PFConfig
+from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     compute_cuthbert_filter,
     compute_cuthbert_filter_update,
@@ -343,7 +343,7 @@ def test_rejects_obs_values_conditioning():
                 obs_values=jnp.zeros((5, 1)),
             )
 
-    with pytest.raises(ValueError, match="does not support conditioning"):
+    with pytest.raises(ValueError, match="generation-only"):
         _run_trace(model)
 
 
@@ -381,7 +381,7 @@ def test_requires_seeded_context():
         with DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=s0):
             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
 
-    with pytest.raises(ValueError, match="requires a PRNG key"):
+    with pytest.raises(ValueError, match="PRNG key required"):
         trace(model).get_trace()
 
 

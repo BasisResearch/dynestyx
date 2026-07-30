@@ -1,6 +1,7 @@
 """Online control loop and control policies for discrete-time dynestyx models."""
 
 from dynestyx.control.discrete_controller_simulators import (
+    ControlledSimulatedResult,
     DiscreteControlLoopSimulator,
     PolicyCallable,
     filter_state_mean,
@@ -8,6 +9,7 @@ from dynestyx.control.discrete_controller_simulators import (
 from dynestyx.control.mppi import MPPI, mppi_initial_state
 
 __all__ = [
+    "ControlledSimulatedResult",
     "DiscreteControlLoopSimulator",
     "MPPI",
     "PolicyCallable",

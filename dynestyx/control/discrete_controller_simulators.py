@@ -32,9 +32,9 @@ for details.
 
 `DiscreteControlLoopSimulator` computes its own controls online, so unlike
 `DiscreteTimeSimulator` it is driven with `predict_times` only -- do not
-pass `ctrl_times`/`ctrl_values` to `dsx.sample` (the shared validation in
-`dynestyx/utils.py` requires them together and rejects `ctrl_times` alone,
-and `ctrl_values` would conflict with online control in any case).
+pass `ctrl_times`/`ctrl_values` to `dsx.sample` (simulator handlers are
+generation-only and reject `obs_times`/`obs_values`; `ctrl_values` is
+rejected here too, since it would conflict with online control).
 """
 
 import dataclasses
@@ -43,17 +43,18 @@ from typing import Any, Protocol, runtime_checkable
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import numpyro
 from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
 
-from dynestyx.inference.filter_configs import BaseFilterConfig
+from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.filters import _default_filter_config
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     compute_cuthbert_filter_update,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.simulators import BaseSimulator, _ensure_trailing_dim, _tile_times
+from dynestyx.simulation.base import BaseSimulator
+from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
+from dynestyx.types import SimulatedResult
 from dynestyx.utils import _should_record_field
 
 
@@ -98,6 +99,23 @@ class PolicyCallable(Protocol):
 
 
 @dataclasses.dataclass
+class ControlledSimulatedResult(SimulatedResult):
+    """`SimulatedResult` extended with the control loop's extra outputs.
+
+    Registered as deterministic sites the same generic way as
+    `SimulatedResult`'s own fields (`dynestyx.simulation.utils.
+    _register_simulated_result_sites` iterates every dataclass field and
+    skips `None` values) -- so the existing recording-gating logic just
+    means passing `None` for a field instead of conditionally omitting a
+    dict key, as the old (pre-refactor) version of this class did.
+    """
+
+    # control_time = time - 1 (no control is chosen after the final state).
+    controls: Real[Array, "n_simulations control_time control_dim"] | None = None
+    filtered_states_mean: Array | None = None
+    policy_states: PyTree | None = None
+
+
 class DiscreteControlLoopSimulator(BaseSimulator):
     r"""Closed-loop simulator: simulate, observe, filter, and decide controls online.
 
@@ -119,26 +137,29 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         n_simulations: Currently only `1` is supported.
     """
 
-    control_policy: PolicyCallable
-    policy_state_init: PyTree
-    filter_config: BaseFilterConfig | None = None
-    n_simulations: int = 1
-
-    def _simulate(
+    def __init__(
         self,
-        name: str,
+        *,
+        control_policy: PolicyCallable,
+        policy_state_init: PyTree,
+        filter_config: BaseFilterConfig | None = None,
+        n_simulations: int = 1,
+    ) -> None:
+        super().__init__(n_simulations=n_simulations)
+        self.control_policy = control_policy
+        self.policy_state_init = policy_state_init
+        self.filter_config = filter_config
+
+    def simulate(
+        self,
         dynamics: DynamicalModel,
         *,
-        obs_times=None,
-        obs_values=None,
-        _obs_values_filled=None,
-        _obs_mask=None,
-        _obs_has_missing=None,
+        rng_key: PRNGKeyArray,
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
         **kwargs,
-    ) -> dict[str, Array]:
+    ) -> ControlledSimulatedResult:
         if dynamics.continuous_time:
             raise ValueError(
                 "DiscreteControlLoopSimulator only supports discrete-time models "
@@ -152,19 +173,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 "Simulator/DiscreteTimeSimulator instead if you want "
                 "open-loop control."
             )
-        if obs_values is not None:
-            raise ValueError(
-                "DiscreteControlLoopSimulator does not support conditioning on "
-                "obs_values yet; it only supports forward rollout."
-            )
         if self.n_simulations != 1:
             raise NotImplementedError(
                 "DiscreteControlLoopSimulator does not yet support n_simulations > 1."
             )
 
-        times = obs_times if obs_times is not None else predict_times
+        times = predict_times
         if times is None:
-            raise ValueError("obs_times or predict_times must be provided")
+            raise ValueError("predict_times must be provided")
         T = len(times)
         if T < 1:
             raise ValueError("times must contain at least one timepoint")
@@ -175,13 +191,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             else _default_filter_config(dynamics)
         )
 
-        key = numpyro.prng_key()
-        if key is None:
-            raise ValueError(
-                "DiscreteControlLoopSimulator requires a PRNG key (run inside a "
-                "seeded context, e.g. numpyro.handlers.seed)."
-            )
-        key, k_x0, k_y0, k_filt0 = jr.split(key, 4)
+        key, k_x0, k_y0, k_filt0 = jr.split(rng_key, 4)
 
         x_0 = dynamics.initial_condition.sample(k_x0)
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(k_y0)
@@ -244,39 +254,48 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         states = jnp.concatenate([jnp.expand_dims(x_0, axis=0), xs], axis=0)
         observations = jnp.concatenate([jnp.expand_dims(y_0, axis=0), ys], axis=0)
 
-        result = {
-            "times": _tile_times(times, 1),
-            "states": _ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
-            "observations": _ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
-            "controls": _ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
-        }
-
         mean_shape = filter_state_mean(x_hat_0).shape
         record_mean = _should_record_field(
             filter_config.record_filtered_states_mean,
             (T, *mean_shape),
             filter_config.record_max_elems,
         )
+        filtered_states_mean = None
         if record_mean:
-            filtered_states_mean = jnp.concatenate(
+            filtered_states_mean_vals = jnp.concatenate(
                 [
                     jnp.expand_dims(filter_state_mean(x_hat_0), axis=0),
                     filter_state_mean(x_hats),
                 ],
                 axis=0,
             )
-            result["filtered_states_mean"] = _ensure_trailing_dim(
-                jnp.expand_dims(filtered_states_mean, axis=0)
+            filtered_states_mean = _ensure_trailing_dim(
+                jnp.expand_dims(filtered_states_mean_vals, axis=0)
             )
 
+        policy_states = None
         if s_0 is not None:
             # A stateless policy (policy_state_init=None) has nothing to
             # record; jnp.expand_dims can't be applied to None directly, and
             # there is no meaningful "policy_states" trajectory to report.
-            result["policy_states"] = jax.tree_util.tree_map(
+            policy_states = jax.tree_util.tree_map(
                 lambda leaf: jnp.expand_dims(leaf, axis=0), ss
             )
-        return result
+
+        return ControlledSimulatedResult(
+            times=_tile_times(times, 1),
+            x_0=jnp.expand_dims(x_0, axis=0),
+            states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            observations=_ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
+            controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
+            filtered_states_mean=filtered_states_mean,
+            policy_states=policy_states,
+        )
 
 
-__all__ = ["DiscreteControlLoopSimulator", "PolicyCallable", "filter_state_mean"]
+__all__ = [
+    "ControlledSimulatedResult",
+    "DiscreteControlLoopSimulator",
+    "PolicyCallable",
+    "filter_state_mean",
+]
