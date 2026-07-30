@@ -9,7 +9,7 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
-from dynestyx.discrete_controller_simulators import (
+from dynestyx.control.discrete_controller_simulators import (
     DiscreteControlLoopSimulator,
     filter_state_mean,
 )
@@ -46,14 +46,14 @@ class _LinearPolicy(eqx.Module):
 
     K: jax.Array
 
-    def __call__(self, x_hat, s):
+    def __call__(self, x_hat, s, key):
         return -self.K @ filter_state_mean(x_hat), s
 
 
 def _linear_policy_fn(K):
     """Plain-function equivalent of _LinearPolicy."""
 
-    def policy(x_hat, s):
+    def policy(x_hat, s, key):
         return -K @ filter_state_mean(x_hat), s
 
     return policy
@@ -509,7 +509,7 @@ def test_array_policy_state_preserves_shape_and_values():
     """
     dynamics = _lti_1d()
 
-    def counting_policy(x_hat, s):
+    def counting_policy(x_hat, s, key):
         # u is irrelevant to this test; s is a running step counter.
         return jnp.zeros(1), s + 1.0
 
@@ -590,7 +590,7 @@ def test_observation_uses_previous_step_control_not_same_index():
         control_dim=control_dim,
     )
 
-    def growing_policy(x_hat, s):
+    def growing_policy(x_hat, s, key):
         # A distinct, easily-identified control value at every step.
         return jnp.reshape(s + 1.0, (1,)), s + 1.0
 

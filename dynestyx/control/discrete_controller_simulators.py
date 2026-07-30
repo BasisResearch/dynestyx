@@ -5,7 +5,7 @@ Implements the online control loop:
     x_0 ~ p(x_0)
     y_0 | x_0 ~ p(y_0 | x_0, t_0)
     x_hat_{0|0} = FilterUpdate(y_0, t_0)
-    u_k, s_{k+1} = control_policy(x_hat_{k|k}, s_k),                  k = 0..T-1
+    u_k, s_{k+1} = control_policy(x_hat_{k|k}, s_k, key_k),           k = 0..T-1
     x_{k+1} | x_k, u_k ~ p(x_{k+1} | x_k, u_k, t_k, t_{k+1}),          k = 0..T-1
     y_{k+1} | x_{k+1}, u_k ~ p(y_{k+1} | x_{k+1}, u_k, t_{k+1}),       k = 0..T-1
     x_hat_{k+1|k+1} = FilterUpdate(x_hat_{k|k}, u_k, y_{k+1}, t_k, t_{k+1}),  k = 0..T-1
@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpyro
 from jax import Array
-from jaxtyping import PyTree, Real
+from jaxtyping import PRNGKeyArray, PyTree, Real
 
 from dynestyx.inference.filter_configs import BaseFilterConfig
 from dynestyx.inference.filters import _default_filter_config
@@ -79,18 +79,20 @@ def filter_state_mean(state) -> Array:
 class PolicyCallable(Protocol):
     r"""Structural protocol for a control policy $\pi$.
 
-    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, s_k)$$
+    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, s_k, \mathrm{key}_k)$$
 
     `x_hat` is whatever belief state the chosen `filter_config` family
     produces (see module docstring); use `filter_state_mean` for a
-    family-agnostic point estimate. Any plain callable matching this
-    signature works, including an `equinox.Module` with a matching
-    `__call__` (e.g. a learned neural policy) or a plain Python function
-    (e.g. an LQR gain lookup).
+    family-agnostic point estimate. `key` is a fresh PRNG key for this step,
+    for policies that need their own randomness (e.g. sampling-based
+    controllers like `dynestyx.control.mppi.MPPI`); deterministic policies
+    simply ignore it. Any plain callable matching this signature works,
+    including an `equinox.Module` with a matching `__call__` (e.g. a learned
+    neural policy) or a plain Python function (e.g. an LQR gain lookup).
     """
 
     def __call__(
-        self, x_hat: Any, s: PyTree
+        self, x_hat: Any, s: PyTree, key: PRNGKeyArray
     ) -> tuple[Real[Array, " control_dim"], PyTree]:
         raise NotImplementedError()
 
@@ -209,11 +211,11 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         def _step(carry, t_idx):
             x_prev, x_hat_prev, s_prev, step_key = carry
-            step_key, k_trans, k_obs, k_filt = jr.split(step_key, 4)
+            step_key, k_trans, k_obs, k_filt, k_policy = jr.split(step_key, 5)
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
 
-            u_k, s_next = self.control_policy(x_hat_prev, s_prev)
+            u_k, s_next = self.control_policy(x_hat_prev, s_prev, k_policy)
 
             trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
             x_next = trans_dist.sample(k_trans)
