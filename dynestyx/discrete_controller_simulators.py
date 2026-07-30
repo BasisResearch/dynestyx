@@ -183,8 +183,27 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         x_0 = dynamics.initial_condition.sample(k_x0)
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(k_y0)
+        # Give the bootstrap FilterUpdate a non-degenerate t_prev (borrowing the
+        # width of the first real interval, matching compute_cuthbert_filter's
+        # own dummy-row convention). This step is a genuine no-op transition
+        # for every filter family (nothing has happened before t_0), but some
+        # backends (e.g. EKF's Taylor linearization) evaluate the transition
+        # unconditionally via jnp.where rather than jax.lax.cond, so t_prev==t
+        # would construct a zero-width-dt, zero-covariance distribution whose
+        # NaN log-density leaks through the gradient even on the discarded
+        # branch -- a state-evolution whose covariance scales with dt (e.g. an
+        # Euler-Maruyama-discretized SDE) hits this; a fixed-covariance one
+        # (e.g. LinearGaussianStateEvolution) does not.
+        dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
         x_hat_0 = compute_cuthbert_filter_update(
-            dynamics, filter_config, None, k_filt0, y=y_0, u=None, t=times[0]
+            dynamics,
+            filter_config,
+            None,
+            k_filt0,
+            y=y_0,
+            u=None,
+            t=times[0],
+            t_prev=times[0] - dt0,
         )
         s_0 = self.policy_state_init
 
