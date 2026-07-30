@@ -103,9 +103,7 @@ class MPPI(eqx.Module):
         weighted_seq = jnp.einsum("k,khc->hc", weights, candidates)
 
         u0 = weighted_seq[0]
-        next_nominal = jnp.concatenate(
-            [weighted_seq[1:], weighted_seq[-1:]], axis=0
-        )
+        next_nominal = jnp.concatenate([weighted_seq[1:], weighted_seq[-1:]], axis=0)
         return u0, next_nominal
 
 
