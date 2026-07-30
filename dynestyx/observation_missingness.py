@@ -836,6 +836,10 @@ def prepare_observation_log_prob(
         has_partial_missing=has_partial_missing,
         requested_strategy=missing_observation_strategy,
     )
+    if missing_obs_values is not None and not use_augmentation:
+        raise ValueError(
+            "missing_obs_values requires missing-observation augmentation."
+        )
 
     completed_obs = None
     missing_obs_times = None
