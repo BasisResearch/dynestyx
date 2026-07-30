@@ -282,7 +282,7 @@ def _stack_optional_member_values(
 
     Args:
         values: One value per plate member, ordered by flattened plate index.
-            Each non-`None` value must have the same shape.
+            Non-`None` values must have broadcast-compatible shapes.
         plate_shapes: Sizes of the plate dimensions to restore.
 
     Returns:
@@ -292,8 +292,40 @@ def _stack_optional_member_values(
     """
     if any(value is None for value in values):
         return None
-    first = jnp.asarray(values[0])
-    return jnp.stack([jnp.asarray(value) for value in values]).reshape(
+    arrays = jnp.broadcast_arrays(*[jnp.asarray(value) for value in values])
+    first = arrays[0]
+    return jnp.stack(arrays).reshape(
+        *plate_shapes,
+        *first.shape,
+    )
+
+
+def _stack_or_list_optional_member_values(
+    values: list[Shaped[Array, "..."] | None],
+    plate_shapes: tuple[int, ...],
+) -> Shaped[Array, "..."] | list[Shaped[Array, "..."]] | None:
+    """Stack uniform member values or preserve ragged values as a flat list.
+
+    The list order matches ``itertools.product`` over ``plate_shapes``: the
+    rightmost plate index varies fastest.
+
+    Args:
+        values: One value per flattened plate member.
+        plate_shapes: Sizes of the plate dimensions to restore for uniform
+            values.
+
+    Returns:
+        Array | list[Array] | None: A stacked array when all member shapes
+            match, the original member arrays when their shapes differ, or
+            `None` if any member value is `None`.
+    """
+    if any(value is None for value in values):
+        return None
+    arrays = [jnp.asarray(value) for value in values]
+    if any(array.shape != arrays[0].shape for array in arrays[1:]):
+        return arrays
+    first = arrays[0]
+    return jnp.stack(arrays).reshape(
         *plate_shapes,
         *first.shape,
     )

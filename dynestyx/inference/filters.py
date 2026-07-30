@@ -74,7 +74,7 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
+from dynestyx.utils import _dist_has_plate_batch_dims
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -100,6 +100,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         **kwargs,
     ) -> FunctionOfTime:
         filtered_dists = None
+        self.marginal_loglik = self.filtered_states = self._filter_config_used = None
         if not (obs_times is None or obs_values is None):
             filtered_dists = self._add_log_factors(
                 name,
@@ -202,7 +203,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](filter_configs.md).
+    [Available filter configurations](configs/filter_configs.md).
 
     Defaults
     --------
@@ -269,7 +270,7 @@ class Filter(BaseLogFactorAdder):
             else _default_filter_config(dynamics)
         )
         if isinstance(config, BaseFilterConfig):
-            _validate_missing_observation_support(
+            obs_values = _validate_missing_observation_support(
                 config,
                 obs_values=obs_values,
                 mode="filter",
@@ -376,17 +377,17 @@ class Filter(BaseLogFactorAdder):
         def _register(site_name: str) -> None:
             if marginal_loglik is None or config is None:
                 return
-            if _is_batched:
-                # TODO: support per-field recording for batched (plate) states
-                numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
-                numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
-            elif isinstance(config, HMMConfigs):
+            if isinstance(config, HMMConfigs):
                 register_hmm_filter_sites(
                     site_name,
                     marginal_loglik,
                     cast(jax.Array, states),
                     cast(HMMConfig, config),
                 )
+            elif _is_batched:
+                # TODO: support per-field recording for batched (plate) states
+                numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
+                numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             else:
                 register_filter_sites(site_name, marginal_loglik, states, config)
 
@@ -610,15 +611,17 @@ class Filter(BaseLogFactorAdder):
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
+            states = outputs
         elif output_kind == "hmm":
-            marginal_logliks, log_filt_seq = outputs
+            marginal_logliks, states = outputs
+            log_filt_seq = states
         elif output_kind == "cuthbert":
             marginal_logliks, states = outputs
         else:
             raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
         self.marginal_loglik = marginal_logliks
-        self.filtered_states = outputs
+        self.filtered_states = states
         self._filter_config_used = config
 
         if output_kind == "continuous":
@@ -645,23 +648,6 @@ class Filter(BaseLogFactorAdder):
                 ),
             )
         if output_kind == "hmm":
-            hmm_config = cast(HMMConfig, config)
-            record_max_elems = hmm_config.record_max_elems
-            if _should_record_field(
-                hmm_config.record_log_filtered,
-                log_filt_seq.shape,
-                record_max_elems,
-            ):
-                numpyro.deterministic(f"{name}_log_filtered_states", log_filt_seq)
-            if _should_record_field(
-                hmm_config.record_filtered,
-                log_filt_seq.shape,
-                record_max_elems,
-            ):
-                numpyro.deterministic(
-                    f"{name}_filtered_states",
-                    jnp.exp(log_filt_seq),
-                )
             return _categorical_log_probs_to_dists(
                 log_filt_seq,
                 plate_shapes=plate_shapes,
@@ -682,12 +668,11 @@ def _filter_discrete_time(
     filter_config: BaseFilterConfig,
     key: PRNGKeyArray | None = None,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
     | None = None,
     **kwargs,
 ) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
@@ -739,12 +724,11 @@ def _filter_continuous_time(
     filter_config: BaseFilterConfig,
     key: PRNGKeyArray | None = None,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
     | None = None,
     **kwargs,
 ) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:

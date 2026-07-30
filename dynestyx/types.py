@@ -64,26 +64,40 @@ class LatentStateResult:
       entries of ``obs_values``,
     - ``completed_obs_values`` is the dense observation array after those
       missing entries are filled back in.
+
+    Under plates, latent-coordinate fields are stacked when all members have
+    the same shape. Ragged values are returned as a flat list in plate order,
+    with the rightmost plate index varying fastest.
     """
 
     joint_log_prob: Real[Array, "*plate"] | None = None
-    state_path_params: Real[Array, "*state_path_param_shape"] | None = None
+    state_path_params: (
+        Real[Array, "*state_path_param_shape"] | list[Real[Array, "..."]] | None
+    ) = None
     state_path_param_times: (
-        Real[Array, "*state_path_param_time_plate state_path_param_time"] | None
+        Real[Array, "*state_path_param_time_plate state_path_param_time"]
+        | list[Real[Array, "..."]]
+        | None
     ) = None
     state_path_param_coordinate_indices: (
-        Int[Array, "*state_path_param_plate n_state_path_params"] | None
+        Int[Array, "*state_path_param_plate n_state_path_params"]
+        | list[Int[Array, "..."]]
+        | None
     ) = None
     state_path: Real[Array, "*state_path_shape"] | None = None
     state_path_times: Real[Array, "*state_path_time_plate state_path_time"] | None = (
         None
     )
-    missing_obs_values: Real[Array, "*missing_obs_shape"] | None = None
-    missing_obs_times: Real[Array, "*missing_obs_time_plate n_missing_obs"] | None = (
-        None
-    )
+    missing_obs_values: (
+        Real[Array, "*missing_obs_shape"] | list[Real[Array, "..."]] | None
+    ) = None
+    missing_obs_times: (
+        Real[Array, "*missing_obs_time_plate n_missing_obs"]
+        | list[Real[Array, "..."]]
+        | None
+    ) = None
     missing_obs_coordinate_indices: (
-        Int[Array, "*missing_obs_plate n_missing_obs"] | None
+        Int[Array, "*missing_obs_plate n_missing_obs"] | list[Int[Array, "..."]] | None
     ) = None
     completed_obs_values: Real[Array, "*completed_obs_shape"] | None = None
     state_dists: list | None = None

@@ -104,15 +104,10 @@ def _validate_batched_plate_alignment(
 def _validate_missing_observation_support(
     config: BaseFilterConfig | BaseSmootherConfig,
     *,
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"]
-    | None,
+    obs_values: Real[Array, "*obs_value_shape"],
     mode: Literal["filter", "smoother"],
-) -> None:
+) -> Real[Array, "*obs_value_shape"]:
     """Reject unsupported NaN-valued observations for filter/smoother backends."""
-    if obs_values is None:
-        return
-
     has_missing = jnp.any(jnp.isnan(obs_values))
 
     if mode == "filter":
@@ -149,21 +144,19 @@ def _validate_missing_observation_support(
         )
 
     if isinstance(config, continuous_types):
-        _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
-        return
+        return _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
 
     if mode == "filter" and isinstance(config, HMMConfigs):
-        return
+        return obs_values
 
     if isinstance(config, discrete_types):
         filter_source = getattr(config, "filter_source", None)
         if filter_source == "cd_dynamax":
-            _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
-            return
+            return _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
 
         if filter_source == "cuthbert":
             if mode == "filter" and isinstance(config, PFConfig):
-                _raise_now_or_error_if(
+                return _raise_now_or_error_if(
                     obs_values,
                     has_missing,
                     "PFConfig does not treat NaN-valued obs_values specially. "
@@ -172,17 +165,15 @@ def _validate_missing_observation_support(
                     "handle NaNs appropriately.",
                     action="warn",
                 )
-                return
             if isinstance(config, exact_supported_types):
-                return
-            _raise_now_or_error_if(
+                return obs_values
+            return _raise_now_or_error_if(
                 obs_values,
                 has_missing,
                 exact_supported_msg,
             )
-            return
 
-    _raise_now_or_error_if(
+    return _raise_now_or_error_if(
         obs_values,
         has_missing,
         f"NaN-valued obs_values are not supported for {type(config).__name__} {fallback_label}s.",

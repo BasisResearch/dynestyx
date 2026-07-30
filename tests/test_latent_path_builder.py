@@ -3,6 +3,7 @@
 from typing import cast
 
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -15,6 +16,10 @@ from numpyro.infer import MCMC, NUTS, Predictive
 import dynestyx as dsx
 from dynestyx.inference.utils.distribution_utils import (
     _ForwardSimulationImproperUniform,
+)
+from dynestyx.inference.utils.plate_utils import (
+    _stack_optional_member_values,
+    _stack_or_list_optional_member_values,
 )
 from dynestyx.observation_missingness import prepare_missing_observation_metadata
 
@@ -126,6 +131,25 @@ def _manual_discrete_state_log_prob(dynamics, state_path, state_path_times):
             state_path_times[idx + 1],
         ).log_prob(state_path[idx + 1])
     return expected
+
+
+def test_stack_optional_member_values_broadcasts_members():
+    actual = _stack_optional_member_values(
+        [jnp.array([0.1, 0.2]), jnp.array([0.3])], (2,)
+    )
+    assert actual is not None
+    assert jnp.array_equal(actual, jnp.array([[0.1, 0.2], [0.3, 0.3]]))
+
+
+def test_stack_or_list_optional_member_values_preserves_ragged_shapes():
+    actual = _stack_or_list_optional_member_values(
+        [jnp.array([0.1, 0.2]), jnp.array([0.3])],
+        (2,),
+    )
+    assert isinstance(actual, list)
+    assert len(actual) == 2
+    assert jnp.array_equal(actual[0], jnp.array([0.1, 0.2]))
+    assert jnp.array_equal(actual[1], jnp.array([0.3]))
 
 
 def test_latent_path_builder_sample_discrete_matches_log_prob():
@@ -395,6 +419,122 @@ def test_prepare_missing_observation_metadata_matches_dirac_partial_missing_layo
     assert metadata.observation_shape == (3, 2)
 
 
+def test_latent_path_builder_outer_jit_predictive_refreshes_handler_metadata():
+    dynamics = _make_dirac_discrete_dynamics()
+    template_values = jnp.array([[0.2, jnp.nan], [jnp.nan, -0.1], [jnp.nan, jnp.nan]])
+    builder = dsx.LatentPathBuilder()
+
+    def model(obs_times=None, obs_values=None, predict_times=None):
+        with dsx.DiscreteTimeSimulator():
+            with builder:
+                dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    predict_times=predict_times,
+                )
+
+    Predictive(model, num_samples=1)(
+        jr.PRNGKey(0),
+        obs_times=jnp.arange(3.0),
+        obs_values=template_values,
+        predict_times=jnp.array([3.0]),
+    )
+    refreshed_values = template_values.at[0, 1].set(0.3)
+    Predictive(model, num_samples=1)(
+        jr.PRNGKey(1),
+        obs_times=jnp.arange(3.0),
+        obs_values=refreshed_values,
+        predict_times=jnp.array([3.0]),
+    )
+    predictive = jax.jit(Predictive(model, num_samples=2, exclude_deterministic=False))
+    samples = predictive(
+        jr.PRNGKey(0),
+        obs_times=jnp.array([10.0, 11.0, 12.0]),
+        obs_values=jnp.array([[0.4, 0.5], [jnp.nan, 0.7], [jnp.nan, jnp.nan]]),
+        predict_times=jnp.array([13.0, 14.0]),
+    )
+
+    assert jnp.array_equal(
+        samples["f_state_path_param_times"][0],
+        jnp.array([11.0, 12.0, 12.0]),
+    )
+    with pytest.raises(
+        jax.errors.JaxRuntimeError,
+        match="does not match the LatentPathBuilder layout",
+    ):
+        jax.block_until_ready(
+            predictive(
+                jr.PRNGKey(1),
+                obs_times=jnp.arange(3.0),
+                obs_values=template_values,
+                predict_times=jnp.array([3.0]),
+            )["f_state_path"]
+        )
+
+
+def test_latent_path_builder_outer_jit_predictive_accepts_explicit_metadata():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_values = jnp.array([[0.0, jnp.nan], [jnp.nan, 1.0]])
+    metadata = dsx.prepare_missing_observation_metadata(
+        dynamics,
+        obs_times=jnp.arange(2.0),
+        obs_values=obs_values,
+    )
+
+    def model(obs_times=None, obs_values=None, predict_times=None):
+        with dsx.DiscreteTimeSimulator(), dsx.LatentPathBuilder():
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                predict_times=predict_times,
+                missing_obs_metadata=metadata,
+            )
+
+    samples = jax.jit(Predictive(model, num_samples=1, exclude_deterministic=False))(
+        jr.PRNGKey(0),
+        obs_times=jnp.array([10.0, 11.0]),
+        obs_values=obs_values,
+        predict_times=jnp.array([12.0]),
+    )
+
+    assert jnp.array_equal(
+        samples["f_state_path_param_times"][0],
+        jnp.array([10.0, 11.0]),
+    )
+    assert jnp.array_equal(
+        samples["f_state_path_param_coordinate_indices"][0],
+        jnp.array([1, 0]),
+    )
+
+
+def test_latent_path_builder_outer_jit_predictive_requires_a_layout():
+    dynamics = _make_dirac_discrete_dynamics()
+    builder = dsx.LatentPathBuilder()
+
+    def model(obs_times=None, obs_values=None):
+        with builder:
+            dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    with pytest.raises(
+        ValueError,
+        match="traced obs_values.*concrete observations.*missing_obs_metadata",
+    ):
+        jax.jit(Predictive(model, num_samples=1))(
+            jr.PRNGKey(0),
+            obs_times=jnp.arange(2.0),
+            obs_values=jnp.array([[0.0, jnp.nan], [jnp.nan, 1.0]]),
+        )
+
+
 def test_latent_path_builder_rejects_dsx_condition():
     dynamics = _make_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0])
@@ -537,7 +677,7 @@ def test_latent_path_builder_bare_predictive_draws_dynamical_prior_paths():
     def model():
         with dsx.LatentPathBuilder():
             dsx.sample(
-                "f",
+                "bare_predictive",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -546,8 +686,8 @@ def test_latent_path_builder_bare_predictive_draws_dynamical_prior_paths():
     predictive = Predictive(model, num_samples=3)(jr.PRNGKey(13))
 
     expected = jnp.broadcast_to(jnp.array([3.0, 5.0, 7.0]), (3, 3))
-    assert jnp.array_equal(predictive["f_state_path_params"], expected)
-    assert jnp.array_equal(predictive["f_state_path"], expected)
+    assert jnp.array_equal(predictive["bare_predictive_state_path_params"], expected)
+    assert jnp.array_equal(predictive["bare_predictive_state_path"], expected)
 
 
 def test_latent_path_builder_ode_prior_site_samples_initial_condition():
@@ -682,7 +822,7 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
     assert posterior["f_state_path"].shape == (10, 3, 2)
 
 
-def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_layout():
+def test_latent_path_builder_dirac_partial_missing_predictive_uses_current_layout():
     dynamics = _make_dirac_discrete_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array(
@@ -696,7 +836,7 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
     def conditioned_model(obs_times=None, obs_values=None):
         with dsx.LatentPathBuilder():
             dsx.sample(
-                "f",
+                "dirac_predictive",
                 dynamics,
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -705,23 +845,82 @@ def test_latent_path_builder_dirac_partial_missing_predictive_keeps_compressed_l
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
         conditioned_model(obs_times=obs_times, obs_values=obs_values)
 
-    assert tr["f_state_path_params"]["value"].shape == (4,)
+    assert tr["dirac_predictive_state_path_params"]["value"].shape == (4,)
     assert jnp.array_equal(
-        tr["f_state_path_param_coordinate_indices"]["value"],
+        tr["dirac_predictive_state_path_param_coordinate_indices"]["value"],
         jnp.array([1, 0, 0, 1], dtype=jnp.int32),
     )
 
+    replay_times = jnp.array([10.0, 11.0, 12.0])
+    replay_values = jnp.array(
+        [
+            [jnp.nan, 0.2],
+            [0.3, jnp.nan],
+            [jnp.nan, jnp.nan],
+        ]
+    )
     predictive = Predictive(conditioned_model, num_samples=2)(
         jr.PRNGKey(1),
-        obs_times=obs_times,
-        obs_values=obs_values,
+        obs_times=replay_times,
+        obs_values=replay_values,
     )
 
-    assert predictive["f_state_path_params"].shape == (2, 4)
+    assert predictive["dirac_predictive_state_path_params"].shape == (2, 4)
     assert jnp.array_equal(
-        predictive["f_state_path_param_coordinate_indices"][0],
-        jnp.array([1, 0, 0, 1], dtype=jnp.int32),
+        predictive["dirac_predictive_state_path_param_times"][0],
+        jnp.array([10.0, 11.0, 12.0, 12.0]),
     )
+    assert jnp.array_equal(
+        predictive["dirac_predictive_state_path_param_coordinate_indices"][0],
+        jnp.array([0, 1, 0, 1], dtype=jnp.int32),
+    )
+
+
+def test_latent_path_builder_ragged_plate_metadata_is_not_broadcast():
+    dynamics = _make_dirac_discrete_dynamics()
+    obs_times = jnp.array([0.0, 1.0])
+    obs_values = jnp.array(
+        [
+            [[0.0, jnp.nan], [jnp.nan, 1.0]],
+            [[0.0, jnp.nan], [1.0, 2.0]],
+        ]
+    )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder():
+            with dsx.plate("members", 2):
+                result = dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+
+    assert isinstance(result.state_path_params, list)
+    assert isinstance(result.state_path_param_times, list)
+    assert isinstance(result.state_path_param_coordinate_indices, list)
+    assert [value.shape for value in result.state_path_params] == [(2,), (1,)]
+    assert jnp.array_equal(
+        result.state_path_param_times[0],
+        jnp.array([0.0, 1.0]),
+    )
+    assert jnp.array_equal(
+        result.state_path_param_times[1],
+        jnp.array([0.0]),
+    )
+    assert jnp.array_equal(
+        result.state_path_param_coordinate_indices[0],
+        jnp.array([1, 0]),
+    )
+    assert jnp.array_equal(
+        result.state_path_param_coordinate_indices[1],
+        jnp.array([1]),
+    )
+    assert result.state_path.shape == (2, 2, 2)
+    assert result.state_path_times.shape == (2, 2)
+    assert result.joint_log_prob.shape == (2,)
+    assert tr["f_p0_state_path_params"]["value"].shape == (2,)
+    assert tr["f_p1_state_path_params"]["value"].shape == (1,)
 
 
 def test_latent_path_builder_dirac_partial_missing_explicit_augment_uses_state_path_params():
@@ -961,6 +1160,48 @@ def test_latent_path_builder_auto_augments_student_t_partial_missing_mcmc_smoke(
         posterior["f_missing_obs_coordinate_indices"][0],
         jnp.array([0, 1], dtype=jnp.int32),
     )
+
+
+def test_latent_path_builder_ragged_augmentation_mcmc_returns_member_sites():
+    obs_times = jnp.array([0.0, 1.0])
+    obs_values = jnp.array(
+        [
+            [[0.0, jnp.nan], [jnp.nan, 1.0]],
+            [[0.0, jnp.nan], [jnp.nan, jnp.nan]],
+        ]
+    )
+    builder = dsx.LatentPathBuilder(missing_observation_strategy="augment")
+
+    def conditioned_model(obs_times=None, obs_values=None):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.0, 0.9))
+        dynamics = _make_student_t_discrete_dynamics(alpha=alpha)
+
+        with builder:
+            with dsx.plate("members", 2):
+                dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+
+    mcmc = MCMC(
+        NUTS(conditioned_model),
+        num_warmup=2,
+        num_samples=3,
+        progress_bar=False,
+    )
+    mcmc.run(
+        jr.PRNGKey(0),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
+
+    samples = mcmc.get_samples()
+
+    assert samples["alpha"].shape == (3,)
+    assert samples["f_p0_missing_obs_values"].shape == (3, 2)
+    assert samples["f_p1_missing_obs_values"].shape == (3, 3)
 
 
 def test_latent_path_builder_rejects_native_sdes():

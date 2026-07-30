@@ -111,6 +111,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         **kwargs,
     ) -> FunctionOfTime:
         smoothed_dists = None
+        self.marginal_loglik = self.smoothed_states = self._smoother_config_used = None
         if not (obs_times is None or obs_values is None):
             smoothed_dists = self._add_log_factors(
                 name,
@@ -136,6 +137,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         filtered_dists = None
         posterior_rollout_final_only = False
         smoothed_times = obs_times
+        result_smoothed_dists = smoothed_dists
         if predict_times is not None and smoothed_dists:
             assert obs_times is not None
             filtered_times = _final_times_for_rollout(obs_times)
@@ -162,7 +164,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             **kwargs,
         )
 
-        result = self._build_infer_result(name, smoothed_dists)
+        result = self._build_infer_result(name, result_smoothed_dists)
         forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
         result._register_numpyro_sites = chain_numpyro_site_registrations(
             result._register_numpyro_sites,
@@ -242,7 +244,7 @@ class Smoother(BaseSmootherLogFactorAdder):
                 "Expected a smoother config class from dynestyx.inference.configs.smoother. "
                 f"Valid types: {valid}"
             )
-        _validate_missing_observation_support(
+        obs_values = _validate_missing_observation_support(
             config,
             obs_values=obs_values,
             mode="smoother",
@@ -508,13 +510,14 @@ class Smoother(BaseSmootherLogFactorAdder):
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
+            states = outputs
         elif output_kind == "cuthbert":
             marginal_logliks, states = outputs
         else:
             raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
         self.marginal_loglik = marginal_logliks
-        self.smoothed_states = outputs
+        self.smoothed_states = states
         self._smoother_config_used = config
 
         if output_kind == "continuous":
@@ -555,12 +558,11 @@ def _smooth_discrete_time(
     smoother_config: DiscreteSmootherConfig,
     key: PRNGKeyArray | None = None,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
     | None = None,
     **kwargs,
 ) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
@@ -623,12 +625,11 @@ def _smooth_continuous_time(
     smoother_config: ContinuousSmootherConfig,
     key: PRNGKeyArray | None = None,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
     | None = None,
     **kwargs,
 ) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:

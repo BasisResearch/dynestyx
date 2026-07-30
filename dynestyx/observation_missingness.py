@@ -363,20 +363,21 @@ def prepare_observation_views(
         invalid_mask,
         concrete_message,
         traced_message,
-    ) -> None:
+    ) -> Array:
         try:
             has_invalid = bool(jnp.any(invalid_mask))
         except TracerBoolConversionError:
-            _raise_now_or_error_if(obs_arr, jnp.any(invalid_mask), traced_message)
-            return
+            return _raise_now_or_error_if(
+                obs_arr, jnp.any(invalid_mask), traced_message
+            )
 
         if not has_invalid:
-            return
+            return obs_arr
 
         bad = obs_arr[invalid_mask][0]
         raise ValueError(concrete_message(bad))
 
-    _raise_categorical_validation_error(
+    obs_arr = _raise_categorical_validation_error(
         obs_mask & ~jnp.equal(obs_arr, jnp.round(obs_arr)),
         lambda bad: (
             "Categorical observations must be encoded as zero-based integer "
@@ -384,7 +385,7 @@ def prepare_observation_views(
         ),
         "Categorical observations must be encoded as zero-based integer labels.",
     )
-    _raise_categorical_validation_error(
+    obs_arr = _raise_categorical_validation_error(
         obs_mask & (obs_arr < 0),
         lambda bad: (
             "Categorical observations must be encoded as zero-based integer "
@@ -394,7 +395,7 @@ def prepare_observation_views(
     )
 
     support_size = _categorical_support_size(obs_dist)
-    _raise_categorical_validation_error(
+    obs_arr = _raise_categorical_validation_error(
         obs_mask & (obs_arr >= support_size),
         lambda bad: (
             "Categorical observations must be encoded as zero-based integer "
@@ -691,7 +692,7 @@ def masked_observation_log_prob(
 
     if expected_mode == "masked":
         row_is_partial = row_has_any_observed & ~jnp.all(obs_mask)
-        _raise_now_or_error_if(
+        y = _raise_now_or_error_if(
             y,
             row_is_partial,
             "Partial missingness currently requires marginalizable "

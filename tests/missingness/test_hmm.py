@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -11,6 +12,7 @@ from dynestyx import DiscreteTimeSimulator, Filter
 from dynestyx.inference.configs.filter import HMMConfig
 from dynestyx.inference.hmm_filters import compute_hmm_filter, hmm_log_components
 from dynestyx.models import DynamicalModel
+from dynestyx.observation_missingness import prepare_observation_views
 from tests.missingness.models import GAUSSIAN_R, INDEPENDENT_SCALE
 from tests.missingness.utils import (
     manual_masked_independent_normal_log_prob,
@@ -361,6 +363,27 @@ def test_plated_hmm_gaussian_missingness_matches_memberwise_filter():
     assert jnp.allclose(actual_filtered, jnp.exp(expected_log_filtered))
 
 
+def test_plated_hmm_condition_defers_numpyro_sites():
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.zeros((2, 3, 2))
+
+    with trace() as tr:
+        with Filter(
+            filter_config=HMMConfig(record_filtered=True, record_log_filtered=True)
+        ):
+            with dsx.plate("trajectories", 2):
+                result = dsx.condition(
+                    "f",
+                    _build_hmm_dynamics(_mvn_observation_model),
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+
+    assert result.marginal_loglik.shape == (2,)
+    assert result.states.shape == (2, 3, 2)
+    assert not any(site_name.startswith("f_") for site_name in tr)
+
+
 def test_plated_hmm_independent_categorical_missingness_matches_memberwise_filter():
     M = 2
     obs_times = jnp.arange(4.0)
@@ -602,4 +625,24 @@ def test_hmm_categorical_observations_reject_out_of_range_labels_early():
             _build_hmm_dynamics(_joint_categorical_observation_model),
             obs_times,
             obs_values,
+        )
+
+
+@pytest.mark.parametrize(
+    ("bad_value", "error_match"),
+    [
+        pytest.param(1.5, "zero-based integer labels\\.", id="non-integer"),
+        pytest.param(-1.0, "zero-based integer labels 0..K-1", id="negative"),
+        pytest.param(4.0, "probed observation distribution with K=4", id="too-large"),
+    ],
+)
+def test_hmm_categorical_observation_guards_survive_jit(bad_value, error_match):
+    dynamics = _build_hmm_dynamics(_joint_categorical_observation_model)
+    obs_values = jnp.array([0.0, bad_value, 2.0])
+
+    with pytest.raises(Exception, match=error_match):
+        jax.block_until_ready(
+            jax.jit(lambda values: prepare_observation_views(dynamics, values)[0])(
+                obs_values
+            )
         )

@@ -50,7 +50,11 @@ def test_infer_smoother_returns_infer_result():
 
     with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
         result = dsx.condition(
-            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=jnp.arange(obs_times[-1], obs_times[-1] + 3.0),
         )
 
     assert isinstance(result, ConditionedResult)
@@ -58,6 +62,32 @@ def test_infer_smoother_returns_infer_result():
     assert jnp.isfinite(result.marginal_loglik)
     assert result.states is not None
     assert result.dists is not None
+
+
+def test_plated_condition_returns_backend_smoother_states():
+    obs_times, obs_values = _make_data()
+    dynamics = _make_lti_dynamics(0.5)
+
+    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        unplated_result = dsx.condition(
+            "unplated",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+
+    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        with dsx.plate("members", 2):
+            result = dsx.condition(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=jnp.stack([obs_values, obs_values]),
+            )
+
+    assert result.marginal_loglik.shape == (2,)
+    assert type(result.states) is type(unplated_result.states)
+    assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
 
 
 def test_infer_smoother_optax_mle():
@@ -110,8 +140,11 @@ def test_infer_smoother_does_not_register_numpyro_sites():
 def test_condition_smoother_no_observations():
     """dsx.condition with Smoother and no obs returns ConditionedResult with marginal_loglik=None."""
     dynamics = _make_lti_dynamics(0.5)
+    obs_times, obs_values = _make_data()
 
     with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+        # Reusing the handler must not leak the first call's cached likelihood.
+        dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
         result = dsx.condition(
             "f",
             dynamics,

@@ -60,6 +60,32 @@ def test_infer_returns_infer_result():
     assert result.dists is not None
 
 
+def test_plated_condition_returns_backend_filter_states():
+    obs_times, obs_values = _make_data()
+    dynamics = _make_lti_dynamics(0.5)
+
+    with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+        unplated_result = dsx.condition(
+            "unplated",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+
+    with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+        with dsx.plate("members", 2):
+            result = dsx.condition(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=jnp.stack([obs_values, obs_values]),
+            )
+
+    assert result.marginal_loglik.shape == (2,)
+    assert type(result.states) is type(unplated_result.states)
+    assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
+
+
 def test_infer_enkf_with_crn_seed():
     """dsx.condition works with EnKF and explicit crn_seed."""
     obs_times, obs_values = _make_data()
@@ -127,8 +153,11 @@ def test_infer_does_not_register_numpyro_sites():
 def test_condition_no_observations():
     """dsx.condition with no obs returns ConditionedResult with marginal_loglik=None."""
     dynamics = _make_lti_dynamics(0.5)
+    obs_times, obs_values = _make_data()
 
     with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+        # Reusing the handler must not leak the first call's cached likelihood.
+        dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
         result = dsx.condition(
             "f",
             dynamics,

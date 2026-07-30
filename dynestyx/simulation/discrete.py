@@ -35,8 +35,8 @@ def _align_ctrl_values_to_times(
     max_idx = ctrl_times.shape[0] - 1
     safe_idx = jnp.clip(idx, 0, max_idx)
     matched = (idx < ctrl_times.shape[0]) & (ctrl_times[safe_idx] == times)
-    _raise_now_or_error_if(
-        times,
+    safe_idx = _raise_now_or_error_if(
+        safe_idx,
         jnp.any(~matched),
         "ctrl_times must contain every discrete simulation time exactly.",
     )

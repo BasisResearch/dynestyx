@@ -86,6 +86,31 @@ def test_log_prob_discrete_matches_manual_joint_density():
     )
 
 
+def test_log_prob_preserves_distribution_batch_axes():
+    times = jnp.array([0.0, 1.0])
+    state_path = jnp.array([[0.2, -0.1], [0.4, 0.3]])
+    offsets = jnp.array([0.0, 1.0])
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=dist.Normal(offsets, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(x + offsets, 1.0),
+        observation_model=lambda x, u, t: dist.Normal(x, 1.0),
+    )
+
+    actual = dsx.log_prob(
+        dynamics,
+        state_path_params=state_path,
+        state_path_param_times=times,
+    )
+    expected = dynamics.initial_condition.log_prob(state_path[0])
+    expected += dynamics.state_evolution(
+        state_path[0], None, times[0], times[1]
+    ).log_prob(state_path[1])
+
+    assert actual.shape == (2,)
+    assert jnp.allclose(actual, expected)
+
+
 def test_log_prob_discrete_missingness_matches_manual_masking():
     state_times = jnp.array([0.0, 1.0])
     state_path_params = jnp.array([[0.2, -0.1], [0.4, 0.3]])

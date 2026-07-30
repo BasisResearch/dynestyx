@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 import pytest
@@ -146,6 +147,22 @@ def test_observation_log_prob_partial_missing_unsupported_distribution_raises_at
             obs_values,
             missing_observation_strategy="marginalize",
         )
+
+
+def test_observation_log_prob_partial_missing_guard_survives_jit():
+    dynamics = _build_vector_dynamics(lambda x, u, t: dist.Delta(x, event_dim=1))
+
+    def score(obs_values):
+        log_prob, _, _, _ = prepare_observation_log_prob(dynamics, obs_values)
+        return log_prob(
+            x=jnp.zeros(2),
+            u=None,
+            t=jnp.array(0.0),
+            t_idx=0,
+        )
+
+    with pytest.raises(Exception, match="Partial missingness currently requires"):
+        jax.block_until_ready(jax.jit(score)(jnp.array([[0.0, jnp.nan]])))
 
 
 def test_observation_log_prob_partial_missing_type_change_raises_clear_error():

@@ -205,13 +205,27 @@ to be inferred through `state_path_params`. The builder does not create a
 separate `missing_obs_values` site in this case. Exact missing observations
 support `"auto"` and `"augment"`.
 
-Some JAX transformations trace a model before evaluating it. During tracing,
-the values in the observation mask may not be available to Python. The builder
-therefore creates `MissingObservationMetadata` during a normal model call and
-stores it for later traced calls. It matches the stored data by site name, its
-purpose, the observation shape, and the missing-observation strategy. If no
-match is available, run the model once with ordinary observation arrays before
-applying the JAX transformation.
+The missingness pattern can determine NumPyro site shapes, so it must remain
+static while JAX traces the model. With concrete observations, the builder
+caches the layout by sample site and observation shape.
+
+There are three supported paths: run concretely, reuse a cache from a concrete
+run, or pass `missing_obs_metadata` directly. The metadata can come from
+`dsx.prepare_missing_observation_metadata(...)` or a manually constructed
+`dsx.MissingObservationMetadata` object.
+
+The recommended pattern defines the model first and applies
+`LatentPathBuilder` when the model runs. Cache reuse requires the same builder
+object for the concrete and traced calls. NumPyro MCMC routines typically make
+the concrete call automatically.
+
+The test suite covers all three paths and ragged MCMC. The builder derives
+missing-observation times from the current `obs_times`, so values and times can
+change while the layout stays fixed.
+
+For plate members with different layouts, use one builder for all traced calls.
+Ragged aggregate fields are flat lists of per-member arrays. Member sites keep
+their shapes, and the rightmost plate index varies fastest.
 
 ## Implementation modules
 
