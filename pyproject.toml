@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "effectful>=0.2.0",
+    "effectful>=0.4.0",
     "cuthbert>=0.0.10",
     "cuthbertlib>=0.0.10",
     "cd-dynamax>=0.3.3",
