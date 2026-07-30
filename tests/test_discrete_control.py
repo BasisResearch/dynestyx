@@ -19,7 +19,12 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     compute_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion
+from dynestyx.models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    FullDiffusion,
+    StochasticContinuousTimeStateEvolution,
+)
 from dynestyx.models.lti_dynamics import LTI_discrete
 from dynestyx.models.observations import LinearGaussianObservation
 from tests.fixtures import _n_particles
@@ -175,7 +180,9 @@ def test_compute_cuthbert_filter_update_matches_whole_trajectory(filter_config):
         ctrl_values=_CTRL_VALUES,
     )
     means_batch = states_batch.mean.ravel()
-    means_step = _step_through_filter_update(dynamics, filter_config, key_seed=0).ravel()
+    means_step = _step_through_filter_update(
+        dynamics, filter_config, key_seed=0
+    ).ravel()
     assert jnp.allclose(means_batch, means_step, atol=1e-4)
 
 
@@ -213,6 +220,13 @@ def _euler_maruyama_dynamics():
         state_evolution=cte,
         observation_model=LinearGaussianObservation(H=jnp.eye(1), R=0.2 * jnp.eye(1)),
         control_dim=1,
+    )
+    # DynamicalModel.state_evolution is declared as the broader
+    # ContinuousTimeStateEvolution | DiscreteStateTransition union; narrow it
+    # for the type checker the same way Discretizer._sample_ds does at
+    # runtime (dynestyx/discretizers.py), via an isinstance check.
+    assert isinstance(
+        continuous_dynamics.state_evolution, StochasticContinuousTimeStateEvolution
     )
     return DynamicalModel(
         initial_condition=continuous_dynamics.initial_condition,
@@ -526,9 +540,7 @@ def test_array_policy_state_preserves_shape_and_values():
     policy_states = tr["f_policy_states"]["value"]
     T = len(predict_times)
     assert policy_states.shape == (1, T - 1, 1)
-    assert jnp.array_equal(
-        policy_states[0, :, 0], jnp.arange(1, T, dtype=jnp.float32)
-    )
+    assert jnp.array_equal(policy_states[0, :, 0], jnp.arange(1, T, dtype=jnp.float32))
 
 
 # ---------------------------------------------------------------------------
@@ -545,7 +557,9 @@ def test_closed_loop_stabilizes_vs_uncontrolled_baseline():
 
     def run(K):
         policy = _LinearPolicy(K=jnp.array([[K]]))
-        sim = DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=None)
+        sim = DiscreteControlLoopSimulator(
+            control_policy=policy, policy_state_init=None
+        )
 
         def model():
             with sim:
@@ -637,7 +651,9 @@ def test_eqx_module_policy_matches_equivalent_plain_function_policy():
     predict_times = jnp.arange(0.0, 8.0)
 
     def run(policy):
-        sim = DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=None)
+        sim = DiscreteControlLoopSimulator(
+            control_policy=policy, policy_state_init=None
+        )
 
         def model():
             with sim:
@@ -648,9 +664,7 @@ def test_eqx_module_policy_matches_equivalent_plain_function_policy():
     tr_module = run(_LinearPolicy(K=K))
     tr_fn = run(_linear_policy_fn(K))
 
-    assert jnp.array_equal(
-        tr_module["f_states"]["value"], tr_fn["f_states"]["value"]
-    )
+    assert jnp.array_equal(tr_module["f_states"]["value"], tr_fn["f_states"]["value"])
     assert jnp.array_equal(
         tr_module["f_controls"]["value"], tr_fn["f_controls"]["value"]
     )
