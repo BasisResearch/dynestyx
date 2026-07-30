@@ -6,7 +6,7 @@
 
 ```python
 from dynestyx import DiscreteTimeSimulator, Smoother
-from dynestyx.inference.smoother_configs import KFSmootherConfig
+from dynestyx.inference.configs.smoother import KFSmootherConfig
 
 with DiscreteTimeSimulator(n_simulations=4):
     with Smoother(

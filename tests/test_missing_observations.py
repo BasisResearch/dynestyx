@@ -1,4 +1,5 @@
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
@@ -8,8 +9,8 @@ from numpyro.infer import Predictive
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Filter, Smoother
 from dynestyx.inference.checkers import _validate_missing_observation_support
-from dynestyx.inference.filter_configs import EKFConfig, EnKFConfig, KFConfig, PFConfig
-from dynestyx.inference.smoother_configs import EKFSmootherConfig, KFSmootherConfig
+from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
+from dynestyx.inference.configs.smoother import EKFSmootherConfig, KFSmootherConfig
 
 _EQX_ERRORS = (
     ValueError,
@@ -156,6 +157,16 @@ def test_cuthbert_gaussian_discrete_time_missing_observation_support_matrix(
         with pytest.raises(_EQX_ERRORS, match=error_match):
             with context:
                 _identity_lti_model(obs_times=obs_times, obs_values=missing_obs_values)
+        with pytest.raises(Exception, match=error_match):
+            jax.block_until_ready(
+                jax.jit(
+                    lambda values: _validate_missing_observation_support(
+                        config,
+                        obs_values=values,
+                        mode=mode,
+                    )
+                )(missing_obs_values)
+            )
         return
 
     with trace() as tr:

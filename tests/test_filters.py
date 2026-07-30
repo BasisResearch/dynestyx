@@ -7,7 +7,8 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import (
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
     EKFConfig,
     EnKFConfig,
@@ -22,7 +23,6 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.fixtures import (
     _squeeze_sim_dims,
     data_conditioned_jumpy_controls,
@@ -238,15 +238,14 @@ def test_cuthbert_filtered_distribution_shapes_match_observations(filter_config)
     obs_times, obs_values = _make_discrete_lti_data()
     dynamics = _make_discrete_lti_dynamics()
 
-    with trace(), seed(rng_seed=jr.PRNGKey(1)):
-        filtered_dists = run_cuthbert_discrete_filter(
-            "f",
-            dynamics,
-            filter_config,
-            key=jr.PRNGKey(2),
-            obs_times=obs_times,
-            obs_values=obs_values,
-        )
+    _marginal_loglik, _states, filtered_dists = run_cuthbert_discrete_filter(
+        "f",
+        dynamics,
+        filter_config,
+        key=jr.PRNGKey(2),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 
     assert len(filtered_dists) == len(obs_times)
     for filtered_dist in filtered_dists:
@@ -336,15 +335,14 @@ def test_cuthbert_enkf_accepts_callable_independent_normal_observation():
         ),
     )
 
-    with trace(), seed(rng_seed=jr.PRNGKey(1)):
-        filtered_dists = run_cuthbert_discrete_filter(
-            "f",
-            dynamics,
-            EnKFConfig(n_particles=16, filter_source="cuthbert"),
-            key=jr.PRNGKey(2),
-            obs_times=obs_times,
-            obs_values=obs_values,
-        )
+    _marginal_loglik, _states, filtered_dists = run_cuthbert_discrete_filter(
+        "f",
+        dynamics,
+        EnKFConfig(n_particles=16, filter_source="cuthbert"),
+        key=jr.PRNGKey(2),
+        obs_times=obs_times,
+        obs_values=obs_values,
+    )
 
     assert len(filtered_dists) == len(obs_times)
     assert all(d.event_shape == (dynamics.state_dim,) for d in filtered_dists)

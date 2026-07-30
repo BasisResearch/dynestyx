@@ -12,10 +12,10 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import KFConfig
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.filter import KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models.lti_dynamics import LTI_discrete
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True

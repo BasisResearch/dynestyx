@@ -83,7 +83,9 @@ def load_font(font_size: int, font_path: str | None):
 # -----------------------------
 
 
-def bilinear_sample_jax(arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+def bilinear_sample_jax(
+    arr: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray
+) -> jnp.ndarray:
     """Bilinear interpolation for arr[y, x], where x/y are pixel coordinates."""
     H, W = arr.shape
     x0 = jnp.floor(x).astype(jnp.int32)
@@ -303,7 +305,7 @@ def simulate_boundary_orbit_gif(
         )
         return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
-    with SDESimulator(dt0=dt):
+    with SDESimulator(simulator_config=dsx.SDESimulatorConfig(dt0=dt)):
         samples = Predictive(logo_model, num_samples=n_particles)(
             jr.PRNGKey(seed),
             predict_times=obs_times,

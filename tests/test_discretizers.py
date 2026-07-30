@@ -13,7 +13,7 @@ from dynestyx.discretizers import (
     EulerMaruyamaGaussianStateEvolution,
     euler_maruyama,
 )
-from dynestyx.inference.filter_configs import EKFConfig
+from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
@@ -137,6 +137,24 @@ def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolu
     d = evo(x, None, t0, t1)
     assert jnp.allclose(d_dict["loc"], d.loc)
     assert jnp.allclose(d_dict["cov"], d.covariance_matrix)
+
+
+def test_euler_maruyama_loc_cov_batched_state_accepts_scalar_times():
+    cte = _ctse_1d_zero_drift_unit_diffusion()
+    x = jnp.array([[0.0], [1.0], [2.0]])
+
+    out = euler_maruyama_loc_cov(
+        cte,
+        x,
+        None,
+        jnp.array(1.0),
+        jnp.array(1.5),
+    )
+
+    assert out["loc"].shape == (3, 1)
+    assert out["cov"].shape == (3, 1, 1)
+    assert jnp.allclose(out["loc"], x)
+    assert jnp.allclose(out["cov"][:, 0, 0], 0.5)
 
 
 @pytest.mark.parametrize(

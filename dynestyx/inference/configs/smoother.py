@@ -4,7 +4,7 @@ import abc
 import dataclasses
 from typing import Literal
 
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeEKFConfig,
     ContinuousTimeKFConfig,
     EKFConfig,
@@ -27,7 +27,7 @@ class BaseSmootherConfig(abc.ABC):
     Concrete smoother configs inherit from their corresponding filter configs,
     so backend selection, filter tuning, continuous-time solver options, and
     filter recording fields follow the same conventions as
-    `dynestyx.inference.filter_configs`.
+    `dynestyx.inference.configs.filter`.
 
     The `record_smoothed_*` fields let you save intermediate smoothing outputs
     into the NumPyro trace as `numpyro.deterministic` sites, making them

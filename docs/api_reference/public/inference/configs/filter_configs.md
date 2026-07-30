@@ -20,7 +20,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 
 ## Discrete Time Configuration Classes
 
-::: dynestyx.inference.filter_configs
+::: dynestyx.inference.configs.filter
     options:
       members:
         - BaseFilterConfig
@@ -32,7 +32,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 
 ## Continuous Time Configuration Classes
 
-::: dynestyx.inference.filter_configs
+::: dynestyx.inference.configs.filter
     options:
       members:
         - ContinuousTimeConfig
@@ -45,7 +45,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 
 ## Discrete State-Space Configuration Classes
 
-::: dynestyx.inference.filter_configs
+::: dynestyx.inference.configs.filter
     options:
       members:
         - HMMConfig

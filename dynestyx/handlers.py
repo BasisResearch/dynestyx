@@ -1,6 +1,6 @@
-"""Contains the `sample` primitive and `effectful` utilities for `dynestyx`."""
+"""Contains the core dynestyx primitives and `effectful` handler utilities."""
 
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import numpyro
 from effectful.ops.semantics import fwd, handler
@@ -11,7 +11,9 @@ from jaxtyping import Array, Bool, Real
 from dynestyx.models import (
     DynamicalModel,
 )
-from dynestyx.observation_missingness import prepare_observation_views
+from dynestyx.observation_missingness import (
+    prepare_observation_views,
+)
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _get_dynamics_with_t0,
@@ -23,7 +25,7 @@ from dynestyx.utils import (
 T = TypeVar("T")
 
 
-def sample(
+def _validate_and_prepare(
     name: str,
     dynamics: DynamicalModel,
     *,
@@ -36,35 +38,28 @@ def sample(
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-    **kwargs,
-) -> FunctionOfTime:
-    """
-    Samples from a dynamical model. This is the main primitive of dynestyx.
-
-    The `sample` primitive is meant to mimic the `numpyro.sample` primitive in usage,
-    but using a `DynamicalModel` instead of a `Distribution`.
-
-    The `sample` method calls `_sample_intp`, which is defined as a `defop` in `effectful`.
-    This is where any real "work" is done, after input validation.
-
-    Shape note:
-        Inside ``dsx.plate``, observation arrays use leading plate axes followed
-        by time and event axes, e.g. ``(N, T, obs_dim)``. Model parameters follow
-        the same leading-plate, trailing-event convention. See :class:`plate`
-        for the full plated-shape contract.
-
-    Parameters:
-        name: Name of the sample site.
-        dynamics: Dynamical model to sample from.
-        obs_times: Times at which to sample the observations.
-        obs_values: Values of the observations at the given times.
-        ctrl_times: Times at which to sample the controls.
-        ctrl_values: Values of the controls at the given times.
-        predict_times: Times at which to predict the observations.
-        **kwargs: Additional keyword arguments.
+) -> tuple[
+    DynamicalModel,
+    Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+    Bool[Array, "*obs_value_plate obs_time observation_dim"]
+    | Bool[Array, "*obs_value_plate obs_time"]
+    | None,
+    bool | None,
+]:
+    """Validate inputs and prepare dynamics and observation missingness views.
 
     Returns:
-        FunctionOfTime: A function of time that samples from the dynamical model.
+        A 4-tuple ``(dynamics_with_t0, obs_values_filled, obs_mask, obs_has_missing)``.
+        ``dynamics_with_t0`` is the validated dynamics object with ``t0`` resolved
+        from the provided observation/prediction times when needed.
+        ``obs_values_filled`` preserves the shape of ``obs_values`` while replacing
+        missing entries with neutral fillers for downstream scoring.
+        ``obs_mask`` marks which observation entries are actually observed.
+        ``obs_has_missing`` is a precomputed flag indicating whether any
+        observation entries are missing; it may be ``None`` for traced callers
+        where this cannot be determined as a Python bool eagerly.
     """
     # Rule: obs_times must be accompanied with obs_values, which should be the same length.
     if obs_times is None and predict_times is None:
@@ -111,9 +106,111 @@ def sample(
     obs_values_filled, obs_mask, obs_has_missing = prepare_observation_views(
         dynamics_with_t0, obs_values
     )
+    return dynamics_with_t0, obs_values_filled, obs_mask, obs_has_missing
 
-    # Pass to interpreted version of `sample` for inference.
-    return _sample_intp(
+
+def sample(
+    name: str,
+    dynamics: DynamicalModel,
+    *,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
+    **kwargs,
+):
+    """
+    Samples from a dynamical model. This is the main primitive of dynestyx.
+
+    The ``sample`` primitive is meant to mimic the ``numpyro.sample`` primitive
+    in usage, but using a ``DynamicalModel`` instead of a ``Distribution``.
+
+    Internally, ``sample`` calls ``dsx.condition(...)`` and then registers the
+    results as numpyro sites (``numpyro.factor``, ``numpyro.deterministic``).
+
+    Shape note:
+        Inside ``dsx.plate``, observation arrays use leading plate axes followed
+        by time and event axes, e.g. ``(N, T, obs_dim)``. Model parameters follow
+        the same leading-plate, trailing-event convention. See :class:`plate`
+        for the full plated-shape contract.
+
+    Parameters:
+        name: Name of the sample site.
+        dynamics: Dynamical model to sample from.
+        obs_times: Times at which to sample the observations.
+        obs_values: Values of the observations at the given times.
+        ctrl_times: Times at which to sample the controls.
+        ctrl_values: Values of the controls at the given times.
+        predict_times: Times at which to predict the observations.
+        **kwargs: Additional keyword arguments.
+    """
+    result = condition(
+        name,
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        predict_times=predict_times,
+        _dsx_sample_mode=True,
+        **kwargs,
+    )
+
+    register_numpyro_sites = getattr(result, "_register_numpyro_sites", None)
+    if callable(register_numpyro_sites):
+        register_numpyro_sites(name)
+
+    return result
+
+
+def condition(
+    name: str,
+    dynamics: DynamicalModel,
+    *,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None = None,
+    predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
+    **kwargs,
+):
+    """Run inference on a dynamical model without registering numpyro sites.
+
+    This is the numpyro-free entry point. When a Filter or Smoother handler
+    is active, returns a ConditionedResult dataclass with marginal_loglik, states, etc.
+
+    Parameters:
+        name: Name of the inference site.
+        dynamics: Dynamical model to infer.
+        obs_times: Times at which observations are available.
+        obs_values: Values of the observations at the given times.
+        ctrl_times: Times at which controls are applied.
+        ctrl_values: Values of the controls at the given times.
+        predict_times: Times at which to predict.
+        **kwargs: Additional keyword arguments.
+    """
+    dynamics_with_t0, obs_values_filled, obs_mask, obs_has_missing = (
+        _validate_and_prepare(
+            name,
+            dynamics,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+        )
+    )
+
+    return _condition_intp(
         name,
         dynamics_with_t0,
         obs_times=obs_times,
@@ -129,7 +226,7 @@ def sample(
 
 
 @defop
-def _sample_intp(
+def _condition_intp(
     name: str,
     dynamics: DynamicalModel,
     *,
@@ -137,7 +234,9 @@ def _sample_intp(
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
-    _obs_values_filled: Array | None = None,
+    _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None = None,
     _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
     | Bool[Array, "*obs_value_plate obs_time"]
     | None = None,
@@ -365,10 +464,8 @@ class plate(ObjectInterpretation):
         self._cm.__exit__(exc_type, exc, tb)
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
 
-    @implements(_sample_intp)
-    def _sample_ds(
-        self, name, dynamics, *, plate_shapes=(), **kwargs
-    ) -> FunctionOfTime:
+    @implements(_condition_intp)
+    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Any:
         """Effectful interpretation for the `sample` primitive in a plate.
 
         Appends metadata to the argument stack and passes forward.
@@ -380,7 +477,9 @@ class plate(ObjectInterpretation):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            FunctionOfTime: A function of time that samples from the dynamical model.
+            The downstream handler result, such as ``FunctionOfTime`` for
+            simulators/filters or ``LatentStateResult`` for
+            ``LatentPathBuilder``.
         """
         # Append plate_shapes metadata to the argument stack and pass forward.
         return fwd(name, dynamics, plate_shapes=plate_shapes + (self.size,), **kwargs)
