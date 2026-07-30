@@ -6,10 +6,10 @@ import dataclasses
 from typing import Any, Literal
 
 import diffrax as dfx
-import equinox as eqx
 from jaxtyping import Array, Real
 
 from dynestyx.types import as_scalar_time_array
+from dynestyx.utils import _raise_now_or_error_if
 
 
 @dataclasses.dataclass
@@ -148,7 +148,7 @@ class SDESimulatorConfig:
             if self.tol_vbt is None
             else as_scalar_time_array(self.tol_vbt, name="tol_vbt")
         )
-        tol_vbt_arr = eqx.error_if(
+        tol_vbt_arr = _raise_now_or_error_if(
             tol_vbt_arr,
             tol_vbt_arr >= dt0_arr,
             "tol_vbt must be smaller than dt0 for statistically correct simulation.",
