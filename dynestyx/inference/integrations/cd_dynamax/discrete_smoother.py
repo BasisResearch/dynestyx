@@ -1,6 +1,7 @@
 """Discrete-time smoothers via cd-dynamax (dynamax): KF, EKF, UKF."""
 
-import jax
+from typing import Any
+
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import lgssm_smoother
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
@@ -10,6 +11,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_smoother,
 )
+from jaxtyping import Array, Real
 
 from dynestyx.inference.configs.filter import (
     EKFConfig,
@@ -32,11 +34,11 @@ def compute_cd_dynamax_discrete_smoother(
     dynamics: DynamicalModel,
     filter_config: BaseSmootherConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX cd-dynamax discrete smoother computation (no numpyro side-effects)."""
     emissions, inputs = _prepare_inputs(
         dynamics, obs_values, obs_times, ctrl_times, ctrl_values
@@ -69,12 +71,12 @@ def run_discrete_smoother(
     dynamics: DynamicalModel,
     filter_config: BaseSmootherConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[dist.Distribution]]:
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
     """Run discrete-time smoother via cd-dynamax (KF, EKF, UKF).
 
     Pure computation — no numpyro side-effects. Callers are responsible for

@@ -14,6 +14,7 @@ from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
+    _ensure_trailing_event_axis,
     _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
@@ -88,7 +89,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -143,7 +144,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -161,7 +162,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     ) -> ConditionedResult: ...
 
 
-def _default_filter_config(dynamics: DynamicalModel):
+def _default_filter_config(dynamics: DynamicalModel) -> BaseFilterConfig:
     """Return appropriate default filter config when none specified."""
     if dynamics.continuous_time:
         return ContinuousTimeEnKFConfig()
@@ -237,7 +238,7 @@ class Filter(BaseLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -275,6 +276,16 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 mode="filter",
             )
+        if not isinstance(config, HMMConfigs):
+            obs_values = _ensure_trailing_event_axis(
+                obs_values,
+                plate_shapes=plate_shapes,
+            )
+            if ctrl_values is not None:
+                ctrl_values = _ensure_trailing_event_axis(
+                    ctrl_values,
+                    plate_shapes=plate_shapes,
+                )
 
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
@@ -669,13 +680,15 @@ def _filter_discrete_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""] | None,
+    object | None,
+    list[numpyro.distributions.Distribution],
+]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
     Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
@@ -725,13 +738,15 @@ def _filter_continuous_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""],
+    object,
+    list[numpyro.distributions.Distribution],
+]:
     """Continuous-time marginal likelihood via CD-Dynamax.
 
     Supports: EnKF, DPF, EKF, UKF (inferred from config type).

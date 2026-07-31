@@ -2,9 +2,8 @@
 
 from collections.abc import Callable
 from functools import partial
-from typing import cast
+from typing import Any, cast
 
-import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cuthbert import smoother as cuthbert_smoother
@@ -12,6 +11,7 @@ from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.smoother import (
     EKFSmootherConfig,
@@ -66,7 +66,13 @@ def _kalman_get_dynamics_params(dynamics: DynamicalModel):
 def _taylor_get_dynamics_log_density(dynamics: DynamicalModel):
     transition = cast(
         Callable[
-            [jax.Array, jax.Array | None, jax.Array, jax.Array], dist.Distribution
+            [
+                Real[Array, " state_dim"],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                Real[Array, ""],
+                Real[Array, ""],
+            ],
+            dist.Distribution,
         ],
         dynamics.state_evolution,
     )
@@ -150,13 +156,13 @@ def _pf_backward_sampling_fn(config: PFSmootherConfig):
 def compute_cuthbert_smoother(
     dynamics: DynamicalModel,
     smoother_config: CuthbertSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert smoother computation (no numpyro side-effects)."""
     obs_len = int(obs_values.shape[0])
     marginal_loglik, filtered_states = compute_cuthbert_filter(
@@ -226,14 +232,14 @@ def run_discrete_smoother(
     name: str,
     dynamics: DynamicalModel,
     smoother_config: CuthbertSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array | None, object | None, list[dist.Distribution]]:
+) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
     """Run discrete-time smoother via cuthbert.
 
     Returns:

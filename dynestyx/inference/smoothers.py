@@ -13,6 +13,7 @@ from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
+    _ensure_trailing_event_axis,
     _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
@@ -98,7 +99,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -179,7 +180,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -202,7 +203,7 @@ class Smoother(BaseSmootherLogFactorAdder):
     r"""Performs Bayesian smoothing to compute the smoothing distribution p(x_t | y_{1:T})."""
 
     smoother_config: SmootherAnyConfig | None = None
-    marginal_loglik: jax.Array | None = dataclasses.field(
+    marginal_loglik: Real[Array, "*plate"] | None = dataclasses.field(
         default=None, repr=False, init=False
     )
     smoothed_states: object = dataclasses.field(default=None, repr=False, init=False)
@@ -215,7 +216,7 @@ class Smoother(BaseSmootherLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -249,6 +250,15 @@ class Smoother(BaseSmootherLogFactorAdder):
             obs_values=obs_values,
             mode="smoother",
         )
+        obs_values = _ensure_trailing_event_axis(
+            obs_values,
+            plate_shapes=plate_shapes,
+        )
+        if ctrl_values is not None:
+            ctrl_values = _ensure_trailing_event_axis(
+                ctrl_values,
+                plate_shapes=plate_shapes,
+            )
 
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic smoothers don't need one).
@@ -357,12 +367,11 @@ class Smoother(BaseSmootherLogFactorAdder):
         key: PRNGKeyArray | None,
         plate_shapes: tuple[int, ...],
         obs_times: Real[Array, "*obs_time_plate obs_time"],
-        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-        | Real[Array, "*obs_value_plate obs_time"],
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"],
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-        | Real[Array, "*ctrl_value_plate ctrl_time"]
-        | None = None,
+        ctrl_values: (
+            Real[Array, "*ctrl_value_plate ctrl_time control_dim"] | None
+        ) = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts."""
         output_kind: str
@@ -559,13 +568,15 @@ def _smooth_discrete_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""] | None,
+    object | None,
+    list[numpyro.distributions.Distribution],
+]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax smoothers."""
 
     if isinstance(smoother_config, UKFSmootherConfig) and (
@@ -626,13 +637,15 @@ def _smooth_continuous_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""],
+    object,
+    list[numpyro.distributions.Distribution],
+]:
     """Continuous-time marginal likelihood via CD-Dynamax smoothers."""
     if smoother_config.filter_source != "cd_dynamax":
         raise ValueError(
