@@ -13,7 +13,6 @@ from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
-    _ensure_trailing_event_axis,
     _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
@@ -66,7 +65,7 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims
+from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
 
 DiscreteSmootherConfig = (
     KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
@@ -250,16 +249,6 @@ class Smoother(BaseSmootherLogFactorAdder):
             obs_values=obs_values,
             mode="smoother",
         )
-        obs_values = _ensure_trailing_event_axis(
-            obs_values,
-            plate_shapes=plate_shapes,
-        )
-        if ctrl_values is not None:
-            ctrl_values = _ensure_trailing_event_axis(
-                ctrl_values,
-                plate_shapes=plate_shapes,
-            )
-
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic smoothers don't need one).
         typed_config = config
@@ -284,6 +273,10 @@ class Smoother(BaseSmootherLogFactorAdder):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
             )
+
+        obs_values = _ensure_trailing_event_axis(obs_values)
+        if ctrl_values is not None:
+            ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
         if dynamics.continuous_time:
             if not isinstance(typed_config, ContinuousTimeSmootherConfigs):
@@ -367,11 +360,12 @@ class Smoother(BaseSmootherLogFactorAdder):
         key: PRNGKeyArray | None,
         plate_shapes: tuple[int, ...],
         obs_times: Real[Array, "*obs_time_plate obs_time"],
-        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"],
+        obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"],
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-        ctrl_values: (
-            Real[Array, "*ctrl_value_plate ctrl_time control_dim"] | None
-        ) = None,
+        ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts."""
         output_kind: str
@@ -385,7 +379,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             continuous_config = cast(ContinuousSmootherConfig, config)
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ct, cv, k):
                 return compute_continuous_smoother(
                     dyn,
                     continuous_config,
@@ -407,7 +401,7 @@ class Smoother(BaseSmootherLogFactorAdder):
                 cuthbert_config = cast(CuthbertSmootherConfig, discrete_config)
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cuthbert_smoother(
                         dyn,
                         cuthbert_config,
@@ -421,7 +415,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             elif discrete_config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
-                def compute_output(dyn, ot, ov, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cd_dynamax_discrete_smoother(
                         dyn,
                         discrete_config,
@@ -439,6 +433,13 @@ class Smoother(BaseSmootherLogFactorAdder):
             raise ValueError(
                 f"Unsupported smoother config for plate: {type(config).__name__}"
             )
+
+        def compute_output(dyn, ot, ov, ct, cv, k):
+            # Add scalar event axes after vmap removes plate dimensions.
+            ov = _ensure_trailing_event_axis(ov)
+            if cv is not None:
+                cv = _ensure_trailing_event_axis(cv)
+            return _compute_output(dyn, ot, ov, ct, cv, k)
 
         if key is not None:
             if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):

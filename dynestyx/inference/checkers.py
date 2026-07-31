@@ -40,24 +40,6 @@ def _leading_dims(
     return tuple(int(d) for d in arr.shape[:n])
 
 
-def _ensure_trailing_event_axis(
-    values: Real[Array, "..."],
-    *,
-    plate_shapes: tuple[int, ...],
-) -> Real[Array, "..."]:
-    """Lift scalar time series to ``(*plate, time, 1)`` for numerical inference."""
-    n_plate_dims = len(plate_shapes)
-    has_plate_axes = (
-        n_plate_dims > 0
-        and values.ndim > n_plate_dims
-        and tuple(values.shape[:n_plate_dims]) == plate_shapes
-    )
-    scalar_series_ndim = n_plate_dims + 1 if has_plate_axes else 1
-    if values.ndim == scalar_series_ndim:
-        return values[..., None]
-    return values
-
-
 def _summarize_dynamics_leading_dims(
     dynamics: DynamicalModel, n_dims: int, max_items: int = 6
 ) -> str:

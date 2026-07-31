@@ -14,7 +14,6 @@ from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.checkers import (
-    _ensure_trailing_event_axis,
     _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
@@ -75,7 +74,7 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims
+from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -276,17 +275,6 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 mode="filter",
             )
-        if not isinstance(config, HMMConfigs):
-            obs_values = _ensure_trailing_event_axis(
-                obs_values,
-                plate_shapes=plate_shapes,
-            )
-            if ctrl_values is not None:
-                ctrl_values = _ensure_trailing_event_axis(
-                    ctrl_values,
-                    plate_shapes=plate_shapes,
-                )
-
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
         if config.crn_seed is not None:
@@ -313,6 +301,11 @@ class Filter(BaseLogFactorAdder):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
             )
+
+        if not isinstance(config, HMMConfigs):
+            obs_values = _ensure_trailing_event_axis(obs_values)
+            if ctrl_values is not None:
+                ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
@@ -450,7 +443,7 @@ class Filter(BaseLogFactorAdder):
                 )
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_continuous_filter(
                     dyn,
                     cast(ContinuousTimeFilterConfig, config),
@@ -465,7 +458,7 @@ class Filter(BaseLogFactorAdder):
             output_kind = "hmm"
             uses_preprocessed_obs = True
 
-            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_hmm_filter(
                     dyn,
                     obs_times=ot,
@@ -479,7 +472,7 @@ class Filter(BaseLogFactorAdder):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cuthbert_filter(
                         dyn,
                         config,
@@ -493,7 +486,7 @@ class Filter(BaseLogFactorAdder):
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
-                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
@@ -509,6 +502,14 @@ class Filter(BaseLogFactorAdder):
             raise ValueError(
                 f"Unsupported filter config for plate: {type(config).__name__}"
             )
+
+        def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            # Add scalar event axes after vmap removes plate dimensions.
+            if not isinstance(config, HMMConfigs):
+                ov = _ensure_trailing_event_axis(ov)
+                if cv is not None:
+                    cv = _ensure_trailing_event_axis(cv)
+            return _compute_output(dyn, ot, ov, ovf, om, ct, cv, k)
 
         # Pre-split keys for all plate members (needed for stochastic filters).
         if key is not None:
