@@ -45,6 +45,8 @@ nav:
         - Tracking an object with a Kalman filter: tutorials/state_space_models/kf_tracking.ipynb
         - Online linear regression with a Kalman filter: tutorials/state_space_models/kf_linreg.ipynb
         - Parameter estimation for an LGSSM (SGD and MCMC): tutorials/state_space_models/lgssm_learning.ipynb
+      - Switching linear dynamical systems:
+        - Rao-Blackwellized particle filtering: tutorials/state_space_models/slds_rbpf.md
       - Nonlinear Gaussian SSMs:
         - Tracking a spiraling object with an EKF: tutorials/state_space_models/ekf_spiral.ipynb
         - Online learning of an MLP with an EKF: tutorials/state_space_models/ekf_mlp.ipynb
@@ -77,6 +79,9 @@ nav:
           - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
           - GaussianObservation: api_reference/public/models/specialized/gaussian_observation.md
           - LinearGaussianStateEvolution: api_reference/public/models/specialized/linear_gaussian_state_evolution.md
+          - MixedStateDistribution: api_reference/public/models/specialized/mixed_state_distribution.md
+          - SwitchingLinearGaussianStateEvolution: api_reference/public/models/specialized/switching_linear_gaussian_state_evolution.md
+          - SwitchingLinearGaussianObservation: api_reference/public/models/specialized/switching_linear_gaussian_observation.md
           - GaussianStateEvolution: api_reference/public/models/specialized/gaussian_state_evolution.md
           - AffineDrift: api_reference/public/models/specialized/affine_drift.md
           - LTI_continuous: api_reference/public/models/specialized/lti_continuous.md

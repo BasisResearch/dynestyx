@@ -12,6 +12,7 @@ ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
 FilterStateOrder = Literal["zeroth", "first", "second"]
+RBPFProposal = Literal["prior", "optimal"]
 
 CuthbertOnlyFilterSource = Literal["cuthbert"]
 CDDynamaxOnlyFilterSource = Literal["cd_dynamax"]
@@ -283,6 +284,44 @@ class PFConfig(BaseFilterConfig):
     )
     ess_threshold_ratio: float = 0.7
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+
+@dataclasses.dataclass
+class RBPFConfig(BaseFilterConfig):
+    r"""Rao-Blackwellized particle filter (RBPF) for an SLDS.
+
+    The filter samples the discrete regime path while analytically
+    marginalizing the conditionally linear-Gaussian continuous state with
+    Kalman updates. It is therefore usually much more efficient than a
+    bootstrap particle filter over the full joint state.
+
+    Use this config with a model composed of
+    `MixedStateDistribution`,
+    `SwitchingLinearGaussianStateEvolution`, and
+    `SwitchingLinearGaussianObservation`.
+
+    Does not support missing observations (data cannot contain NaNs).
+
+    Attributes:
+        n_particles: Number of particles over discrete regime paths. Defaults
+            to `1_000`.
+        proposal: Discrete proposal strategy. `"prior"` samples from the
+            regime transition prior and resamples below the configured
+            effective-sample-size threshold. `"optimal"` uses cd-dynamax's
+            observation-adapted optimal path. Defaults to `"optimal"`.
+        ess_threshold_ratio: Resample the prior-proposal filter when its
+            effective sample size falls below this fraction of
+            `n_particles`. Ignored by the optimal path. Defaults to `0.5`.
+        record_filtered_regime_probs: Save
+            \(p(z_t \mid y_{0:t})\) as a deterministic NumPyro site.
+        filter_source: Backend. Always `"cd_dynamax"`.
+    """
+
+    n_particles: int = 1_000
+    proposal: RBPFProposal = "optimal"
+    ess_threshold_ratio: float = 0.5
+    record_filtered_regime_probs: bool | None = None
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
 @dataclasses.dataclass
@@ -675,6 +714,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 DiscreteTimeConfigs: tuple[type, ...] = (
     EnKFConfig,
     PFConfig,
+    RBPFConfig,
     EKFConfig,
     KFConfig,
     UKFConfig,
@@ -744,13 +784,17 @@ def _config_to_record_kwargs(config: BaseFilterConfig) -> dict:
             "record_log_filtered": config.record_log_filtered,
             "record_max_elems": config.record_max_elems,
         }
-    else:
-        return {
-            "record_filtered_states_mean": config.record_filtered_states_mean,
-            "record_filtered_states_cov": config.record_filtered_states_cov,
-            "record_filtered_states_cov_diag": config.record_filtered_states_cov_diag,
-            "record_filtered_particles": config.record_filtered_particles,
-            "record_filtered_log_weights": config.record_filtered_log_weights,
-            "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
-            "record_max_elems": config.record_max_elems,
-        }
+    record_kwargs = {
+        "record_filtered_states_mean": config.record_filtered_states_mean,
+        "record_filtered_states_cov": config.record_filtered_states_cov,
+        "record_filtered_states_cov_diag": config.record_filtered_states_cov_diag,
+        "record_filtered_particles": config.record_filtered_particles,
+        "record_filtered_log_weights": config.record_filtered_log_weights,
+        "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
+        "record_max_elems": config.record_max_elems,
+    }
+    if isinstance(config, RBPFConfig):
+        record_kwargs["record_filtered_regime_probs"] = (
+            config.record_filtered_regime_probs
+        )
+    return record_kwargs

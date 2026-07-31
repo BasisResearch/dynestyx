@@ -12,6 +12,7 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
+from dynestyx.distributions import MixedStateDistribution
 from dynestyx.models.core import DiscreteTimeStateEvolution
 
 
@@ -185,6 +186,96 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
             loc = loc + jnp.dot(B, u)
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+
+
+class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
+    r"""Regime-switching linear-Gaussian transition for an SLDS.
+
+    Given a joint state ``[z_t, *x_t]``, the transition is
+
+    \[
+    z_{t+1} \mid z_t
+      \sim \operatorname{Categorical}(P_{z_t}), \qquad
+    x_{t+1} \mid x_t, z_{t+1}
+      \sim \mathcal{N}(A_{z_{t+1}}x_t
+        + B_{z_{t+1}}u_t + b_{z_{t+1}}, Q_{z_{t+1}}).
+    \]
+
+    The next regime selects the continuous transition parameters. This
+    convention matches the Rao-Blackwellized particle-filter backend and keeps
+    simulation and filtering under one model definition.
+
+    Args:
+        transition_matrix: Row-stochastic regime transition matrix with shape
+            ``(num_regimes, num_regimes)``.
+        A: Regime-specific state matrices with shape
+            ``(num_regimes, state_dim, state_dim)``.
+        cov: Regime-specific process covariance matrices with shape
+            ``(num_regimes, state_dim, state_dim)``.
+        B: Optional regime-specific control matrices with shape
+            ``(num_regimes, state_dim, control_dim)``.
+        bias: Optional regime-specific transition biases with shape
+            ``(num_regimes, state_dim)``.
+
+    Attributes:
+        transition_matrix: Regime transition probabilities.
+        A: Regime-specific state matrices.
+        cov: Regime-specific process covariance matrices.
+        B: Optional regime-specific control matrices.
+        bias: Optional regime-specific transition biases.
+    """
+
+    transition_matrix: Float[Array, "num_regimes num_regimes"]
+    A: Float[Array, "num_regimes state_dim state_dim"]
+    cov: Float[Array, "num_regimes state_dim state_dim"]
+    B: Float[Array, "num_regimes state_dim control_dim"] | None = None
+    bias: Float[Array, "num_regimes state_dim"] | None = None
+
+    def __init__(
+        self,
+        transition_matrix: Float[Array, "num_regimes num_regimes"],
+        A: Float[Array, "num_regimes state_dim state_dim"],
+        cov: Float[Array, "num_regimes state_dim state_dim"],
+        B: Float[Array, "num_regimes state_dim control_dim"] | None = None,
+        bias: Float[Array, "num_regimes state_dim"] | None = None,
+    ) -> None:
+        self.transition_matrix = transition_matrix
+        self.A = A
+        self.cov = cov
+        self.B = B
+        self.bias = bias
+
+    @property
+    def num_regimes(self) -> int:
+        """Number of discrete regimes."""
+        return int(self.transition_matrix.shape[-1])
+
+    @property
+    def continuous_state_dim(self) -> int:
+        """Dimension of the continuous part of the state."""
+        return int(self.A.shape[-1])
+
+    def __call__(
+        self,
+        x: Real[Array, " joint_state_dim"],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> MixedStateDistribution:
+        """Return the joint transition distribution from ``[z_t, *x_t]``."""
+        del t_now, t_next
+        regime = jnp.rint(x[0]).astype(jnp.int32)
+        continuous_state = x[1:]
+        locs = jnp.einsum("...kij,...j->...ki", self.A, continuous_state)
+        if self.B is not None and u is not None:
+            locs = locs + jnp.einsum("...kij,...j->...ki", self.B, u)
+        if self.bias is not None:
+            locs = locs + self.bias
+        return MixedStateDistribution(
+            categorical_probs=self.transition_matrix[regime],
+            continuous_locs=locs,
+            continuous_covariances=self.cov,
+        )
 
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):

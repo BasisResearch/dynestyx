@@ -34,6 +34,7 @@ from dynestyx.inference.configs.filter import (
     KFConfig,
     PFConfig,
     PFResamplingConfig,
+    RBPFConfig,
     UKFConfig,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
@@ -58,6 +59,7 @@ from dynestyx.inference.utils.distribution_utils import (
     _categorical_log_probs_to_dists,
     _cholesky_state_sequence_to_dists,
     _posterior_sequence_to_dists,
+    _rbpf_sequence_to_dists,
 )
 from dynestyx.inference.utils.numpyro_sites import (
     register_filter_sites,
@@ -486,6 +488,7 @@ class Filter(BaseLogFactorAdder):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
+                        key=k,
                         obs_times=ot,
                         obs_values=ov,
                         ctrl_times=ct,
@@ -637,6 +640,11 @@ class Filter(BaseLogFactorAdder):
                 ),
             )
         if output_kind == "cd_dynamax_discrete":
+            if isinstance(config, RBPFConfig):
+                return _rbpf_sequence_to_dists(
+                    outputs,
+                    plate_shapes=plate_shapes,
+                )
             return _posterior_sequence_to_dists(
                 outputs,
                 means_attr="filtered_means",
@@ -678,8 +686,9 @@ def _filter_discrete_time(
 ) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
-    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
-    (cd-dynamax) or KFConfig, EKFConfig, EnKFConfig, PFConfig (cuthbert).
+    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig,
+    RBPFConfig (cd-dynamax) or KFConfig, EKFConfig, EnKFConfig, PFConfig
+    (cuthbert).
 
     Args:
         name: Name of the factor.
@@ -696,6 +705,7 @@ def _filter_discrete_time(
             name,
             dynamics,
             filter_config,
+            key=key,
             obs_times=obs_times,
             obs_values=obs_values,
             ctrl_times=ctrl_times,
@@ -772,5 +782,6 @@ __all__ = [
     "KFConfig",
     "PFConfig",
     "PFResamplingConfig",
+    "RBPFConfig",
     "UKFConfig",
 ]

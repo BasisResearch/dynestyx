@@ -13,7 +13,12 @@ from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
 from jaxtyping import Real, Shaped
 
-from dynestyx.models import Diffusion, DynamicalModel
+from dynestyx.models import (
+    Diffusion,
+    DynamicalModel,
+    SwitchingLinearGaussianObservation,
+    SwitchingLinearGaussianStateEvolution,
+)
 
 
 def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
@@ -212,7 +217,14 @@ def _is_opaque_plate_leaf(node) -> bool:
     """
     if isinstance(node, Diffusion):
         return not callable(node.coefficient)
-    return isinstance(node, numpyro.distributions.Distribution)
+    return isinstance(
+        node,
+        (
+            numpyro.distributions.Distribution,
+            SwitchingLinearGaussianObservation,
+            SwitchingLinearGaussianStateEvolution,
+        ),
+    )
 
 
 def _dist_has_plate_batch_dims(dist_obj, plate_shapes: tuple[int, ...]) -> bool:
