@@ -8,6 +8,7 @@ import numpyro.distributions as dist
 from jaxtyping import Array, Float, PRNGKeyArray, Real, Shaped
 from numpyro.distributions import constraints
 
+from dynestyx.distributions import RaoBlackwellizedParticleDistribution
 from dynestyx.inference.integrations.utils import (
     WeightedParticles,
     covariance_from_cholesky,
@@ -167,6 +168,26 @@ def _posterior_sequence_to_dists(
         missing=missing,
         missing_message=missing_message,
     )
+
+
+def _rbpf_sequence_to_dists(
+    posterior,
+    *,
+    plate_shapes: tuple[int, ...] = (),
+) -> list[dist.Distribution]:
+    """Convert an RBPF Gaussian-mixture sequence to joint-state distributions."""
+    t_len = _time_len_from_array(posterior.weights, plate_shapes)
+    return [
+        RaoBlackwellizedParticleDistribution(
+            log_weights=jnp.log(_slice_time_axis(posterior.weights, t, plate_shapes)),
+            regimes=_slice_time_axis(posterior.regimes, t, plate_shapes),
+            continuous_locs=_slice_time_axis(posterior.means, t, plate_shapes),
+            continuous_covariances=_slice_time_axis(
+                posterior.covariances, t, plate_shapes
+            ),
+        )
+        for t in range(t_len)
+    ]
 
 
 def _cholesky_state_sequence_to_dists(

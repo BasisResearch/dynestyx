@@ -11,6 +11,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 | `EKFConfig`                | Discrete            | Nonlinear, differentiable Gaussian dynamics, nonlinear (and with `cuthbert`, non-Gaussian) but differentiable observations (approximate). |
 | `UKFConfig`                | Discrete            | Nonlinear, differentiable Gaussian dynamics, nonlinear but differentiable Gaussian observations (approximate). Generally more accurate, but slower than `EKFConfig`. |
 | `PFConfig`                 | Discrete            | Applicable for arbitrary state-space models, but quite expensive and noisy estimates (asymptotically exact in the limit of infinite particles, approximate in practice). |
+| `RBPFConfig`               | Discrete (SLDS)     | Switching linear-Gaussian models; samples regimes while marginalizing the continuous state with Kalman updates. |
 | `HMMConfig`                | Discrete (HMM)      | Finite discrete latent state space (exact & optimal). |
 | `ContinuousTimeKFConfig`   | Continuous-discrete | Linear-Gaussian SDE + linear-Gaussian observations (exact and optimal). |
 | `ContinuousTimeEKFConfig`  | Continuous-discrete | Mildly nonlinear SDE with differentiable drift and difussion terms; Gaussian observations (approximate). |
@@ -28,6 +29,7 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
         - EKFConfig
         - UKFConfig
         - PFConfig
+        - RBPFConfig
         - EnKFConfig
 
 ## Continuous Time Configuration Classes

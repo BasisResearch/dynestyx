@@ -173,6 +173,81 @@ class LinearGaussianObservation(ObservationModel):
         return dist.MultivariateNormal(loc=loc, covariance_matrix=R)
 
 
+class SwitchingLinearGaussianObservation(ObservationModel):
+    r"""Regime-switching linear-Gaussian observation model for an SLDS.
+
+    Given the joint state ``[z_t, *x_t]``, observations follow
+
+    \[
+    y_t \mid x_t, z_t
+      \sim \mathcal{N}(H_{z_t}x_t + D_{z_t}u_t + b_{z_t}, R_{z_t}).
+    \]
+
+    Args:
+        H: Regime-specific observation matrices with shape
+            ``(num_regimes, observation_dim, state_dim)``.
+        R: Regime-specific observation covariance matrices with shape
+            ``(num_regimes, observation_dim, observation_dim)``.
+        D: Optional regime-specific control matrices with shape
+            ``(num_regimes, observation_dim, control_dim)``.
+        bias: Optional regime-specific observation biases with shape
+            ``(num_regimes, observation_dim)``.
+
+    Attributes:
+        H: Regime-specific observation matrices.
+        R: Regime-specific observation covariance matrices.
+        D: Optional regime-specific control matrices.
+        bias: Optional regime-specific observation biases.
+    """
+
+    H: Float[Array, "num_regimes observation_dim state_dim"]
+    R: Float[Array, "num_regimes observation_dim observation_dim"]
+    D: Float[Array, "num_regimes observation_dim control_dim"] | None = None
+    bias: Float[Array, "num_regimes observation_dim"] | None = None
+
+    def __init__(
+        self,
+        H: Float[Array, "num_regimes observation_dim state_dim"],
+        R: Float[Array, "num_regimes observation_dim observation_dim"],
+        D: Float[Array, "num_regimes observation_dim control_dim"] | None = None,
+        bias: Float[Array, "num_regimes observation_dim"] | None = None,
+    ) -> None:
+        self.H = H
+        self.R = R
+        self.D = D
+        self.bias = bias
+
+    @property
+    def num_regimes(self) -> int:
+        """Number of discrete regimes."""
+        return int(self.H.shape[-3])
+
+    @property
+    def continuous_state_dim(self) -> int:
+        """Dimension of the continuous part of the state."""
+        return int(self.H.shape[-1])
+
+    def __call__(
+        self,
+        x: Real[Array, " joint_state_dim"],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> dist.MultivariateNormal:
+        """Return the observation distribution for ``[z_t, *x_t]``."""
+        del t
+        regime = jnp.rint(x[0]).astype(jnp.int32)
+        continuous_state = x[1:]
+        loc = jnp.dot(self.H[regime], continuous_state)
+        if self.D is not None and u is not None:
+            loc = loc + jnp.dot(self.D[regime], u)
+        if self.bias is not None:
+            loc = loc + self.bias[regime]
+        return dist.MultivariateNormal(
+            loc=loc,
+            covariance_matrix=self.R[regime],
+        )
+
+
 class GaussianObservation(ObservationModel):
     """
     Nonlinear Gaussian observation model.
