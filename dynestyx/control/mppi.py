@@ -21,13 +21,6 @@ from jaxtyping import PRNGKeyArray, PyTree, Real
 from dynestyx.control.discrete_controller_simulators import filter_state_mean
 
 
-def mppi_initial_state(
-    horizon: int, control_dim: int
-) -> Real[Array, "horizon control_dim"]:
-    """Zero nominal control sequence, the natural `policy_state_init` for `MPPI`."""
-    return jnp.zeros((horizon, control_dim))
-
-
 class MPPI(eqx.Module):
     r"""Model Predictive Path Integral (MPPI) controller.
 
@@ -61,6 +54,10 @@ class MPPI(eqx.Module):
         loss_fn: `(x_seq, u_seq) -> scalar`, called once per sample (vmapped)
             over the rolled-out state and control trajectories.
         horizon: Planning horizon length `H`.
+        control_dim: Control dimension, used by `initial_state()` to build the
+            zero nominal sequence `DiscreteControlLoopSimulator` seeds the
+            policy state with (via `initial_state()`) -- no need to pass an
+            initial policy state in yourself.
         n_samples: Number of sampled control sequences per call.
         noise_std: Standard deviation of the Gaussian perturbations added to
             the nominal sequence, scalar or shape `(control_dim,)`.
@@ -69,25 +66,49 @@ class MPPI(eqx.Module):
             lowest-loss samples.
         batched: Whether `dynamics_model` accepts a batch of control
             sequences in one call (see above).
+        seed: Seeds MPPI's own exploration-noise PRNG key, carried inside the
+            policy state `s` (as `(nominal_sequence, key)`) and split
+            internally on every call -- `DiscreteControlLoopSimulator` never
+            passes a key to `control_policy`, so MPPI owns and advances its
+            randomness entirely by itself. Two `MPPI` instances with the same
+            `seed` explore identically regardless of the simulation's own
+            `rng_key`; use a different `seed` to get a different exploration
+            sequence.
     """
 
     dynamics_model: Callable = eqx.field(static=True)
     loss_fn: Callable = eqx.field(static=True)
     horizon: int = eqx.field(static=True)
-    n_samples: int = eqx.field(static=True)
+    control_dim: int = eqx.field(static=True)
     noise_std: Real[Array, ""] | Real[Array, " control_dim"]
+    n_samples: int = eqx.field(static=True, default=10)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
+    seed: int = eqx.field(static=True, default=0)
+
+    def initial_state(
+        self,
+    ) -> tuple[Real[Array, "horizon control_dim"], PRNGKeyArray]:
+        """Zero nominal control sequence plus MPPI's own seeded PRNG key --
+        `DiscreteControlLoopSimulator` calls this automatically to seed the
+        policy state; no need to build or pass one in yourself."""
+        return jnp.zeros((self.horizon, self.control_dim)), jr.PRNGKey(self.seed)
 
     def __call__(
-        self, x_hat: PyTree, s: Real[Array, "horizon control_dim"], key: PRNGKeyArray
-    ) -> tuple[Real[Array, " control_dim"], Real[Array, "horizon control_dim"]]:
+        self,
+        x_hat: PyTree,
+        s: tuple[Real[Array, "horizon control_dim"], PRNGKeyArray],
+    ) -> tuple[
+        Real[Array, " control_dim"],
+        tuple[Real[Array, "horizon control_dim"], PRNGKeyArray],
+    ]:
         x0 = filter_state_mean(x_hat)
-        nominal = s
+        nominal, key = s
+        key, noise_key = jr.split(key)
         control_dim = nominal.shape[-1]
 
         noise = self.noise_std * jr.normal(
-            key, (self.n_samples, self.horizon, control_dim)
+            noise_key, (self.n_samples, self.horizon, control_dim)
         )
         candidates = nominal[None, :, :] + noise  # (n_samples, horizon, control_dim)
 
@@ -104,7 +125,7 @@ class MPPI(eqx.Module):
 
         u0 = weighted_seq[0]
         next_nominal = jnp.concatenate([weighted_seq[1:], weighted_seq[-1:]], axis=0)
-        return u0, next_nominal
+        return u0, (next_nominal, key)
 
 
-__all__ = ["MPPI", "mppi_initial_state"]
+__all__ = ["MPPI"]

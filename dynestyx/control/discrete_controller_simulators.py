@@ -5,7 +5,12 @@ Implements the online control loop:
     x_0 ~ p(x_0)
     y_0 | x_0 ~ p(y_0 | x_0, t_0)
     x_hat_{0|0} = FilterUpdate(y_0, t_0)
-    u_k, s_{k+1} = control_policy(x_hat_{k|k}, s_k, key_k),           k = 0..T-1
+    u_k, s_{k+1} = control_policy(x_hat_{k|k}, s_k),                  k = 0..T-1
+        (control_policy never receives a key: if it returns a NumPyro
+        Distribution, u_k is drawn from it with a fresh key generated
+        here; if it needs its own randomness to pick a value directly,
+        that randomness must be carried inside s and advanced by the
+        policy itself, e.g. dynestyx.control.mppi.MPPI)
     x_{k+1} | x_k, u_k ~ p(x_{k+1} | x_k, u_k, t_k, t_{k+1}),          k = 0..T-1
     y_{k+1} | x_{k+1}, u_k ~ p(y_{k+1} | x_{k+1}, u_k, t_{k+1}),       k = 0..T-1
     x_hat_{k+1|k+1} = FilterUpdate(x_hat_{k|k}, u_k, y_{k+1}, t_k, t_{k+1}),  k = 0..T-1
@@ -45,6 +50,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
+from numpyro.distributions import Distribution
 
 from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.filters import _default_filter_config
@@ -80,21 +86,33 @@ def filter_state_mean(state) -> Array:
 class PolicyCallable(Protocol):
     r"""Structural protocol for a control policy $\pi$.
 
-    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, s_k, \mathrm{key}_k)$$
+    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, s_k)$$
 
     `x_hat` is whatever belief state the chosen `filter_config` family
     produces (see module docstring); use `filter_state_mean` for a
-    family-agnostic point estimate. `key` is a fresh PRNG key for this step,
-    for policies that need their own randomness (e.g. sampling-based
-    controllers like `dynestyx.control.mppi.MPPI`); deterministic policies
-    simply ignore it. Any plain callable matching this signature works,
-    including an `equinox.Module` with a matching `__call__` (e.g. a learned
-    neural policy) or a plain Python function (e.g. an LQR gain lookup).
+    family-agnostic point estimate. Any plain callable matching this
+    signature works, including an `equinox.Module` with a matching
+    `__call__` (e.g. a learned neural policy) or a plain Python function
+    (e.g. an LQR gain lookup).
+
+    `control_policy` never receives a PRNG key -- there are two ways for a
+    policy to be stochastic without one:
+
+    - Return a NumPyro `Distribution` instead of a value (e.g.
+      `dist.Normal(mean, std)` for Gaussian exploration).
+      `DiscreteControlLoopSimulator` draws the actual control from it with a
+      fresh key, the same way it already samples
+      `dynamics.state_evolution`/`observation_model`.
+    - Return a value directly, but carry any randomness the policy itself
+      needs (e.g. MPPI's exploration noise) inside `s`, splitting/advancing
+      it internally on every call. The policy owns and seeds this randomness
+      entirely by itself -- see `dynestyx.control.mppi.MPPI`'s `seed`
+      attribute for the pattern.
     """
 
     def __call__(
-        self, x_hat: Any, s: PyTree, key: PRNGKeyArray
-    ) -> tuple[Real[Array, " control_dim"], PyTree]:
+        self, x_hat: Any, s: PyTree
+    ) -> tuple[Real[Array, " control_dim"] | Distribution, PyTree]:
         raise NotImplementedError()
 
 
@@ -126,8 +144,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     and the control-index convention used for `dynamics.observation_model`.
 
     Attributes:
-        control_policy: Control policy $\pi$; see `PolicyCallable`.
-        policy_state_init: Initial policy state $s_0$ (any PyTree).
+        control_policy: Control policy $\pi$; see `PolicyCallable`. Its initial
+            state $s_0$ is obtained by calling `control_policy.initial_state()`
+            when that method exists, or `None` otherwise (a stateless policy).
         filter_config: Selects the filtering algorithm
             (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`). Defaults to
             `_default_filter_config(dynamics)` when `None`. Its
@@ -141,13 +160,11 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         self,
         *,
         control_policy: PolicyCallable,
-        policy_state_init: PyTree,
         filter_config: BaseFilterConfig | None = None,
         n_simulations: int = 1,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
         self.control_policy = control_policy
-        self.policy_state_init = policy_state_init
         self.filter_config = filter_config
 
     def simulate(
@@ -160,6 +177,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         predict_times=None,
         **kwargs,
     ) -> ControlledSimulatedResult:
+
         if dynamics.continuous_time:
             raise ValueError(
                 "DiscreteControlLoopSimulator only supports discrete-time models "
@@ -217,15 +235,18 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             t=times[0],
             t_prev=times[0] - dt0,
         )
-        s_0 = self.policy_state_init
+        initial_state_fn = getattr(self.control_policy, "initial_state", None)
+        s_0 = initial_state_fn() if callable(initial_state_fn) else None
 
         def _step(carry, t_idx):
             x_prev, x_hat_prev, s_prev, step_key = carry
-            step_key, k_trans, k_obs, k_filt, k_policy = jr.split(step_key, 5)
+            step_key, k_trans, k_obs, k_filt, k_sample = jr.split(step_key, 5)
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
 
-            u_k, s_next = self.control_policy(x_hat_prev, s_prev, k_policy)
+            u_k, s_next = self.control_policy(x_hat_prev, s_prev)
+            if isinstance(u_k, Distribution):
+                u_k = u_k.sample(k_sample)
 
             trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
             x_next = trans_dist.sample(k_trans)
@@ -275,9 +296,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         policy_states = None
         if s_0 is not None:
-            # A stateless policy (policy_state_init=None) has nothing to
-            # record; jnp.expand_dims can't be applied to None directly, and
-            # there is no meaningful "policy_states" trajectory to report.
+            # A stateless policy (no initial_state()) has nothing to record;
+            # jnp.expand_dims can't be applied to None directly, and there is
+            # no meaningful "policy_states" trajectory to report.
             policy_states = jax.tree_util.tree_map(
                 lambda leaf: jnp.expand_dims(leaf, axis=0), ss
             )

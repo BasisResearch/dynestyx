@@ -1,7 +1,9 @@
 """Top-level pure-JAX API for simulation and scoring. Consider using as an alternative
 to the NumPyro-based API if simulation and scoring are the only requirements."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -9,6 +11,7 @@ from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
+from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.configs.simulator import SimulatorConfig
 from dynestyx.inference.state_paths.reconstruct import reconstruct_state_path
 from dynestyx.inference.state_paths.score import compute_state_path_log_prob
@@ -25,6 +28,9 @@ from dynestyx.utils import (
     _validate_site_sorting,
 )
 
+if TYPE_CHECKING:
+    from dynestyx.control.discrete_controller_simulators import PolicyCallable
+
 
 def simulate(
     dynamics: DynamicalModel,
@@ -37,6 +43,8 @@ def simulate(
     predict_times: Real[Array, " predict_time"] | None = None,
     n_simulations: int = 1,
     simulator_config: SimulatorConfig | None = None,
+    control_policy: PolicyCallable | None = None,
+    filter_config: BaseFilterConfig | None = None,
 ) -> SimulatedResult:
     """Simulate states and observations without registering NumPyro sites.
 
@@ -53,6 +61,17 @@ def simulate(
         simulator_config: ODE or SDE solver configuration. Its type must match
             the model's state evolution. Discrete-time models do not accept a
             simulator configuration.
+        control_policy: Optional control policy (see
+            `dynestyx.control.discrete_controller_simulators.PolicyCallable`).
+            When given, controls are computed online in closed loop via
+            [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]
+            instead of being drawn from the uncontrolled/`ctrl_values`
+            transition -- `ctrl_times`/`ctrl_values` must not be passed
+            together with `control_policy`, and `simulator_config` is not
+            accepted either.
+        filter_config: Filter configuration forwarded to
+            `DiscreteControlLoopSimulator` when `control_policy` is given;
+            ignored otherwise.
 
     Returns:
         SimulatedResult: Simulated times, initial states, state paths, and
@@ -81,6 +100,8 @@ def simulate(
     simulator = Simulator(
         n_simulations=n_simulations,
         simulator_config=simulator_config,
+        control_policy=control_policy,
+        filter_config=filter_config,
     )
     _, simulation_key = jr.split(rng_key)
     return simulator.simulate(

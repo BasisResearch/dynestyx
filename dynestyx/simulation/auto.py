@@ -1,7 +1,12 @@
 """Auto-routing simulator handler."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from jaxtyping import Array, PRNGKeyArray, Real
 
+from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
@@ -17,6 +22,11 @@ from dynestyx.simulation.discrete import DiscreteTimeSimulator
 from dynestyx.simulation.ode import ODESimulator
 from dynestyx.simulation.sde import SDESimulator
 from dynestyx.types import SimulatedResult
+
+if TYPE_CHECKING:
+    # Deferred: dynestyx.control imports from dynestyx.simulation.base, so a
+    # top-level import here would be circular. Only needed for type-checking.
+    from dynestyx.control.discrete_controller_simulators import PolicyCallable
 
 
 class Simulator(BaseSimulator):
@@ -94,7 +104,10 @@ class Simulator(BaseSimulator):
 
     What this does
     --------------
-    The concrete backend is selected from `dynamics.state_evolution`:
+    If `control_policy` is given, the backend is always
+    [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator],
+    regardless of `dynamics.state_evolution`. Otherwise the concrete backend is
+    selected from `dynamics.state_evolution`:
 
     - `StochasticContinuousTimeStateEvolution` uses
       [SDESimulator][dynestyx.simulation.sde.SDESimulator].
@@ -185,6 +198,16 @@ class Simulator(BaseSimulator):
             must match the model selected at first use.
         n_simulations: Number of independent trajectories drawn per model
             execution. Defaults to one and must be greater than or equal to one.
+        control_policy: Optional control policy (see
+            `dynestyx.control.discrete_controller_simulators.PolicyCallable`).
+            When given, routing ignores `dynamics.state_evolution`'s type
+            entirely and always uses
+            [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]
+            instead -- a policy is an orthogonal choice from the dynamics
+            themselves, not something inferable from `dynamics`.
+        filter_config: Filter configuration forwarded to
+            `DiscreteControlLoopSimulator` when `control_policy` is given;
+            ignored otherwise.
         simulator: Concrete auto-selected simulator cached on first use.
     """
 
@@ -193,9 +216,13 @@ class Simulator(BaseSimulator):
         simulator_config: SimulatorConfig | None = None,
         *,
         n_simulations: int = 1,
+        control_policy: PolicyCallable | None = None,
+        filter_config: BaseFilterConfig | None = None,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
         self.simulator_config = simulator_config
+        self.control_policy = control_policy
+        self.filter_config = filter_config
         self.simulator: BaseSimulator | None = None
 
     def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
@@ -203,7 +230,24 @@ class Simulator(BaseSimulator):
         if self.simulator is not None:
             return self.simulator
 
-        if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
+        if self.control_policy is not None:
+            from dynestyx.control.discrete_controller_simulators import (
+                DiscreteControlLoopSimulator,
+            )
+
+            if self.simulator_config is not None:
+                raise ValueError(
+                    "Received a SimulatorConfig together with control_policy. "
+                    "DiscreteControlLoopSimulator does not accept a simulator_config."
+                )
+            self.simulator = DiscreteControlLoopSimulator(
+                control_policy=self.control_policy,
+                filter_config=self.filter_config,
+                n_simulations=self.n_simulations,
+            )
+        elif isinstance(
+            dynamics.state_evolution, StochasticContinuousTimeStateEvolution
+        ):
             if isinstance(self.simulator_config, ODESimulatorConfig):
                 raise ValueError(
                     "Received an ODESimulatorConfig for stochastic continuous-time "
