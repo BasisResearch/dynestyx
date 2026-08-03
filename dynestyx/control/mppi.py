@@ -67,10 +67,11 @@ class MPPI(eqx.Module):
         n_samples: Number of sampled control sequences per call. Defaults to
             `20`.
         dt: Fixed planning step size. Rollout step $i$ (of `horizon`) calls
-            `dynamics.state_evolution(x, u, i*dt, (i+1)*dt)` -- planning
-            always starts from a local $t=0$, independent of the real
-            simulation's current time, since MPPI re-plans from scratch on
-            every call.
+            `dynamics.state_evolution(x, u, t_now + i*dt, t_now + (i+1)*dt)`,
+            where `t_now` is the real current simulation time passed into
+            `__call__` -- so a genuinely time-varying `dynamics.state_evolution`
+            plans from the correct absolute time, even though MPPI re-plans
+            a fresh `horizon`-step lookahead from scratch on every call.
         temperature: MPPI's $\\lambda$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
             lowest-loss samples.
@@ -119,17 +120,19 @@ class MPPI(eqx.Module):
         x0: Real[Array, " state_dim"],
         u_seq: Real[Array, "horizon control_dim"],
         key: PRNGKeyArray,
+        t_now: Real[Array, ""],
     ) -> Real[Array, "horizon state_dim"]:
         """Unroll `horizon` one-step `dynamics` calls for one candidate
-        control sequence -- the internal replacement for what used to be a
-        hand-written rollout function supplied by the caller."""
+        control sequence, starting from real time `t_now` -- the internal
+        replacement for what used to be a hand-written rollout function
+        supplied by the caller."""
 
         def step(carry, u_and_idx):
             x, step_key = carry
             u, idx = u_and_idx
-            t_now = idx * self.dt
-            t_next = (idx + 1) * self.dt
-            transition = self.dynamics.state_evolution(x, u, t_now, t_next)
+            step_t_now = t_now + idx * self.dt
+            step_t_next = step_t_now + self.dt
+            transition = self.dynamics.state_evolution(x, u, step_t_now, step_t_next)
             if hasattr(transition, "mean"):
                 x_next = transition.mean
             else:
@@ -144,11 +147,16 @@ class MPPI(eqx.Module):
     def __call__(
         self,
         x_hat: PyTree,
+        t_now: Real[Array, ""],
+        t_next: Real[Array, ""],
         s: tuple[Real[Array, "horizon control_dim"], PRNGKeyArray],
     ) -> tuple[
         Real[Array, " control_dim"],
         tuple[Real[Array, "horizon control_dim"], PRNGKeyArray],
     ]:
+        # t_next (the real simulation's next observation time) is unused --
+        # MPPI plans its own horizon-step lookahead from t_now using its own dt.
+        del t_next
         x0 = filter_state_mean(x_hat)
         nominal, key = s
         key, noise_key, rollout_key = jr.split(key, 3)
@@ -161,12 +169,13 @@ class MPPI(eqx.Module):
         rollout_keys = jr.split(rollout_key, self.n_samples)
 
         if self.batched:
-            x_trajectories = jax.vmap(self._rollout_one, in_axes=(None, 0, 0))(
-                x0, candidates, rollout_keys
+            x_trajectories = jax.vmap(self._rollout_one, in_axes=(None, 0, 0, None))(
+                x0, candidates, rollout_keys, t_now
             )
         else:
             x_trajectories = jax.lax.map(
-                lambda args: self._rollout_one(x0, *args), (candidates, rollout_keys)
+                lambda args: self._rollout_one(x0, args[0], args[1], t_now),
+                (candidates, rollout_keys),
             )
         losses = jax.vmap(self.loss_fn)(x_trajectories, candidates)
         # A candidate whose rollout numerically diverges (e.g. an unstable

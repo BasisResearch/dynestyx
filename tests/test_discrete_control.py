@@ -53,14 +53,14 @@ class _LinearPolicy(eqx.Module):
 
     K: jax.Array
 
-    def __call__(self, x_hat, s):
+    def __call__(self, x_hat, t_now, t_next, s):
         return -self.K @ filter_state_mean(x_hat), s
 
 
 def _linear_policy_fn(K):
     """Plain-function equivalent of _LinearPolicy."""
 
-    def policy(x_hat, s):
+    def policy(x_hat, t_now, t_next, s):
         return -K @ filter_state_mean(x_hat), s
 
     return policy
@@ -527,7 +527,7 @@ def test_array_policy_state_preserves_shape_and_values():
         def initial_state(self):
             return jnp.zeros(1)
 
-        def __call__(self, x_hat, s):
+        def __call__(self, x_hat, t_now, t_next, s):
             return jnp.zeros(1), s + 1.0
 
     sim = DiscreteControlLoopSimulator(control_policy=_CountingPolicy())
@@ -609,7 +609,7 @@ def test_observation_uses_previous_step_control_not_same_index():
         def initial_state(self):
             return jnp.array(0.0)
 
-        def __call__(self, x_hat, s):
+        def __call__(self, x_hat, t_now, t_next, s):
             return jnp.reshape(s + 1.0, (1,)), s + 1.0
 
     sim = DiscreteControlLoopSimulator(control_policy=_GrowingPolicy())
@@ -811,24 +811,25 @@ def test_black_box_transition_rejected_clearly_by_kf_ekf(
 
 
 # ---------------------------------------------------------------------------
-# Group 8: distribution-returning policies
+# Group 8: distribution-returning policies are rejected
 # ---------------------------------------------------------------------------
 
 
 class _GaussianExplorationPolicy:
-    """A policy that returns a NumPyro Distribution instead of a raw value;
-    DiscreteControlLoopSimulator must sample from it."""
+    """A policy that returns a NumPyro Distribution instead of a raw value --
+    no longer supported; DiscreteControlLoopSimulator must reject it clearly
+    rather than silently sampling it."""
 
     def __init__(self, K, std):
         self._K = K
         self._std = std
 
-    def __call__(self, x_hat, s):
+    def __call__(self, x_hat, t_now, t_next, s):
         mean = -self._K @ filter_state_mean(x_hat)
         return dist.Normal(mean, self._std), s
 
 
-def test_distribution_returning_policy_runs_end_to_end():
+def test_distribution_returning_policy_raises_clear_error():
     dynamics = _lti_1d()
     policy = _GaussianExplorationPolicy(K=jnp.array([[0.5]]), std=0.1)
     sim = DiscreteControlLoopSimulator(control_policy=policy)
@@ -838,27 +839,8 @@ def test_distribution_returning_policy_runs_end_to_end():
         with sim:
             return dsx.sample("f", dynamics, predict_times=predict_times)
 
-    tr = _run_trace(model)
-    assert_trace_sites_exist_and_field_all_finite(
-        tr, "f_states", "f_controls", where="distribution-returning policy test"
-    )
-
-
-def test_distribution_returning_policy_actually_samples():
-    """Different keys must produce different controls -- otherwise the
-    returned Distribution would be silently ignored rather than sampled."""
-    dynamics = _lti_1d()
-    policy = _GaussianExplorationPolicy(K=jnp.array([[0.5]]), std=1.0)
-    sim = DiscreteControlLoopSimulator(control_policy=policy)
-    predict_times = jnp.arange(0.0, 6.0)
-
-    def model():
-        with sim:
-            return dsx.sample("f", dynamics, predict_times=predict_times)
-
-    tr_a = _run_trace(model, rng_seed=0)
-    tr_b = _run_trace(model, rng_seed=1)
-    assert not jnp.array_equal(tr_a["f_controls"]["value"], tr_b["f_controls"]["value"])
+    with pytest.raises(ValueError, match="not yet supported"):
+        _run_trace(model)
 
 
 # ---------------------------------------------------------------------------
@@ -1069,10 +1051,11 @@ def test_mppi_initial_state_and_call_depend_only_on_seed():
             seed=seed,
         )
 
+    t0, t1 = jnp.array(0.0), jnp.array(1.0)
     mppi_a1, mppi_a2, mppi_b = make(seed=0), make(seed=0), make(seed=1)
-    u_a1, _ = mppi_a1(x_hat, mppi_a1.initial_state())
-    u_a2, _ = mppi_a2(x_hat, mppi_a2.initial_state())
-    u_b, _ = mppi_b(x_hat, mppi_b.initial_state())
+    u_a1, _ = mppi_a1(x_hat, t0, t1, mppi_a1.initial_state())
+    u_a2, _ = mppi_a2(x_hat, t0, t1, mppi_a2.initial_state())
+    u_b, _ = mppi_b(x_hat, t0, t1, mppi_b.initial_state())
 
     assert jnp.array_equal(u_a1, u_a2)
     assert not jnp.array_equal(u_a1, u_b)
@@ -1104,6 +1087,8 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     class _FixedBelief:
         mean = jnp.array([2.0])
 
-    u0, (next_nominal, _) = mppi(_FixedBelief(), mppi.initial_state())
+    u0, (next_nominal, _) = mppi(
+        _FixedBelief(), jnp.array(0.0), jnp.array(1.0), mppi.initial_state()
+    )
     assert jnp.all(jnp.isfinite(u0))
     assert jnp.all(jnp.isfinite(next_nominal))
