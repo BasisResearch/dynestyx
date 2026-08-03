@@ -10,9 +10,11 @@ from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
 from dynestyx.control.discrete_controller_simulators import (
+    ControlledSimulatedResult,
     DiscreteControlLoopSimulator,
     filter_state_mean,
 )
+from dynestyx.control.mppi import MPPI
 from dynestyx.discretizers import Discretizer, euler_maruyama
 from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
@@ -51,14 +53,14 @@ class _LinearPolicy(eqx.Module):
 
     K: jax.Array
 
-    def __call__(self, x_hat, s, key):
+    def __call__(self, x_hat, s):
         return -self.K @ filter_state_mean(x_hat), s
 
 
 def _linear_policy_fn(K):
     """Plain-function equivalent of _LinearPolicy."""
 
-    def policy(x_hat, s, key):
+    def policy(x_hat, s):
         return -K @ filter_state_mean(x_hat), s
 
     return policy
@@ -303,8 +305,8 @@ def test_compute_cuthbert_filter_update_pf_enkf_agree_with_kf_mean(filter_config
 # ---------------------------------------------------------------------------
 
 
-def _simple_policy_and_state():
-    return _LinearPolicy(K=jnp.array([[0.5]])), None
+def _simple_policy():
+    return _LinearPolicy(K=jnp.array([[0.5]]))
 
 
 def test_rejects_continuous_time_dynamics_not_wrapped_in_discretizer():
@@ -316,10 +318,10 @@ def test_rejects_continuous_time_dynamics_not_wrapped_in_discretizer():
         observation_model=LinearGaussianObservation(H=jnp.eye(1), R=0.1 * jnp.eye(1)),
         control_dim=1,
     )
-    policy, s0 = _simple_policy_and_state()
+    policy = _simple_policy()
 
     def model():
-        with DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=s0):
+        with DiscreteControlLoopSimulator(control_policy=policy):
             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
 
     with pytest.raises(ValueError, match="only supports discrete-time models"):
@@ -328,10 +330,10 @@ def test_rejects_continuous_time_dynamics_not_wrapped_in_discretizer():
 
 def test_rejects_ctrl_values():
     dynamics = _lti_1d()
-    policy, s0 = _simple_policy_and_state()
+    policy = _simple_policy()
 
     def model():
-        with DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=s0):
+        with DiscreteControlLoopSimulator(control_policy=policy):
             return dsx.sample(
                 "f",
                 dynamics,
@@ -346,10 +348,10 @@ def test_rejects_ctrl_values():
 
 def test_rejects_obs_values_conditioning():
     dynamics = _lti_1d()
-    policy, s0 = _simple_policy_and_state()
+    policy = _simple_policy()
 
     def model():
-        with DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=s0):
+        with DiscreteControlLoopSimulator(control_policy=policy):
             return dsx.sample(
                 "f",
                 dynamics,
@@ -363,12 +365,10 @@ def test_rejects_obs_values_conditioning():
 
 def test_rejects_n_simulations_greater_than_one():
     dynamics = _lti_1d()
-    policy, s0 = _simple_policy_and_state()
+    policy = _simple_policy()
 
     def model():
-        with DiscreteControlLoopSimulator(
-            control_policy=policy, policy_state_init=s0, n_simulations=2
-        ):
+        with DiscreteControlLoopSimulator(control_policy=policy, n_simulations=2):
             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
 
     with pytest.raises(NotImplementedError, match="n_simulations"):
@@ -377,10 +377,10 @@ def test_rejects_n_simulations_greater_than_one():
 
 def test_requires_obs_times_or_predict_times():
     dynamics = _lti_1d()
-    policy, s0 = _simple_policy_and_state()
+    policy = _simple_policy()
 
     def model():
-        with DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=s0):
+        with DiscreteControlLoopSimulator(control_policy=policy):
             return dsx.sample("f", dynamics)
 
     with pytest.raises(ValueError, match="obs_times or predict_times"):
@@ -389,10 +389,10 @@ def test_requires_obs_times_or_predict_times():
 
 def test_requires_seeded_context():
     dynamics = _lti_1d()
-    policy, s0 = _simple_policy_and_state()
+    policy = _simple_policy()
 
     def model():
-        with DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=s0):
+        with DiscreteControlLoopSimulator(control_policy=policy):
             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
 
     with pytest.raises(ValueError, match="PRNG key required"):
@@ -416,7 +416,7 @@ def test_end_to_end_shapes_and_finiteness(filter_config):
     dynamics = _lti_1d()
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
-        control_policy=policy, policy_state_init=None, filter_config=filter_config
+        control_policy=policy, filter_config=filter_config
     )
     predict_times = jnp.arange(0.0, 8.0)
 
@@ -450,7 +450,6 @@ def test_record_filtered_states_mean_explicit_gating(record_val, expect_present)
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
         control_policy=policy,
-        policy_state_init=None,
         filter_config=EKFConfig(record_filtered_states_mean=record_val),
     )
 
@@ -471,7 +470,6 @@ def test_record_filtered_states_mean_default_size_heuristic():
 
     small_cap_sim = DiscreteControlLoopSimulator(
         control_policy=policy,
-        policy_state_init=None,
         filter_config=EKFConfig(record_max_elems=0),
     )
 
@@ -483,7 +481,7 @@ def test_record_filtered_states_mean_default_size_heuristic():
     assert "f_filtered_states_mean" not in tr_small_cap
 
     default_sim = DiscreteControlLoopSimulator(
-        control_policy=policy, policy_state_init=None, filter_config=EKFConfig()
+        control_policy=policy, filter_config=EKFConfig()
     )
 
     def default_model():
@@ -495,11 +493,11 @@ def test_record_filtered_states_mean_default_size_heuristic():
 
 
 def test_stateless_policy_runs_without_crashing_and_omits_policy_states():
-    """Regression test: policy_state_init=None previously crashed
-    (jnp.expand_dims(None, axis=0)) when assembling the result dict."""
+    """Regression test: a stateless policy (no initial_state()) previously
+    crashed (jnp.expand_dims(None, axis=0)) when assembling the result dict."""
     dynamics = _lti_1d()
     policy = _linear_policy_fn(jnp.array([[0.5]]))
-    sim = DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=None)
+    sim = DiscreteControlLoopSimulator(control_policy=policy)
 
     def model():
         with sim:
@@ -523,13 +521,16 @@ def test_array_policy_state_preserves_shape_and_values():
     """
     dynamics = _lti_1d()
 
-    def counting_policy(x_hat, s, key):
-        # u is irrelevant to this test; s is a running step counter.
-        return jnp.zeros(1), s + 1.0
+    class _CountingPolicy:
+        """s is a running step counter; u is irrelevant to this test."""
 
-    sim = DiscreteControlLoopSimulator(
-        control_policy=counting_policy, policy_state_init=jnp.zeros(1)
-    )
+        def initial_state(self):
+            return jnp.zeros(1)
+
+        def __call__(self, x_hat, s):
+            return jnp.zeros(1), s + 1.0
+
+    sim = DiscreteControlLoopSimulator(control_policy=_CountingPolicy())
     predict_times = jnp.arange(0.0, 6.0)
 
     def model():
@@ -557,9 +558,7 @@ def test_closed_loop_stabilizes_vs_uncontrolled_baseline():
 
     def run(K):
         policy = _LinearPolicy(K=jnp.array([[K]]))
-        sim = DiscreteControlLoopSimulator(
-            control_policy=policy, policy_state_init=None
-        )
+        sim = DiscreteControlLoopSimulator(control_policy=policy)
 
         def model():
             with sim:
@@ -604,13 +603,16 @@ def test_observation_uses_previous_step_control_not_same_index():
         control_dim=control_dim,
     )
 
-    def growing_policy(x_hat, s, key):
-        # A distinct, easily-identified control value at every step.
-        return jnp.reshape(s + 1.0, (1,)), s + 1.0
+    class _GrowingPolicy:
+        """A distinct, easily-identified control value at every step."""
 
-    sim = DiscreteControlLoopSimulator(
-        control_policy=growing_policy, policy_state_init=jnp.array(0.0)
-    )
+        def initial_state(self):
+            return jnp.array(0.0)
+
+        def __call__(self, x_hat, s):
+            return jnp.reshape(s + 1.0, (1,)), s + 1.0
+
+    sim = DiscreteControlLoopSimulator(control_policy=_GrowingPolicy())
     predict_times = jnp.arange(0.0, 6.0)
 
     def model():
@@ -630,7 +632,7 @@ def test_observation_uses_previous_step_control_not_same_index():
 def test_determinism_same_seed_reproducible_different_seed_differs():
     dynamics = _lti_1d()
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
-    sim = DiscreteControlLoopSimulator(control_policy=policy, policy_state_init=None)
+    sim = DiscreteControlLoopSimulator(control_policy=policy)
     predict_times = jnp.arange(0.0, 8.0)
 
     def model():
@@ -651,9 +653,7 @@ def test_eqx_module_policy_matches_equivalent_plain_function_policy():
     predict_times = jnp.arange(0.0, 8.0)
 
     def run(policy):
-        sim = DiscreteControlLoopSimulator(
-            control_policy=policy, policy_state_init=None
-        )
+        sim = DiscreteControlLoopSimulator(control_policy=policy)
 
         def model():
             with sim:
@@ -689,7 +689,6 @@ def test_discretizer_wrapped_sde_runs_end_to_end():
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
         control_policy=policy,
-        policy_state_init=None,
         filter_config=EKFConfig(record_filtered_states_mean=True),
     )
     predict_times = jnp.arange(0.0, 10.0)
@@ -732,7 +731,7 @@ def test_discretizer_wrapped_nonlinear_2d_diverges_uncontrolled_stabilizes_contr
     def run(k):
         policy = _LinearPolicy(K=k * jnp.eye(control_dim))
         sim = DiscreteControlLoopSimulator(
-            control_policy=policy, policy_state_init=None, filter_config=EKFConfig()
+            control_policy=policy, filter_config=EKFConfig()
         )
 
         def model():
@@ -772,7 +771,7 @@ def test_black_box_transition_runs_under_pf_and_enkf(filter_config):
     dynamics = _black_box_dynamics()
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
-        control_policy=policy, policy_state_init=None, filter_config=filter_config
+        control_policy=policy, filter_config=filter_config
     )
     predict_times = jnp.arange(0.0, 5.0)
 
@@ -799,7 +798,7 @@ def test_black_box_transition_rejected_clearly_by_kf_ekf(
     dynamics = _black_box_dynamics()
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
-        control_policy=policy, policy_state_init=None, filter_config=filter_config
+        control_policy=policy, filter_config=filter_config
     )
     predict_times = jnp.arange(0.0, 5.0)
 
@@ -809,3 +808,257 @@ def test_black_box_transition_rejected_clearly_by_kf_ekf(
 
     with pytest.raises(expected_exception):
         _run_trace(model)
+
+
+# ---------------------------------------------------------------------------
+# Group 8: distribution-returning policies
+# ---------------------------------------------------------------------------
+
+
+class _GaussianExplorationPolicy:
+    """A policy that returns a NumPyro Distribution instead of a raw value;
+    DiscreteControlLoopSimulator must sample from it."""
+
+    def __init__(self, K, std):
+        self._K = K
+        self._std = std
+
+    def __call__(self, x_hat, s):
+        mean = -self._K @ filter_state_mean(x_hat)
+        return dist.Normal(mean, self._std), s
+
+
+def test_distribution_returning_policy_runs_end_to_end():
+    dynamics = _lti_1d()
+    policy = _GaussianExplorationPolicy(K=jnp.array([[0.5]]), std=0.1)
+    sim = DiscreteControlLoopSimulator(control_policy=policy)
+    predict_times = jnp.arange(0.0, 6.0)
+
+    def model():
+        with sim:
+            return dsx.sample("f", dynamics, predict_times=predict_times)
+
+    tr = _run_trace(model)
+    assert_trace_sites_exist_and_field_all_finite(
+        tr, "f_states", "f_controls", where="distribution-returning policy test"
+    )
+
+
+def test_distribution_returning_policy_actually_samples():
+    """Different keys must produce different controls -- otherwise the
+    returned Distribution would be silently ignored rather than sampled."""
+    dynamics = _lti_1d()
+    policy = _GaussianExplorationPolicy(K=jnp.array([[0.5]]), std=1.0)
+    sim = DiscreteControlLoopSimulator(control_policy=policy)
+    predict_times = jnp.arange(0.0, 6.0)
+
+    def model():
+        with sim:
+            return dsx.sample("f", dynamics, predict_times=predict_times)
+
+    tr_a = _run_trace(model, rng_seed=0)
+    tr_b = _run_trace(model, rng_seed=1)
+    assert not jnp.array_equal(tr_a["f_controls"]["value"], tr_b["f_controls"]["value"])
+
+
+# ---------------------------------------------------------------------------
+# Group 9: dsx.simulate(..., control_policy=...) routing
+# ---------------------------------------------------------------------------
+
+
+def test_dsx_simulate_with_control_policy_routes_to_control_loop():
+    dynamics = _lti_1d(A=1.0, B=1.0, Q=0.05, R=0.1)
+    predict_times = jnp.arange(0.0, 20.0)
+
+    result_controlled = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
+    )
+    result_uncontrolled = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=_LinearPolicy(K=jnp.array([[0.0]])),
+    )
+
+    assert isinstance(result_controlled, ControlledSimulatedResult)
+    assert isinstance(result_uncontrolled, ControlledSimulatedResult)
+    assert result_controlled.controls is not None
+    assert result_controlled.states is not None
+    assert result_uncontrolled.states is not None
+    assert jnp.abs(result_controlled.states[0, -1, 0]) < 1.0
+    assert jnp.abs(result_controlled.states[0, -1, 0]) < jnp.abs(
+        result_uncontrolled.states[0, -1, 0]
+    )
+
+
+def test_dsx_simulate_with_control_policy_forwards_filter_config():
+    dynamics = _lti_1d()
+    predict_times = jnp.arange(0.0, 5.0)
+
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
+        filter_config=EKFConfig(record_filtered_states_mean=True),
+    )
+    assert isinstance(result, ControlledSimulatedResult)
+    assert result.filtered_states_mean is not None
+    assert jnp.all(jnp.isfinite(result.filtered_states_mean))
+
+
+def test_dsx_simulate_with_control_policy_rejects_ctrl_values():
+    dynamics = _lti_1d()
+    predict_times = jnp.arange(0.0, 5.0)
+
+    with pytest.raises(ValueError, match="computes controls online"):
+        dsx.simulate(
+            dynamics,
+            rng_key=jr.PRNGKey(0),
+            predict_times=predict_times,
+            ctrl_times=predict_times,
+            ctrl_values=jnp.zeros((5, 1)),
+            control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
+        )
+
+
+def test_dsx_simulate_with_control_policy_rejects_simulator_config():
+    from dynestyx.inference.configs.simulator import SDESimulatorConfig
+
+    dynamics = _lti_1d()
+    predict_times = jnp.arange(0.0, 5.0)
+
+    with pytest.raises(
+        ValueError, match="SimulatorConfig together with control_policy"
+    ):
+        dsx.simulate(
+            dynamics,
+            rng_key=jr.PRNGKey(0),
+            predict_times=predict_times,
+            control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
+            simulator_config=SDESimulatorConfig(),
+        )
+
+
+def test_dsx_simulate_without_control_policy_unchanged():
+    """No control_policy given -> falls back to today's type-based routing,
+    returning a plain SimulatedResult (no controls field at all), not a
+    ControlledSimulatedResult."""
+    dynamics = _lti_1d()
+    predict_times = jnp.arange(0.0, 5.0)
+
+    result = dsx.simulate(dynamics, rng_key=jr.PRNGKey(0), predict_times=predict_times)
+    assert not hasattr(result, "controls")
+
+
+# ---------------------------------------------------------------------------
+# Group 10: MPPI owns its randomness -- control_policy never receives a key
+# ---------------------------------------------------------------------------
+
+
+def _mppi_rollout(dynamics, dt=1.0):
+    def rollout_one(x0, u_seq):
+        def step(x, u):
+            x_next = dynamics.state_evolution(x, u, 0.0, dt).mean
+            return x_next, x_next
+
+        _, xs = jax.lax.scan(step, x0, u_seq)
+        return xs
+
+    return jax.vmap(rollout_one, in_axes=(None, 0))
+
+
+def _mppi_loss(x_seq, u_seq):
+    return jnp.sum(x_seq**2) + 0.01 * jnp.sum(u_seq**2)
+
+
+def test_mppi_runs_end_to_end_without_a_key_argument():
+    dynamics = _lti_1d(A=1.05, B=1.0)
+    mppi = MPPI(
+        dynamics_model=_mppi_rollout(dynamics),
+        loss_fn=_mppi_loss,
+        horizon=10,
+        control_dim=1,
+        noise_std=jnp.array(1.0),
+        seed=0,
+    )
+    predict_times = jnp.arange(0.0, 20.0)
+
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=mppi,
+        filter_config=KFConfig(record_filtered_states_mean=True),
+    )
+    assert isinstance(result, ControlledSimulatedResult)
+    assert result.states is not None
+    assert jnp.all(jnp.isfinite(result.states))
+
+
+def test_mppi_different_seeds_explore_differently_under_the_same_rng_key():
+    """MPPI owns its exploration randomness entirely -- two instances with
+    different `seed`s must produce different controls even when driven by
+    the identical outer `rng_key`."""
+    dynamics = _lti_1d(A=1.05, B=1.0)
+    predict_times = jnp.arange(0.0, 20.0)
+
+    def run(seed):
+        mppi = MPPI(
+            dynamics_model=_mppi_rollout(dynamics),
+            loss_fn=_mppi_loss,
+            horizon=10,
+            control_dim=1,
+            noise_std=jnp.array(1.0),
+            seed=seed,
+        )
+        return dsx.simulate(
+            dynamics,
+            rng_key=jr.PRNGKey(0),
+            predict_times=predict_times,
+            control_policy=mppi,
+        )
+
+    result_a = run(seed=0)
+    result_b = run(seed=1)
+    assert isinstance(result_a, ControlledSimulatedResult)
+    assert isinstance(result_b, ControlledSimulatedResult)
+    assert not jnp.allclose(result_a.controls, result_b.controls)
+
+
+def test_mppi_initial_state_and_call_depend_only_on_seed():
+    """Unit-level check, isolated from the closed loop (where a different
+    outer rng_key also changes x_hat via the real observed trajectory, so
+    the chosen control legitimately differs downstream for reasons that have
+    nothing to do with MPPI's own randomness). `seed` alone determines the
+    key baked into `initial_state()`'s output; `__call__` itself takes no
+    key at all, so its output is a pure function of (x_hat, s)."""
+    dynamics = _lti_1d(A=1.05, B=1.0)
+
+    class _FixedBelief:
+        mean = jnp.array([2.0])  # a KF-like belief, not a raw array (whose
+        # own .mean is a bound method, not a value -- would collide with
+        # filter_state_mean's hasattr(state, "mean") duck-typing check)
+
+    x_hat = _FixedBelief()
+
+    def make(seed):
+        return MPPI(
+            dynamics_model=_mppi_rollout(dynamics),
+            loss_fn=_mppi_loss,
+            horizon=10,
+            control_dim=1,
+            noise_std=jnp.array(1.0),
+            seed=seed,
+        )
+
+    mppi_a1, mppi_a2, mppi_b = make(seed=0), make(seed=0), make(seed=1)
+    u_a1, _ = mppi_a1(x_hat, mppi_a1.initial_state())
+    u_a2, _ = mppi_a2(x_hat, mppi_a2.initial_state())
+    u_b, _ = mppi_b(x_hat, mppi_b.initial_state())
+
+    assert jnp.array_equal(u_a1, u_a2)
+    assert not jnp.array_equal(u_a1, u_b)
