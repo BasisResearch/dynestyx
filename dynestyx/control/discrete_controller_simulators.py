@@ -5,12 +5,13 @@ Implements the online control loop:
     x_0 ~ p(x_0)
     y_0 | x_0 ~ p(y_0 | x_0, t_0)
     x_hat_{0|0} = FilterUpdate(y_0, t_0)
-    u_k, s_{k+1} = control_policy(x_hat_{k|k}, s_k),                  k = 0..T-1
-        (control_policy never receives a key: if it returns a NumPyro
-        Distribution, u_k is drawn from it with a fresh key generated
-        here; if it needs its own randomness to pick a value directly,
-        that randomness must be carried inside s and advanced by the
-        policy itself, e.g. dynestyx.control.mppi.MPPI)
+    u_k, s_{k+1} = control_policy(x_hat_{k|k}, t_k, t_{k+1}, s_k),     k = 0..T-1
+        (control_policy always receives the current and next times,
+        even if it ignores them; it never receives a key -- a policy
+        needing its own randomness must carry it inside s and advance
+        it internally, e.g. dynestyx.control.mppi.MPPI. It must return
+        a concrete value, not a NumPyro Distribution -- see
+        PolicyCallable)
     x_{k+1} | x_k, u_k ~ p(x_{k+1} | x_k, u_k, t_k, t_{k+1}),          k = 0..T-1
     y_{k+1} | x_{k+1}, u_k ~ p(y_{k+1} | x_{k+1}, u_k, t_{k+1}),       k = 0..T-1
     x_hat_{k+1|k+1} = FilterUpdate(x_hat_{k|k}, u_k, y_{k+1}, t_k, t_{k+1}),  k = 0..T-1
@@ -86,33 +87,31 @@ def filter_state_mean(state) -> Array:
 class PolicyCallable(Protocol):
     r"""Structural protocol for a control policy $\pi$.
 
-    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, s_k)$$
+    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)$$
 
     `x_hat` is whatever belief state the chosen `filter_config` family
     produces (see module docstring); use `filter_state_mean` for a
-    family-agnostic point estimate. Any plain callable matching this
-    signature works, including an `equinox.Module` with a matching
-    `__call__` (e.g. a learned neural policy) or a plain Python function
-    (e.g. an LQR gain lookup).
+    family-agnostic point estimate. `t_now`/`t_next` are the current and next
+    times -- always passed, even to a policy that ignores them, so that a
+    policy needing genuine time-dependence (e.g. `dynestyx.control.mppi.MPPI`,
+    which plans forward from `t_now`) doesn't need special-casing. Any plain
+    callable matching this signature works, including an `equinox.Module`
+    with a matching `__call__` (e.g. a learned neural policy) or a plain
+    Python function (e.g. an LQR gain lookup).
 
-    `control_policy` never receives a PRNG key -- there are two ways for a
-    policy to be stochastic without one:
-
-    - Return a NumPyro `Distribution` instead of a value (e.g.
-      `dist.Normal(mean, std)` for Gaussian exploration).
-      `DiscreteControlLoopSimulator` draws the actual control from it with a
-      fresh key, the same way it already samples
-      `dynamics.state_evolution`/`observation_model`.
-    - Return a value directly, but carry any randomness the policy itself
-      needs (e.g. MPPI's exploration noise) inside `s`, splitting/advancing
-      it internally on every call. The policy owns and seeds this randomness
-      entirely by itself -- see `dynestyx.control.mppi.MPPI`'s `seed`
-      attribute for the pattern.
+    `control_policy` never receives a PRNG key and must return a concrete
+    value, not a NumPyro `Distribution` (returning one raises a `ValueError`
+    -- not yet supported). A stochastic policy instead carries any
+    randomness it needs (e.g. MPPI's exploration noise) inside `s`,
+    splitting/advancing it internally on every call and sampling from its
+    own distributions itself before returning a value. The policy owns and
+    seeds this randomness entirely by itself -- see
+    `dynestyx.control.mppi.MPPI`'s `seed` attribute for the pattern.
     """
 
     def __call__(
-        self, x_hat: Any, s: PyTree
-    ) -> tuple[Real[Array, " control_dim"] | Distribution, PyTree]:
+        self, x_hat: Any, t_now: Real[Array, ""], t_next: Real[Array, ""], s: PyTree
+    ) -> tuple[Real[Array, " control_dim"], PyTree]:
         raise NotImplementedError()
 
 
@@ -240,13 +239,16 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         def _step(carry, t_idx):
             x_prev, x_hat_prev, s_prev, step_key = carry
-            step_key, k_trans, k_obs, k_filt, k_sample = jr.split(step_key, 5)
+            step_key, k_trans, k_obs, k_filt = jr.split(step_key, 4)
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
 
-            u_k, s_next = self.control_policy(x_hat_prev, s_prev)
+            u_k, s_next = self.control_policy(x_hat_prev, t_now, t_next, s_prev)
             if isinstance(u_k, Distribution):
-                u_k = u_k.sample(k_sample)
+                raise ValueError(
+                    "Returning a distribution is not yet supported, instead "
+                    "sample from this distribution inside your policy."
+                )
 
             trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
             x_next = trans_dist.sample(k_trans)
