@@ -19,6 +19,7 @@ from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
 
 from dynestyx.control.discrete_controller_simulators import filter_state_mean
+from dynestyx.models import DynamicalModel
 
 
 class MPPI(eqx.Module):
@@ -26,9 +27,11 @@ class MPPI(eqx.Module):
 
     At each call: sample `n_samples` candidate control sequences of length
     `horizon` as Gaussian perturbations around a nominal sequence (the policy
-    state `s`, warm-started from the previous call), roll each through
-    `dynamics_model`, score the resulting trajectories with `loss_fn`, and
-    combine them via the standard MPPI weighting
+    state `s`, warm-started from the previous call), roll each one forward
+    `horizon` steps through `dynamics.state_evolution` (built internally --
+    the caller only ever supplies the *one-step* dynamics, never a
+    hand-written rollout), score the resulting trajectories with `loss_fn`,
+    and combine them via the standard MPPI weighting
 
     $$w_i \\propto \\exp(-\\mathrm{loss}_i / \\lambda), \\qquad
       u_{0:H-1} = \\sum_i w_i\\, u^{(i)}_{0:H-1}$$
@@ -39,49 +42,63 @@ class MPPI(eqx.Module):
     sequence, shifted left by one with the last entry repeated.
 
     Attributes:
-        dynamics_model: Any callable `(x0, u_seq) -> x_seq`, deliberately not
-            tied to dynestyx's own `DynamicalModel`/filtering machinery -- a
-            bare JAX-compatible rollout function (e.g. wrapping a
-            `DynamicalModel`'s `state_evolution` with a `jax.lax.scan`, or an
-            external simulator). If `batched=True` (default), it must accept
-            `u_seq` shaped `(n_samples, horizon, control_dim)` and return
-            `(n_samples, horizon, state_dim)` in one call (e.g. internally
-            vmapped). If `batched=False`, it only supports a single
-            `(horizon, control_dim) -> (horizon, state_dim)` call at a time;
-            `MPPI` then drives it with `jax.lax.map`, JAX's for-loop
-            construct that calls it once per sample without requiring the
-            model itself to support batching.
+        dynamics: The *same* `DynamicalModel` used for the real simulation
+            (or a distinct approximate model for planning) -- MPPI calls
+            `dynamics.state_evolution(x, u, t_now, t_next)` once per rollout
+            step, `horizon` times per call, internally via `jax.lax.scan`.
+            Not `eqx.field(static=True)`: if `dynamics` holds trainable
+            parameters you're also fitting via the outer simulation, they
+            must stay in the differentiable pytree for gradients through
+            planning to be tracked too (see module notes on this in the
+            project's design discussion).
+            Uses the transition's `.mean` when available (the standard MPPI
+            simplification -- a deterministic prediction is enough for
+            planning); falls back to `.sample()`, using MPPI's own
+            internally-carried key (see `seed`), for a genuine black-box
+            transition that only exposes `.sample()`.
         loss_fn: `(x_seq, u_seq) -> scalar`, called once per sample (vmapped)
             over the rolled-out state and control trajectories.
-        horizon: Planning horizon length `H`.
-        control_dim: Control dimension, used by `initial_state()` to build the
-            zero nominal sequence `DiscreteControlLoopSimulator` seeds the
-            policy state with (via `initial_state()`) -- no need to pass an
-            initial policy state in yourself.
-        n_samples: Number of sampled control sequences per call.
+        horizon: Planning horizon length `H` -- the number of internal
+            one-step `dynamics` calls per rollout, and the length of each
+            candidate control sequence. Defaults to `10`.
         noise_std: Standard deviation of the Gaussian perturbations added to
-            the nominal sequence, scalar or shape `(control_dim,)`.
+            the nominal sequence, scalar or shape `(control_dim,)`. Defaults
+            to `1.0`.
+        n_samples: Number of sampled control sequences per call. Defaults to
+            `20`.
+        dt: Fixed planning step size. Rollout step $i$ (of `horizon`) calls
+            `dynamics.state_evolution(x, u, i*dt, (i+1)*dt)` -- planning
+            always starts from a local $t=0$, independent of the real
+            simulation's current time, since MPPI re-plans from scratch on
+            every call.
         temperature: MPPI's $\\lambda$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
             lowest-loss samples.
-        batched: Whether `dynamics_model` accepts a batch of control
-            sequences in one call (see above).
-        seed: Seeds MPPI's own exploration-noise PRNG key, carried inside the
-            policy state `s` (as `(nominal_sequence, key)`) and split
-            internally on every call -- `DiscreteControlLoopSimulator` never
-            passes a key to `control_policy`, so MPPI owns and advances its
-            randomness entirely by itself. Two `MPPI` instances with the same
+        batched: Whether the `n_samples` candidate rollouts are computed with
+            `jax.vmap` (default, fast, requires `dynamics.state_evolution` to
+            be vmap-compatible) or `jax.lax.map` (a sequential loop -- slower,
+            but works for a `dynamics.state_evolution` that isn't
+            vmap-compatible, e.g. wraps an external simulator via
+            `jax.pure_callback`).
+        seed: Seeds MPPI's own PRNG key, carried inside the policy state `s`
+            (as `(nominal_sequence, key)`) and split internally on every
+            call -- `DiscreteControlLoopSimulator` never passes a key to
+            `control_policy`, so MPPI owns and advances all of its own
+            randomness itself (exploration noise, and `.sample()` calls when
+            `dynamics` is a black box). Two `MPPI` instances with the same
             `seed` explore identically regardless of the simulation's own
             `rng_key`; use a different `seed` to get a different exploration
             sequence.
     """
 
-    dynamics_model: Callable = eqx.field(static=True)
+    dynamics: DynamicalModel
     loss_fn: Callable = eqx.field(static=True)
-    horizon: int = eqx.field(static=True)
-    control_dim: int = eqx.field(static=True)
-    noise_std: Real[Array, ""] | Real[Array, " control_dim"]
-    n_samples: int = eqx.field(static=True, default=10)
+    horizon: int = eqx.field(static=True, default=10)
+    noise_std: Real[Array, ""] | Real[Array, " control_dim"] = eqx.field(
+        default_factory=lambda: jnp.array(1.0)
+    )
+    n_samples: int = eqx.field(static=True, default=20)
+    dt: float = eqx.field(static=True, default=1.0)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
@@ -92,7 +109,37 @@ class MPPI(eqx.Module):
         """Zero nominal control sequence plus MPPI's own seeded PRNG key --
         `DiscreteControlLoopSimulator` calls this automatically to seed the
         policy state; no need to build or pass one in yourself."""
-        return jnp.zeros((self.horizon, self.control_dim)), jr.PRNGKey(self.seed)
+        return (
+            jnp.zeros((self.horizon, self.dynamics.control_dim)),
+            jr.PRNGKey(self.seed),
+        )
+
+    def _rollout_one(
+        self,
+        x0: Real[Array, " state_dim"],
+        u_seq: Real[Array, "horizon control_dim"],
+        key: PRNGKeyArray,
+    ) -> Real[Array, "horizon state_dim"]:
+        """Unroll `horizon` one-step `dynamics` calls for one candidate
+        control sequence -- the internal replacement for what used to be a
+        hand-written rollout function supplied by the caller."""
+
+        def step(carry, u_and_idx):
+            x, step_key = carry
+            u, idx = u_and_idx
+            t_now = idx * self.dt
+            t_next = (idx + 1) * self.dt
+            transition = self.dynamics.state_evolution(x, u, t_now, t_next)
+            if hasattr(transition, "mean"):
+                x_next = transition.mean
+            else:
+                step_key, sample_key = jr.split(step_key)
+                x_next = transition.sample(sample_key)
+            return (x_next, step_key), x_next
+
+        idxs = jnp.arange(self.horizon)
+        (_, _), xs = jax.lax.scan(step, (x0, key), (u_seq, idxs))
+        return xs
 
     def __call__(
         self,
@@ -104,21 +151,33 @@ class MPPI(eqx.Module):
     ]:
         x0 = filter_state_mean(x_hat)
         nominal, key = s
-        key, noise_key = jr.split(key)
+        key, noise_key, rollout_key = jr.split(key, 3)
         control_dim = nominal.shape[-1]
 
         noise = self.noise_std * jr.normal(
             noise_key, (self.n_samples, self.horizon, control_dim)
         )
         candidates = nominal[None, :, :] + noise  # (n_samples, horizon, control_dim)
+        rollout_keys = jr.split(rollout_key, self.n_samples)
 
         if self.batched:
-            x_trajectories = self.dynamics_model(x0, candidates)
+            x_trajectories = jax.vmap(self._rollout_one, in_axes=(None, 0, 0))(
+                x0, candidates, rollout_keys
+            )
         else:
             x_trajectories = jax.lax.map(
-                lambda u_seq: self.dynamics_model(x0, u_seq), candidates
+                lambda args: self._rollout_one(x0, *args), (candidates, rollout_keys)
             )
         losses = jax.vmap(self.loss_fn)(x_trajectories, candidates)
+        # A candidate whose rollout numerically diverges (e.g. an unstable
+        # system explored too far by an unlucky noise draw) can produce a
+        # +-inf or nan loss. A lone +-inf is harmless under softmax (it gets
+        # weight ~0), but a lone nan poisons every weight (softmax subtracts
+        # max(losses); nan - anything is nan). Clamping to the largest
+        # finite value keeps that candidate's weight ~0 without corrupting
+        # the others -- and keeps softmax well-defined even if every
+        # candidate this happens to.
+        losses = jnp.where(jnp.isfinite(losses), losses, jnp.finfo(losses.dtype).max)
 
         weights = jax.nn.softmax(-losses / self.temperature)
         weighted_seq = jnp.einsum("k,khc->hc", weights, candidates)
