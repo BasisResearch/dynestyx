@@ -955,20 +955,8 @@ def test_dsx_simulate_without_control_policy_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# Group 10: MPPI owns its randomness -- control_policy never receives a key
+# Group 10: MPPI takes one-step dynamics directly; owns its own randomness
 # ---------------------------------------------------------------------------
-
-
-def _mppi_rollout(dynamics, dt=1.0):
-    def rollout_one(x0, u_seq):
-        def step(x, u):
-            x_next = dynamics.state_evolution(x, u, 0.0, dt).mean
-            return x_next, x_next
-
-        _, xs = jax.lax.scan(step, x0, u_seq)
-        return xs
-
-    return jax.vmap(rollout_one, in_axes=(None, 0))
 
 
 def _mppi_loss(x_seq, u_seq):
@@ -978,10 +966,9 @@ def _mppi_loss(x_seq, u_seq):
 def test_mppi_runs_end_to_end_without_a_key_argument():
     dynamics = _lti_1d(A=1.05, B=1.0)
     mppi = MPPI(
-        dynamics_model=_mppi_rollout(dynamics),
+        dynamics=dynamics,
         loss_fn=_mppi_loss,
         horizon=10,
-        control_dim=1,
         noise_std=jnp.array(1.0),
         seed=0,
     )
@@ -999,6 +986,35 @@ def test_mppi_runs_end_to_end_without_a_key_argument():
     assert jnp.all(jnp.isfinite(result.states))
 
 
+def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
+    """dynamics.state_evolution here (see _black_box_dynamics) exposes only
+    .sample()/.shape(), no .mean -- MPPI's internal rollout must fall back
+    to sampling (using its own internally-carried key) rather than crashing
+    on a missing .mean."""
+    dynamics = _black_box_dynamics()
+    mppi = MPPI(
+        dynamics=dynamics,
+        loss_fn=_mppi_loss,
+        horizon=5,
+        noise_std=jnp.array(1.0),
+        seed=0,
+    )
+    predict_times = jnp.arange(0.0, 5.0)
+
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=mppi,
+        filter_config=PFConfig(
+            n_particles=_n_particles(64), record_filtered_states_mean=True
+        ),
+    )
+    assert isinstance(result, ControlledSimulatedResult)
+    assert result.states is not None
+    assert jnp.all(jnp.isfinite(result.states))
+
+
 def test_mppi_different_seeds_explore_differently_under_the_same_rng_key():
     """MPPI owns its exploration randomness entirely -- two instances with
     different `seed`s must produce different controls even when driven by
@@ -1008,10 +1024,9 @@ def test_mppi_different_seeds_explore_differently_under_the_same_rng_key():
 
     def run(seed):
         mppi = MPPI(
-            dynamics_model=_mppi_rollout(dynamics),
+            dynamics=dynamics,
             loss_fn=_mppi_loss,
             horizon=10,
-            control_dim=1,
             noise_std=jnp.array(1.0),
             seed=seed,
         )
@@ -1047,10 +1062,9 @@ def test_mppi_initial_state_and_call_depend_only_on_seed():
 
     def make(seed):
         return MPPI(
-            dynamics_model=_mppi_rollout(dynamics),
+            dynamics=dynamics,
             loss_fn=_mppi_loss,
             horizon=10,
-            control_dim=1,
             noise_std=jnp.array(1.0),
             seed=seed,
         )
@@ -1062,3 +1076,34 @@ def test_mppi_initial_state_and_call_depend_only_on_seed():
 
     assert jnp.array_equal(u_a1, u_a2)
     assert not jnp.array_equal(u_a1, u_b)
+
+
+def test_mppi_masks_non_finite_losses_before_softmax():
+    """Regression test: even when some candidate rollouts produce a nan
+    loss (e.g. from numerical divergence of an unstable system), MPPI's
+    output must stay finite. Unmasked, a single nan loss poisons the entire
+    softmax weighting (jax.nn.softmax([1, 2, nan, 3]) is all-nan), unlike a
+    lone +inf loss, which softmax already handles gracefully on its own."""
+    dynamics = _lti_1d(A=1.05, B=1.0)
+
+    def flaky_loss(x_seq, u_seq):
+        # Deterministically nan for roughly half the candidates (whichever
+        # have a positive first control), finite for the rest -- exercises
+        # the masking without depending on actual numerical divergence.
+        base = jnp.sum(x_seq**2) + 0.01 * jnp.sum(u_seq**2)
+        return jnp.where(u_seq[0, 0] > 0, jnp.nan, base)
+
+    mppi = MPPI(
+        dynamics=dynamics,
+        loss_fn=flaky_loss,
+        horizon=3,
+        n_samples=20,
+        noise_std=jnp.array(1.0),
+    )
+
+    class _FixedBelief:
+        mean = jnp.array([2.0])
+
+    u0, (next_nominal, _) = mppi(_FixedBelief(), mppi.initial_state())
+    assert jnp.all(jnp.isfinite(u0))
+    assert jnp.all(jnp.isfinite(next_nominal))
