@@ -224,9 +224,28 @@ def _build_cuthbert_filter_obj(
     return filter_obj, parallel
 
 
-def compute_cuthbert_filter_update(
+def build_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
+    key: jax.Array | None = None,
+):
+    """Build the cuthbert Filter object for `(dynamics, filter_config)`.
+
+    Depends only on `dynamics`/`filter_config`, never on trajectory data, so
+    it can be built once and reused across many `compute_cuthbert_filter_update`
+    calls via that function's `filter_obj=` argument -- avoids rebuilding it
+    on every step. `key` is only required (non-`None`) for `PFConfig`/`EnKFConfig`.
+    """
+    filter_kwargs = _config_to_filter_kwargs(filter_config)
+    filter_obj, _ = _build_cuthbert_filter_obj(
+        dynamics, filter_config, filter_kwargs, key, want_parallel=False
+    )
+    return filter_obj
+
+
+def compute_cuthbert_filter_update(
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig | None,
     prev_state,
     key: jax.Array,
     *,
@@ -234,42 +253,31 @@ def compute_cuthbert_filter_update(
     u: jax.Array | None,
     t: jax.Array,
     t_prev: jax.Array | None = None,
+    filter_obj=None,
 ):
-    r"""One-step FilterUpdate: state_k + u_k + y_{k+1} -> state_{k+1}.
+    r"""One-step FilterUpdate: state_k + u_k + y_{k+1} -> state_{k+1}. Used for online filtering.
 
-    Unlike `compute_cuthbert_filter` (whole-trajectory), this performs exactly
-    one predict+update step using cuthbert's `Filter.filter_prepare`/
-    `filter_combine` primitives directly, without requiring future
-    observations. This is what makes online control possible: the state
-    returned here can be consumed by a policy to choose the next control
-    before the next observation exists.
+    Unlike `compute_cuthbert_filter` (whole-trajectory), this performs one
+    predict+update step directly via cuthbert's `Filter.filter_prepare`/
+    `filter_combine`
+    Pass `prev_state=None` for the bootstrap call
+    (first observation, no control history yet); this runs `init_prepare`
+    first.
 
-    Pass `prev_state=None` for the bootstrap call (computing the filtering
-    state after only the first observation, with no control history yet);
-    this internally calls the cuthbert filter's `init_prepare` first.
+    `u` is the control that drove the transition *into* the state being
+    filtered (u_k, producing state_{k+1} from y_{k+1}).
 
-    Control convention (important, and different from `compute_cuthbert_filter`
-    / `DiscreteTimeSimulator`): `u` is the control that drove the transition
-    *into* the state being filtered, i.e. u_k when producing state_{k+1} from
-    state_k and y_{k+1} -- matching `FilterUpdate(x_hat_k, u_k, y_{k+1}, ...)`
-    in the control-loop equations. `compute_cuthbert_filter`/
-    `DiscreteTimeSimulator` instead pair `ctrl_values[t]` with *both* the
-    observation and the outgoing transition at the same index t, which is
-    only valid when the whole control trajectory is already known in advance.
-    For online control this is impossible: u_{k+1} cannot exist before
-    y_{k+1} is observed, since it is computed by the policy from the filtered
-    state that itself depends on y_{k+1}. So `u` here is used for both
-    `CuthbertInputs.u` and `CuthbertInputs.u_prev` in the single-row input
-    built for this step. Pass `u=None` for the bootstrap call, matching y_0's
-    lack of a control argument in the control-loop equations (numerically
-    equivalent to zeros for models with a control-input matrix, since D=None
-    or u=None are both treated as "no control contribution").
+    Provide exactly one of `filter_config` (builds the filter internally) or
+    `filter_obj` (an already-built filter from `build_cuthbert_filter`, to
+    reuse across repeated calls instead of rebuilding it here).
     """
-    filter_kwargs = _config_to_filter_kwargs(filter_config)
+    if (filter_config is None) == (filter_obj is None):
+        raise ValueError("Provide exactly one of filter_config or filter_obj.")
+
     key_state, key_prep = jr.split(key)
-    filter_obj, _ = _build_cuthbert_filter_obj(
-        dynamics, filter_config, filter_kwargs, key_state, want_parallel=False
-    )
+    if filter_obj is None:
+        assert filter_config is not None
+        filter_obj = build_cuthbert_filter(dynamics, filter_config, key_state)
 
     control_dim = dynamics.control_dim
     u_arr = jnp.zeros((control_dim,)) if u is None else jnp.asarray(u)

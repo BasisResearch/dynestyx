@@ -12,6 +12,7 @@ import dynestyx as dsx
 from dynestyx.control.discrete_controller_simulators import (
     ControlledSimulatedResult,
     DiscreteControlLoopSimulator,
+    filter_state_dist,
     filter_state_mean,
 )
 from dynestyx.control.mppi import MPPI
@@ -21,6 +22,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     compute_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
+from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
@@ -129,6 +131,38 @@ def test_filter_state_mean_unsupported_type_raises():
 
     with pytest.raises(TypeError, match="Cannot summarize filter state"):
         filter_state_mean(_Neither())
+
+
+def test_filter_state_dist_gaussian_when_chol_cov_present():
+    class _KFLikeState:
+        mean = jnp.array([1.0, 2.0])
+        chol_cov = jnp.array([[1.0, 0.0], [0.5, 1.0]])
+
+    result = filter_state_dist(_KFLikeState())
+    assert isinstance(result, dist.MultivariateNormal)
+    assert jnp.allclose(result.mean, _KFLikeState.mean)
+    assert jnp.allclose(result.scale_tril, _KFLikeState.chol_cov)
+
+
+def test_filter_state_dist_weighted_particles_when_particles_present():
+    class _PFLikeState:
+        particles = jnp.array([[0.0], [2.0], [4.0]])  # 3 particles, state_dim=1
+        log_weights = jnp.log(jnp.array([0.25, 0.25, 0.5]))
+
+    result = filter_state_dist(_PFLikeState())
+    assert isinstance(result, WeightedParticles)
+    assert jnp.allclose(result.particles, _PFLikeState.particles)
+    assert jnp.allclose(
+        jnp.exp(result.log_weights), jnp.array([0.25, 0.25, 0.5]), atol=1e-5
+    )
+
+
+def test_filter_state_dist_unsupported_type_raises():
+    class _Neither:
+        pass
+
+    with pytest.raises(TypeError, match="Cannot build a distribution"):
+        filter_state_dist(_Neither())
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +332,39 @@ def test_compute_cuthbert_filter_update_pf_enkf_agree_with_kf_mean(filter_config
     kf_means = kf_states.mean.ravel()
     means = _step_through_filter_update(dynamics, filter_config, key_seed=1).ravel()
     assert jnp.mean(jnp.abs(means - kf_means)) < tol
+
+
+@pytest.mark.parametrize(
+    ("filter_config", "expected_dist_type"),
+    [
+        (KFConfig(filter_source="cuthbert"), dist.MultivariateNormal),
+        (EKFConfig(), dist.MultivariateNormal),
+        (EnKFConfig(n_particles=_n_particles(50)), dist.MultivariateNormal),
+        (PFConfig(n_particles=_n_particles(50)), WeightedParticles),
+    ],
+)
+def test_filter_state_dist_matches_family_and_agrees_with_mean(
+    filter_config, expected_dist_type
+):
+    dynamics = _lti_1d()
+    state = compute_cuthbert_filter_update(
+        dynamics,
+        filter_config,
+        None,
+        jr.PRNGKey(0),
+        y=_OBS_VALUES[0],
+        u=None,
+        t=_OBS_TIMES[0],
+    )
+    result = filter_state_dist(state)
+    assert isinstance(result, expected_dist_type)
+
+    if isinstance(result, WeightedParticles):
+        weights = jax.nn.softmax(result.log_weights, axis=-1)
+        result_mean = jnp.sum(weights[..., None] * result.particles, axis=-2)
+    else:
+        result_mean = result.mean
+    assert jnp.allclose(result_mean, filter_state_mean(state), atol=1e-5)
 
 
 # ---------------------------------------------------------------------------
@@ -1035,12 +1102,7 @@ def test_mppi_initial_state_and_call_depend_only_on_seed():
     key at all, so its output is a pure function of (x_hat, s)."""
     dynamics = _lti_1d(A=1.05, B=1.0)
 
-    class _FixedBelief:
-        mean = jnp.array([2.0])  # a KF-like belief, not a raw array (whose
-        # own .mean is a bound method, not a value -- would collide with
-        # filter_state_mean's hasattr(state, "mean") duck-typing check)
-
-    x_hat = _FixedBelief()
+    x_hat = dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1))
 
     def make(seed):
         return MPPI(
@@ -1084,11 +1146,10 @@ def test_mppi_masks_non_finite_losses_before_softmax():
         noise_std=jnp.array(1.0),
     )
 
-    class _FixedBelief:
-        mean = jnp.array([2.0])
+    x_hat = dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1))
 
     u0, (next_nominal, _) = mppi(
-        _FixedBelief(), jnp.array(0.0), jnp.array(1.0), mppi.initial_state()
+        x_hat, jnp.array(0.0), jnp.array(1.0), mppi.initial_state()
     )
     assert jnp.all(jnp.isfinite(u0))
     assert jnp.all(jnp.isfinite(next_nominal))

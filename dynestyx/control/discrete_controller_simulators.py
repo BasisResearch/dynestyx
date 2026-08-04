@@ -21,10 +21,14 @@ Implements the online control loop:
 cuthbert's `Filter.filter_prepare`/`filter_combine` primitives one step at a
 time instead of over a whole pre-supplied trajectory. This works for any
 filter family exposed there (`KFConfig`, `EKFConfig`, `EnKFConfig`,
-`PFConfig`); the belief `x_hat` returned each step is therefore whatever
-state type that family produces (e.g. a Kalman-family state with a `.mean`
-property, or a `ParticleFilterState` with `.particles`/`.log_weights`) --
-see `filter_state_mean` below for a family-agnostic point estimate.
+`PFConfig`); the raw belief each step produces is family-specific (e.g. a
+Kalman-family state with a `.mean`/`.chol_cov`, or a `ParticleFilterState`
+with `.particles`/`.log_weights`), so before it's handed to `control_policy`
+it's converted via `filter_state_dist` into a family-agnostic NumPyro
+`Distribution` (`MultivariateNormal` for the Gaussian families,
+`WeightedParticles` for `PFConfig`) -- a policy can call `.mean` for a point
+estimate, or use the full distribution (e.g. `.sample`) for risk-aware
+planning.
 
 Important: the control passed to `dynamics.observation_model` for
 `y_{k+1}` is `u_k` (the control that drove the transition into `x_{k+1}`),
@@ -44,11 +48,12 @@ rejected here too, since it would conflict with online control).
 """
 
 import dataclasses
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import numpyro.distributions as dist
 from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
 from numpyro.distributions import Distribution
@@ -56,8 +61,10 @@ from numpyro.distributions import Distribution
 from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.filters import _default_filter_config
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+    build_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
+from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
@@ -83,15 +90,38 @@ def filter_state_mean(state) -> Array:
     raise TypeError(f"Cannot summarize filter state of type {type(state).__name__}")
 
 
+def filter_state_dist(state) -> Distribution:
+    """Full-belief NumPyro distribution for a cuthbert filter state, any family.
+
+    Kalman-family states (`KFConfig`, `EKFConfig`, `EnKFConfig`) expose
+    `.mean`/`.chol_cov`, giving an exact `MultivariateNormal`. `PFConfig`
+    states have no such property -- their belief is a weighted particle
+    cloud (`.particles`, `.log_weights`), represented via `WeightedParticles`
+    (dynestyx's own `Distribution`; NumPyro has no built-in equivalent).
+    Unlike `filter_state_mean`, this does not broadcast over a leading
+    time/batch axis -- call it once per (unbatched) state.
+    """
+    if hasattr(state, "chol_cov"):
+        return dist.MultivariateNormal(state.mean, scale_tril=state.chol_cov)
+    if hasattr(state, "particles") and hasattr(state, "log_weights"):
+        log_weights = jax.nn.log_softmax(state.log_weights, axis=-1)
+        return WeightedParticles(state.particles, log_weights)
+    raise TypeError(
+        f"Cannot build a distribution for filter state of type {type(state).__name__}"
+    )
+
+
 @runtime_checkable
 class PolicyCallable(Protocol):
     r"""Structural protocol for a control policy $\pi$.
 
     $$u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)$$
 
-    `x_hat` is whatever belief state the chosen `filter_config` family
-    produces (see module docstring); use `filter_state_mean` for a
-    family-agnostic point estimate. `t_now`/`t_next` are the current and next
+    `x_hat` is a NumPyro `Distribution` -- `MultivariateNormal` for
+    `KFConfig`/`EKFConfig`/`EnKFConfig`, `WeightedParticles` for `PFConfig`
+    (see module docstring and `filter_state_dist`); use `x_hat.mean` for a
+    family-agnostic point estimate, or the distribution itself for
+    uncertainty-aware planning. `t_now`/`t_next` are the current and next
     times -- always passed, even to a policy that ignores them, so that a
     policy needing genuine time-dependence (e.g. `dynestyx.control.mppi.MPPI`,
     which plans forward from `t_now`) doesn't need special-casing. Any plain
@@ -110,7 +140,11 @@ class PolicyCallable(Protocol):
     """
 
     def __call__(
-        self, x_hat: Any, t_now: Real[Array, ""], t_next: Real[Array, ""], s: PyTree
+        self,
+        x_hat: Distribution,
+        t_now: Real[Array, ""],
+        t_next: Real[Array, ""],
+        s: PyTree,
     ) -> tuple[Real[Array, " control_dim"], PyTree]:
         raise NotImplementedError()
 
@@ -209,6 +243,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
 
         key, k_x0, k_y0, k_filt0 = jr.split(rng_key, 4)
+        filter_obj = build_cuthbert_filter(dynamics, filter_config, key=rng_key)
 
         x_0 = dynamics.initial_condition.sample(k_x0)
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(k_y0)
@@ -226,13 +261,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
         x_hat_0 = compute_cuthbert_filter_update(
             dynamics,
-            filter_config,
+            None,
             None,
             k_filt0,
             y=y_0,
             u=None,
             t=times[0],
             t_prev=times[0] - dt0,
+            filter_obj=filter_obj,
         )
         initial_state_fn = getattr(self.control_policy, "initial_state", None)
         s_0 = initial_state_fn() if callable(initial_state_fn) else None
@@ -243,7 +279,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
 
-            u_k, s_next = self.control_policy(x_hat_prev, t_now, t_next, s_prev)
+            u_k, s_next = self.control_policy(
+                filter_state_dist(x_hat_prev), t_now, t_next, s_prev
+            )
             if isinstance(u_k, Distribution):
                 raise ValueError(
                     "Returning a distribution is not yet supported, instead "
@@ -258,13 +296,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
             x_hat_next = compute_cuthbert_filter_update(
                 dynamics,
-                filter_config,
+                None,
                 x_hat_prev,
                 k_filt,
                 y=y_next,
                 u=u_k,
                 t=t_next,
                 t_prev=t_now,
+                filter_obj=filter_obj,
             )
 
             new_carry = (x_next, x_hat_next, s_next, step_key)
@@ -320,5 +359,6 @@ __all__ = [
     "ControlledSimulatedResult",
     "DiscreteControlLoopSimulator",
     "PolicyCallable",
+    "filter_state_dist",
     "filter_state_mean",
 ]
