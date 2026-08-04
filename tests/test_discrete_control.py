@@ -19,6 +19,7 @@ from dynestyx.control.mppi import MPPI
 from dynestyx.discretizers import Discretizer, euler_maruyama
 from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+    build_cuthbert_filter,
     compute_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
@@ -125,14 +126,6 @@ def test_filter_state_mean_weighted_particle_average():
     assert jnp.allclose(result, jnp.array([expected]), atol=1e-5)
 
 
-def test_filter_state_mean_unsupported_type_raises():
-    class _Neither:
-        pass
-
-    with pytest.raises(TypeError, match="Cannot summarize filter state"):
-        filter_state_mean(_Neither())
-
-
 def test_filter_state_dist_gaussian_when_chol_cov_present():
     class _KFLikeState:
         mean = jnp.array([1.0, 2.0])
@@ -157,12 +150,19 @@ def test_filter_state_dist_weighted_particles_when_particles_present():
     )
 
 
-def test_filter_state_dist_unsupported_type_raises():
+@pytest.mark.parametrize(
+    ("fn", "match"),
+    [
+        (filter_state_mean, "Cannot summarize filter state"),
+        (filter_state_dist, "Cannot build a distribution"),
+    ],
+)
+def test_unsupported_filter_state_type_raises(fn, match):
     class _Neither:
         pass
 
-    with pytest.raises(TypeError, match="Cannot build a distribution"):
-        filter_state_dist(_Neither())
+    with pytest.raises(TypeError, match=match):
+        fn(_Neither())
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +181,9 @@ def _step_through_filter_update(dynamics, filter_config, *, key_seed=0):
     (ctrl_values[t] paired with both the transition into t and the observation
     at t), so the result is directly comparable to the whole-trajectory filter.
     """
+    filter_obj, _ = build_cuthbert_filter(
+        dynamics, filter_config, key=jr.PRNGKey(key_seed), want_parallel=False
+    )
     prev_state = None
     means = []
     k = jr.PRNGKey(key_seed)
@@ -190,7 +193,7 @@ def _step_through_filter_update(dynamics, filter_config, *, key_seed=0):
         t_prev = None if t_idx == 0 else _OBS_TIMES[t_idx - 1]
         prev_state = compute_cuthbert_filter_update(
             dynamics,
-            filter_config,
+            filter_obj,
             prev_state,
             sub,
             y=_OBS_VALUES[t_idx],
@@ -230,15 +233,17 @@ def test_compute_cuthbert_filter_update_bootstrap_ignores_u():
     making this a meaningful check, not just a no-op-by-construction one.
     """
     dynamics = _lti_1d()
-    filter_config = EKFConfig()
+    filter_obj, _ = build_cuthbert_filter(
+        dynamics, EKFConfig(), key=None, want_parallel=False
+    )
     y0 = jnp.array([0.5])
     t0 = jnp.array(0.0)
 
     state_no_u = compute_cuthbert_filter_update(
-        dynamics, filter_config, None, jr.PRNGKey(0), y=y0, u=None, t=t0
+        dynamics, filter_obj, None, jr.PRNGKey(0), y=y0, u=None, t=t0
     )
     state_huge_u = compute_cuthbert_filter_update(
-        dynamics, filter_config, None, jr.PRNGKey(0), y=y0, u=jnp.array([999.0]), t=t0
+        dynamics, filter_obj, None, jr.PRNGKey(0), y=y0, u=jnp.array([999.0]), t=t0
     )
     assert jnp.allclose(state_no_u.mean, state_huge_u.mean, atol=1e-6)
 
@@ -272,36 +277,23 @@ def _euler_maruyama_dynamics():
     )
 
 
-def test_compute_cuthbert_filter_update_default_t_prev_is_degenerate_for_dt_scaled_transition():
-    """Documents the actual failure mode of the bug found and fixed this
-    session: for a transition whose covariance scales with dt (e.g. an
-    Euler-Maruyama-discretized SDE), omitting `t_prev` collapses to dt=0 for
-    the first real step, which produces a zero-covariance distribution whose
-    NaN log-density leaks through EKF's Taylor-linearization gradient (via
-    jnp.where evaluating both branches). This is why
-    DiscreteControlLoopSimulator always supplies an explicit, non-degenerate
-    t_prev for its bootstrap call (see the next test).
+def test_compute_cuthbert_filter_update_explicit_t_prev_avoids_degeneracy():
+    """Regression test for a real bug: for a transition whose covariance
+    scales with dt (e.g. an Euler-Maruyama-discretized SDE), omitting
+    `t_prev` collapses to dt=0 for the first real step, producing a
+    zero-covariance distribution whose NaN log-density leaks through EKF's
+    Taylor-linearization gradient (via jnp.where evaluating both branches).
+    An explicit, non-degenerate `t_prev` (as `DiscreteControlLoopSimulator`
+    always supplies for its bootstrap call) avoids this.
     """
     dynamics = _euler_maruyama_dynamics()
-    state = compute_cuthbert_filter_update(
-        dynamics,
-        EKFConfig(),
-        None,
-        jr.PRNGKey(0),
-        y=jnp.array([0.9]),
-        u=None,
-        t=jnp.array(0.0),
-        # t_prev omitted -> defaults to t (dt=0)
+    filter_obj, _ = build_cuthbert_filter(
+        dynamics, EKFConfig(), key=None, want_parallel=False
     )
-    assert bool(jnp.any(jnp.isnan(state.mean)))
-
-
-def test_compute_cuthbert_filter_update_explicit_t_prev_avoids_degeneracy():
-    dynamics = _euler_maruyama_dynamics()
     t0 = jnp.array(0.0)
     state = compute_cuthbert_filter_update(
         dynamics,
-        EKFConfig(),
+        filter_obj,
         None,
         jr.PRNGKey(0),
         y=jnp.array([0.9]),
@@ -347,9 +339,12 @@ def test_filter_state_dist_matches_family_and_agrees_with_mean(
     filter_config, expected_dist_type
 ):
     dynamics = _lti_1d()
+    filter_obj, _ = build_cuthbert_filter(
+        dynamics, filter_config, key=jr.PRNGKey(0), want_parallel=False
+    )
     state = compute_cuthbert_filter_update(
         dynamics,
-        filter_config,
+        filter_obj,
         None,
         jr.PRNGKey(0),
         y=_OBS_VALUES[0],
@@ -395,41 +390,6 @@ def test_rejects_continuous_time_dynamics_not_wrapped_in_discretizer():
         _run_trace(model)
 
 
-def test_rejects_ctrl_values():
-    dynamics = _lti_1d()
-    policy = _simple_policy()
-
-    def model():
-        with DiscreteControlLoopSimulator(control_policy=policy):
-            return dsx.sample(
-                "f",
-                dynamics,
-                predict_times=jnp.arange(0.0, 5.0),
-                ctrl_times=jnp.arange(0.0, 5.0),
-                ctrl_values=jnp.zeros((5, 1)),
-            )
-
-    with pytest.raises(ValueError, match="computes controls online"):
-        _run_trace(model)
-
-
-def test_rejects_obs_values_conditioning():
-    dynamics = _lti_1d()
-    policy = _simple_policy()
-
-    def model():
-        with DiscreteControlLoopSimulator(control_policy=policy):
-            return dsx.sample(
-                "f",
-                dynamics,
-                obs_times=jnp.arange(0.0, 5.0),
-                obs_values=jnp.zeros((5, 1)),
-            )
-
-    with pytest.raises(ValueError, match="generation-only"):
-        _run_trace(model)
-
-
 def test_rejects_n_simulations_greater_than_one():
     dynamics = _lti_1d()
     policy = _simple_policy()
@@ -440,30 +400,6 @@ def test_rejects_n_simulations_greater_than_one():
 
     with pytest.raises(NotImplementedError, match="n_simulations"):
         _run_trace(model)
-
-
-def test_requires_obs_times_or_predict_times():
-    dynamics = _lti_1d()
-    policy = _simple_policy()
-
-    def model():
-        with DiscreteControlLoopSimulator(control_policy=policy):
-            return dsx.sample("f", dynamics)
-
-    with pytest.raises(ValueError, match="obs_times or predict_times"):
-        _run_trace(model)
-
-
-def test_requires_seeded_context():
-    dynamics = _lti_1d()
-    policy = _simple_policy()
-
-    def model():
-        with DiscreteControlLoopSimulator(control_policy=policy):
-            return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
-
-    with pytest.raises(ValueError, match="PRNG key required"):
-        trace(model).get_trace()
 
 
 # ---------------------------------------------------------------------------
@@ -509,15 +445,22 @@ def test_end_to_end_shapes_and_finiteness(filter_config):
 
 
 @pytest.mark.parametrize(
-    ("record_val", "expect_present"),
-    [(True, True), (False, False)],
+    ("filter_config", "expect_present"),
+    [
+        (EKFConfig(record_filtered_states_mean=True), True),
+        (EKFConfig(record_filtered_states_mean=False), False),
+        (EKFConfig(record_max_elems=0), False),  # default heuristic, capped out
+        (EKFConfig(), True),  # default heuristic, uncapped
+    ],
 )
-def test_record_filtered_states_mean_explicit_gating(record_val, expect_present):
+def test_record_filtered_states_mean_gating(filter_config, expect_present):
+    """record_filtered_states_mean=True/False explicitly gates the output;
+    left at its default (None), it falls back to a size heuristic --
+    mirrors Filter's own _should_record_field convention."""
     dynamics = _lti_1d()
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
-        control_policy=policy,
-        filter_config=EKFConfig(record_filtered_states_mean=record_val),
+        control_policy=policy, filter_config=filter_config
     )
 
     def model():
@@ -526,37 +469,6 @@ def test_record_filtered_states_mean_explicit_gating(record_val, expect_present)
 
     tr = _run_trace(model)
     assert ("f_filtered_states_mean" in tr) is expect_present
-
-
-def test_record_filtered_states_mean_default_size_heuristic():
-    """record_filtered_states_mean=None (default) records only when the total
-    element count is within record_max_elems -- mirrors Filter's own
-    _should_record_field convention."""
-    dynamics = _lti_1d()
-    policy = _LinearPolicy(K=jnp.array([[0.5]]))
-
-    small_cap_sim = DiscreteControlLoopSimulator(
-        control_policy=policy,
-        filter_config=EKFConfig(record_max_elems=0),
-    )
-
-    def small_cap_model():
-        with small_cap_sim:
-            return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
-
-    tr_small_cap = _run_trace(small_cap_model)
-    assert "f_filtered_states_mean" not in tr_small_cap
-
-    default_sim = DiscreteControlLoopSimulator(
-        control_policy=policy, filter_config=EKFConfig()
-    )
-
-    def default_model():
-        with default_sim:
-            return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
-
-    tr_default = _run_trace(default_model)
-    assert "f_filtered_states_mean" in tr_default
 
 
 def test_stateless_policy_runs_without_crashing_and_omits_policy_states():
@@ -712,29 +624,6 @@ def test_determinism_same_seed_reproducible_different_seed_differs():
 
     assert jnp.array_equal(tr_a["f_states"]["value"], tr_b["f_states"]["value"])
     assert not jnp.array_equal(tr_a["f_states"]["value"], tr_c["f_states"]["value"])
-
-
-def test_eqx_module_policy_matches_equivalent_plain_function_policy():
-    dynamics = _lti_1d()
-    K = jnp.array([[0.5]])
-    predict_times = jnp.arange(0.0, 8.0)
-
-    def run(policy):
-        sim = DiscreteControlLoopSimulator(control_policy=policy)
-
-        def model():
-            with sim:
-                return dsx.sample("f", dynamics, predict_times=predict_times)
-
-        return _run_trace(model, rng_seed=0)
-
-    tr_module = run(_LinearPolicy(K=K))
-    tr_fn = run(_linear_policy_fn(K))
-
-    assert jnp.array_equal(tr_module["f_states"]["value"], tr_fn["f_states"]["value"])
-    assert jnp.array_equal(
-        tr_module["f_controls"]["value"], tr_fn["f_controls"]["value"]
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1064,35 +953,6 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
     assert jnp.all(jnp.isfinite(result.states))
 
 
-def test_mppi_different_seeds_explore_differently_under_the_same_rng_key():
-    """MPPI owns its exploration randomness entirely -- two instances with
-    different `seed`s must produce different controls even when driven by
-    the identical outer `rng_key`."""
-    dynamics = _lti_1d(A=1.05, B=1.0)
-    predict_times = jnp.arange(0.0, 20.0)
-
-    def run(seed):
-        mppi = MPPI(
-            dynamics=dynamics,
-            loss_fn=_mppi_loss,
-            horizon=10,
-            noise_std=jnp.array(1.0),
-            seed=seed,
-        )
-        return dsx.simulate(
-            dynamics,
-            rng_key=jr.PRNGKey(0),
-            predict_times=predict_times,
-            control_policy=mppi,
-        )
-
-    result_a = run(seed=0)
-    result_b = run(seed=1)
-    assert isinstance(result_a, ControlledSimulatedResult)
-    assert isinstance(result_b, ControlledSimulatedResult)
-    assert not jnp.allclose(result_a.controls, result_b.controls)
-
-
 def test_mppi_initial_state_and_call_depend_only_on_seed():
     """Unit-level check, isolated from the closed loop (where a different
     outer rng_key also changes x_hat via the real observed trajectory, so
@@ -1153,3 +1013,239 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     )
     assert jnp.all(jnp.isfinite(u0))
     assert jnp.all(jnp.isfinite(next_nominal))
+
+
+# ---------------------------------------------------------------------------
+# Retired tests (superseded/redundant; kept for reference, not run).
+# See /Users/matthieu/.claude/plans/let-s-go-back-to-valiant-bonbon.md for the
+# rationale behind each retirement.
+# ---------------------------------------------------------------------------
+
+# Property of Python/JAX (closures vs. eqx.Module.__call__ computing
+# identical math), not of dynestyx.control -- if this ever failed, every
+# other _LinearPolicy-based test would already be failing.
+#
+# def test_eqx_module_policy_matches_equivalent_plain_function_policy():
+#     dynamics = _lti_1d()
+#     K = jnp.array([[0.5]])
+#     predict_times = jnp.arange(0.0, 8.0)
+#
+#     def run(policy):
+#         sim = DiscreteControlLoopSimulator(control_policy=policy)
+#
+#         def model():
+#             with sim:
+#                 return dsx.sample("f", dynamics, predict_times=predict_times)
+#
+#         return _run_trace(model, rng_seed=0)
+#
+#     tr_module = run(_LinearPolicy(K=K))
+#     tr_fn = run(_linear_policy_fn(K))
+#
+#     assert jnp.array_equal(tr_module["f_states"]["value"], tr_fn["f_states"]["value"])
+#     assert jnp.array_equal(
+#         tr_module["f_controls"]["value"], tr_fn["f_controls"]["value"]
+#     )
+
+
+# Shared BaseSimulator guards, not control-loop-specific -- already covered
+# by test_hierarchical_simulator_discretizer_smokes.py, test_sample_input_matrix.py,
+# and missingness/test_discrete_simulator.py.
+#
+# def test_rejects_obs_values_conditioning():
+#     dynamics = _lti_1d()
+#     policy = _simple_policy()
+#
+#     def model():
+#         with DiscreteControlLoopSimulator(control_policy=policy):
+#             return dsx.sample(
+#                 "f",
+#                 dynamics,
+#                 obs_times=jnp.arange(0.0, 5.0),
+#                 obs_values=jnp.zeros((5, 1)),
+#             )
+#
+#     with pytest.raises(ValueError, match="generation-only"):
+#         _run_trace(model)
+#
+#
+# def test_requires_obs_times_or_predict_times():
+#     dynamics = _lti_1d()
+#     policy = _simple_policy()
+#
+#     def model():
+#         with DiscreteControlLoopSimulator(control_policy=policy):
+#             return dsx.sample("f", dynamics)
+#
+#     with pytest.raises(ValueError, match="obs_times or predict_times"):
+#         _run_trace(model)
+#
+#
+# def test_requires_seeded_context():
+#     dynamics = _lti_1d()
+#     policy = _simple_policy()
+#
+#     def model():
+#         with DiscreteControlLoopSimulator(control_policy=policy):
+#             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
+#
+#     with pytest.raises(ValueError, match="PRNG key required"):
+#         trace(model).get_trace()
+
+
+# Duplicates test_dsx_simulate_with_control_policy_rejects_ctrl_values (same
+# guard in DiscreteControlLoopSimulator.simulate(), exercised via the raw
+# handler instead of the primary dsx.simulate() entry point).
+#
+# def test_rejects_ctrl_values():
+#     dynamics = _lti_1d()
+#     policy = _simple_policy()
+#
+#     def model():
+#         with DiscreteControlLoopSimulator(control_policy=policy):
+#             return dsx.sample(
+#                 "f",
+#                 dynamics,
+#                 predict_times=jnp.arange(0.0, 5.0),
+#                 ctrl_times=jnp.arange(0.0, 5.0),
+#                 ctrl_values=jnp.zeros((5, 1)),
+#             )
+#
+#     with pytest.raises(ValueError, match="computes controls online"):
+#         _run_trace(model)
+
+
+# Superseded by test_unsupported_filter_state_type_raises, which parametrizes
+# over both filter_state_mean and filter_state_dist instead of duplicating
+# the same trivial else-raise check twice.
+#
+# def test_filter_state_mean_unsupported_type_raises():
+#     class _Neither:
+#         pass
+#
+#     with pytest.raises(TypeError, match="Cannot summarize filter state"):
+#         filter_state_mean(_Neither())
+#
+#
+# def test_filter_state_dist_unsupported_type_raises():
+#     class _Neither:
+#         pass
+#
+#     with pytest.raises(TypeError, match="Cannot build a distribution"):
+#         filter_state_dist(_Neither())
+
+
+# Superseded by test_record_filtered_states_mean_gating, which parametrizes
+# over explicit True/False and the default size-heuristic (capped/uncapped)
+# in one test instead of three.
+#
+# @pytest.mark.parametrize(
+#     ("record_val", "expect_present"),
+#     [(True, True), (False, False)],
+# )
+# def test_record_filtered_states_mean_explicit_gating(record_val, expect_present):
+#     dynamics = _lti_1d()
+#     policy = _LinearPolicy(K=jnp.array([[0.5]]))
+#     sim = DiscreteControlLoopSimulator(
+#         control_policy=policy,
+#         filter_config=EKFConfig(record_filtered_states_mean=record_val),
+#     )
+#
+#     def model():
+#         with sim:
+#             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
+#
+#     tr = _run_trace(model)
+#     assert ("f_filtered_states_mean" in tr) is expect_present
+#
+#
+# def test_record_filtered_states_mean_default_size_heuristic():
+#     """record_filtered_states_mean=None (default) records only when the total
+#     element count is within record_max_elems -- mirrors Filter's own
+#     _should_record_field convention."""
+#     dynamics = _lti_1d()
+#     policy = _LinearPolicy(K=jnp.array([[0.5]]))
+#
+#     small_cap_sim = DiscreteControlLoopSimulator(
+#         control_policy=policy,
+#         filter_config=EKFConfig(record_max_elems=0),
+#     )
+#
+#     def small_cap_model():
+#         with small_cap_sim:
+#             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
+#
+#     tr_small_cap = _run_trace(small_cap_model)
+#     assert "f_filtered_states_mean" not in tr_small_cap
+#
+#     default_sim = DiscreteControlLoopSimulator(
+#         control_policy=policy, filter_config=EKFConfig()
+#     )
+#
+#     def default_model():
+#         with default_sim:
+#             return dsx.sample("f", dynamics, predict_times=jnp.arange(0.0, 5.0))
+#
+#     tr_default = _run_trace(default_model)
+#     assert "f_filtered_states_mean" in tr_default
+
+
+# Overlaps with test_mppi_initial_state_and_call_depend_only_on_seed (same
+# property -- seed alone determines MPPI's own randomness -- checked through
+# the closed loop instead of directly against __call__).
+#
+# def test_mppi_different_seeds_explore_differently_under_the_same_rng_key():
+#     """MPPI owns its exploration randomness entirely -- two instances with
+#     different `seed`s must produce different controls even when driven by
+#     the identical outer `rng_key`."""
+#     dynamics = _lti_1d(A=1.05, B=1.0)
+#     predict_times = jnp.arange(0.0, 20.0)
+#
+#     def run(seed):
+#         mppi = MPPI(
+#             dynamics=dynamics,
+#             loss_fn=_mppi_loss,
+#             horizon=10,
+#             noise_std=jnp.array(1.0),
+#             seed=seed,
+#         )
+#         return dsx.simulate(
+#             dynamics,
+#             rng_key=jr.PRNGKey(0),
+#             predict_times=predict_times,
+#             control_policy=mppi,
+#         )
+#
+#     result_a = run(seed=0)
+#     result_b = run(seed=1)
+#     assert isinstance(result_a, ControlledSimulatedResult)
+#     assert isinstance(result_b, ControlledSimulatedResult)
+#     assert not jnp.allclose(result_a.controls, result_b.controls)
+
+
+# Documents a known-broken behavior (asserts NaN happens) rather than
+# guarding correct behavior; its rationale is now a comment on the paired
+# test_compute_cuthbert_filter_update_explicit_t_prev_avoids_degeneracy.
+#
+# def test_compute_cuthbert_filter_update_default_t_prev_is_degenerate_for_dt_scaled_transition():
+#     """Documents the actual failure mode of the bug found and fixed this
+#     session: for a transition whose covariance scales with dt (e.g. an
+#     Euler-Maruyama-discretized SDE), omitting `t_prev` collapses to dt=0 for
+#     the first real step, which produces a zero-covariance distribution whose
+#     NaN log-density leaks through EKF's Taylor-linearization gradient (via
+#     jnp.where evaluating both branches). This is why
+#     DiscreteControlLoopSimulator always supplies an explicit, non-degenerate
+#     t_prev for its bootstrap call (see the next test).
+#     """
+#     dynamics = _euler_maruyama_dynamics()
+#     state = compute_cuthbert_filter_update(
+#         dynamics,
+#         EKFConfig(),
+#         None,
+#         jr.PRNGKey(0),
+#         y=jnp.array([0.9]),
+#         u=None,
+#         t=jnp.array(0.0),
+#         # t_prev omitted -> defaults to t (dt=0)
+#     )
+#     assert bool(jnp.any(jnp.isnan(state.mean)))
