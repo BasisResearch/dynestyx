@@ -243,7 +243,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
 
         key, k_x0, k_y0, k_filt0 = jr.split(rng_key, 4)
-        filter_obj = build_cuthbert_filter(dynamics, filter_config, key=rng_key)
+        filter_obj, _ = build_cuthbert_filter(
+            dynamics, filter_config, key=rng_key, want_parallel=False
+        )
 
         x_0 = dynamics.initial_condition.sample(k_x0)
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(k_y0)

@@ -152,21 +152,15 @@ def _drop_cuthbert_dummy_step(states, *, obs_len: int):
     return jax.tree.map(_drop_if_time_leaf, states)
 
 
-def _build_cuthbert_filter_obj(
+def build_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    filter_kwargs: dict,
     key: jax.Array | None,
     *,
     want_parallel: bool,
 ):
-    """Dispatch on filter_config type to build the cuthbert Filter object.
-
-    Shared by compute_cuthbert_filter (whole-trajectory) and
-    compute_cuthbert_filter_update (single-step): the Filter object itself
-    (init_prepare/filter_prepare/filter_combine) only depends on `dynamics`,
-    never on trajectory data, so both callers build it the same way.
-    """
+    """Build the cuthbert Filter object for `(dynamics, filter_config)`."""
+    filter_kwargs = _config_to_filter_kwargs(filter_config)
     if isinstance(filter_config, PFConfig):
         if key is None:
             raise ValueError(
@@ -202,25 +196,6 @@ def _build_cuthbert_filter_obj(
             f"filter is not associative: {type(filter_config).__name__}."
         )
     return filter_obj, parallel
-
-
-def build_cuthbert_filter(
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
-):
-    """Build the cuthbert Filter object for `(dynamics, filter_config)`.
-
-    Depends only on `dynamics`/`filter_config`, never on trajectory data, so
-    it can be built once and reused across many `compute_cuthbert_filter_update`
-    calls via that function's `filter_obj=` argument -- avoids rebuilding it
-    on every step. `key` is only required (non-`None`) for `PFConfig`/`EnKFConfig`.
-    """
-    filter_kwargs = _config_to_filter_kwargs(filter_config)
-    filter_obj, _ = _build_cuthbert_filter_obj(
-        dynamics, filter_config, filter_kwargs, key, want_parallel=False
-    )
-    return filter_obj
 
 
 def compute_cuthbert_filter_update(
@@ -289,8 +264,6 @@ def compute_cuthbert_filter(
         tuple: (marginal_loglik, states). By default states are aligned to
         obs_times; pass align_to_observations=False for raw cuthbert T+1 states.
     """
-    filter_kwargs = _config_to_filter_kwargs(filter_config)
-
     ys = obs_values
     obs_len = int(ys.shape[0])
     times = obs_times
@@ -321,8 +294,8 @@ def compute_cuthbert_filter(
         is_first_step=jnp.arange(obs_len + 1) == 1,
     )
 
-    filter_obj, parallel = _build_cuthbert_filter_obj(
-        dynamics, filter_config, filter_kwargs, key, want_parallel=True
+    filter_obj, parallel = build_cuthbert_filter(
+        dynamics, filter_config, key, want_parallel=True
     )
 
     raw_states = cuthbert_filter(
