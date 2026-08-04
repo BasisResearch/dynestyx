@@ -261,14 +261,13 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
         x_hat_0 = compute_cuthbert_filter_update(
             dynamics,
-            None,
-            None,
-            k_filt0,
+            filter_obj=filter_obj,
+            prev_state=None,
+            key=k_filt0,
             y=y_0,
             u=None,
             t=times[0],
             t_prev=times[0] - dt0,
-            filter_obj=filter_obj,
         )
         initial_state_fn = getattr(self.control_policy, "initial_state", None)
         s_0 = initial_state_fn() if callable(initial_state_fn) else None
@@ -296,14 +295,13 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
             x_hat_next = compute_cuthbert_filter_update(
                 dynamics,
-                None,
-                x_hat_prev,
-                k_filt,
+                filter_obj=filter_obj,
+                prev_state=x_hat_prev,
+                key=k_filt,
                 y=y_next,
                 u=u_k,
                 t=t_next,
                 t_prev=t_now,
-                filter_obj=filter_obj,
             )
 
             new_carry = (x_next, x_hat_next, s_next, step_key)
