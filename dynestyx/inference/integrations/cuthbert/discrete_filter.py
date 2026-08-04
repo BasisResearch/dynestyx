@@ -225,7 +225,7 @@ def build_cuthbert_filter(
 
 def compute_cuthbert_filter_update(
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig | None,
+    filter_obj,
     prev_state,
     key: jax.Array,
     *,
@@ -233,31 +233,15 @@ def compute_cuthbert_filter_update(
     u: jax.Array | None,
     t: jax.Array,
     t_prev: jax.Array | None = None,
-    filter_obj=None,
 ):
     r"""One-step FilterUpdate: state_k + u_k + y_{k+1} -> state_{k+1}. Used for online filtering.
-
     Unlike `compute_cuthbert_filter` (whole-trajectory), this performs one
-    predict+update step directly via cuthbert's `Filter.filter_prepare`/
-    `filter_combine`
-    Pass `prev_state=None` for the bootstrap call
-    (first observation, no control history yet); this runs `init_prepare`
-    first.
-
+    predict+update step directly.
     `u` is the control that drove the transition *into* the state being
     filtered (u_k, producing state_{k+1} from y_{k+1}).
-
-    Provide exactly one of `filter_config` (builds the filter internally) or
-    `filter_obj` (an already-built filter from `build_cuthbert_filter`, to
-    reuse across repeated calls instead of rebuilding it here).
     """
-    if (filter_config is None) == (filter_obj is None):
-        raise ValueError("Provide exactly one of filter_config or filter_obj.")
 
     key_state, key_prep = jr.split(key)
-    if filter_obj is None:
-        assert filter_config is not None
-        filter_obj = build_cuthbert_filter(dynamics, filter_config, key_state)
 
     control_dim = dynamics.control_dim
     u_arr = jnp.zeros((control_dim,)) if u is None else jnp.asarray(u)
