@@ -16,9 +16,9 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from jax import Array
-from jaxtyping import PRNGKeyArray, PyTree, Real
+from jaxtyping import PRNGKeyArray, Real
+from numpyro.distributions import Distribution
 
-from dynestyx.control.discrete_controller_simulators import filter_state_mean
 from dynestyx.models import DynamicalModel
 
 
@@ -146,7 +146,7 @@ class MPPI(eqx.Module):
 
     def __call__(
         self,
-        x_hat: PyTree,
+        x_hat: Distribution,
         t_now: Real[Array, ""],
         t_next: Real[Array, ""],
         s: tuple[Real[Array, "horizon control_dim"], PRNGKeyArray],
@@ -157,7 +157,7 @@ class MPPI(eqx.Module):
         # t_next (the real simulation's next observation time) is unused --
         # MPPI plans its own horizon-step lookahead from t_now using its own dt.
         del t_next
-        x0 = filter_state_mean(x_hat)
+        x0 = x_hat.mean
         nominal, key = s
         key, noise_key, rollout_key = jr.split(key, 3)
         control_dim = nominal.shape[-1]
