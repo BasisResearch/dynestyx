@@ -44,7 +44,7 @@ def _config_to_cd_dynamax_filter_kwargs(
     config: ContinuousTimeFilterConfig,
     params: Any,
     obs_values: Real[Array, "obs_time observation_dim"],
-    obs_times: Real[Array, "obs_time one"],
+    obs_times: Real[Array, "obs_time 1"],
     ctrl_values: Real[Array, "ctrl_time control_dim"],
     key: PRNGKeyArray | None,
 ) -> dict[str, Any]:
@@ -114,7 +114,7 @@ def _config_to_cd_dynamax_filter_kwargs(
 
 def _run_linear_kf(
     dynamics: DynamicalModel,
-    obs_times: Real[Array, "obs_time one"],
+    obs_times: Real[Array, "obs_time 1"],
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_values: Real[Array, "ctrl_time control_dim"],
     filter_config: ContinuousTimeKFConfig,

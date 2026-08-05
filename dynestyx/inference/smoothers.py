@@ -249,6 +249,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             obs_values=obs_values,
             mode="smoother",
         )
+
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic smoothers don't need one).
         typed_config = config

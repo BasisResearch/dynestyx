@@ -275,6 +275,7 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 mode="filter",
             )
+
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
         if config.crn_seed is not None:
