@@ -38,13 +38,27 @@ from dynestyx.models import (
 
 
 class CuthbertInputs(NamedTuple):
-    """Model-input pytree before or after cuthbert slices its leading time axis."""
+    """Model-input pytree before or after cuthbert slices its leading time axis.
 
-    y: Real[Array, "cuthbert_time observation_dim"] | Real[Array, " observation_dim"]
-    u: Real[Array, "cuthbert_time control_dim"] | Real[Array, " control_dim"]
-    u_prev: Real[Array, "cuthbert_time control_dim"] | Real[Array, " control_dim"]
-    time: Real[Array, " cuthbert_time"] | Real[Array, ""]
-    time_prev: Real[Array, " cuthbert_time"] | Real[Array, ""]
+    As constructed, every leaf has a leading time dim of ``T+1``: one dummy step
+    is prepended so cuthbert's scan can carry an initial state.
+    """
+
+    y: (
+        Real[Array, "cuthbert_time observation_dim"]  # (T+1, emission_dim)
+        | Real[Array, " observation_dim"]
+    )
+    u: (
+        Real[Array, "cuthbert_time control_dim"]  # (T+1, control_dim) or (T+1, 0)
+        | Real[Array, " control_dim"]
+    )
+    u_prev: (
+        Real[Array, "cuthbert_time control_dim"]  # (T+1, control_dim) or (T+1, 0)
+        | Real[Array, " control_dim"]
+    )
+    time: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
+    time_prev: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
+    # (T+1,) bool — True only at index 1.
     is_first_step: Bool[Array, " cuthbert_time"] | Bool[Array, ""]
 
 
