@@ -5,8 +5,8 @@ import dataclasses
 import math
 from typing import Literal
 
-import jax
 import jax.random as jr
+from jaxtyping import PRNGKeyArray
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
@@ -55,7 +55,7 @@ class BaseFilterConfig(abc.ABC):
             this factor before the update. Values slightly above `1.0`
             implement covariance inflation, which can improve robustness when
             the model is misspecified. `None` disables rescaling.
-        crn_seed (jax.Array | None): Fix the PRNG key for stochastic filters
+        crn_seed (PRNGKeyArray | None): Fix the PRNG key for stochastic filters
             (EnKF, PF). Useful when differentiating through the filter:
             a fixed key makes the randomness a deterministic function of model
             parameters. `None` draws a fresh key each call.
@@ -78,7 +78,7 @@ class BaseFilterConfig(abc.ABC):
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
     cov_rescaling: float | None = None
-    crn_seed: jax.Array | None = None
+    crn_seed: PRNGKeyArray | None = None
 
 
 @dataclasses.dataclass
@@ -107,7 +107,7 @@ class EnKFConfig(BaseFilterConfig):
         n_particles (int): Number of ensemble members. More members give a
             better covariance estimate at higher compute cost. Defaults to
             `30`.
-        crn_seed (jax.Array | None): Fixed PRNG key for the ensemble. Defaults
+        crn_seed (PRNGKeyArray | None): Fixed PRNG key for the ensemble. Defaults
             to `jr.PRNGKey(0)`, i.e., common random numbers are used. This
             can reduce variance in gradient-based learning, but introduces
             further bias.
@@ -163,7 +163,7 @@ class EnKFConfig(BaseFilterConfig):
     """
 
     n_particles: int = 30
-    crn_seed: jax.Array | None = dataclasses.field(
+    crn_seed: PRNGKeyArray | None = dataclasses.field(
         default_factory=lambda: jr.PRNGKey(0)
     )
     perturb_measurements: bool | None = None

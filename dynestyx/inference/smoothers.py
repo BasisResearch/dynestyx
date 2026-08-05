@@ -65,7 +65,7 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims
+from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
 
 DiscreteSmootherConfig = (
     KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
@@ -98,7 +98,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -179,7 +179,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -202,7 +202,7 @@ class Smoother(BaseSmootherLogFactorAdder):
     r"""Performs Bayesian smoothing to compute the smoothing distribution p(x_t | y_{1:T})."""
 
     smoother_config: SmootherAnyConfig | None = None
-    marginal_loglik: jax.Array | None = dataclasses.field(
+    marginal_loglik: Real[Array, "*plate"] | None = dataclasses.field(
         default=None, repr=False, init=False
     )
     smoothed_states: object = dataclasses.field(default=None, repr=False, init=False)
@@ -215,7 +215,7 @@ class Smoother(BaseSmootherLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -274,6 +274,10 @@ class Smoother(BaseSmootherLogFactorAdder):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
             )
+
+        obs_values = _ensure_trailing_event_axis(obs_values)
+        if ctrl_values is not None:
+            ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
         if dynamics.continuous_time:
             if not isinstance(typed_config, ContinuousTimeSmootherConfigs):
@@ -376,7 +380,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             continuous_config = cast(ContinuousSmootherConfig, config)
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ct, cv, k):
                 return compute_continuous_smoother(
                     dyn,
                     continuous_config,
@@ -398,7 +402,7 @@ class Smoother(BaseSmootherLogFactorAdder):
                 cuthbert_config = cast(CuthbertSmootherConfig, discrete_config)
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cuthbert_smoother(
                         dyn,
                         cuthbert_config,
@@ -412,7 +416,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             elif discrete_config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
-                def compute_output(dyn, ot, ov, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ct, cv, k):
                     return compute_cd_dynamax_discrete_smoother(
                         dyn,
                         discrete_config,
@@ -430,6 +434,13 @@ class Smoother(BaseSmootherLogFactorAdder):
             raise ValueError(
                 f"Unsupported smoother config for plate: {type(config).__name__}"
             )
+
+        def compute_output(dyn, ot, ov, ct, cv, k):
+            # Add scalar event axes after vmap removes plate dimensions.
+            ov = _ensure_trailing_event_axis(ov)
+            if cv is not None:
+                cv = _ensure_trailing_event_axis(cv)
+            return _compute_output(dyn, ot, ov, ct, cv, k)
 
         if key is not None:
             if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
@@ -559,13 +570,15 @@ def _smooth_discrete_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""] | None,
+    object | None,
+    list[numpyro.distributions.Distribution],
+]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax smoothers."""
 
     if isinstance(smoother_config, UKFSmootherConfig) and (
@@ -626,13 +639,15 @@ def _smooth_continuous_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""],
+    object,
+    list[numpyro.distributions.Distribution],
+]:
     """Continuous-time marginal likelihood via CD-Dynamax smoothers."""
     if smoother_config.filter_source != "cd_dynamax":
         raise ValueError(

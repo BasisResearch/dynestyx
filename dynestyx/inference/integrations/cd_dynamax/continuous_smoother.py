@@ -1,5 +1,7 @@
 """Continuous-time smoothers via CD-Dynamax: KF, EKF."""
 
+from typing import Any
+
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
@@ -10,6 +12,7 @@ from cd_dynamax import (
     cdlgssm_smoother,
     cdnlgssm_smoother,
 )
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.smoother import (
     ContinuousTimeEKFSmootherConfig,
@@ -30,13 +33,13 @@ ContinuousTimeSmootherConfig = (
 def compute_continuous_smoother(
     dynamics: DynamicalModel,
     smoother_config: ContinuousTimeSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX continuous-time smoother computation (no numpyro side-effects)."""
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
@@ -118,14 +121,14 @@ def run_continuous_smoother(
     name: str,
     dynamics: DynamicalModel,
     smoother_config: ContinuousTimeSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[dist.Distribution]]:
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
     """Run continuous-time smoother via CD-Dynamax.
 
     Pure computation — no numpyro side-effects. Callers are responsible for
