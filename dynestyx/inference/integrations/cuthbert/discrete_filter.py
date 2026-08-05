@@ -1,5 +1,5 @@
 import warnings
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -14,6 +14,7 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
+from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
@@ -37,17 +38,33 @@ from dynestyx.models import (
 
 
 class CuthbertInputs(NamedTuple):
-    """Model inputs pytree for cuthbert; leading time dim must be T+1."""
+    """Model-input pytree before or after cuthbert slices its leading time axis.
 
-    y: jax.Array  # (T+1, emission_dim)
-    u: jax.Array  # (T+1, control_dim) or (T+1, 0)
-    u_prev: jax.Array  # (T+1, control_dim) or (T+1, 0)
-    time: jax.Array  # (T+1,)
-    time_prev: jax.Array  # (T+1,)
-    is_first_step: jax.Array  # (T+1,) bool — True only at index 1
+    As constructed, every leaf has a leading time dim of ``T+1``: one dummy step
+    is prepended so cuthbert's scan can carry an initial state.
+    """
+
+    y: (
+        Real[Array, "cuthbert_time observation_dim"]  # (T+1, emission_dim)
+        | Real[Array, " observation_dim"]
+    )
+    u: (
+        Real[Array, "cuthbert_time control_dim"]  # (T+1, control_dim) or (T+1, 0)
+        | Real[Array, " control_dim"]
+    )
+    u_prev: (
+        Real[Array, "cuthbert_time control_dim"]  # (T+1, control_dim) or (T+1, 0)
+        | Real[Array, " control_dim"]
+    )
+    time: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
+    time_prev: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
+    # (T+1,) bool — True only at index 1.
+    is_first_step: Bool[Array, " cuthbert_time"] | Bool[Array, ""]
 
 
-def _extract_gaussian_chol(d: dist.Distribution, obs_dim: int) -> jax.Array:
+def _extract_gaussian_chol(
+    d: dist.Distribution, obs_dim: int
+) -> Float[Array, "observation_dim observation_dim"]:
     """Extract a Cholesky factor of the covariance from a Gaussian distribution."""
     if isinstance(d, dist.MultivariateNormal):
         return jnp.asarray(d.scale_tril)
@@ -68,7 +85,9 @@ def _extract_gaussian_chol(d: dist.Distribution, obs_dim: int) -> jax.Array:
 
 
 def _check_state_independent_noise(
-    chol_R_at_x0: jax.Array, probe_dist_at_x1: dist.Distribution, obs_dim: int
+    chol_R_at_x0: Float[Array, "observation_dim observation_dim"],
+    probe_dist_at_x1: dist.Distribution,
+    obs_dim: int,
 ) -> None:
     """Raise if the observation noise covariance varies with state."""
     chol_R_at_x1 = _extract_gaussian_chol(probe_dist_at_x1, obs_dim)
@@ -154,14 +173,14 @@ def _drop_cuthbert_dummy_step(states, *, obs_len: int):
 def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
-):
+) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
     Returns:
@@ -250,14 +269,14 @@ def run_discrete_filter(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array | None, object | None, list[dist.Distribution]]:
+) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
     Pure computation — no numpyro side-effects. Callers are responsible for

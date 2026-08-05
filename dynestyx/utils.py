@@ -44,6 +44,15 @@ type SSMType = CDNLGSSM | CDNLSSM
 _CONTROL_EXTEND_EPSILON = 1e-5
 
 
+def _ensure_trailing_event_axis(
+    values: Real[Array, "..."],
+) -> Real[Array, "..."]:
+    """Lift a scalar time series from ``(time,)`` to ``(time, 1)``."""
+    if values.ndim == 1:
+        return values[..., None]
+    return values
+
+
 def _raise_now_or_error_if(
     anchor: Array,
     predicate,

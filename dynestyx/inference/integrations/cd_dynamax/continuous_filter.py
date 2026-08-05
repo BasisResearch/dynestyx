@@ -1,5 +1,7 @@
 """Continuous-time filters via CD-Dynamax: KF, EnKF, DPF, EKF, UKF."""
 
+from typing import Any
+
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
@@ -11,6 +13,7 @@ from cd_dynamax import (
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
@@ -39,12 +42,12 @@ ContinuousTimeFilterConfig = (
 
 def _config_to_cd_dynamax_filter_kwargs(
     config: ContinuousTimeFilterConfig,
-    params,
-    obs_values,
-    obs_times,
-    ctrl_values,
-    key,
-) -> dict:
+    params: Any,
+    obs_values: Real[Array, "obs_time observation_dim"],
+    obs_times: Real[Array, "obs_time 1"],
+    ctrl_values: Real[Array, "ctrl_time control_dim"],
+    key: PRNGKeyArray | None,
+) -> dict[str, Any]:
     """Build the filter_kwargs dict passed to cd_dynamax_model.filter()."""
 
     # cd-dynamax uses the legacy PRNG key interface, but newer numpyro uses typed keys.
@@ -111,9 +114,9 @@ def _config_to_cd_dynamax_filter_kwargs(
 
 def _run_linear_kf(
     dynamics: DynamicalModel,
-    obs_times,
-    obs_values,
-    ctrl_values,
+    obs_times: Real[Array, "obs_time 1"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_values: Real[Array, "ctrl_time control_dim"],
     filter_config: ContinuousTimeKFConfig,
 ) -> PosteriorGSSMFiltered:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
@@ -136,13 +139,13 @@ def _run_linear_kf(
 def compute_continuous_filter(
     dynamics: DynamicalModel,
     filter_config: ContinuousTimeFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX continuous-time filter computation (no numpyro side-effects)."""
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
@@ -196,14 +199,14 @@ def run_continuous_filter(
     name: str,
     dynamics: DynamicalModel,
     filter_config: ContinuousTimeFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[dist.Distribution]]:
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
     """Run continuous-time filter via CD-Dynamax.
 
     Pure computation — no numpyro side-effects. Callers are responsible for

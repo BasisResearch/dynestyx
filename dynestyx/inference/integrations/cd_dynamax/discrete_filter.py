@@ -1,6 +1,7 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF."""
 
-import jax
+from typing import Any, cast
+
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
@@ -14,6 +15,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_filter,
 )
+from jaxtyping import Array, Real
 
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
@@ -83,7 +85,16 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
     )
 
 
-def _prepare_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
+def _prepare_inputs(
+    dynamics: DynamicalModel,
+    obs_values: Real[Array, "obs_time observation_dim"],
+    obs_times: Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None,
+) -> tuple[
+    Real[Array, "obs_time observation_dim"],
+    Real[Array, "obs_time control_dim"],
+]:
     """Prepare emissions and inputs arrays for cd-dynamax discrete filters."""
     emissions = obs_values
     t1 = emissions.shape[0]
@@ -91,7 +102,8 @@ def _prepare_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
     if ctrl_values is None:
         inputs = jnp.zeros((t1, control_dim))
     elif ctrl_values.shape[0] > t1:
-        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        aligned_ctrl_times = cast(Real[Array, " ctrl_time"], ctrl_times)
+        inds = jnp.searchsorted(aligned_ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
     else:
         inputs = ctrl_values
@@ -102,11 +114,11 @@ def compute_cd_dynamax_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects)."""
     emissions, inputs = _prepare_inputs(
         dynamics, obs_values, obs_times, ctrl_times, ctrl_values
@@ -141,12 +153,12 @@ def run_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[dist.Distribution]]:
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
     """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).
 
     Pure computation — no numpyro side-effects. Callers are responsible for

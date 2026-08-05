@@ -74,7 +74,7 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims
+from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -88,7 +88,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -143,7 +143,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -161,7 +161,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     ) -> ConditionedResult: ...
 
 
-def _default_filter_config(dynamics: DynamicalModel):
+def _default_filter_config(dynamics: DynamicalModel) -> BaseFilterConfig:
     """Return appropriate default filter config when none specified."""
     if dynamics.continuous_time:
         return ContinuousTimeEnKFConfig()
@@ -237,7 +237,7 @@ class Filter(BaseLogFactorAdder):
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -302,6 +302,11 @@ class Filter(BaseLogFactorAdder):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
             )
+
+        if not isinstance(config, HMMConfigs):
+            obs_values = _ensure_trailing_event_axis(obs_values)
+            if ctrl_values is not None:
+                ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
@@ -439,7 +444,7 @@ class Filter(BaseLogFactorAdder):
                 )
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_continuous_filter(
                     dyn,
                     cast(ContinuousTimeFilterConfig, config),
@@ -454,7 +459,7 @@ class Filter(BaseLogFactorAdder):
             output_kind = "hmm"
             uses_preprocessed_obs = True
 
-            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_hmm_filter(
                     dyn,
                     obs_times=ot,
@@ -468,7 +473,7 @@ class Filter(BaseLogFactorAdder):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cuthbert_filter(
                         dyn,
                         config,
@@ -482,7 +487,7 @@ class Filter(BaseLogFactorAdder):
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
 
-                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
@@ -498,6 +503,14 @@ class Filter(BaseLogFactorAdder):
             raise ValueError(
                 f"Unsupported filter config for plate: {type(config).__name__}"
             )
+
+        def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            # Add scalar event axes after vmap removes plate dimensions.
+            if not isinstance(config, HMMConfigs):
+                ov = _ensure_trailing_event_axis(ov)
+                if cv is not None:
+                    cv = _ensure_trailing_event_axis(cv)
+            return _compute_output(dyn, ot, ov, ovf, om, ct, cv, k)
 
         # Pre-split keys for all plate members (needed for stochastic filters).
         if key is not None:
@@ -669,13 +682,15 @@ def _filter_discrete_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array | None, object | None, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""] | None,
+    object | None,
+    list[numpyro.distributions.Distribution],
+]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
     Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
@@ -725,13 +740,15 @@ def _filter_continuous_time(
     key: PRNGKeyArray | None = None,
     *,
     obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> tuple[jax.Array, object, list[numpyro.distributions.Distribution]]:
+) -> tuple[
+    Real[Array, ""],
+    object,
+    list[numpyro.distributions.Distribution],
+]:
     """Continuous-time marginal likelihood via CD-Dynamax.
 
     Supports: EnKF, DPF, EKF, UKF (inferred from config type).
