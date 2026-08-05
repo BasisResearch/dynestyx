@@ -417,9 +417,13 @@ def enrich_continuous_filter_output(
             observation_dim=dynamics.observation_dim,
             plate_shapes=plate_shapes,
         )
-        score_mean, score_cov = _select_scoring_inputs(
-            predictions,
-        )
+        assert predictions.mean is not None
+        if predictions.obs_cov is None:
+            raise NotImplementedError(
+                "Observation scoring requires predictive observation covariance."
+            )
+        score_mean = predictions.mean
+        score_cov = predictions.obs_cov
         for rule in scoring_config.rules:
             try:
                 if isinstance(
@@ -457,23 +461,6 @@ def enrich_continuous_filter_output(
                 raise
 
     return posterior, predictions, score_arrays
-
-
-def _select_scoring_inputs(
-    predictions: PredictedObservationOutputs,
-) -> tuple[
-    Float[Array, "*plate time observation_dim"],
-    Float[Array, "*plate time observation_dim observation_dim"],
-]:
-    assert predictions.mean is not None
-    if predictions.obs_cov is None:
-        raise NotImplementedError(
-            "Observation scoring requires predictive observation covariance."
-        )
-    return (
-        predictions.mean,
-        predictions.obs_cov,
-    )
 
 
 def _select_scoring_ensemble(
