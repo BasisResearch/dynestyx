@@ -21,12 +21,18 @@ class ConditionedResult:
     """Result of dsx.condition — the numpyro-free conditioning primitive.
 
     Carries all outputs from the handler stack (Filter, Smoother, etc.)
-    without registering any numpyro sites.
+    without registering any NumPyro sites. Filter results may additionally
+    expose canonical one-step-ahead ``predicted_observations`` and a mapping
+    of per-time ``observation_scores``.
     """
 
     marginal_loglik: Real[Array, "*plate"] | None = None
     states: object = None
     dists: list | None = None
+    predicted_observations: object = None
+    observation_scores: dict[str, Real[Array, "..."]] = dataclasses.field(
+        default_factory=dict
+    )
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )

@@ -54,6 +54,13 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
+from dynestyx.inference.observation_predictions import (
+    PredictedObservationOutputs,
+    add_observation_prediction_and_score_sites,
+    enrich_continuous_filter_output,
+    wants_observation_prediction_diagnostics,
+)
+from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.inference.utils.distribution_utils import (
     _categorical_log_probs_to_dists,
     _cholesky_state_sequence_to_dists,
@@ -101,6 +108,8 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     ) -> FunctionOfTime:
         filtered_dists = None
         self.marginal_loglik = self.filtered_states = self._filter_config_used = None
+        self.predicted_observations = None
+        self.observation_scores = {}
         if not (obs_times is None or obs_values is None):
             filtered_dists = self._add_log_factors(
                 name,
@@ -216,20 +225,40 @@ class Filter(BaseLogFactorAdder):
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
         - What gets recorded to the trace (means/covariances, particles/weights,
         etc.) depends on `filter_config.record_*` and the backend implementation.
+        - Predicted-observation summaries and scoring rules are configured
+        through `filter_config.record_predicted_observations_*` and
+        `scoring_config`.
+        - Observation scoring currently supports continuous-time CD-Dynamax
+        Gaussian filters: `ContinuousTimeKFConfig`, `ContinuousTimeEKFConfig`,
+        `ContinuousTimeUKFConfig`, and `ContinuousTimeEnKFConfig`.
+        - Scoring is defined on the one-step-ahead predictive observation
+        distributions \(p(y_t \mid y_{1:t-1}, \theta)\), not on the filtered
+        state posterior.
 
     Attributes:
         filter_config: Selects the filtering algorithm and its hyperparameters.
             If `None`, a reasonable default is chosen based on whether the model
             is continuous-time or discrete-time.
+        scoring_config: Optional configuration for proper scoring rules on the
+            predicted observation distribution. Requested score arrays can be
+            recorded as `numpyro.deterministic` sites independently of the
+            `record_predicted_observations_*` summary flags.
     """
 
     filter_config: BaseFilterConfig | None = None
+    scoring_config: ObservationScoringConfig | None = None
     marginal_loglik: Real[Array, "*plate"] | None = dataclasses.field(
         default=None, repr=False, init=False
     )
     filtered_states: object = dataclasses.field(default=None, repr=False, init=False)
     _filter_config_used: BaseFilterConfig | None = dataclasses.field(
         default=None, repr=False, init=False
+    )
+    predicted_observations: PredictedObservationOutputs | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
+    observation_scores: dict[str, Real[Array, "..."]] = dataclasses.field(
+        default_factory=dict, repr=False, init=False
     )
 
     def _add_log_factors(
@@ -269,6 +298,24 @@ class Filter(BaseLogFactorAdder):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
+        scoring_config_for_handler = (
+            self.scoring_config
+            if self.scoring_config is not None
+            and self.scoring_config.record_as_numpyro_sites
+            else None
+        )
+        if (
+            wants_observation_prediction_diagnostics(
+                config,
+                scoring_config=scoring_config_for_handler,
+            )
+            and not dynamics.continuous_time
+        ):
+            raise NotImplementedError(
+                "Predicted observation summaries and observation scoring rules are "
+                "currently supported only for continuous-time CD-Dynamax Gaussian "
+                "filters (KF, EKF, UKF, EnKF)."
+            )
         if isinstance(config, BaseFilterConfig):
             obs_values = _validate_missing_observation_support(
                 config,
@@ -300,6 +347,7 @@ class Filter(BaseLogFactorAdder):
                 _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                scoring_config=scoring_config_for_handler,
             )
 
         if not isinstance(config, HMMConfigs):
@@ -325,8 +373,20 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                scoring_config=scoring_config_for_handler,
                 **kwargs,
             )
+            states, predictions, score_arrays = enrich_continuous_filter_output(
+                states,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_values=ctrl_values,
+                scoring_config=scoring_config_for_handler,
+            )
+            self.predicted_observations = predictions
+            self.observation_scores = score_arrays
         elif isinstance(config, HMMConfigs):
             loglik, log_filt_seq, filtered_dists = _filter_hmm(
                 name,
@@ -374,6 +434,9 @@ class Filter(BaseLogFactorAdder):
         marginal_loglik = self.marginal_loglik
         states = self.filtered_states
         config = self._filter_config_used
+        predictions = self.predicted_observations
+        score_arrays = self.observation_scores
+        scoring_config = self.scoring_config
         _is_batched = (
             isinstance(marginal_loglik, jax.Array) and marginal_loglik.ndim > 0
         )
@@ -394,11 +457,20 @@ class Filter(BaseLogFactorAdder):
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             else:
                 register_filter_sites(site_name, marginal_loglik, states, config)
+            add_observation_prediction_and_score_sites(
+                site_name,
+                filter_config=config,
+                scoring_config=scoring_config,
+                predictions=predictions,
+                score_arrays=score_arrays,
+            )
 
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
             states=states,
             dists=filtered_dists,
+            predicted_observations=predictions,
+            observation_scores=score_arrays,
             _register_numpyro_sites=_register,
         )
 
@@ -424,6 +496,7 @@ class Filter(BaseLogFactorAdder):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        scoring_config: ObservationScoringConfig | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
@@ -452,6 +525,7 @@ class Filter(BaseLogFactorAdder):
                     obs_values=ov,
                     ctrl_times=ct,
                     ctrl_values=cv,
+                    scoring_config=scoring_config,
                 )
 
         elif isinstance(config, HMMConfigs):
@@ -637,6 +711,21 @@ class Filter(BaseLogFactorAdder):
         self._filter_config_used = config
 
         if output_kind == "continuous":
+            states, predictions, score_arrays = enrich_continuous_filter_output(
+                states,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_values=ctrl_values,
+                scoring_config=scoring_config,
+                plate_shapes=plate_shapes,
+            )
+            self.filtered_states = states
+            self.predicted_observations = predictions
+            self.observation_scores = score_arrays
+
+        if output_kind == "continuous":
             particle_mode = isinstance(config, ContinuousTimeDPFConfig)
             return _posterior_sequence_to_dists(
                 outputs,
@@ -742,6 +831,7 @@ def _filter_continuous_time(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    scoring_config: ObservationScoringConfig | None = None,
     **kwargs,
 ) -> tuple[
     Real[Array, ""],
@@ -770,6 +860,7 @@ def _filter_continuous_time(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        scoring_config=scoring_config,
         **kwargs,
     )
 
