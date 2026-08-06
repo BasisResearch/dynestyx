@@ -472,8 +472,9 @@ def test_record_filtered_states_mean_gating(filter_config, expect_present):
 
 
 def test_stateless_policy_runs_without_crashing_and_omits_policy_states():
-    """Regression test: a stateless policy (no initial_state()) previously
-    crashed (jnp.expand_dims(None, axis=0)) when assembling the result dict."""
+    """Regression test: a stateless policy (no initial_policy_state given,
+    s_0=None) previously crashed (jnp.expand_dims(None, axis=0)) when
+    assembling the result dict."""
     dynamics = _lti_1d()
     policy = _linear_policy_fn(jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(control_policy=policy)
@@ -503,9 +504,6 @@ def test_array_policy_state_preserves_shape_and_values():
     class _CountingPolicy:
         """s is a running step counter; u is irrelevant to this test."""
 
-        def initial_state(self):
-            return jnp.zeros(1)
-
         def __call__(self, x_hat, t_now, t_next, s):
             return jnp.zeros(1), s + 1.0
 
@@ -514,7 +512,12 @@ def test_array_policy_state_preserves_shape_and_values():
 
     def model():
         with sim:
-            return dsx.sample("f", dynamics, predict_times=predict_times)
+            return dsx.sample(
+                "f",
+                dynamics,
+                predict_times=predict_times,
+                initial_policy_state=jnp.zeros(1),
+            )
 
     tr = _run_trace(model)
     policy_states = tr["f_policy_states"]["value"]
@@ -585,9 +588,6 @@ def test_observation_uses_previous_step_control_not_same_index():
     class _GrowingPolicy:
         """A distinct, easily-identified control value at every step."""
 
-        def initial_state(self):
-            return jnp.array(0.0)
-
         def __call__(self, x_hat, t_now, t_next, s):
             return jnp.reshape(s + 1.0, (1,)), s + 1.0
 
@@ -596,7 +596,12 @@ def test_observation_uses_previous_step_control_not_same_index():
 
     def model():
         with sim:
-            return dsx.sample("f", dynamics, predict_times=predict_times)
+            return dsx.sample(
+                "f",
+                dynamics,
+                predict_times=predict_times,
+                initial_policy_state=jnp.array(0.0),
+            )
 
     tr = _run_trace(model)
     controls = tr["f_controls"]["value"][0, :, 0]
@@ -892,6 +897,37 @@ def test_dsx_simulate_without_control_policy_unchanged():
     assert not hasattr(result, "controls")
 
 
+def test_initial_policy_state_threads_through_dsx_simulate():
+    """dsx.simulate(..., initial_policy_state=...) is used directly as s_0 --
+    control_policy is never introspected for an initial_state() method, so a
+    stateful policy's initial state must always be passed explicitly."""
+    dynamics = _lti_1d()
+
+    class _CountingPolicy:
+        """s is a running step counter; u is irrelevant to this test."""
+
+        def __call__(self, x_hat, t_now, t_next, s):
+            return jnp.zeros(1), s + 1.0
+
+    predict_times = jnp.arange(0.0, 4.0)
+    T = len(predict_times)
+
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=_CountingPolicy(),
+        initial_policy_state=jnp.array([10.0]),
+    )
+
+    assert isinstance(result, ControlledSimulatedResult)
+    assert result.policy_states is not None
+    assert jnp.array_equal(
+        result.policy_states[0, :, 0],
+        jnp.arange(11, T + 10, dtype=jnp.float32),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Group 10: MPPI takes one-step dynamics directly; owns its own randomness
 # ---------------------------------------------------------------------------
@@ -918,6 +954,7 @@ def test_mppi_runs_end_to_end_without_a_key_argument():
         predict_times=predict_times,
         control_policy=mppi,
         filter_config=KFConfig(record_filtered_states_mean=True),
+        initial_policy_state=mppi.initial_state(),
     )
     assert isinstance(result, ControlledSimulatedResult)
     assert result.states is not None
@@ -947,6 +984,7 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
         filter_config=PFConfig(
             n_particles=_n_particles(64), record_filtered_states_mean=True
         ),
+        initial_policy_state=mppi.initial_state(),
     )
     assert isinstance(result, ControlledSimulatedResult)
     assert result.states is not None

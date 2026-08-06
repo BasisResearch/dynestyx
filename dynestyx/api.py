@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
 import jax.random as jr
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
@@ -45,6 +45,7 @@ def simulate(
     simulator_config: SimulatorConfig | None = None,
     control_policy: PolicyCallable | None = None,
     filter_config: BaseFilterConfig | None = None,
+    initial_policy_state: PyTree | None = None,
 ) -> SimulatedResult:
     """Simulate states and observations without registering NumPyro sites.
 
@@ -72,6 +73,12 @@ def simulate(
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
+        initial_policy_state: Initial policy state $s_0$, forwarded to
+            `DiscreteControlLoopSimulator` when `control_policy` is given;
+            ignored otherwise. Defaults to `None` (a stateless policy) --
+            `control_policy` is never introspected for an `initial_state()`
+            method, so a stateful policy's initial state must always be
+            passed explicitly here.
 
     Returns:
         SimulatedResult: Simulated times, initial states, state paths, and
@@ -110,6 +117,7 @@ def simulate(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         predict_times=predict_times,
+        initial_policy_state=initial_policy_state,
     )
 
 

@@ -178,8 +178,10 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
     Attributes:
         control_policy: Control policy $\pi$; see `PolicyCallable`. Its initial
-            state $s_0$ is obtained by calling `control_policy.initial_state()`
-            when that method exists, or `None` otherwise (a stateless policy).
+            state $s_0$ is exactly `simulate`'s `initial_policy_state` argument
+            (default `None`, for a stateless policy) -- `control_policy` is
+            never introspected for an `initial_state()` method; a stateful
+            policy's initial state must always be passed explicitly.
         filter_config: Selects the filtering algorithm
             (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`). Defaults to
             `_default_filter_config(dynamics)` when `None`. Its
@@ -208,6 +210,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         ctrl_times=None,
         ctrl_values=None,
         predict_times=None,
+        initial_policy_state: PyTree | None = None,
         **kwargs,
     ) -> ControlledSimulatedResult:
 
@@ -271,8 +274,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             t=times[0],
             t_prev=times[0] - dt0,
         )
-        initial_state_fn = getattr(self.control_policy, "initial_state", None)
-        s_0 = initial_state_fn() if callable(initial_state_fn) else None
+        s_0 = initial_policy_state
 
         def _step(carry, t_idx):
             x_prev, x_hat_prev, s_prev, step_key = carry
@@ -337,9 +339,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         policy_states = None
         if s_0 is not None:
-            # A stateless policy (no initial_state()) has nothing to record;
-            # jnp.expand_dims can't be applied to None directly, and there is
-            # no meaningful "policy_states" trajectory to report.
+            # A stateless policy (no initial_policy_state given) has nothing
+            # to record; jnp.expand_dims can't be applied to None directly,
+            # and there is no meaningful "policy_states" trajectory to report.
             policy_states = jax.tree_util.tree_map(
                 lambda leaf: jnp.expand_dims(leaf, axis=0), ss
             )
