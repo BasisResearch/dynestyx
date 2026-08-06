@@ -107,9 +107,10 @@ class MPPI(eqx.Module):
     def initial_state(
         self,
     ) -> tuple[Real[Array, "horizon control_dim"], PRNGKeyArray]:
-        """Zero nominal control sequence plus MPPI's own seeded PRNG key --
-        `DiscreteControlLoopSimulator` calls this automatically to seed the
-        policy state; no need to build or pass one in yourself."""
+        """Zero nominal control sequence plus MPPI's own seeded PRNG key.
+        Pass this call's result as `initial_policy_state` to `simulate`/
+        `dsx.simulate` -- `DiscreteControlLoopSimulator` never calls this
+        automatically, so it must be supplied explicitly."""
         return (
             jnp.zeros((self.horizon, self.dynamics.control_dim)),
             jr.PRNGKey(self.seed),
