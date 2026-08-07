@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import warnings
 from abc import ABC, abstractmethod
 from typing import cast
 
@@ -10,6 +11,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
@@ -69,6 +71,7 @@ from dynestyx.inference.utils.plate_utils import (
     _slice_dist_for_plate_member,
 )
 from dynestyx.models import DynamicalModel
+from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.types import (
     ConditionedResult,
     FunctionOfTime,
@@ -167,6 +170,8 @@ def _default_filter_config(dynamics: DynamicalModel) -> BaseFilterConfig:
         return ContinuousTimeEnKFConfig()
 
     return EnKFConfig()
+
+
 
 
 @dataclasses.dataclass
@@ -276,13 +281,25 @@ class Filter(BaseLogFactorAdder):
                 mode="filter",
             )
 
+        obs_model = dynamics.observation_model
+        # Add a simple warning for sparse observation matrices + EKF/KF filters
+        if (
+            isinstance(obs_model, LinearGaussianObservation)
+            and isinstance(obs_model.H, jax_sparse.JAXSparse)
+            and isinstance(config, (KFConfig, EKFConfig))
+        ):
+            warnings.warn(
+                f"A sparse observation matrix H was passed to {type(config).__name__}. "
+                "This is unlikely to be supported: the underlying cuthbert Kalman-filter "
+                "internals assume dense arrays. If sparse H support is ever added for "
+                "KF/EKF, this warning can be removed.",
+                stacklevel=2,
+            )
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
         if config.crn_seed is not None:
             key = config.crn_seed
         else:
-            import warnings  # noqa: PLC0415
-
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 key = numpyro.prng_key()  # returns None outside seed handler

@@ -14,6 +14,7 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
+from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.filter import (
@@ -405,7 +406,14 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
         if isinstance(obs_model, LinearGaussianObservation):
             obs_params = obs_model.params_at(mi.time)
-            H = jnp.asarray(obs_params.H)
+
+            # Handle sparse observation matrix
+            if isinstance(obs_params.H, jax_sparse.JAXSparse):
+                H = obs_params.H
+            else:
+                H = jnp.asarray(obs_params.H)
+
+
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)

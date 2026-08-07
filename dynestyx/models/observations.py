@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import NamedTuple, cast
 
 import jax.numpy as jnp
+from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
@@ -22,7 +23,7 @@ class LinearGaussianObservationParams(NamedTuple):
     member-sliced (reduced-rank) parameter to `__call__`.
     """
 
-    H: Float[Array, "..."]
+    H: Float[Array, "..."] | jax_sparse.JAXSparse
     D: Float[Array, "..."] | None
     bias: Float[Array, "..."] | None
     R: Float[Array, "..."]
@@ -62,6 +63,7 @@ class LinearGaussianObservation(ObservationModel):
 
     H: (
         Float[Array, "*h_plate observation_dim state_dim"]
+        | jax_sparse.JAXSparse
         | Callable[
             [float | int | Real[Array, ""]],
             Float[Array, "*h_plate observation_dim state_dim"],
@@ -94,6 +96,7 @@ class LinearGaussianObservation(ObservationModel):
     def __init__(
         self,
         H: Float[Array, "*h_plate observation_dim state_dim"]
+        | jax_sparse.JAXSparse
         | Callable[
             [float | int | Real[Array, ""]],
             Float[Array, "*h_plate observation_dim state_dim"],
@@ -118,8 +121,10 @@ class LinearGaussianObservation(ObservationModel):
     ):
         """
         Args:
-            H (jax.Array | Callable): Observation matrix with shape
-                $(d_y, d_x)$, or a callable `(t,)` returning it.
+            H (jax.Array | jax.experimental.sparse.JAXSparse | Callable): Observation
+                matrix with shape $(d_y, d_x)$, or a callable `(t,)` returning it. May be
+                a sparse (e.g. `BCOO`) array for `EnKFConfig`/`PFConfig`; not supported for
+                `KFConfig`/`EKFConfig` (warns).
             R (jax.Array | Callable): Observation noise covariance with shape
                 $(d_y, d_y)$, or a callable `(t,)` returning it.
             D (jax.Array | Callable | None): Optional control matrix with
@@ -165,9 +170,9 @@ class LinearGaussianObservation(ObservationModel):
 
     def __call__(self, x, u, t):
         H, D, bias, R = self.params_at(t)
-        loc = jnp.dot(H, x)
+        loc = H @ x
         if D is not None and u is not None:
-            loc = loc + jnp.dot(D, u)
+            loc = loc + D @ u
         if bias is not None:
             loc = loc + bias
         return dist.MultivariateNormal(loc=loc, covariance_matrix=R)
