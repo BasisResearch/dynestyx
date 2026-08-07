@@ -71,8 +71,10 @@ with dsx.Filter():
 
 ```python
 # Explicit latent path
+from dynestyx.discretizers import EulerMaruyamaConfig
+
 with dsx.LatentPathBuilder():
-    with dsx.Discretizer(discretize=dsx.euler_maruyama):
+    with dsx.Discretizer(EulerMaruyamaConfig()):
         model(obs_times=obs_times, obs_values=obs_values)
 
 # Marginalized latent path
@@ -94,8 +96,10 @@ with dsx.Filter():
   model when `dirac_observation=True`:
 
 ```python
+from dynestyx.discretizers import EulerMaruyamaConfig
+
 with dsx.LatentPathBuilder():
-    with dsx.Discretizer(discretize=dsx.euler_maruyama):
+    with dsx.Discretizer(EulerMaruyamaConfig()):
         model(
             obs_times=obs_times,
             obs_values=obs_values,

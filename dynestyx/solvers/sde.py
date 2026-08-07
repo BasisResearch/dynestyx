@@ -1,4 +1,4 @@
-"""SDE solver backends for SDESimulator."""
+"""SDE solver backends for full-path simulation and interval transitions."""
 
 from __future__ import annotations
 
@@ -381,7 +381,33 @@ def _solve_sde_diffrax(
             f"{type(dynamics.state_evolution)}"
         )
 
-    state_evolution = dynamics.state_evolution
+    return _solve_diffrax_sde_state_path(
+        dynamics.state_evolution,
+        t0,
+        saveat_times,
+        x0,
+        control_path_eval,
+        diffeqsolve_settings,
+        key=key,
+        tol_vbt=tol_vbt,
+    )
+
+
+def _solve_diffrax_sde_state_path(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    t0: Real[Array, ""],
+    saveat_times: Real[Array, " path_time"],
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ],
+    diffeqsolve_settings: dict[str, Any],
+    *,
+    key: PRNGKeyArray,
+    tol_vbt: Real[Array, ""],
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
+    """Solve one state evolution over a path using one Brownian tree."""
     diffusion = state_evolution.diffusion
 
     def _drift(t, y, args):
@@ -391,6 +417,10 @@ def _solve_sde_diffrax(
     def _diffusion(t, y, args):
         u_t = args(t) if args is not None else None
         return diffusion.as_matrix(x=y, u=u_t, t=t, state_dim=y.shape[-1])
+
+    solver = diffeqsolve_settings.get("solver")
+    if solver is None:
+        raise ValueError("Diffrax SDE solves require a solver setting.")
 
     k_bm, _ = jr.split(key, 2)
     bm = dfx.VirtualBrownianTree(
@@ -410,6 +440,67 @@ def _solve_sde_diffrax(
         **diffeqsolve_settings,
     )
     return sol.ys
+
+
+def solve_diffrax_sde_interval(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    *,
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    t0: float | int | Real[Array, ""],
+    t1: float | int | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    diffeqsolve_settings: dict[str, Any],
+    key: PRNGKeyArray,
+    tol_vbt: float | int | Real[Array, ""],
+) -> Real[Array, " state_dim"] | Real[Array, ""]:
+    """Sample the final state of one Diffrax SDE interval.
+
+    A fresh virtual Brownian tree is constructed for the interval using
+    ordinary Brownian increments. The control ``u`` is held constant over
+    ``[t0, t1]``.
+
+    Args:
+        state_evolution: Continuous-time stochastic state evolution.
+        initial_state: State at ``t0``.
+        t0: Interval start time.
+        t1: Interval end time. Must be strictly greater than ``t0``.
+        u: Optional control held constant throughout the interval.
+        diffeqsolve_settings: Keyword arguments for ``diffrax.diffeqsolve``.
+        key: PRNG key used to construct this interval's Brownian tree.
+        tol_vbt: Virtual-Brownian-tree tolerance.
+
+    Returns:
+        Sampled state at ``t1``.
+    """
+    state_dtype = jnp.result_type(jnp.asarray(initial_state), 0.0)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=state_dtype)
+    t1_arr = as_scalar_time_array(t1, name="t1", dtype=state_dtype)
+    t1_arr = eqx.error_if(
+        t1_arr,
+        t1_arr <= t0_arr,
+        "Diffrax SDE intervals require t1 > t0.",
+    )
+    tol_vbt_arr = as_scalar_time_array(tol_vbt, name="tol_vbt", dtype=state_dtype)
+    tol_vbt_arr = eqx.error_if(
+        tol_vbt_arr,
+        tol_vbt_arr <= 0,
+        "Diffrax SDE intervals require tol_vbt > 0.",
+    )
+
+    def _constant_control(_):
+        return u
+
+    states = _solve_diffrax_sde_state_path(
+        state_evolution,
+        t0_arr,
+        jnp.expand_dims(t1_arr, axis=0),
+        initial_state,
+        _constant_control,
+        diffeqsolve_settings,
+        key=key,
+        tol_vbt=tol_vbt_arr,
+    )
+    return states[0]
 
 
 def solve_sde_state_path(

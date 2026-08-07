@@ -104,8 +104,19 @@ def _taylor_get_dynamics_log_density(dynamics: DynamicalModel):
 
 def _pf_log_potential(dynamics: DynamicalModel):
     def log_potential(x_prev, x, mi: CuthbertInputs):
+        # Unlike the forward bootstrap filter, cuthbert's backward sampler
+        # expects the joint transition-plus-observation potential.
+        transition = dynamics.state_evolution(
+            x_prev,
+            mi.u_prev,
+            mi.time_prev,
+            mi.time,
+        )
         edist = dynamics.observation_model(x, mi.u, mi.time)
-        return jnp.asarray(edist.log_prob(mi.y)).sum()
+        return (
+            jnp.asarray(transition.log_prob(x)).sum()
+            + jnp.asarray(edist.log_prob(mi.y)).sum()
+        )
 
     return log_potential
 

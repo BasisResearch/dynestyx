@@ -5,7 +5,7 @@ from importlib.metadata import version
 __version__ = version("dynestyx")
 
 from dynestyx.api import log_prob, simulate
-from dynestyx.discretizers import Discretizer, euler_maruyama
+from dynestyx.discretizers import Discretizer
 from dynestyx.handlers import condition, plate, sample
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
@@ -93,5 +93,4 @@ __all__ = [
     "ODESimulator",
     "SDESimulator",
     "Simulator",
-    "euler_maruyama",
 ]
