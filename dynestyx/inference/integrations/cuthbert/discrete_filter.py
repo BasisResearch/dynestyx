@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cuthbert import filter as cuthbert_filter
-from cuthbert.enkf import ensemble_kalman_filter
+from cuthbert.ensemble_kalman import ensemble_kalman_filter
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import particle_filter
 from cuthbertlib.resampling import (
@@ -251,11 +251,21 @@ def compute_cuthbert_filter(
             f"filter is not associative: {type(filter_config).__name__}."
         )
 
+    init_inputs = jax.tree.map(lambda leaf: leaf[0], cuthbert_inputs)
+    filter_inputs = jax.tree.map(lambda leaf: leaf[1:], cuthbert_inputs)
+    if key is None:
+        init_state = filter_obj.init_prepare(init_inputs)
+        filter_key = None
+    else:
+        init_key, filter_key = jax.random.split(key)
+        init_state = filter_obj.init_prepare(init_inputs, key=init_key)
+
     raw_states = cuthbert_filter(
         filter_obj,
-        cuthbert_inputs,
+        filter_inputs,
+        init_state,
         parallel=cast(bool, parallel),
-        key=key,
+        key=filter_key,
     )
     marginal_loglik = raw_states.log_normalizing_constant[-1]
     states = (
