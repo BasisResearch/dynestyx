@@ -521,7 +521,7 @@ def test_cuthbert_enkf_sparse_h_matches_dense_h():
     ground_truth = dsx.simulate(
         dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
     )
-    obs_values = ground_truth.observations[0]
+    obs_values = jnp.asarray(ground_truth.observations)[0]
 
     # Fixed crn_seed: EnKF's randomness becomes a deterministic function of its inputs, so
     # dense and sparse H should give numerically identical results, not just close ones.
@@ -569,7 +569,7 @@ def test_ekf_warns_on_sparse_observation_matrix_but_still_works():
     ground_truth = dsx.simulate(
         dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
     )
-    obs_values = ground_truth.observations[0]
+    obs_values = jnp.asarray(ground_truth.observations)[0]
 
     with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
         result_dense = dsx.condition(
