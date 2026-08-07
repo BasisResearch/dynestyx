@@ -172,8 +172,6 @@ def _default_filter_config(dynamics: DynamicalModel) -> BaseFilterConfig:
     return EnKFConfig()
 
 
-
-
 @dataclasses.dataclass
 class Filter(BaseLogFactorAdder):
     r"""Performs Bayesian filtering to compute the filtering distribution $p(x_t | y_{1:t})$ and the marginal likelihood $\log p(y_{1:T})$.
@@ -282,19 +280,24 @@ class Filter(BaseLogFactorAdder):
             )
 
         obs_model = dynamics.observation_model
-        # Add a simple warning for sparse observation matrices + EKF/KF filters
-        if (
-            isinstance(obs_model, LinearGaussianObservation)
-            and isinstance(obs_model.H, jax_sparse.JAXSparse)
-            and isinstance(config, (KFConfig, EKFConfig))
+        # Sparse observation matrices: incompatible with KF, compatible with EKF (but most likely inefficient)
+        if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+            obs_model.H, jax_sparse.JAXSparse
         ):
-            warnings.warn(
-                f"A sparse observation matrix H was passed to {type(config).__name__}. "
-                "This is unlikely to be supported: the underlying cuthbert Kalman-filter "
-                "internals assume dense arrays. If sparse H support is ever added for "
-                "KF/EKF, this warning can be removed.",
-                stacklevel=2,
-            )
+            if isinstance(config, KFConfig):
+                raise ValueError(
+                    "A sparse observation matrix H was passed to KFConfig. This is not "
+                    "supported: the underlying cuthbert Kalman-filter internals cannot "
+                    "handle a sparse H. Pass a dense H, or use EnKFConfig/EKFConfig instead."
+                )
+            if isinstance(config, EKFConfig):
+                warnings.warn(
+                    "A sparse observation matrix H was passed to EKFConfig. This works "
+                    "correctly, but likely gives no efficiency gain as EKF differentiates the observation log-density instead, which" \
+                    "scales with the dense state/observation dimensions "
+                    "regardless of H's sparsity.",
+                    stacklevel=2,
+                )
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
         if config.crn_seed is not None:

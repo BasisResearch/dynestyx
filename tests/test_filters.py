@@ -541,19 +541,43 @@ def test_cuthbert_enkf_sparse_h_matches_dense_h():
     assert jnp.allclose(means_dense, means_sparse)
 
 
-def test_kf_warns_on_sparse_observation_matrix():
-    """KF is not expected to support a sparse H: the warning should fire, and (since KF
-    itself is not fixed by this change, only EnKF is) it should still go on to fail --
-    confirming the warning is an accurate heads-up, not a stale claim about a combination
-    that secretly already works."""
+def test_kf_raises_on_sparse_observation_matrix():
+    """KF does not support a sparse H: cuthbert's Kalman internals cannot handle it
+    (vmap's sparse tracing breaks inside a jnp.block call), so dynestyx raises a clear
+    error up front rather than letting that confusing internal failure surface."""
     H_sparse = jax_sparse.BCOO.fromdense(jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
     dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
     obs_times = jnp.arange(3.0)
     obs_values = jnp.zeros((3, 2))
 
-    with pytest.warns(UserWarning, match="unlikely to be supported"):
-        with pytest.raises(Exception):
-            with Filter(filter_config=KFConfig(filter_source="cuthbert")):
-                dsx.condition(
-                    "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
-                )
+    with pytest.raises(ValueError, match="not supported"):
+        with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+            dsx.condition(
+                "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+            )
+
+
+def test_ekf_warns_on_sparse_observation_matrix_but_still_works():
+    """EKF works correctly with a sparse H, but the warning should fire to flag that
+    there's likely no efficiency gain (EKF differentiates the log-density directly rather
+    than extracting H, so the underlying computation is dense-scaling regardless)."""
+    H_dense = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    H_sparse = jax_sparse.BCOO.fromdense(H_dense)
+    dynamics_dense = _sparse_h_test_dynamics(H_dense)
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = ground_truth.observations[0]
+
+    with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+        result_dense = dsx.condition(
+            "f", dynamics_dense, obs_times=obs_times, obs_values=obs_values
+        )
+    with pytest.warns(UserWarning, match="no efficiency gain"):
+        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+            result_sparse = dsx.condition(
+                "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+            )
+    assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)

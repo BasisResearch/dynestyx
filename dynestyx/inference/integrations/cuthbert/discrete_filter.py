@@ -413,7 +413,6 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             else:
                 H = jnp.asarray(obs_params.H)
 
-
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
