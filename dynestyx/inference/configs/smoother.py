@@ -8,6 +8,7 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeEKFConfig,
     ContinuousTimeKFConfig,
     EKFConfig,
+    EnKFConfig,
     KFConfig,
     PFConfig,
     UKFConfig,
@@ -165,6 +166,52 @@ class EKFSmootherConfig(EKFConfig, BaseSmootherConfig):
         - For a modern textbook reference, see: Särkkä, S., & Svensson, L. (2023).
             Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
             [Available Online](https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf).
+    """
+
+
+@dataclasses.dataclass
+class EnRTSSmootherConfig(EnKFConfig, BaseSmootherConfig):
+    r"""Ensemble Rauch-Tung-Striebel smoother (EnRTS) for discrete-time models.
+
+    The EnRTS runs an ensemble Kalman filter forward pass followed by an
+    RTS-like backward recursion over the filtered and forecast ensembles. Use
+    this for nonlinear models with Gaussian, state-independent observation
+    noise when an ensemble approximation is preferable to local
+    linearization.
+
+    The inherited `n_particles`, `inflation_delta`, and
+    `perturb_measurements` fields configure the forward EnKF. The cuthbert
+    backend retains the forecast ensemble required by the backward pass.
+
+    Supports missing observations via NaNs.
+
+    Attributes:
+        n_particles (int): Number of ensemble members. Defaults to `30`.
+        crn_seed (PRNGKeyArray | None): Fixed PRNG key for the ensemble.
+        perturb_measurements (bool | None): Whether to use stochastic
+            perturbed-observation EnKF updates.
+        inflation_delta (float | None): Ensemble inflation applied during the
+            forward pass.
+        filter_source (FilterSource): Backend. Always `"cuthbert"`.
+
+    ??? note "Algorithm Reference"
+        The EnRTS smooths each ensemble member with an empirical RTS gain:
+
+        $$
+            x_{t \mid T}^{(i)}
+            = x_{t \mid t}^{(i)}
+            + J_t \left(
+                x_{t+1 \mid T}^{(i)}
+                - x_{t+1 \mid t}^{(i)}
+            \right).
+        $$
+
+        The gain \(J_t\) is estimated from the filtered ensemble at time \(t\)
+        and its forecast at time \(t+1\).
+
+        References:
+
+        - Raanes, P. N. (2016). On the ensemble Rauch-Tung-Striebel smoother and its equivalence to the ensemble Kalman smoother. Quarterly Journal of the Royal Meteorological Society, 142(696), 1259-1264.
     """
 
 
@@ -363,6 +410,7 @@ class ContinuousTimeEKFSmootherConfig(ContinuousTimeEKFConfig, BaseSmootherConfi
 DiscreteTimeSmootherConfigs: tuple[type, ...] = (
     KFSmootherConfig,
     EKFSmootherConfig,
+    EnRTSSmootherConfig,
     UKFSmootherConfig,
     PFSmootherConfig,
 )
@@ -394,6 +442,7 @@ __all__ = [
     "ContinuousTimeSmootherConfigs",
     "DiscreteTimeSmootherConfigs",
     "EKFSmootherConfig",
+    "EnRTSSmootherConfig",
     "KFSmootherConfig",
     "PFBackwardSamplingMethod",
     "PFSmootherConfig",
