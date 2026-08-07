@@ -293,7 +293,7 @@ class Filter(BaseLogFactorAdder):
             if isinstance(config, EKFConfig):
                 warnings.warn(
                     "A sparse observation matrix H was passed to EKFConfig. This works "
-                    "correctly, but likely gives no efficiency gain as EKF differentiates the observation log-density instead, which" \
+                    "correctly, but likely gives no efficiency gain as EKF differentiates the observation log-density instead, which"
                     "scales with the dense state/observation dimensions "
                     "regardless of H's sparsity.",
                     stacklevel=2,

@@ -379,7 +379,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     obs_dim = dynamics.observation_dim
 
     obs_model = dynamics.observation_model
-    if not isinstance(obs_model, (LinearGaussianObservation, GaussianObservation)):
+    if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
         _probe_state_independent_observation_noise(
             obs_model, state_dim=state_dim, obs_dim=obs_dim
         )
@@ -447,7 +447,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             def observation_fn(x):
                 edist = obs_model(x, mi.u, mi.time)
                 if not (
-                    isinstance(edist, (dist.MultivariateNormal, dist.Normal))
+                    isinstance(edist, dist.MultivariateNormal | dist.Normal)
                     or (
                         isinstance(edist, dist.Independent)
                         and isinstance(edist.base_dist, dist.Normal)
