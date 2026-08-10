@@ -140,8 +140,8 @@ def compute_cd_dynamax_discrete_filter(
         ):
             warnings.warn(
                 "A sparse observation matrix H was passed to EKFConfig. This works "
-                  "correctly, but likely gives no efficiency gain due to internal"
-                  "use of automatic differentiation.",
+                "correctly, but likely gives no efficiency gain due to internal"
+                "use of automatic differentiation.",
                 stacklevel=2,
             )
         return extended_kalman_filter(params_nl, emissions, inputs=inputs)
