@@ -7,6 +7,7 @@ requiring users to opt into smoothing-specific classes. Backend support is
 validated by `Smoother` before dispatch:
 
 - discrete `KFSmootherConfig` and `EKFSmootherConfig`: `cuthbert` or `cd_dynamax`
+- discrete `EnRTSSmootherConfig`: `cuthbert`
 - discrete `UKFSmootherConfig`: `cd_dynamax`
 - discrete `PFSmootherConfig`: `cuthbert`
 - continuous `ContinuousTimeKFSmootherConfig` and

@@ -181,6 +181,7 @@ def compute_cuthbert_filter(
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
+    store_predicted_ensemble: bool = False,
 ) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
@@ -189,6 +190,7 @@ def compute_cuthbert_filter(
         obs_times; pass align_to_observations=False for raw cuthbert T+1 states.
     """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
+    filter_kwargs["store_predicted_ensemble"] = store_predicted_ensemble
 
     ys = obs_values
     obs_len = int(ys.shape[0])
@@ -479,6 +481,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         n_particles=int(filter_kwargs.get("n_particles", 30)),
         inflation=float(filter_kwargs.get("inflation", 0.0)),
         perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
+        store_predicted_ensemble=bool(
+            filter_kwargs.get("store_predicted_ensemble", False)
+        ),
     )
 
 
