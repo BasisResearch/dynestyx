@@ -177,9 +177,18 @@ def build_cuthbert_filter(
     key: jax.Array | None,
     *,
     want_parallel: bool,
+    extra_filter_kwargs: dict | None = None,
 ):
-    """Build the cuthbert Filter object for `(dynamics, filter_config)`."""
+    """Build the cuthbert Filter object for `(dynamics, filter_config)`.
+
+    `extra_filter_kwargs`, when given, is merged over (overriding) the kwargs
+    derived from `filter_config` -- e.g. `store_predicted_ensemble`, which
+    depends on why the caller is building the filter (a smoother's backward
+    pass needs it, a plain filter doesn't), not on the config itself.
+    """
     filter_kwargs = _config_to_filter_kwargs(filter_config)
+    if extra_filter_kwargs:
+        filter_kwargs.update(extra_filter_kwargs)
     if isinstance(filter_config, PFConfig):
         if key is None:
             raise ValueError(
@@ -284,9 +293,6 @@ def compute_cuthbert_filter(
         tuple: (marginal_loglik, states). By default states are aligned to
         obs_times; pass align_to_observations=False for raw cuthbert T+1 states.
     """
-    filter_kwargs = _config_to_filter_kwargs(filter_config)
-    filter_kwargs["store_predicted_ensemble"] = store_predicted_ensemble
-
     ys = obs_values
     obs_len = int(ys.shape[0])
     times = obs_times
@@ -318,7 +324,11 @@ def compute_cuthbert_filter(
     )
 
     filter_obj, parallel = build_cuthbert_filter(
-        dynamics, filter_config, key, want_parallel=True
+        dynamics,
+        filter_config,
+        key,
+        want_parallel=True,
+        extra_filter_kwargs={"store_predicted_ensemble": store_predicted_ensemble},
     )
 
     init_inputs = jax.tree.map(lambda leaf: leaf[0], cuthbert_inputs)
