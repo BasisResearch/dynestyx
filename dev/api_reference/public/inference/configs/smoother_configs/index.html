@@ -2991,6 +2991,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.inference.configs.smoother.EnRTSSmootherConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EnRTSSmootherConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.inference.configs.smoother.KFSmootherConfig" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4682,19 +4693,17 @@ recording fields such as <code>record_smoothed_states_mean</code>,
 <h2 id="common-choices">Common Choices<a class="headerlink" href="#common-choices" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.inference.configs.smoother</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">ContinuousTimeKFSmootherConfig</span><span class="p">,</span>
+    <span class="n">EnRTSSmootherConfig</span><span class="p">,</span>
     <span class="n">KFSmootherConfig</span><span class="p">,</span>
     <span class="n">PFSmootherConfig</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">kf</span> <span class="o">=</span> <span class="n">KFSmootherConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">&quot;cd_dynamax&quot;</span><span class="p">)</span>
+<span class="n">enrts</span> <span class="o">=</span> <span class="n">EnRTSSmootherConfig</span><span class="p">(</span><span class="n">n_particles</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 <span class="n">pf</span> <span class="o">=</span> <span class="n">PFSmootherConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">&quot;cuthbert&quot;</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
 <span class="n">ct_kf</span> <span class="o">=</span> <span class="n">ContinuousTimeKFSmootherConfig</span><span class="p">()</span>
 </code></pre></div>
-<p><code>PFSmootherConfig</code> exposes particle-smoother options:
-<code>pf_backward_sampling_method</code>, <code>pf_mcmc_n_steps</code>, and
-<code>pf_n_smoother_particles</code>. <code>ContinuousTimeKFSmootherConfig</code> exposes
-<code>cdlgssm_smoother_type</code> for the CD-Dynamax continuous-discrete linear
-Gaussian smoother variant.</p>
+<p><code>EnRTSSmootherConfig</code> inherits the EnKF ensemble-size, inflation, and perturbed-observation options. <code>PFSmootherConfig</code> exposes particle-smoother options: <code>pf_backward_sampling_method</code>, <code>pf_mcmc_n_steps</code>, and <code>pf_n_smoother_particles</code>. <code>ContinuousTimeKFSmootherConfig</code> exposes <code>cdlgssm_smoother_type</code> for the CD-Dynamax continuous-discrete linear Gaussian smoother variant.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -5211,6 +5220,166 @@ backward recursion as <code>KFSmootherConfig</code>.</p>
 <li>For a modern textbook reference, see: Särkkä, S., &amp; Svensson, L. (2023).
     Bayesian Filtering and Smoothing (Vol. 17). Cambridge University Press.
     <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Available Online</a>.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.configs.smoother.EnRTSSmootherConfig" class="doc doc-heading">
+            <code>EnRTSSmootherConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.configs.smoother.EnRTSSmootherConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="EnKFConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.filter.EnKFConfig)" href="../../../../developer/inference/configs/filter_configs/#dynestyx.inference.configs.filter.EnKFConfig">EnKFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="BaseSmootherConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.smoother.BaseSmootherConfig)" href="../../../../developer/inference/configs/smoother_configs/#dynestyx.inference.configs.smoother.BaseSmootherConfig">BaseSmootherConfig</a></code></p>
+
+
+
+        <p>Ensemble Rauch-Tung-Striebel smoother (EnRTS) for discrete-time models.</p>
+<p>The EnRTS runs an ensemble Kalman filter forward pass followed by an
+RTS-like backward recursion over the filtered and forecast ensembles. Use
+this for nonlinear models with Gaussian, state-independent observation
+noise when an ensemble approximation is preferable to local
+linearization.</p>
+<p>The inherited <code>n_particles</code>, <code>inflation_delta</code>, and
+<code>perturb_measurements</code> fields configure the forward EnKF. The cuthbert
+backend retains the forecast ensemble required by the backward pass.</p>
+<p>Supports missing observations via NaNs.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.smoother.EnRTSSmootherConfig.n_particles">n_particles</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of ensemble members. Defaults to <code>30</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.smoother.EnRTSSmootherConfig.crn_seed">crn_seed</span></code></td>
+            <td>
+                  <code><span title="PRNGKeyArray">PRNGKeyArray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fixed PRNG key for the ensemble.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.smoother.EnRTSSmootherConfig.perturb_measurements">perturb_measurements</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to use stochastic
+perturbed-observation EnKF updates.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.smoother.EnRTSSmootherConfig.inflation_delta">inflation_delta</span></code></td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Ensemble inflation applied during the
+forward pass.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.smoother.EnRTSSmootherConfig.filter_source">filter_source</span></code></td>
+            <td>
+                  <code><span title="FilterSource">FilterSource</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend. Always <code>"cuthbert"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<p>The EnRTS smooths each ensemble member with an empirical RTS gain:</p>
+<div class="arithmatex">\[
+    x_{t \mid T}^{(i)}
+    = x_{t \mid t}^{(i)}
+    + J_t \left(
+        x_{t+1 \mid T}^{(i)}
+        - x_{t+1 \mid t}^{(i)}
+    \right).
+\]</div>
+<p>The gain <span class="arithmatex">\(J_t\)</span> is estimated from the filtered ensemble at time <span class="arithmatex">\(t\)</span>
+and its forecast at time <span class="arithmatex">\(t+1\)</span>.</p>
+<p>References:</p>
+<ul>
+<li>Raanes, P. N. (2016). On the ensemble Rauch-Tung-Striebel smoother and its equivalence to the ensemble Kalman smoother. Quarterly Journal of the Royal Meteorological Society, 142(696), 1259-1264.</li>
 </ul>
 </details>
 
