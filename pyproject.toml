@@ -35,7 +35,9 @@ dependencies = [
     "cuthbertlib==0.0.14",
     "cd-dynamax>=0.3.3",
     "matplotlib>=3.10.7",
-    "numpyro>=0.19.0",
+    # numpyro<0.21.0 fails to import against jax>=0.10 (removed xla_pmap_p);
+    # keep this floor aligned with the jax floor below.
+    "numpyro>=0.21.0",
     "pytest>=9.0.1",
     "arviz>=0.18.0,<1.0.0",
     "blackjax>=1.3",
