@@ -11,7 +11,6 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.handlers import HandlesSelf, _condition_intp
@@ -71,7 +70,6 @@ from dynestyx.inference.utils.plate_utils import (
     _slice_dist_for_plate_member,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.types import (
     ConditionedResult,
     FunctionOfTime,
@@ -279,25 +277,6 @@ class Filter(BaseLogFactorAdder):
                 mode="filter",
             )
 
-        obs_model = dynamics.observation_model
-        # Sparse observation matrices: incompatible with KF, compatible with EKF (but most likely inefficient)
-        if isinstance(obs_model, LinearGaussianObservation) and isinstance(
-            obs_model.H, jax_sparse.JAXSparse
-        ):
-            if isinstance(config, KFConfig):
-                raise ValueError(
-                    "A sparse observation matrix H was passed to KFConfig. This is not "
-                    "supported: the underlying cuthbert Kalman-filter internals cannot "
-                    "handle a sparse H. Pass a dense H, or use EnKFConfig/EKFConfig instead."
-                )
-            if isinstance(config, EKFConfig):
-                warnings.warn(
-                    "A sparse observation matrix H was passed to EKFConfig. This works "
-                    "correctly, but likely gives no efficiency gain as EKF differentiates the observation log-density instead, which"
-                    "scales with the dense state/observation dimensions "
-                    "regardless of H's sparsity.",
-                    stacklevel=2,
-                )
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
         if config.crn_seed is not None:

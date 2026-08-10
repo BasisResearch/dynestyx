@@ -419,11 +419,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         if isinstance(obs_model, LinearGaussianObservation):
             obs_params = obs_model.params_at(mi.time)
 
-            # Handle sparse observation matrix
-            if isinstance(obs_params.H, jax_sparse.JAXSparse):
-                H = obs_params.H
-            else:
-                H = jnp.asarray(obs_params.H)
+            H = obs_params.H
 
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
@@ -597,6 +593,15 @@ def _cuthbert_filter_kalman(
     obs = dynamics.observation_model
     ic = dynamics.initial_condition
 
+    if isinstance(obs.H, jax_sparse.JAXSparse):
+        raise ValueError(
+            "A sparse observation matrix H was passed to KFConfig(filter_source="
+            "'cuthbert'). This is not supported with  filter_source = 'cuthbert' due "
+            "to internal incompatibilities. Either pass a dense H, use KFConfig(filter_source="
+            "'cd_dynamax') (works, verified bit-identical to dense), or use another config such as"
+            "EnKFConfig/EKFConfig."
+        )
+
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
@@ -627,6 +632,17 @@ def _cuthbert_filter_taylor_kf(
 ):
     if filter_kwargs is None:
         filter_kwargs = {}
+
+    obs_model = dynamics.observation_model
+    if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+        obs_model.H, jax_sparse.JAXSparse
+    ):
+        warnings.warn(
+            "A sparse observation matrix H was passed to EKFConfig. This works "
+            "correctly, but likely gives no efficiency gain due to internal"
+            "use of automatic differentiation.",
+            stacklevel=2,
+        )
 
     rtol = filter_kwargs.get("rtol", None)
 

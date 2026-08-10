@@ -1,5 +1,6 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF."""
 
+import warnings
 from typing import Any, cast
 
 import jax.numpy as jnp
@@ -15,6 +16,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_filter,
 )
+from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Real
 
 from dynestyx.inference.configs.filter import (
@@ -132,6 +134,16 @@ def compute_cd_dynamax_discrete_filter(
     params_nl = gaussian_to_nlgssm_params(dynamics)
 
     if isinstance(filter_config, EKFConfig):
+        obs_model = dynamics.observation_model
+        if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+            obs_model.H, jax_sparse.JAXSparse
+        ):
+            warnings.warn(
+                "A sparse observation matrix H was passed to EKFConfig. This works "
+                  "correctly, but likely gives no efficiency gain due to internal"
+                  "use of automatic differentiation.",
+                stacklevel=2,
+            )
         return extended_kalman_filter(params_nl, emissions, inputs=inputs)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
