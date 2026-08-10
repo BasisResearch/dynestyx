@@ -26,6 +26,7 @@ from dynestyx.inference.configs.smoother import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
     EKFSmootherConfig,
+    EnRTSSmootherConfig,
     KFSmootherConfig,
     PFBackwardSamplingMethod,
     PFSmootherConfig,
@@ -103,6 +104,7 @@ def _make_discrete_lti_dynamics(alpha=0.35):
     [
         KFSmootherConfig(filter_source="cuthbert"),
         EKFSmootherConfig(filter_source="cuthbert"),
+        EnRTSSmootherConfig(n_particles=16),
         PFSmootherConfig(n_particles=16, filter_source="cuthbert"),
     ],
 )
@@ -141,6 +143,53 @@ def test_compute_cuthbert_smoother_returns_observation_aligned_states(
         )
         assert states.mean.shape[0] == len(obs_times)
         assert states.chol_cov.shape[0] == len(obs_times)
+        if isinstance(smoother_config, EnRTSSmootherConfig):
+            assert_tree_all_finite(
+                {
+                    "ensemble": states.ensemble,
+                    "predicted_ensemble": states.predicted_ensemble,
+                },
+                where="EnRTS smoother states",
+            )
+            assert states.ensemble.shape == (
+                len(obs_times),
+                smoother_config.n_particles,
+                dynamics.state_dim,
+            )
+
+
+def test_enrts_smoother_handler_records_gaussian_outputs():
+    obs_times, obs_values, _ = _gen_obs_discrete()
+    config = EnRTSSmootherConfig(
+        n_particles=32,
+        crn_seed=jr.PRNGKey(7),
+        record_smoothed_states_mean=True,
+        record_smoothed_states_cov_diag=True,
+        record_smoothed_states_chol_cov=True,
+    )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(8)):
+        with Smoother(smoother_config=config):
+            discrete_time_lti_simplified_model(
+                obs_times=obs_times,
+                obs_values=obs_values,
+            )
+
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_marginal_loglik",
+        "f_smoothed_states_mean",
+        "f_smoothed_states_cov_diag",
+        "f_smoothed_states_chol_cov",
+        where="EnRTS smoother trace",
+    )
+    assert tr["f_smoothed_states_mean"]["value"].shape == (len(obs_times), 2)
+    assert tr["f_smoothed_states_cov_diag"]["value"].shape == (len(obs_times), 2)
+    assert tr["f_smoothed_states_chol_cov"]["value"].shape == (
+        len(obs_times),
+        2,
+        2,
+    )
 
 
 def test_predictive_smoother_discretetimesimulator_shapes():
@@ -492,13 +541,20 @@ def _make_plate_vector_continuous_observations():
     return obs_times, tr["f_observations"]["value"][:, 0]
 
 
-def test_smoother_plate_batched_loglik_shape():
+@pytest.mark.parametrize(
+    "smoother_config",
+    [
+        KFSmootherConfig(filter_source="cd_dynamax"),
+        EnRTSSmootherConfig(n_particles=16, crn_seed=jr.PRNGKey(10)),
+    ],
+)
+def test_smoother_plate_batched_loglik_shape(smoother_config):
     obs_times = jnp.arange(0.0, 5.0, 1.0)
     m = 3
     obs_values = jnp.zeros((m, len(obs_times), 1))
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-        with Smoother(smoother_config=KFSmootherConfig(filter_source="cd_dynamax")):
+        with Smoother(smoother_config=smoother_config):
             _plate_discrete_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
