@@ -120,6 +120,17 @@ def _validate_continuous_state_evolution(
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
 
+    implicit_drift = getattr(state_evolution, "implicit_drift", None)
+    if implicit_drift is not None:
+        implicit_drift_shape = jax.eval_shape(
+            lambda: implicit_drift(x_probe, u_probe, t_probe)
+        ).shape
+        if implicit_drift_shape != (state_dim,):
+            raise ValueError(
+                "implicit_drift shape is inconsistent with state_dim. "
+                f"Expected {(state_dim,)}, got {implicit_drift_shape}."
+            )
+
 
 def _validate_discrete_state_evolution_output_shape(
     state_evolution: Any,

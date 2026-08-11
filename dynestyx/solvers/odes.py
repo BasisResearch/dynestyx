@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, cast, get_origin
 
 import diffrax as dfx
 import jax.numpy as jnp
@@ -23,6 +23,18 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
         "dt0": jnp.asarray(1e-3),
         "max_steps": 100_000,
     }
+
+
+def _solver_needs_multi_term(solver: dfx.AbstractSolver) -> bool:
+    """Whether `solver` requires diffrax's `MultiTerm` (e.g. IMEX solvers like
+    `KenCarp3/4/5`, `Sil3`), rather than a single `ODETerm`.
+
+    Mirrors the check diffrax itself performs (see
+    `diffrax._solver.runge_kutta.AbstractRungeKutta.__init_subclass__` and
+    `diffrax._integrate._assert_term_compatible`), so it covers any current or
+    future diffrax solver without hardcoding solver names.
+    """
+    return get_origin(solver.term_structure) is dfx.MultiTerm
 
 
 def solve_ode_state_path(
@@ -51,18 +63,53 @@ def solve_ode_state_path(
         dynamics.state_evolution,
     )
 
+    needs_multi_term = _solver_needs_multi_term(settings["solver"])
+    has_implicit_drift = state_evolution.implicit_drift is not None
+    if has_implicit_drift and not needs_multi_term:
+        raise ValueError(
+            "You supplied an `implicit_drift`, but did not select an IMEX "
+            "solver (one whose term_structure requires diffrax's MultiTerm, "
+            "e.g. diffrax.KenCarp4()). Remove `implicit_drift` or choose an "
+            "IMEX solver."
+        )
+    if needs_multi_term and not has_implicit_drift:
+        raise ValueError(
+            "Solver requires separate explicit/implicit terms (diffrax "
+            "MultiTerm), but `implicit_drift` is not set on this "
+            "ContinuousTimeStateEvolution. Set `implicit_drift` to the "
+            "stiff component of the vector field."
+        )
+
     def _early_return():
         return jnp.broadcast_to(
             initial_state, (len(path_times),) + jnp.shape(initial_state)
         )
 
     def _solve():
-        def _drift(t, y, args):
-            u_t = args(t) if args is not None else None
-            return state_evolution.total_drift(x=y, u=u_t, t=t)
+        if needs_multi_term:
+
+            def _explicit(t, y, args):
+                u_t = args(t) if args is not None else None
+                return state_evolution.total_drift(x=y, u=u_t, t=t)
+
+            def _implicit(t, y, args):
+                u_t = args(t) if args is not None else None
+                assert state_evolution.implicit_drift is not None
+                return state_evolution.implicit_drift(x=y, u=u_t, t=t)
+
+            terms: dfx.AbstractTerm = dfx.MultiTerm(
+                dfx.ODETerm(_explicit), dfx.ODETerm(_implicit)
+            )
+        else:
+
+            def _drift(t, y, args):
+                u_t = args(t) if args is not None else None
+                return state_evolution.total_drift(x=y, u=u_t, t=t)
+
+            terms = dfx.ODETerm(_drift)
 
         sol = dfx.diffeqsolve(
-            dfx.ODETerm(_drift),
+            terms,
             t0=t0_arr,
             t1=t1,
             y0=initial_state,

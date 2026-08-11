@@ -20,7 +20,11 @@ class ODESimulatorConfig:
         solver (diffrax.AbstractSolver): Diffrax solver used for integration.
             Defaults to `diffrax.Tsit5()`. See Diffrax's
             [solver guide](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/)
-            when selecting an alternative.
+            when selecting an alternative. IMEX solvers (e.g. `diffrax.KenCarp3/4/5`,
+            `diffrax.Sil3`) are supported, but require the state evolution's
+            `implicit_drift` to be set to the stiff component of the vector field
+            (see `ContinuousTimeStateEvolution.implicit_drift`); conversely, setting
+            `implicit_drift` while using a non-IMEX solver raises an error.
         adjoint (diffrax.AbstractAdjoint): Strategy used to differentiate
             through the solve. Defaults to
             `diffrax.RecursiveCheckpointAdjoint()`.

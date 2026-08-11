@@ -46,6 +46,7 @@ dependencies = [
     "equinox>=0.13.2",
     "jaxtyping>=0.3.9",
     "diffrax>=0.6.2",
+    "optimistix>=0.1.0",
     "numpy>=2.0",
     # NumPyro 0.20.1 currently fails to import with JAX 0.10.0
     # (removed xla_pmap_p); cap until upstream compatibility lands.
@@ -60,6 +61,9 @@ packages = ["dynestyx"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.uv.sources]
+cd-dynamax = { path = "/Users/matthieu/Documents/GitHub/cd_dynamax" }
 
 [dependency-groups]
 dev = [

@@ -217,6 +217,7 @@ class DynamicalModel(eqx.Module):
                     drift=current_state_evolution.drift,
                     potential=current_state_evolution.potential,
                     use_negative_gradient=current_state_evolution.use_negative_gradient,
+                    implicit_drift=current_state_evolution.implicit_drift,
                 )
 
             resolved_diffusion = diffusion.resolve_metadata(
@@ -230,6 +231,7 @@ class DynamicalModel(eqx.Module):
                 potential=current_state_evolution.potential,
                 use_negative_gradient=current_state_evolution.use_negative_gradient,
                 diffusion=resolved_diffusion,
+                implicit_drift=current_state_evolution.implicit_drift,
             )
 
         if _inside_plate:
@@ -386,12 +388,20 @@ class ContinuousTimeStateEvolution(eqx.Module):
         diffusion (Diffusion | None): Diffusion coefficient object.
             Use `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion` to define
             the stochastic part of the SDE. Pass `None` for deterministic dynamics.
+        implicit_drift (Drift | None): Stiff/implicit component of the vector field,
+            used *only* by diffrax IMEX solvers (e.g. `diffrax.KenCarp3/4/5`,
+            `diffrax.Sil3`) that require separate explicit/implicit terms
+            (diffrax's `MultiTerm`). When set, `drift`/`potential` above form the
+            explicit term. Leave `None` for all other solvers; setting it while
+            using a non-IMEX solver is an error (raised by the ODE solve path,
+            since only there is the chosen solver known).
     """
 
     drift: Drift | None = None
     potential: Potential | None = None
     use_negative_gradient: bool = eqx.field(static=True, default=False)
     diffusion: Diffusion | None = None
+    implicit_drift: Drift | None = None
 
     def total_drift(
         self,
@@ -416,6 +426,30 @@ class ContinuousTimeStateEvolution(eqx.Module):
             return grad_term
         return base + grad_term
 
+    def split_total_drift(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> tuple[
+        Real[Array, " state_dim"] | Real[Array, ""],
+        Real[Array, " state_dim"] | Real[Array, ""],
+    ]:
+        """Return the (explicit, implicit) vector field split for IMEX solvers.
+
+        The explicit part is `total_drift` (i.e. `drift` plus any potential
+        gradient); the implicit part is `implicit_drift`. Only meaningful when
+        `implicit_drift` is set.
+        """
+        if self.implicit_drift is None:
+            raise ValueError(
+                "Solver requires separate explicit/implicit terms (diffrax "
+                "MultiTerm), but `implicit_drift` is not set on this "
+                "ContinuousTimeStateEvolution. Set `implicit_drift` to the "
+                "stiff component of the vector field."
+            )
+        return self.total_drift(x, u, t), self.implicit_drift(x, u, t)
+
 
 class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
     """Continuous-time state evolution with no diffusion term, i.e., describing an ODE.
@@ -436,6 +470,7 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
         potential: Potential | None = None,
         use_negative_gradient: bool = False,
         diffusion: None = None,
+        implicit_drift: Drift | None = None,
     ):
         if diffusion is not None:
             raise ValueError(
@@ -445,6 +480,7 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
         self.potential = potential
         self.use_negative_gradient = use_negative_gradient
         self.diffusion = None
+        self.implicit_drift = implicit_drift
 
 
 class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
@@ -466,6 +502,7 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
         potential: Potential | None = None,
         use_negative_gradient: bool = False,
         diffusion: Diffusion,
+        implicit_drift: Drift | None = None,
     ):
         if diffusion.bm_dim is None:
             raise ValueError(
@@ -476,6 +513,7 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
         self.potential = potential
         self.use_negative_gradient = use_negative_gradient
         self.diffusion = diffusion
+        self.implicit_drift = implicit_drift
 
     @property
     def bm_dim(self) -> int:
