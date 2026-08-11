@@ -177,12 +177,12 @@ def test_invalid_method_raises():
     # out-of-Literal value is rejected as a jaxtyping.TypeCheckError before __init__'s own
     # `if method not in _VALID_METHODS` check would run; either way it must raise.
     with pytest.raises(Exception):
-        GridInterpolator((X_GRID,), X_GRID[:1, None], method="cubic")  # type: ignore[arg-type]
+        GridInterpolator((X_GRID,), X_GRID[:1, None], method="cubic")  # ty: ignore[invalid-argument-type]
 
 
 def test_invalid_boundary_raises():
     with pytest.raises(Exception):
-        GridInterpolator((X_GRID,), X_GRID[:1, None], boundary="reflect")  # type: ignore[arg-type]
+        GridInterpolator((X_GRID,), X_GRID[:1, None], boundary="reflect")  # ty: ignore[invalid-argument-type]
 
 
 def test_wrong_query_points_shape_raises():
