@@ -24,6 +24,11 @@ import dynestyx as dsx
 from dynestyx.control.discrete_controller_simulators import ControlledSimulatedResult
 from dynestyx.models import DynamicalModel
 
+# (result: ControlledSimulatedResult) -> scalar, called once per sampled rollout
+# (vmapped across all n_samples candidates) on that candidate's full rollout result.
+# See MPPI.loss_fn for the full shape contract.
+type MPPILossFn = Callable[[ControlledSimulatedResult], Real[Array, ""]]
+
 
 class MPPI(eqx.Module):
     r"""Model Predictive Path Integral (MPPI) controller.
@@ -45,44 +50,31 @@ class MPPI(eqx.Module):
     sequence, shifted left by one with the last entry repeated.
 
     Attributes:
-        dynamics: The *same* `DynamicalModel` used for the real simulation
-            (or a distinct approximate model for planning) -- each candidate
-            rollout is computed by calling `dsx.simulate` on a copy of
-            `dynamics` with `initial_condition` pinned to the current belief
-            (see `plan_step`), genuinely sampling the transition and
-            observation at every step (no `.mean`-based shortcut).
-            Not `eqx.field(static=True)`: if `dynamics` holds trainable
+        dynamics: a `DynamicalModel` (the same model used for the real simulation
+            or some approximate). Each candidate rollout is computed by calling `dsx.simulate`.
+            Note `eqx.field(static=True)`: if `dynamics` holds trainable
             parameters you're also fitting via the outer simulation, they
             must stay in the differentiable pytree for gradients through
-            planning to be tracked too (see module notes on this in the
-            project's design discussion).
-        loss_fn: `(result: ControlledSimulatedResult) -> scalar`, called once
-            per sample (vmapped) on that candidate's full rollout. Every
+            planning to be tracked too.
+        loss_fn: `MPPILossFn`, i.e. `(result: ControlledSimulatedResult) -> scalar`,
+            called once per sample (vmapped) on that candidate's full rollout. Every
             field carries a leading `n_simulations=1` axis -- e.g.
-            `result.states.shape == (1, horizon + 1, state_dim)` -- matching
-            how `dsx.simulate` never drops that axis, even for one
-            trajectory; `jnp.sum(result.states**2)`-style reductions don't
-            need to care, but explicit indexing does (`result.controls[0, 0]`
-            is the whole first control vector, not a scalar). `times`/
-            `states`/`observations` have length `horizon + 1` (including the
-            starting state) and `controls` has length `horizon`, matching
-            `ControlledSimulatedResult`'s own `control_time = time - 1`
-            convention. See `plan_step` for the batched (`n_samples`-wide)
-            version of this same result, covering every candidate at once.
+            `result.states.shape == (1, horizon + 1, state_dim)` -- matching how
+            `dsx.simulate` never drops that axis, even for one trajectory;
+            `jnp.sum(result.states**2)`-style reductions don't need to care, but
+            explicit indexing does (`result.controls[0, 0]` is the whole first control
+            vector, not a scalar). `times`/`states`/`observations` have length
+            `horizon + 1` (including the starting state) and `controls` has length
+            `horizon`, matching `ControlledSimulatedResult`'s own
+            `control_time = time - 1` convention.
         horizon: Planning horizon length `H` -- the number of internal
-            one-step `dynamics` calls per rollout, and the length of each
-            candidate control sequence. Defaults to `10`.
+            one-step `dynamics` calls per rollout. Defaults to `10`.
         noise_std: Standard deviation of the Gaussian perturbations added to
             the nominal sequence, scalar or shape `(control_dim,)`. Defaults
             to `1.0`.
         n_samples: Number of sampled control sequences per call. Defaults to
             `20`.
-        dt: Fixed planning step size. Rollout step $i$ (of `horizon`) calls
-            `dynamics.state_evolution(x, u, t_now + i*dt, t_now + (i+1)*dt)`,
-            where `t_now` is the real current simulation time passed into
-            `__call__` -- so a genuinely time-varying `dynamics.state_evolution`
-            plans from the correct absolute time, even though MPPI re-plans
-            a fresh `horizon`-step lookahead from scratch on every call.
+        dt: Fixed planning step size. Defaults to `0.1`.
         temperature: MPPI's $\\lambda$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
             lowest-loss samples.
@@ -94,17 +86,11 @@ class MPPI(eqx.Module):
             `jax.pure_callback`).
         seed: Seeds MPPI's own PRNG key, carried inside the policy state `s`
             (as `(nominal_sequence, key)`) and split internally on every
-            call -- `DiscreteControlLoopSimulator` never passes a key to
-            `control_policy`, so MPPI owns and advances all of its own
-            randomness itself (exploration noise, and `.sample()` calls when
-            `dynamics` is a black box). Two `MPPI` instances with the same
-            `seed` explore identically regardless of the simulation's own
-            `rng_key`; use a different `seed` to get a different exploration
-            sequence.
+            call.
     """
 
     dynamics: DynamicalModel
-    loss_fn: Callable = eqx.field(static=True)
+    loss_fn: MPPILossFn = eqx.field(static=True)
     horizon: int = eqx.field(static=True, default=10)
     noise_std: Real[Array, ""] | Real[Array, " control_dim"] = eqx.field(
         default_factory=lambda: jnp.array(1.0)
@@ -219,30 +205,27 @@ class MPPI(eqx.Module):
         noise = self.noise_std * jr.normal(
             noise_key, (self.n_samples, self.horizon, control_dim)
         )
-        candidates = nominal[None, :, :] + noise  # (n_samples, horizon, control_dim)
+        control_candidates = (
+            nominal[None, :, :] + noise
+        )  # (n_samples, horizon, control_dim)
         rollout_keys = jr.split(rollout_key, self.n_samples)
 
         if self.batched:
             losses, states_batch, obs_batch = jax.vmap(
                 self._rollout_and_score_one, in_axes=(None, 0, 0, None)
-            )(x0, candidates, rollout_keys, t_now)
+            )(x0, control_candidates, rollout_keys, t_now)
         else:
             losses, states_batch, obs_batch = jax.lax.map(
                 lambda args: self._rollout_and_score_one(x0, args[0], args[1], t_now),
-                (candidates, rollout_keys),
+                (control_candidates, rollout_keys),
             )
-        # A candidate whose rollout numerically diverges (e.g. an unstable
-        # system explored too far by an unlucky noise draw) can produce a
-        # +-inf or nan loss. A lone +-inf is harmless under softmax (it gets
-        # weight ~0), but a lone nan poisons every weight (softmax subtracts
-        # max(losses); nan - anything is nan). Clamping to the largest
-        # finite value keeps that candidate's weight ~0 without corrupting
-        # the others -- and keeps softmax well-defined even if every
-        # candidate this happens to.
+        # A candidate whose rollout numerically diverges can produce a
+        # nan loss. Clamping to the largest finite value keeps that candidate's
+        # weight ~0 without corrupting the others
         losses = jnp.where(jnp.isfinite(losses), losses, jnp.finfo(losses.dtype).max)
 
         weights = jax.nn.softmax(-losses / self.temperature)
-        weighted_seq = jnp.einsum("k,khc->hc", weights, candidates)
+        weighted_seq = jnp.einsum("k,khc->hc", weights, control_candidates)
 
         u0 = weighted_seq[0]
         next_nominal = jnp.concatenate([weighted_seq[1:], weighted_seq[-1:]], axis=0)
@@ -253,7 +236,7 @@ class MPPI(eqx.Module):
             x_0=jnp.broadcast_to(x0, (self.n_samples,) + x0.shape),
             states=states_batch,
             observations=obs_batch,
-            controls=candidates,
+            controls=control_candidates,
         )
         return u0, (next_nominal, key), result
 
@@ -274,4 +257,4 @@ class MPPI(eqx.Module):
         return u0, next_s
 
 
-__all__ = ["MPPI"]
+__all__ = ["MPPI", "MPPILossFn"]

@@ -7,12 +7,13 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_dist,
     filter_state_mean,
 )
-from dynestyx.control.mppi import MPPI
+from dynestyx.control.mppi import MPPI, MPPILossFn
 
 __all__ = [
     "ControlledSimulatedResult",
     "DiscreteControlLoopSimulator",
     "MPPI",
+    "MPPILossFn",
     "PolicyCallable",
     "filter_state_dist",
     "filter_state_mean",
