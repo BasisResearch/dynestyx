@@ -933,8 +933,8 @@ def test_initial_policy_state_threads_through_dsx_simulate():
 # ---------------------------------------------------------------------------
 
 
-def _mppi_loss(x_seq, u_seq):
-    return jnp.sum(x_seq**2) + 0.01 * jnp.sum(u_seq**2)
+def _mppi_loss(result):
+    return jnp.sum(result.states**2) + 0.01 * jnp.sum(result.controls**2)
 
 
 def test_mppi_runs_end_to_end_without_a_key_argument():
@@ -1029,12 +1029,12 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     lone +inf loss, which softmax already handles gracefully on its own."""
     dynamics = _lti_1d(A=1.05, B=1.0)
 
-    def flaky_loss(x_seq, u_seq):
+    def flaky_loss(result):
         # Deterministically nan for roughly half the candidates (whichever
         # have a positive first control), finite for the rest -- exercises
         # the masking without depending on actual numerical divergence.
-        base = jnp.sum(x_seq**2) + 0.01 * jnp.sum(u_seq**2)
-        return jnp.where(u_seq[0, 0] > 0, jnp.nan, base)
+        base = jnp.sum(result.states**2) + 0.01 * jnp.sum(result.controls**2)
+        return jnp.where(result.controls[0, 0, 0] > 0, jnp.nan, base)
 
     mppi = MPPI(
         dynamics=dynamics,
