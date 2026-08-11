@@ -20,6 +20,7 @@ from dynestyx.inference.configs.smoother import (
     BaseSmootherConfig,
     ContinuousTimeSmootherConfigs,
     DiscreteTimeSmootherConfigs,
+    EnRTSSmootherConfig,
     KFSmootherConfig,
 )
 from dynestyx.models import (
@@ -127,10 +128,10 @@ def _validate_missing_observation_support(
     elif mode == "smoother":
         continuous_types = ContinuousTimeSmootherConfigs
         discrete_types = DiscreteTimeSmootherConfigs
-        exact_supported_types = (KFSmootherConfig,)
+        exact_supported_types = (KFSmootherConfig, EnRTSSmootherConfig)
         exact_supported_msg = (
             "NaN-valued obs_values are currently supported only for "
-            "cuthbert KFSmootherConfig smoothers."
+            "cuthbert KFSmootherConfig and EnRTSSmootherConfig smoothers."
         )
         cd_dynamax_msg = (
             "CD-Dynamax smoothers do not support NaNs in obs_values. "

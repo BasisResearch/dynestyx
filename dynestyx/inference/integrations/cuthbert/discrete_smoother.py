@@ -1,4 +1,4 @@
-"""Discrete-time smoothers via cuthbert: Kalman, Taylor-KF, and PF backward sampling."""
+"""Discrete-time smoothers via cuthbert: Kalman, Taylor-KF, EnRTS, and PF."""
 
 from collections.abc import Callable
 from functools import partial
@@ -7,6 +7,7 @@ from typing import Any, cast
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cuthbert import smoother as cuthbert_smoother
+from cuthbert.ensemble_kalman import ensemble_rts_smoother
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
@@ -15,6 +16,7 @@ from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.smoother import (
     EKFSmootherConfig,
+    EnRTSSmootherConfig,
     KFSmootherConfig,
     PFSmootherConfig,
 )
@@ -37,7 +39,9 @@ from dynestyx.models import (
     LinearGaussianStateEvolution,
 )
 
-CuthbertSmootherConfig = KFSmootherConfig | EKFSmootherConfig | PFSmootherConfig
+CuthbertSmootherConfig = (
+    KFSmootherConfig | EKFSmootherConfig | EnRTSSmootherConfig | PFSmootherConfig
+)
 
 
 def _kalman_get_dynamics_params(dynamics: DynamicalModel):
@@ -174,6 +178,7 @@ def compute_cuthbert_smoother(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         align_to_observations=False,
+        store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
     )
 
     filter_kwargs = _config_to_filter_kwargs(smoother_config)
@@ -191,6 +196,11 @@ def compute_cuthbert_smoother(
             rtol=filter_kwargs.get("rtol", None),
             ignore_nan_dims=True,
         )
+        smoothed_states = cuthbert_smoother(
+            smoother_obj, filtered_states, model_inputs=None, parallel=False, key=key
+        )
+    elif isinstance(smoother_config, EnRTSSmootherConfig):
+        smoother_obj = ensemble_rts_smoother.build_smoother()
         smoothed_states = cuthbert_smoother(
             smoother_obj, filtered_states, model_inputs=None, parallel=False, key=key
         )
@@ -221,7 +231,8 @@ def compute_cuthbert_smoother(
     else:
         raise ValueError(
             f"Unsupported cuthbert smoother config: {type(smoother_config).__name__}. "
-            "Expected KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig."
+            "Expected KFSmootherConfig, EKFSmootherConfig, "
+            "EnRTSSmootherConfig, PFSmootherConfig."
         )
 
     smoothed_states = _drop_cuthbert_dummy_step(smoothed_states, obs_len=obs_len)
