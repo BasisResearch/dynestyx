@@ -508,6 +508,17 @@ def test_linear_gaussian_observation_sparse_h_matches_dense_h():
     assert jnp.allclose(obs_dense.mean, obs_sparse.mean)
 
 
+@pytest.mark.xfail(
+    raises=ValueError,
+    strict=True,
+    reason="Sparse observation matrices are not supported inside dsx.plate.",
+)
+def test_sparse_h_in_plate():
+    dynamics = _sparse_h_test_dynamics(jax_sparse.BCOO.fromdense(jnp.eye(2, 3)))
+    with dsx.plate("members", 1):
+        dsx.sample("f", dynamics, predict_times=jnp.arange(1.0))
+
+
 def test_cuthbert_enkf_sparse_h_matches_dense_h():
     """EnKF with a sparse H must give the same marginal_loglik and filtered means as the
     dense H -- exercises the `_as_array_or_sparse` fix in the cuthbert EnKF backend."""

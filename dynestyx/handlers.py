@@ -6,10 +6,12 @@ import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
+from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Real
 
 from dynestyx.models import (
     DynamicalModel,
+    LinearGaussianObservation,
 )
 from dynestyx.observation_missingness import (
     prepare_observation_views,
@@ -481,5 +483,15 @@ class plate(ObjectInterpretation):
             simulators/filters or ``LatentStateResult`` for
             ``LatentPathBuilder``.
         """
+        obs_model = dynamics.observation_model
+        if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+            obs_model.H, jax_sparse.JAXSparse
+        ):
+            raise ValueError(
+                "Sparse observation matrices are not currently supported inside "
+                "dsx.plate. Convert H to a dense array before using this model in "
+                "a plate."
+            )
+
         # Append plate_shapes metadata to the argument stack and pass forward.
         return fwd(name, dynamics, plate_shapes=plate_shapes + (self.size,), **kwargs)
