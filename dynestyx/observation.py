@@ -257,13 +257,11 @@ class GridInterpolator(eqx.Module):
     def as_sparse(self) -> jax_sparse.BCOO:
         """Sparse (`jax.experimental.sparse.BCOO`) observation matrix $H$.
 
-        Note:
-            `dynestyx.models.observations.LinearGaussianObservation.__call__` currently
-            calls `jnp.dot(H, x)`, which does not accept a `BCOO` operand (`H @ x` does,
-            but `jnp.dot(H, x)` raises `TypeError`). Use `as_matrix()` when constructing a
-            `LinearGaussianObservation` until that is changed; `as_sparse()` is for
-            evaluation/inspection (`interp.as_sparse() @ values`) or for downstream code
-            that calls `H @ x` directly.
+        `LinearGaussianObservation.__call__` computes `H @ x`, which accepts a `BCOO`
+        operand directly -- pass `as_sparse()`'s result straight to
+        `LinearGaussianObservation(H=..., R=...)` when the query points are sparse enough
+        (few corners per row relative to `state_dim`) for that to be worthwhile; use
+        `as_matrix()` otherwise.
         """
         n_corners = self.corner_indices.shape[-1]
         query_idx = jnp.repeat(jnp.arange(self.n_query), n_corners)
