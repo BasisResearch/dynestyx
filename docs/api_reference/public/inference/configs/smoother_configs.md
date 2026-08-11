@@ -13,20 +13,18 @@ recording fields such as `record_smoothed_states_mean`,
 ```python
 from dynestyx.inference.configs.smoother import (
     ContinuousTimeKFSmootherConfig,
+    EnRTSSmootherConfig,
     KFSmootherConfig,
     PFSmootherConfig,
 )
 
 kf = KFSmootherConfig(filter_source="cd_dynamax")
+enrts = EnRTSSmootherConfig(n_particles=100)
 pf = PFSmootherConfig(filter_source="cuthbert", n_particles=1_000)
 ct_kf = ContinuousTimeKFSmootherConfig()
 ```
 
-`PFSmootherConfig` exposes particle-smoother options:
-`pf_backward_sampling_method`, `pf_mcmc_n_steps`, and
-`pf_n_smoother_particles`. `ContinuousTimeKFSmootherConfig` exposes
-`cdlgssm_smoother_type` for the CD-Dynamax continuous-discrete linear
-Gaussian smoother variant.
+`EnRTSSmootherConfig` inherits the EnKF ensemble-size, inflation, and perturbed-observation options. `PFSmootherConfig` exposes particle-smoother options: `pf_backward_sampling_method`, `pf_mcmc_n_steps`, and `pf_n_smoother_particles`. `ContinuousTimeKFSmootherConfig` exposes `cdlgssm_smoother_type` for the CD-Dynamax continuous-discrete linear Gaussian smoother variant.
 
 ::: dynestyx.inference.configs.smoother
     options:

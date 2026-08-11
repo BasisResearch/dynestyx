@@ -43,6 +43,7 @@ behavior.
 | --- | --- | --- |
 | Discrete linear-Gaussian | `KFSmootherConfig` | `cuthbert`, `cd_dynamax` |
 | Discrete nonlinear Gaussian | `EKFSmootherConfig` | `cuthbert`, `cd_dynamax` |
+| Discrete nonlinear Gaussian | `EnRTSSmootherConfig` | `cuthbert` |
 | Discrete nonlinear Gaussian | `UKFSmootherConfig` | `cd_dynamax` |
 | Discrete non-Gaussian/nonlinear | `PFSmootherConfig` | `cuthbert` |
 | Continuous-discrete linear-Gaussian | `ContinuousTimeKFSmootherConfig` | `cd_dynamax` |
