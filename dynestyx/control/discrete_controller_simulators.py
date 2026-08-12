@@ -16,19 +16,30 @@ Implements the online control loop:
     y_{k+1} | x_{k+1}, u_k ~ p(y_{k+1} | x_{k+1}, u_k, t_{k+1}),       k = 0..T-1
     x_hat_{k+1|k+1} = FilterUpdate(x_hat_{k|k}, u_k, y_{k+1}, t_k, t_{k+1}),  k = 0..T-1
 
-`FilterUpdate` is implemented by `compute_cuthbert_filter_update`
-(`dynestyx/inference/integrations/cuthbert/discrete_filter.py`), which drives
-cuthbert's `Filter.filter_prepare`/`filter_combine` primitives one step at a
-time instead of over a whole pre-supplied trajectory. This works for any
-filter family exposed there (`KFConfig`, `EKFConfig`, `EnKFConfig`,
-`PFConfig`); the raw belief each step produces is family-specific (e.g. a
-Kalman-family state with a `.mean`/`.chol_cov`, or a `ParticleFilterState`
-with `.particles`/`.log_weights`), so before it's handed to `control_policy`
-it's converted via `filter_state_dist` into a family-agnostic NumPyro
+`FilterUpdate` is backend-selectable via `filter_config.filter_source`, same
+as whole-trajectory filtering (`dynestyx/inference/filters.py`):
+`filter_source="cuthbert"` (the default for `PFConfig`/`EnKFConfig`, and one
+option for `KFConfig`/`EKFConfig`) drives cuthbert's `Filter.filter_prepare`/
+`filter_combine` primitives one step at a time via
+`compute_cuthbert_filter_update`
+(`dynestyx/inference/integrations/cuthbert/discrete_filter.py`);
+`filter_source="cd_dynamax"` (the only option for `UKFConfig`) drives
+dynamax's own predict/condition-on primitives one step at a time via
+`compute_cd_dynamax_discrete_filter_update`
+(`dynestyx/inference/integrations/cd_dynamax/discrete_filter.py`). The two
+backends carry genuinely different per-step state (cuthbert: one opaque
+belief object; cd_dynamax: a predicted-belief recursion state plus a
+separately-returned filtered `(mean, cov)`), so `simulate` has one `_step`
+per backend rather than forcing them through a shared representation. The
+raw belief cuthbert's step produces is family-specific (e.g. a Kalman-family
+state with a `.mean`/`.chol_cov`, or a `ParticleFilterState` with
+`.particles`/`.log_weights`), so before it's handed to `control_policy` it's
+converted via `filter_state_dist` into a family-agnostic NumPyro
 `Distribution` (`MultivariateNormal` for the Gaussian families,
-`WeightedParticles` for `PFConfig`) -- a policy can call `.mean` for a point
-estimate, or use the full distribution (e.g. `.sample`) for risk-aware
-planning.
+`WeightedParticles` for `PFConfig`); cd_dynamax's step already has a plain
+`(mean, cov)` pair, so it builds `dist.MultivariateNormal` directly instead.
+Either way, a policy can call `.mean` for a point estimate, or use the full
+distribution (e.g. `.sample`) for risk-aware planning.
 
 Important: the control passed to `dynamics.observation_model` for
 `y_{k+1}` is `u_k` (the control that drove the transition into `x_{k+1}`),
@@ -60,6 +71,10 @@ from numpyro.distributions import Distribution
 
 from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.filters import _default_filter_config
+from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+    build_dynamax_filter,
+    compute_cd_dynamax_discrete_filter_update,
+)
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
     compute_cuthbert_filter_update,
@@ -118,8 +133,8 @@ class PolicyCallable(Protocol):
     $$u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)$$
 
     `x_hat` is a NumPyro `Distribution` -- `MultivariateNormal` for
-    `KFConfig`/`EKFConfig`/`EnKFConfig`, `WeightedParticles` for `PFConfig`
-    (see module docstring and `filter_state_dist`); use `x_hat.mean` for a
+    `KFConfig`/`EKFConfig`/`EnKFConfig`/`UKFConfig`, `WeightedParticles` for
+    `PFConfig` (see module docstring and `filter_state_dist`); use `x_hat.mean` for a
     family-agnostic point estimate, or the distribution itself for
     uncertainty-aware planning. `t_now`/`t_next` are the current and next
     times -- always passed, even to a policy that ignores them, so that a
@@ -183,11 +198,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             never introspected for an `initial_state()` method; a stateful
             policy's initial state must always be passed explicitly.
         filter_config: Selects the filtering algorithm
-            (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`). Defaults to
-            `_default_filter_config(dynamics)` when `None`. Its
-            `record_filtered_states_mean`/`record_max_elems` fields gate
-            whether the `filtered_states_mean` output is recorded, exactly
-            as they do for `Filter` (see `dynestyx.utils._should_record_field`).
+            (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`/`UKFConfig`) and,
+            via its `filter_source` field, the backend (`"cuthbert"` or
+            `"cd_dynamax"`; `UKFConfig` is cd_dynamax-only, cuthbert has no
+            UKF implementation). Defaults to `_default_filter_config(dynamics)`
+            when `None`. Its `record_filtered_states_mean`/`record_max_elems`
+            fields gate whether the `filtered_states_mean` output is
+            recorded, exactly as they do for `Filter` (see
+            `dynestyx.utils._should_record_field`).
         n_simulations: Currently only `1` is supported.
     """
 
@@ -246,96 +264,175 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
 
         key, k_x0, k_y0, k_filt0 = jr.split(rng_key, 4)
-        filter_obj, _ = build_cuthbert_filter(
-            dynamics, filter_config, key=rng_key, want_parallel=False
-        )
-
         x_0 = dynamics.initial_condition.sample(k_x0)
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(k_y0)
-        # Give the bootstrap FilterUpdate a non-degenerate t_prev (borrowing the
-        # width of the first real interval, matching compute_cuthbert_filter's
-        # own dummy-row convention). This step is a genuine no-op transition
-        # for every filter family (nothing has happened before t_0), but some
-        # backends (e.g. EKF's Taylor linearization) evaluate the transition
-        # unconditionally via jnp.where rather than jax.lax.cond, so t_prev==t
-        # would construct a zero-width-dt, zero-covariance distribution whose
-        # NaN log-density leaks through the gradient even on the discarded
-        # branch -- a state-evolution whose covariance scales with dt (e.g. an
-        # Euler-Maruyama-discretized SDE) hits this; a fixed-covariance one
-        # (e.g. LinearGaussianStateEvolution) does not.
-        dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
-        x_hat_0 = compute_cuthbert_filter_update(
-            dynamics,
-            filter_obj=filter_obj,
-            prev_state=None,
-            key=k_filt0,
-            y=y_0,
-            u=None,
-            t=times[0],
-            t_prev=times[0] - dt0,
-        )
         s_0 = initial_policy_state
 
-        def _step(carry, t_idx):
-            x_prev, x_hat_prev, s_prev, step_key = carry
-            step_key, k_trans, k_obs, k_filt = jr.split(step_key, 4)
-            t_now = times[t_idx]
-            t_next = times[t_idx + 1]
-
-            u_k, s_next = self.control_policy(
-                filter_state_dist(x_hat_prev), t_now, t_next, s_prev
+        if filter_config.filter_source == "cuthbert":
+            filter_obj, _ = build_cuthbert_filter(
+                dynamics, filter_config, key=rng_key, want_parallel=False
             )
-            if isinstance(u_k, Distribution):
-                raise ValueError(
-                    "Returning a distribution is not yet supported, instead "
-                    "sample from this distribution inside your policy."
-                )
 
-            trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
-            x_next = trans_dist.sample(k_trans)
-
-            obs_dist = dynamics.observation_model(x_next, u_k, t_next)
-            y_next = obs_dist.sample(k_obs)
-
-            x_hat_next = compute_cuthbert_filter_update(
+            # Give the bootstrap FilterUpdate a non-degenerate t_prev (borrowing
+            # the width of the first real interval, matching
+            # compute_cuthbert_filter's own dummy-row convention). This step is
+            # a genuine no-op transition for every filter family (nothing has
+            # happened before t_0), but some backends (e.g. EKF's Taylor
+            # linearization) evaluate the transition unconditionally via
+            # jnp.where rather than jax.lax.cond, so t_prev==t would construct
+            # a zero-width-dt, zero-covariance distribution whose NaN
+            # log-density leaks through the gradient even on the discarded
+            # branch -- a state-evolution whose covariance scales with dt
+            # (e.g. an Euler-Maruyama-discretized SDE) hits this; a
+            # fixed-covariance one (e.g. LinearGaussianStateEvolution) does not.
+            dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
+            x_hat_0 = compute_cuthbert_filter_update(
                 dynamics,
                 filter_obj=filter_obj,
-                prev_state=x_hat_prev,
-                key=k_filt,
-                y=y_next,
-                u=u_k,
-                t=t_next,
-                t_prev=t_now,
+                prev_state=None,
+                key=k_filt0,
+                y=y_0,
+                u=None,
+                t=times[0],
+                t_prev=times[0] - dt0,
             )
 
-            new_carry = (x_next, x_hat_next, s_next, step_key)
-            outputs = (x_next, x_hat_next, y_next, s_next, u_k)
-            return new_carry, outputs
+            def _step(carry, t_idx):
+                x_prev, x_hat_prev, s_prev, step_key = carry
+                step_key, k_trans, k_obs, k_filt = jr.split(step_key, 4)
+                t_now = times[t_idx]
+                t_next = times[t_idx + 1]
 
-        init_carry = (x_0, x_hat_0, s_0, key)
-        _, (xs, x_hats, ys, ss, us) = jax.lax.scan(_step, init_carry, jnp.arange(T - 1))
+                u_k, s_next = self.control_policy(
+                    filter_state_dist(x_hat_prev), t_now, t_next, s_prev
+                )
+                if isinstance(u_k, Distribution):
+                    raise ValueError(
+                        "Returning a distribution is not yet supported, instead "
+                        "sample from this distribution inside your policy."
+                    )
+
+                trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
+                x_next = trans_dist.sample(k_trans)
+
+                obs_dist = dynamics.observation_model(x_next, u_k, t_next)
+                y_next = obs_dist.sample(k_obs)
+
+                x_hat_next = compute_cuthbert_filter_update(
+                    dynamics,
+                    filter_obj=filter_obj,
+                    prev_state=x_hat_prev,
+                    key=k_filt,
+                    y=y_next,
+                    u=u_k,
+                    t=t_next,
+                    t_prev=t_now,
+                )
+
+                new_carry = (x_next, x_hat_next, s_next, step_key)
+                outputs = (x_next, x_hat_next, y_next, s_next, u_k)
+                return new_carry, outputs
+
+            init_carry = (x_0, x_hat_0, s_0, key)
+            _, (xs, x_hats, ys, ss, us) = jax.lax.scan(
+                _step, init_carry, jnp.arange(T - 1)
+            )
+
+            mean_shape = filter_state_mean(x_hat_0).shape
+            record_mean = _should_record_field(
+                filter_config.record_filtered_states_mean,
+                (T, *mean_shape),
+                filter_config.record_max_elems,
+            )
+            filtered_states_mean = None
+            if record_mean:
+                filtered_states_mean_vals = jnp.concatenate(
+                    [
+                        jnp.expand_dims(filter_state_mean(x_hat_0), axis=0),
+                        filter_state_mean(x_hats),
+                    ],
+                    axis=0,
+                )
+                filtered_states_mean = _ensure_trailing_dim(
+                    jnp.expand_dims(filtered_states_mean_vals, axis=0)
+                )
+
+        elif filter_config.filter_source == "cd_dynamax":
+            step_fn, _ = build_dynamax_filter(dynamics, filter_config)
+
+            # Unlike cuthbert's bootstrap, no non-degenerate-t_prev trick is
+            # needed: build_dynamax_filter bakes its prior into step_fn, which
+            # conditions directly on y when prev_state is None, and
+            # compute_cd_dynamax_discrete_filter_update ignores t/t_prev
+            # entirely (cd_dynamax's discrete-time step functions are already
+            # time-homogeneous per step).
+            mean_0, cov_0 = compute_cd_dynamax_discrete_filter_update(
+                dynamics, step_fn, None, y=y_0, u=None
+            )
+
+            def _step(carry, t_idx):
+                x_prev, mean_prev, cov_prev, s_prev, step_key = carry
+                step_key, k_trans, k_obs = jr.split(step_key, 3)
+                t_now = times[t_idx]
+                t_next = times[t_idx + 1]
+
+                u_k, s_next = self.control_policy(
+                    dist.MultivariateNormal(mean_prev, covariance_matrix=cov_prev),
+                    t_now,
+                    t_next,
+                    s_prev,
+                )
+                if isinstance(u_k, Distribution):
+                    raise ValueError(
+                        "Returning a distribution is not yet supported, instead "
+                        "sample from this distribution inside your policy."
+                    )
+
+                trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
+                x_next = trans_dist.sample(k_trans)
+
+                obs_dist = dynamics.observation_model(x_next, u_k, t_next)
+                y_next = obs_dist.sample(k_obs)
+
+                mean_next, cov_next = compute_cd_dynamax_discrete_filter_update(
+                    dynamics,
+                    step_fn,
+                    (mean_prev, cov_prev),
+                    y=y_next,
+                    u=u_k,
+                    t=t_next,
+                    t_prev=t_now,
+                )
+
+                new_carry = (x_next, mean_next, cov_next, s_next, step_key)
+                outputs = (x_next, mean_next, y_next, s_next, u_k)
+                return new_carry, outputs
+
+            init_carry = (x_0, mean_0, cov_0, s_0, key)
+            _, (xs, means, ys, ss, us) = jax.lax.scan(
+                _step, init_carry, jnp.arange(T - 1)
+            )
+
+            mean_shape = mean_0.shape
+            record_mean = _should_record_field(
+                filter_config.record_filtered_states_mean,
+                (T, *mean_shape),
+                filter_config.record_max_elems,
+            )
+            filtered_states_mean = None
+            if record_mean:
+                filtered_states_mean_vals = jnp.concatenate(
+                    [jnp.expand_dims(mean_0, axis=0), means], axis=0
+                )
+                filtered_states_mean = _ensure_trailing_dim(
+                    jnp.expand_dims(filtered_states_mean_vals, axis=0)
+                )
+
+        else:
+            raise ValueError(f"Unknown filter source: {filter_config.filter_source}")
 
         states = jnp.concatenate([jnp.expand_dims(x_0, axis=0), xs], axis=0)
         observations = jnp.concatenate([jnp.expand_dims(y_0, axis=0), ys], axis=0)
-
-        mean_shape = filter_state_mean(x_hat_0).shape
-        record_mean = _should_record_field(
-            filter_config.record_filtered_states_mean,
-            (T, *mean_shape),
-            filter_config.record_max_elems,
-        )
-        filtered_states_mean = None
-        if record_mean:
-            filtered_states_mean_vals = jnp.concatenate(
-                [
-                    jnp.expand_dims(filter_state_mean(x_hat_0), axis=0),
-                    filter_state_mean(x_hats),
-                ],
-                axis=0,
-            )
-            filtered_states_mean = _ensure_trailing_dim(
-                jnp.expand_dims(filtered_states_mean_vals, axis=0)
-            )
 
         policy_states = None
         if s_0 is not None:

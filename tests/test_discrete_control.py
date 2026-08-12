@@ -17,7 +17,17 @@ from dynestyx.control.discrete_controller_simulators import (
 )
 from dynestyx.control.mppi import MPPI
 from dynestyx.discretizers import Discretizer, euler_maruyama
-from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
+from dynestyx.inference.configs.filter import (
+    EKFConfig,
+    EnKFConfig,
+    KFConfig,
+    PFConfig,
+    UKFConfig,
+)
+from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+    build_dynamax_filter,
+    compute_cd_dynamax_discrete_filter_update,
+)
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
     compute_cuthbert_filter,
@@ -225,6 +235,83 @@ def test_compute_cuthbert_filter_update_matches_whole_trajectory(filter_config):
     assert jnp.allclose(means_batch, means_step, atol=1e-4)
 
 
+_VARYING_CTRL_VALUES = jnp.array([[0.3], [-0.5], [0.8], [-0.2], [0.1]])
+
+
+def _step_through_dynamax_filter_update(dynamics, filter_config, ctrl_values):
+    """Drive compute_cd_dynamax_discrete_filter_update one step at a time,
+    using the same u_{t-1}-drove-the-transition-into-t convention
+    `_step_through_filter_update` (cuthbert) uses -- see
+    `build_dynamax_filter`'s docstring for why cd_dynamax's one-step update
+    needs this instead of its own whole-trajectory function's same-index
+    convention.
+    """
+    step_fn, _ = build_dynamax_filter(dynamics, filter_config)
+    prev_state = None
+    means = []
+    for t_idx in range(_T):
+        u_for_call = None if t_idx == 0 else ctrl_values[t_idx - 1]
+        prev_state = compute_cd_dynamax_discrete_filter_update(
+            dynamics, step_fn, prev_state, y=_OBS_VALUES[t_idx], u=u_for_call
+        )
+        means.append(prev_state[0])
+    return jnp.stack(means)
+
+
+@pytest.mark.parametrize(
+    "filter_config",
+    [
+        KFConfig(filter_source="cd_dynamax"),
+        EKFConfig(filter_source="cd_dynamax"),
+        UKFConfig(),
+    ],
+)
+def test_compute_cd_dynamax_filter_update_matches_cuthbert_with_varying_controls(
+    filter_config,
+):
+    """Regression test for a causality bug: an earlier version of
+    build_dynamax_filter mirrored dynamax's own condition-then-predict scan
+    order (carrying the *predicted* belief), which reuses the same `u` for
+    both conditioning on y_k and predicting x_{k+2} -- silently wrong
+    whenever controls vary step to step (predicting x_{k+2} needs u_{k+1},
+    which in closed-loop control isn't chosen until after x_hat_{k+1|k+1} is
+    known). Constant controls mask this bug (u_k == u_{k+1} for all k, as in
+    `_CTRL_VALUES` above), so this test deliberately uses varying ones,
+    cross-checked against cuthbert's independently-implemented KF using the
+    identical (u, y) sequence and convention -- both should agree exactly
+    for this linear-Gaussian model, regardless of which family (KF/EKF/UKF)
+    is under test on the cd_dynamax side.
+    """
+    dynamics = _lti_1d()
+    reference_config = KFConfig(filter_source="cuthbert")
+    filter_obj, _ = build_cuthbert_filter(
+        dynamics, reference_config, key=None, want_parallel=False
+    )
+    prev_cuthbert = None
+    means_cuthbert = []
+    for t_idx in range(_T):
+        u_for_call = None if t_idx == 0 else _VARYING_CTRL_VALUES[t_idx - 1]
+        t_prev = None if t_idx == 0 else _OBS_TIMES[t_idx - 1]
+        prev_cuthbert = compute_cuthbert_filter_update(
+            dynamics,
+            filter_obj=filter_obj,
+            prev_state=prev_cuthbert,
+            key=jr.PRNGKey(0),
+            y=_OBS_VALUES[t_idx],
+            u=u_for_call,
+            t=_OBS_TIMES[t_idx],
+            t_prev=t_prev,
+        )
+        means_cuthbert.append(filter_state_mean(prev_cuthbert))
+    means_cuthbert = jnp.stack(means_cuthbert).ravel()
+
+    means_cd_dynamax = _step_through_dynamax_filter_update(
+        dynamics, filter_config, _VARYING_CTRL_VALUES
+    ).ravel()
+
+    assert jnp.allclose(means_cuthbert, means_cd_dynamax, atol=1e-3)
+
+
 def test_compute_cuthbert_filter_update_bootstrap_ignores_u():
     """The bootstrap call (prev_state=None) must skip the transition entirely
     (is_first_step=True), regardless of what `u` is passed. This model's
@@ -411,6 +498,9 @@ _ALL_FILTER_CONFIGS = [
     EKFConfig(record_filtered_states_mean=True),
     EnKFConfig(n_particles=_n_particles(64), record_filtered_states_mean=True),
     PFConfig(n_particles=_n_particles(64), record_filtered_states_mean=True),
+    KFConfig(filter_source="cd_dynamax", record_filtered_states_mean=True),
+    EKFConfig(filter_source="cd_dynamax", record_filtered_states_mean=True),
+    UKFConfig(record_filtered_states_mean=True),
 ]
 
 
@@ -541,6 +631,47 @@ def test_closed_loop_stabilizes_vs_uncontrolled_baseline():
     def run(K):
         policy = _LinearPolicy(K=jnp.array([[K]]))
         sim = DiscreteControlLoopSimulator(control_policy=policy)
+
+        def model():
+            with sim:
+                return dsx.sample("f", dynamics, predict_times=predict_times)
+
+        return _run_trace(model, rng_seed=0)
+
+    tr_controlled = run(K=0.5)
+    tr_uncontrolled = run(K=0.0)
+
+    final_controlled = jnp.abs(tr_controlled["f_states"]["value"][0, -1, 0])
+    final_uncontrolled = jnp.abs(tr_uncontrolled["f_states"]["value"][0, -1, 0])
+
+    assert final_controlled < 1.0
+    assert final_controlled < final_uncontrolled
+
+
+@pytest.mark.parametrize(
+    "filter_config",
+    [
+        KFConfig(filter_source="cuthbert"),
+        KFConfig(filter_source="cd_dynamax"),
+        UKFConfig(),
+    ],
+)
+def test_closed_loop_stabilizes_cd_dynamax_and_cuthbert_kf(filter_config):
+    """Same stabilization check as
+    test_closed_loop_stabilizes_vs_uncontrolled_baseline, parametrized over
+    filter backend -- confirms the cd_dynamax wiring in
+    DiscreteControlLoopSimulator drives real control decisions from varying,
+    closed-loop-chosen controls, not just producing finite-but-meaningless
+    output (which is all test_end_to_end_shapes_and_finiteness alone would
+    catch)."""
+    dynamics = _lti_1d(A=1.0, B=1.0, Q=0.05, R=0.1)
+    predict_times = jnp.arange(0.0, 20.0)
+
+    def run(K):
+        policy = _LinearPolicy(K=jnp.array([[K]]))
+        sim = DiscreteControlLoopSimulator(
+            control_policy=policy, filter_config=filter_config
+        )
 
         def model():
             with sim:

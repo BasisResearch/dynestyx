@@ -135,27 +135,38 @@ def _prepare_inputs(
 
 
 def build_dynamax_filter(dynamics: DynamicalModel, filter_config: BaseFilterConfig):
-    """Build a one-step (predict+update) function for `(dynamics, filter_config)`.
+    r"""Build a one-step (predict+update) function for `(dynamics, filter_config)`.
 
-    Mirrors the per-step body that `lgssm_filter` / `extended_kalman_filter` /
-    `unscented_kalman_filter` each build once (outside their own `lax.scan`)
-    and then scan over -- e.g. `extended_kalman_filter` computes
-    `F, H = jacfwd(f), jacfwd(h)` once before scanning
-    (`inference_ekf.py:118-119`); this does the same setup, but returns the
-    resulting step callable instead of scanning it. No stateful object is
+    Uses dynamax's own `_predict`/`_condition_on` primitives (the same ones
+    `lgssm_filter` / `extended_kalman_filter` / `unscented_kalman_filter`
+    scan over internally), but in **predict-then-condition** order with the
+    *filtered* belief as carry -- not dynamax's own native
+    condition-then-predict order over the *predicted* belief. This
+    reordering is required for online/closed-loop use: with dynamax's native
+    order, the single `u` passed to a step is used both to condition on `y`
+    (correct: `u_k`, the control that produced the state now observed) *and*
+    to predict the state *after* that (which needs `u_{k+1}`, the control
+    chosen from the belief this very call is producing -- not yet available
+    in closed-loop control). Predict-then-condition avoids this: `u` plays
+    exactly one role per call, matching `compute_cuthbert_filter_update`'s
+    own documented semantics (`u` is the control that drove the transition
+    *into* the state now being conditioned on `y`). No stateful object is
     built: the return value is a plain `(function, tuple-of-arrays)` pair.
 
     Returns:
         `(step_fn, initial_state)`, where:
-        - `step_fn(carry, u, y) -> (new_carry, (filtered_mean, filtered_cov))`,
-          `carry = (pred_mean, pred_cov)` -- exactly what one `lax.scan`
-          iteration of the underlying dynamax filter does: condition on `y`
-          (producing the filtered belief for this step), then predict
-          forward (producing the carry for the next step).
-        - `initial_state = (pred_mean, pred_cov)` at t=0, taken directly from
-          the model's prior -- the same value dynamax itself seeds its own
-          scan carry with. Pass this as `prev_state` on the first call to
-          `compute_cd_dynamax_discrete_filter_update`.
+        - `step_fn(carry, u, y) -> (filtered_mean, filtered_cov)`, `carry`
+          is the previous filtered belief `(mean, cov)` (or `None` to
+          bootstrap: see below). `step_fn`'s return value *is* the belief to
+          pass back in as `carry` on the next call -- one object playing
+          both roles, exactly like `compute_cuthbert_filter_update`'s single
+          returned state.
+        - `initial_state = (prior_mean, prior_cov)`, not yet conditioned on
+          anything. When `carry is None`, `step_fn` conditions this prior
+          directly on `y` with no predict step first (nothing has happened
+          before $t_0$) -- matching cuthbert's own bootstrap, which skips the
+          transition for the same reason (see
+          `compute_cuthbert_filter_update`'s docstring).
     """
     if isinstance(filter_config, KFConfig):
         params = _lti_to_lgssm_params(dynamics)
@@ -175,21 +186,22 @@ def build_dynamax_filter(dynamics: DynamicalModel, filter_config: BaseFilterConf
             params.emissions.bias,
             params.emissions.cov,
         )
+        initial_state = (params.initial.mean, params.initial.cov)
 
         def step_fn(carry, u, y):
-            pred_mean, pred_cov = carry
-            filtered_mean, filtered_cov = _kf_condition_on(
-                pred_mean, pred_cov, H, D, d, R, u, y
-            )
-            next_pred = _kf_predict(filtered_mean, filtered_cov, F, B, b, Q, u)
-            return next_pred, (filtered_mean, filtered_cov)
+            if carry is None:
+                pred_mean, pred_cov = initial_state
+            else:
+                pred_mean, pred_cov = _kf_predict(*carry, F, B, b, Q, u)
+            return _kf_condition_on(pred_mean, pred_cov, H, D, d, R, u, y)
 
-        return step_fn, (params.initial.mean, params.initial.cov)
+        return step_fn, initial_state
 
     # EKF and UKF share the same nonlinear params representation.
     params_nl = gaussian_to_nlgssm_params(dynamics)
     f, h = params_nl.dynamics_function, params_nl.emission_function
     Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
+    initial_state = (params_nl.initial_mean, params_nl.initial_covariance)
 
     if isinstance(filter_config, EKFConfig):
         # Same one-time Jacobian setup extended_kalman_filter itself does
@@ -197,14 +209,13 @@ def build_dynamax_filter(dynamics: DynamicalModel, filter_config: BaseFilterConf
         F_jac, H_jac = jacfwd(f), jacfwd(h)
 
         def step_fn(carry, u, y):
-            pred_mean, pred_cov = carry
-            filtered_mean, filtered_cov = _ekf_condition_on(
-                pred_mean, pred_cov, h, H_jac, R, u, y, 1
-            )
-            next_pred = _ekf_predict(filtered_mean, filtered_cov, f, F_jac, Q, u)
-            return next_pred, (filtered_mean, filtered_cov)
+            if carry is None:
+                pred_mean, pred_cov = initial_state
+            else:
+                pred_mean, pred_cov = _ekf_predict(*carry, f, F_jac, Q, u)
+            return _ekf_condition_on(pred_mean, pred_cov, h, H_jac, R, u, y, 1)
 
-        return step_fn, (params_nl.initial_mean, params_nl.initial_covariance)
+        return step_fn, initial_state
 
     if isinstance(filter_config, UKFConfig):
         # Same one-time sigma-point weight setup unscented_kalman_filter
@@ -216,16 +227,18 @@ def build_dynamax_filter(dynamics: DynamicalModel, filter_config: BaseFilterConf
         )
 
         def step_fn(carry, u, y):
-            pred_mean, pred_cov = carry
+            if carry is None:
+                pred_mean, pred_cov = initial_state
+            else:
+                pred_mean, pred_cov, _ = _ukf_predict(
+                    *carry, f, Q, lamb, w_mean, w_cov, u
+                )
             _, filtered_mean, filtered_cov = _ukf_condition_on(
                 pred_mean, pred_cov, h, R, lamb, w_mean, w_cov, u, y
             )
-            next_pred_mean, next_pred_cov, _ = _ukf_predict(
-                filtered_mean, filtered_cov, f, Q, lamb, w_mean, w_cov, u
-            )
-            return (next_pred_mean, next_pred_cov), (filtered_mean, filtered_cov)
+            return filtered_mean, filtered_cov
 
-        return step_fn, (params_nl.initial_mean, params_nl.initial_covariance)
+        return step_fn, initial_state
 
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
@@ -243,13 +256,20 @@ def compute_cd_dynamax_discrete_filter_update(
     t=None,
     t_prev=None,
 ):
-    r"""One-step FilterUpdate: prev_state + u + y -> (new_state, filtered belief).
+    r"""One-step FilterUpdate: prev_state + u + y -> new filtered belief.
 
-    `prev_state` is the `(pred_mean, pred_cov)` carry from the previous call,
-    or `build_dynamax_filter`'s `initial_state` on the first call -- there is
-    no `None`-sentinel bootstrap branch, because dynamax's own filters need
-    none: the initial carry *is* the prior, and the first step just
-    conditions it on `y_0` like any other step.
+    `u` is the control that drove the transition *into* the state now being
+    filtered (`u_k`, producing `state_{k+1}` from `y_{k+1}`) -- the same
+    convention `compute_cuthbert_filter_update` uses, not dynamax's own
+    native same-index convention (see `build_dynamax_filter`'s docstring for
+    why the reordering is necessary online).
+
+    `prev_state` is the `(mean, cov)` belief returned by the previous call,
+    or `None` to bootstrap: mirrors `compute_cuthbert_filter_update`'s own
+    `prev_state=None` convention exactly. On bootstrap, the prior (from
+    `build_dynamax_filter`'s `initial_state`, baked into `filter_function`)
+    is conditioned on `y` directly, with no predict step -- nothing has
+    happened before $t_0$.
 
     `t`/`t_prev` are accepted for call-site parity with
     `compute_cuthbert_filter_update` but unused -- cd-dynamax's discrete
@@ -257,11 +277,9 @@ def compute_cd_dynamax_discrete_filter_update(
     `gaussian_to_nlgssm_params`'s warning about ignored absolute time).
 
     Returns:
-        `(new_state, (filtered_mean, filtered_cov))` -- the same
-        `(new_carry, output)` shape a `lax.scan` step returns. `new_state`
-        feeds back in as `prev_state` on the next call; `(filtered_mean,
-        filtered_cov)` is the filtered belief \(\hat x_{k|k}\) for external
-        use (e.g. a control policy).
+        `(filtered_mean, filtered_cov)` -- the new belief \(\hat x_{k+1|k+1}\).
+        Feed this back in as `prev_state` on the next call, and/or use it
+        directly for external consumption (e.g. a control policy).
     """
     u_arr = jnp.zeros((dynamics.control_dim,)) if u is None else jnp.asarray(u)
     return filter_function(prev_state, u_arr, jnp.asarray(y))
