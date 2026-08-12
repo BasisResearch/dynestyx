@@ -5,16 +5,40 @@ from typing import Any, cast
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
+    _condition_on as _kf_condition_on,
+)
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
+    _predict as _kf_predict,
+)
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     lgssm_filter,
 )
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
+    preprocess_params_and_inputs as _kf_preprocess_params,
+)
 from cd_dynamax.dynamax.linear_gaussian_ssm.models import LinearGaussianSSM
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
+    _condition_on as _ekf_condition_on,
+)
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
+    _predict as _ekf_predict,
+)
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
     extended_kalman_filter,
 )
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
+    _compute_lambda,
+    _compute_weights,
     unscented_kalman_filter,
 )
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
+    _condition_on as _ukf_condition_on,
+)
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
+    _predict as _ukf_predict,
+)
+from jax import jacfwd
 from jaxtyping import Array, Real
 
 from dynestyx.inference.configs.filter import (
@@ -110,6 +134,139 @@ def _prepare_inputs(
     return emissions, inputs
 
 
+def build_dynamax_filter(dynamics: DynamicalModel, filter_config: BaseFilterConfig):
+    """Build a one-step (predict+update) function for `(dynamics, filter_config)`.
+
+    Mirrors the per-step body that `lgssm_filter` / `extended_kalman_filter` /
+    `unscented_kalman_filter` each build once (outside their own `lax.scan`)
+    and then scan over -- e.g. `extended_kalman_filter` computes
+    `F, H = jacfwd(f), jacfwd(h)` once before scanning
+    (`inference_ekf.py:118-119`); this does the same setup, but returns the
+    resulting step callable instead of scanning it. No stateful object is
+    built: the return value is a plain `(function, tuple-of-arrays)` pair.
+
+    Returns:
+        `(step_fn, initial_state)`, where:
+        - `step_fn(carry, u, y) -> (new_carry, (filtered_mean, filtered_cov))`,
+          `carry = (pred_mean, pred_cov)` -- exactly what one `lax.scan`
+          iteration of the underlying dynamax filter does: condition on `y`
+          (producing the filtered belief for this step), then predict
+          forward (producing the carry for the next step).
+        - `initial_state = (pred_mean, pred_cov)` at t=0, taken directly from
+          the model's prior -- the same value dynamax itself seeds its own
+          scan carry with. Pass this as `prev_state` on the first call to
+          `compute_cd_dynamax_discrete_filter_update`.
+    """
+    if isinstance(filter_config, KFConfig):
+        params = _lti_to_lgssm_params(dynamics)
+        # lgssm_filter's own @preprocess_args wrapper zero-fills bias/input_weights
+        # when they're None (e.g. no bias term, no controls); mirror that here since
+        # we're calling _predict/_condition_on directly instead of through lgssm_filter.
+        params, _ = _kf_preprocess_params(params, num_timesteps=1, inputs=None)
+        F, B, b, Q = (
+            params.dynamics.weights,
+            params.dynamics.input_weights,
+            params.dynamics.bias,
+            params.dynamics.cov,
+        )
+        H, D, d, R = (
+            params.emissions.weights,
+            params.emissions.input_weights,
+            params.emissions.bias,
+            params.emissions.cov,
+        )
+
+        def step_fn(carry, u, y):
+            pred_mean, pred_cov = carry
+            filtered_mean, filtered_cov = _kf_condition_on(
+                pred_mean, pred_cov, H, D, d, R, u, y
+            )
+            next_pred = _kf_predict(filtered_mean, filtered_cov, F, B, b, Q, u)
+            return next_pred, (filtered_mean, filtered_cov)
+
+        return step_fn, (params.initial.mean, params.initial.cov)
+
+    # EKF and UKF share the same nonlinear params representation.
+    params_nl = gaussian_to_nlgssm_params(dynamics)
+    f, h = params_nl.dynamics_function, params_nl.emission_function
+    Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
+
+    if isinstance(filter_config, EKFConfig):
+        # Same one-time Jacobian setup extended_kalman_filter itself does
+        # before scanning (inference_ekf.py:119).
+        F_jac, H_jac = jacfwd(f), jacfwd(h)
+
+        def step_fn(carry, u, y):
+            pred_mean, pred_cov = carry
+            filtered_mean, filtered_cov = _ekf_condition_on(
+                pred_mean, pred_cov, h, H_jac, R, u, y, 1
+            )
+            next_pred = _ekf_predict(filtered_mean, filtered_cov, f, F_jac, Q, u)
+            return next_pred, (filtered_mean, filtered_cov)
+
+        return step_fn, (params_nl.initial_mean, params_nl.initial_covariance)
+
+    if isinstance(filter_config, UKFConfig):
+        # Same one-time sigma-point weight setup unscented_kalman_filter
+        # itself does before scanning (inference_ukf.py:169-172).
+        state_dim = dynamics.state_dim
+        lamb = _compute_lambda(filter_config.alpha, filter_config.kappa, state_dim)
+        w_mean, w_cov = _compute_weights(
+            state_dim, filter_config.alpha, filter_config.beta, lamb
+        )
+
+        def step_fn(carry, u, y):
+            pred_mean, pred_cov = carry
+            _, filtered_mean, filtered_cov = _ukf_condition_on(
+                pred_mean, pred_cov, h, R, lamb, w_mean, w_cov, u, y
+            )
+            next_pred_mean, next_pred_cov, _ = _ukf_predict(
+                filtered_mean, filtered_cov, f, Q, lamb, w_mean, w_cov, u
+            )
+            return (next_pred_mean, next_pred_cov), (filtered_mean, filtered_cov)
+
+        return step_fn, (params_nl.initial_mean, params_nl.initial_covariance)
+
+    raise ValueError(
+        f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
+        "Expected KFConfig, EKFConfig, or UKFConfig."
+    )
+
+
+def compute_cd_dynamax_discrete_filter_update(
+    dynamics: DynamicalModel,
+    filter_function,
+    prev_state,
+    *,
+    y,
+    u,
+    t=None,
+    t_prev=None,
+):
+    r"""One-step FilterUpdate: prev_state + u + y -> (new_state, filtered belief).
+
+    `prev_state` is the `(pred_mean, pred_cov)` carry from the previous call,
+    or `build_dynamax_filter`'s `initial_state` on the first call -- there is
+    no `None`-sentinel bootstrap branch, because dynamax's own filters need
+    none: the initial carry *is* the prior, and the first step just
+    conditions it on `y_0` like any other step.
+
+    `t`/`t_prev` are accepted for call-site parity with
+    `compute_cuthbert_filter_update` but unused -- cd-dynamax's discrete
+    dynamics/emission functions are already time-homogeneous per step (see
+    `gaussian_to_nlgssm_params`'s warning about ignored absolute time).
+
+    Returns:
+        `(new_state, (filtered_mean, filtered_cov))` -- the same
+        `(new_carry, output)` shape a `lax.scan` step returns. `new_state`
+        feeds back in as `prev_state` on the next call; `(filtered_mean,
+        filtered_cov)` is the filtered belief \(\hat x_{k|k}\) for external
+        use (e.g. a control policy).
+    """
+    u_arr = jnp.zeros((dynamics.control_dim,)) if u is None else jnp.asarray(u)
+    return filter_function(prev_state, u_arr, jnp.asarray(y))
+
+
 def compute_cd_dynamax_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
@@ -193,6 +350,8 @@ def run_discrete_filter(
 
 __all__ = [
     "compute_cd_dynamax_discrete_filter",
+    "compute_cd_dynamax_discrete_filter_update",
+    "build_dynamax_filter",
     "run_discrete_filter",
     "_lti_to_lgssm_params",
     "_prepare_inputs",
