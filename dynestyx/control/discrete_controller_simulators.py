@@ -106,10 +106,12 @@ class PolicyCallable(Protocol):
 class ControlledSimulatedResult(SimulatedResult):
     """`SimulatedResult` extended with the control loop's extra outputs.
 
-    Array-valued fields are registered as deterministic sites by the same
-    generic path as `SimulatedResult`'s own fields. A field set to `None`, or a
-    non-array field such as a nested policy-state PyTree, is returned on this
-    object but is not registered as a deterministic site.
+    Registered as deterministic sites the same generic way as
+    `SimulatedResult`'s own fields (`dynestyx.simulation.utils.
+    _register_simulated_result_sites` iterates every dataclass field and
+    skips `None` values) -- so the existing recording-gating logic just
+    means passing `None` for a field instead of conditionally omitting a
+    dict key, as the old (pre-refactor) version of this class did.
     """
 
     # control_time = time - 1 (no control is chosen after the final state).
@@ -177,7 +179,6 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         | None = None,
         predict_times: Real[Array, " predict_time"] | None = None,
         initial_policy_state: PyTree | None = None,
-        _dsx_sample_mode: bool = False,
         **kwargs: Any,
     ) -> ControlledSimulatedResult:
         """Simulate one online controlled trajectory.
@@ -189,7 +190,6 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             ctrl_values: Unsupported because controls are selected online.
             predict_times: Strictly increasing simulation times.
             initial_policy_state: Initial state passed to `control_policy`.
-            _dsx_sample_mode: Internal marker for the NumPyro-style API.
             **kwargs: Additional shared simulator-handler metadata, ignored here.
 
         Returns:
@@ -200,7 +200,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             NotImplementedError: If the requested simulation mode is unsupported.
         """
 
-        del _dsx_sample_mode, kwargs
+        del kwargs
         if dynamics.continuous_time:
             raise ValueError(
                 "DiscreteControlLoopSimulator only supports discrete-time models "
@@ -254,17 +254,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(
             initial_observation_key
         )
-        # Give the bootstrap FilterUpdate a non-degenerate t_prev (borrowing the
-        # width of the first real interval, matching compute_cuthbert_filter's
-        # own dummy-row convention). This step is a genuine no-op transition
-        # for every filter family (nothing has happened before t_0), but some
-        # backends (e.g. EKF's Taylor linearization) evaluate the transition
-        # unconditionally via jnp.where rather than jax.lax.cond, so t_prev==t
-        # would construct a zero-width-dt, zero-covariance distribution whose
-        # NaN log-density leaks through the gradient even on the discarded
-        # branch -- a state-evolution whose covariance scales with dt (e.g. an
-        # Euler-Maruyama-discretized SDE) hits this; a fixed-covariance one
-        # (e.g. LinearGaussianStateEvolution) does not.
+        # Use a nonzero bootstrap interval because some filters evaluate the
+        # nominal transition even when the no-transition branch is selected.
         dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
         x_hat_0 = compute_cuthbert_filter_update(
             dynamics,

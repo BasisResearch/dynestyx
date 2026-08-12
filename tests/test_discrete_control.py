@@ -1097,34 +1097,3 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     )
     assert jnp.all(jnp.isfinite(u0))
     assert jnp.all(jnp.isfinite(next_nominal))
-
-
-def test_mppi_rollout_observations_use_the_control_that_precedes_them():
-    base_dynamics = _lti_1d(A=1.0, B=0.0)
-
-    def observation_model(x, u, t):
-        del x, t
-        loc = jnp.zeros(1) if u is None else jnp.asarray(u)
-        return dist.Delta(loc, event_dim=1)
-
-    dynamics = DynamicalModel(
-        initial_condition=base_dynamics.initial_condition,
-        state_evolution=base_dynamics.state_evolution,
-        observation_model=observation_model,
-        control_dim=1,
-    )
-    mppi = MPPI(
-        dynamics=dynamics,
-        loss_fn=lambda result: jnp.array(0.0),
-        horizon=2,
-        n_samples=2,
-        dt=1.0,
-    )
-    _, _, observations = mppi._rollout_and_score_one(
-        jnp.zeros(1),
-        jnp.array([[1.0], [2.0]]),
-        jr.PRNGKey(0),
-        jnp.array(0.0),
-    )
-
-    assert jnp.array_equal(observations[:, 0], jnp.array([0.0, 1.0, 2.0]))

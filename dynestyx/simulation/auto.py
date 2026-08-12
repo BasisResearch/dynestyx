@@ -298,7 +298,6 @@ class Simulator(BaseSimulator):
         | None = None,
         predict_times: Real[Array, " predict_time"] | None = None,
         initial_policy_state: PyTree | None = None,
-        _dsx_sample_mode: bool = False,
         **kwargs: Any,
     ) -> SimulatedResult:
         """Auto-route to the appropriate pure-JAX simulator backend.
@@ -310,10 +309,8 @@ class Simulator(BaseSimulator):
 
         `initial_policy_state` is forwarded to the controlled simulator when
         `control_policy` was supplied to this `Simulator`; it is ignored for
-        ordinary open-loop simulation. `_dsx_sample_mode` is an internal marker
-        used by the NumPyro-style API.
+        ordinary open-loop simulation.
         """
-        del _dsx_sample_mode
         simulator = self._ensure_simulator(dynamics)
         if self.control_policy is not None:
             kwargs["initial_policy_state"] = initial_policy_state
