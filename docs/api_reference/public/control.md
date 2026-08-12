@@ -23,8 +23,8 @@ open-loop control trajectory.
 Controlled simulation currently supports one trajectory at a time. Its online
 filter update is implemented with Cuthbert and supports `KFConfig`, `EKFConfig`,
 `EnKFConfig`, and `PFConfig`. `dsx.plate` and `n_simulations > 1` are rejected
-explicitly. For controlled simulation, a config's `filter_source` field does
-not select another backend; the remaining family-specific options are honored.
+explicitly. Controlled simulation requires `filter_source="cuthbert"` and
+rejects configurations that request another backend.
 
 ## Simulator and policy protocol
 

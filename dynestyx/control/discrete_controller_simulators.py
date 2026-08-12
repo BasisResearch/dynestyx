@@ -141,9 +141,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             policy's initial state must always be passed explicitly.
         filter_config: Selects the filtering algorithm
             (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`). Defaults to
-            `_default_filter_config(dynamics)` when `None`. Its
-            `filter_source` field is not used for backend dispatch here; the
-            online one-step update currently always uses Cuthbert. Its
+            `_default_filter_config(dynamics)` when `None`. The online one-step
+            update currently requires `filter_source="cuthbert"`. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
             as they do for `Filter` (see `dynestyx.utils._should_record_field`).
@@ -232,6 +231,12 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
+        if filter_config.filter_source != "cuthbert":
+            raise ValueError(
+                "DiscreteControlLoopSimulator requires filter_source='cuthbert' "
+                "because online one-step updates are not available for "
+                f"filter_source={filter_config.filter_source!r}."
+            )
         rollout_key, initial_state_key, initial_observation_key, default_filter_key = (
             jr.split(rng_key, 4)
         )
