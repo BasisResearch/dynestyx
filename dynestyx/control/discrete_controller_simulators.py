@@ -1,54 +1,7 @@
-"""Closed-loop control simulator: interleaves simulation, observation, filtering, and control.
-
-Implements the online control loop:
-
-    x_0 ~ p(x_0)
-    y_0 | x_0 ~ p(y_0 | x_0, t_0)
-    x_hat_{0|0} = FilterUpdate(y_0, t_0)
-    u_k, s_{k+1} = control_policy(x_hat_{k|k}, t_k, t_{k+1}, s_k),     k = 0..T-1
-        (control_policy always receives the current and next times,
-        even if it ignores them; it never receives a key -- a policy
-        needing its own randomness must carry it inside s and advance
-        it internally, e.g. dynestyx.control.mppi.MPPI. It must return
-        a concrete value, not a NumPyro Distribution -- see
-        PolicyCallable)
-    x_{k+1} | x_k, u_k ~ p(x_{k+1} | x_k, u_k, t_k, t_{k+1}),          k = 0..T-1
-    y_{k+1} | x_{k+1}, u_k ~ p(y_{k+1} | x_{k+1}, u_k, t_{k+1}),       k = 0..T-1
-    x_hat_{k+1|k+1} = FilterUpdate(x_hat_{k|k}, u_k, y_{k+1}, t_k, t_{k+1}),  k = 0..T-1
-
-`FilterUpdate` is implemented by `compute_cuthbert_filter_update`
-(`dynestyx/inference/integrations/cuthbert/discrete_filter.py`), which drives
-cuthbert's `Filter.filter_prepare`/`filter_combine` primitives one step at a
-time instead of over a whole pre-supplied trajectory. This works for any
-filter family exposed there (`KFConfig`, `EKFConfig`, `EnKFConfig`,
-`PFConfig`); the raw belief each step produces is family-specific (e.g. a
-Kalman-family state with a `.mean`/`.chol_cov`, or a `ParticleFilterState`
-with `.particles`/`.log_weights`), so before it's handed to `control_policy`
-it's converted via `filter_state_dist` into a family-agnostic NumPyro
-`Distribution` (`MultivariateNormal` for the Gaussian families,
-`WeightedParticles` for `PFConfig`) -- a policy can call `.mean` for a point
-estimate, or use the full distribution (e.g. `.sample`) for risk-aware
-planning.
-
-Important: the control passed to `dynamics.observation_model` for
-`y_{k+1}` is `u_k` (the control that drove the transition into `x_{k+1}`),
-not a same-index `u_{k+1}`. This differs from `DiscreteTimeSimulator`'s
-pre-supplied-trajectory convention, where `ctrl_values[t]` is paired with
-both the observation and the outgoing transition at the same index t. That
-convention is impossible to satisfy online: `u_{k+1}` is chosen by
-`control_policy` from `x_hat_{k+1|k+1}`, which itself depends on having
-already observed `y_{k+1}`. See `compute_cuthbert_filter_update`'s docstring
-for details.
-
-`DiscreteControlLoopSimulator` computes its own controls online, so unlike
-`DiscreteTimeSimulator` it is driven with `predict_times` only -- do not
-pass `ctrl_times`/`ctrl_values` to `dsx.sample` (simulator handlers are
-generation-only and reject `obs_times`/`obs_values`; `ctrl_values` is
-rejected here too, since it would conflict with online control).
-"""
+"""Closed-loop simulation for controlled discrete-time dynamical models."""
 
 import dataclasses
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -72,7 +25,7 @@ from dynestyx.types import SimulatedResult
 from dynestyx.utils import _should_record_field
 
 
-def filter_state_mean(state) -> Array:
+def filter_state_mean(state: Any) -> Real[Array, "..."]:
     """Point-estimate summary of a cuthbert filter state, any family.
 
     Kalman-family states (`KFConfig`, `EKFConfig`, `EnKFConfig`) expose a
@@ -90,7 +43,7 @@ def filter_state_mean(state) -> Array:
     raise TypeError(f"Cannot summarize filter state of type {type(state).__name__}")
 
 
-def filter_state_dist(state) -> Distribution:
+def filter_state_dist(state: Any) -> Distribution:
     """Full-belief NumPyro distribution for a cuthbert filter state, any family.
 
     Kalman-family states (`KFConfig`, `EKFConfig`, `EnKFConfig`) expose
@@ -119,7 +72,7 @@ class PolicyCallable(Protocol):
 
     `x_hat` is a NumPyro `Distribution` -- `MultivariateNormal` for
     `KFConfig`/`EKFConfig`/`EnKFConfig`, `WeightedParticles` for `PFConfig`
-    (see module docstring and `filter_state_dist`); use `x_hat.mean` for a
+    (see `filter_state_dist`); use `x_hat.mean` for a
     family-agnostic point estimate, or the distribution itself for
     uncertainty-aware planning. `t_now`/`t_next` are the current and next
     times -- always passed, even to a policy that ignores them, so that a
@@ -153,17 +106,15 @@ class PolicyCallable(Protocol):
 class ControlledSimulatedResult(SimulatedResult):
     """`SimulatedResult` extended with the control loop's extra outputs.
 
-    Registered as deterministic sites the same generic way as
-    `SimulatedResult`'s own fields (`dynestyx.simulation.utils.
-    _register_simulated_result_sites` iterates every dataclass field and
-    skips `None` values) -- so the existing recording-gating logic just
-    means passing `None` for a field instead of conditionally omitting a
-    dict key, as the old (pre-refactor) version of this class did.
+    Array-valued fields are registered as deterministic sites by the same
+    generic path as `SimulatedResult`'s own fields. A field set to `None`, or a
+    non-array field such as a nested policy-state PyTree, is returned on this
+    object but is not registered as a deterministic site.
     """
 
     # control_time = time - 1 (no control is chosen after the final state).
     controls: Real[Array, "n_simulations control_time control_dim"] | None = None
-    filtered_states_mean: Array | None = None
+    filtered_states_mean: Real[Array, "n_simulations time state_dim"] | None = None
     policy_states: PyTree | None = None
 
 
@@ -173,8 +124,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     Unlike `DiscreteTimeSimulator`, which requires the entire control
     trajectory as a pre-supplied `ctrl_values` array, `DiscreteControlLoopSimulator`
     computes each $u_k$ online from the filtered belief $\hat x_{k|k}$ via
-    `control_policy`. See the module docstring for the full loop equations
-    and the control-index convention used for `dynamics.observation_model`.
+    `control_policy`. See the closed-loop control API page for the full loop
+    equations and the control-index convention used by
+    `dynamics.observation_model`.
+
+    The online loop uses $u_k$ for both the transition into $x_{k+1}$ and the
+    observation $y_{k+1}$. The one-step filter update currently uses Cuthbert
+    and supports `KFConfig`, `EKFConfig`, `EnKFConfig`, and `PFConfig`.
+    Plated controlled simulation is not yet supported.
 
     Attributes:
         control_policy: Control policy $\pi$; see `PolicyCallable`. Its initial
@@ -185,6 +142,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         filter_config: Selects the filtering algorithm
             (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`). Defaults to
             `_default_filter_config(dynamics)` when `None`. Its
+            `filter_source` field is not used for backend dispatch here; the
+            online one-step update currently always uses Cuthbert. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
             as they do for `Filter` (see `dynestyx.utils._should_record_field`).
@@ -202,28 +161,57 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         self.control_policy = control_policy
         self.filter_config = filter_config
 
+    def _validate_plate_support(self) -> None:
+        raise NotImplementedError(
+            "DiscreteControlLoopSimulator does not yet support dsx.plate. "
+            "Run one controlled model at a time."
+        )
+
     def simulate(
         self,
         dynamics: DynamicalModel,
         *,
         rng_key: PRNGKeyArray,
-        ctrl_times=None,
-        ctrl_values=None,
-        predict_times=None,
+        ctrl_times: Real[Array, " ctrl_time"] | None = None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None = None,
+        predict_times: Real[Array, " predict_time"] | None = None,
         initial_policy_state: PyTree | None = None,
-        **kwargs,
+        _dsx_sample_mode: bool = False,
+        **kwargs: Any,
     ) -> ControlledSimulatedResult:
+        """Simulate one online controlled trajectory.
 
+        Args:
+            dynamics: Discrete-time dynamical model.
+            rng_key: Root key for environment and fallback filter randomness.
+            ctrl_times: Unsupported because controls are selected online.
+            ctrl_values: Unsupported because controls are selected online.
+            predict_times: Strictly increasing simulation times.
+            initial_policy_state: Initial state passed to `control_policy`.
+            _dsx_sample_mode: Internal marker for the NumPyro-style API.
+            **kwargs: Additional shared simulator-handler metadata, ignored here.
+
+        Returns:
+            States, observations, controls, filter means, and policy states.
+
+        Raises:
+            ValueError: If inputs are incompatible with online discrete control.
+            NotImplementedError: If the requested simulation mode is unsupported.
+        """
+
+        del _dsx_sample_mode, kwargs
         if dynamics.continuous_time:
             raise ValueError(
                 "DiscreteControlLoopSimulator only supports discrete-time models "
                 "(see class docstring). Wrap continuous-time state evolution "
                 "in a Discretizer first."
             )
-        if ctrl_values is not None:
+        if ctrl_times is not None or ctrl_values is not None:
             raise ValueError(
                 "DiscreteControlLoopSimulator computes controls online via "
-                "`control_policy`; pass ctrl_values to a plain "
+                "`control_policy`; do not pass ctrl_times or ctrl_values. Use a plain "
                 "Simulator/DiscreteTimeSimulator instead if you want "
                 "open-loop control."
             )
@@ -244,14 +232,23 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             if self.filter_config is not None
             else _default_filter_config(dynamics)
         )
-
-        key, k_x0, k_y0, k_filt0 = jr.split(rng_key, 4)
+        rollout_key, initial_state_key, initial_observation_key, default_filter_key = (
+            jr.split(rng_key, 4)
+        )
+        online_filter_key = (
+            filter_config.crn_seed
+            if filter_config.crn_seed is not None
+            else default_filter_key
+        )
+        online_filter_key, initial_filter_update_key = jr.split(online_filter_key)
         filter_obj, _ = build_cuthbert_filter(
-            dynamics, filter_config, key=rng_key, want_parallel=False
+            dynamics, filter_config, key=online_filter_key, want_parallel=False
         )
 
-        x_0 = dynamics.initial_condition.sample(k_x0)
-        y_0 = dynamics.observation_model(x_0, None, times[0]).sample(k_y0)
+        x_0 = dynamics.initial_condition.sample(initial_state_key)
+        y_0 = dynamics.observation_model(x_0, None, times[0]).sample(
+            initial_observation_key
+        )
         # Give the bootstrap FilterUpdate a non-degenerate t_prev (borrowing the
         # width of the first real interval, matching compute_cuthbert_filter's
         # own dummy-row convention). This step is a genuine no-op transition
@@ -268,7 +265,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             dynamics,
             filter_obj=filter_obj,
             prev_state=None,
-            key=k_filt0,
+            key=initial_filter_update_key,
             y=y_0,
             u=None,
             t=times[0],
@@ -277,8 +274,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         s_0 = initial_policy_state
 
         def _step(carry, t_idx):
-            x_prev, x_hat_prev, s_prev, step_key = carry
-            step_key, k_trans, k_obs, k_filt = jr.split(step_key, 4)
+            x_prev, x_hat_prev, s_prev, rollout_key, online_filter_key = carry
+            rollout_key, transition_key, observation_key = jr.split(rollout_key, 3)
+            online_filter_key, filter_update_key = jr.split(online_filter_key)
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
 
@@ -290,29 +288,42 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                     "Returning a distribution is not yet supported, instead "
                     "sample from this distribution inside your policy."
                 )
+            u_k = jnp.asarray(u_k)
+            expected_control_shape = (dynamics.control_dim,)
+            if u_k.shape != expected_control_shape:
+                raise ValueError(
+                    "control_policy must return one control vector with shape "
+                    f"{expected_control_shape}; got {u_k.shape}."
+                )
 
             trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
-            x_next = trans_dist.sample(k_trans)
+            x_next = trans_dist.sample(transition_key)
 
             obs_dist = dynamics.observation_model(x_next, u_k, t_next)
-            y_next = obs_dist.sample(k_obs)
+            y_next = obs_dist.sample(observation_key)
 
             x_hat_next = compute_cuthbert_filter_update(
                 dynamics,
                 filter_obj=filter_obj,
                 prev_state=x_hat_prev,
-                key=k_filt,
+                key=filter_update_key,
                 y=y_next,
                 u=u_k,
                 t=t_next,
                 t_prev=t_now,
             )
 
-            new_carry = (x_next, x_hat_next, s_next, step_key)
+            new_carry = (
+                x_next,
+                x_hat_next,
+                s_next,
+                rollout_key,
+                online_filter_key,
+            )
             outputs = (x_next, x_hat_next, y_next, s_next, u_k)
             return new_carry, outputs
 
-        init_carry = (x_0, x_hat_0, s_0, key)
+        init_carry = (x_0, x_hat_0, s_0, rollout_key, online_filter_key)
         _, (xs, x_hats, ys, ss, us) = jax.lax.scan(_step, init_carry, jnp.arange(T - 1))
 
         states = jnp.concatenate([jnp.expand_dims(x_0, axis=0), xs], axis=0)

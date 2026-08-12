@@ -1,6 +1,7 @@
 import warnings
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -175,11 +176,11 @@ def _drop_cuthbert_dummy_step(states, *, obs_len: int):
 def build_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None,
+    key: PRNGKeyArray | None,
     *,
     want_parallel: bool,
     extra_filter_kwargs: dict | None = None,
-):
+) -> tuple[Any, bool]:
     """Build the cuthbert Filter object for `(dynamics, filter_config)`.
 
     `extra_filter_kwargs`, when given, is merged over (overriding) the kwargs
@@ -214,7 +215,7 @@ def build_cuthbert_filter(
             "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
         )
 
-    parallel = (
+    parallel = bool(
         want_parallel
         and isinstance(filter_config, KFConfig)
         and filter_config.associative
@@ -229,20 +230,36 @@ def build_cuthbert_filter(
 
 def compute_cuthbert_filter_update(
     dynamics: DynamicalModel,
-    filter_obj,
-    prev_state,
-    key: jax.Array,
+    filter_obj: Any,
+    prev_state: Any | None,
+    key: PRNGKeyArray,
     *,
-    y: jax.Array,
-    u: jax.Array | None,
-    t: jax.Array,
-    t_prev: jax.Array | None = None,
-):
-    r"""One-step FilterUpdate: state_k + u_k + y_{k+1} -> state_{k+1}. Used for online filtering.
-    Unlike `compute_cuthbert_filter` (whole-trajectory), this performs one
-    predict+update step directly.
-    `u` is the control that drove the transition *into* the state being
-    filtered (u_k, producing state_{k+1} from y_{k+1}).
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+    t_prev: Real[Array, ""],
+) -> Any:
+    r"""Perform one Cuthbert predict-and-update step for online filtering.
+
+    `u` is the control that drove the transition into the state being filtered:
+    $u_k$ for the transition from $x_k$ to $x_{k+1}$ and observation
+    $y_{k+1}$. For a bootstrap update (`prev_state=None`), `t_prev` must still
+    precede `t`: some Cuthbert filters evaluate the nominal transition even
+    when the no-transition branch is selected, so a zero-width interval can
+    create a degenerate covariance and leak NaNs through differentiation.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Previous Cuthbert filter state, or `None` to bootstrap.
+        key: PRNG key for filter preparation.
+        y: Observation at `t`.
+        u: Control applied between `t_prev` and `t`, or `None` for no control.
+        t: Current observation time.
+        t_prev: Previous time. Must be strictly earlier than `t`.
+
+    Returns:
+        The updated Cuthbert filter state.
     """
 
     key_state, key_prep = jr.split(key)
@@ -251,7 +268,14 @@ def compute_cuthbert_filter_update(
     u_arr = jnp.zeros((control_dim,)) if u is None else jnp.asarray(u)
     is_first_step = prev_state is None
     t_arr = jnp.asarray(t)
-    t_prev_arr = t_arr if t_prev is None else jnp.asarray(t_prev)
+    t_prev_arr = jnp.asarray(t_prev)
+    if t_arr.shape != () or t_prev_arr.shape != ():
+        raise ValueError("t and t_prev must be scalar arrays.")
+    t_prev_arr = eqx.error_if(
+        t_prev_arr,
+        t_prev_arr >= t_arr,
+        "compute_cuthbert_filter_update requires t_prev < t.",
+    )
 
     if is_first_step:
         dummy_mi = CuthbertInputs(
@@ -345,7 +369,7 @@ def compute_cuthbert_filter(
         filter_obj,
         filter_inputs,
         init_state,
-        parallel=cast(bool, parallel),
+        parallel=parallel,
         key=filter_key,
     )
     marginal_loglik = raw_states.log_normalizing_constant[-1]

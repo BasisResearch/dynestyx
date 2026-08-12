@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
 from dynestyx.inference.configs.filter import BaseFilterConfig
 from dynestyx.inference.configs.simulator import (
@@ -279,6 +279,14 @@ class Simulator(BaseSimulator):
 
         return self.simulator
 
+    def _validate_plate_support(self) -> None:
+        """Reject plated closed-loop control until aggregation is supported."""
+        if self.control_policy is not None:
+            raise NotImplementedError(
+                "Simulator(control_policy=...) does not yet support dsx.plate. "
+                "Run one controlled model at a time."
+            )
+
     def simulate(
         self,
         dynamics: DynamicalModel,
@@ -289,7 +297,9 @@ class Simulator(BaseSimulator):
         | Real[Array, " ctrl_time"]
         | None = None,
         predict_times: Real[Array, " predict_time"] | None = None,
-        **kwargs,
+        initial_policy_state: PyTree | None = None,
+        _dsx_sample_mode: bool = False,
+        **kwargs: Any,
     ) -> SimulatedResult:
         """Auto-route to the appropriate pure-JAX simulator backend.
 
@@ -297,8 +307,16 @@ class Simulator(BaseSimulator):
         directly as an already-allocated simulation key and is not pre-split.
         Therefore, `dsx.simulate(..., rng_key=root_key)` is equivalent to
         `Simulator().simulate(..., rng_key=jax.random.split(root_key)[1])`.
+
+        `initial_policy_state` is forwarded to the controlled simulator when
+        `control_policy` was supplied to this `Simulator`; it is ignored for
+        ordinary open-loop simulation. `_dsx_sample_mode` is an internal marker
+        used by the NumPyro-style API.
         """
+        del _dsx_sample_mode
         simulator = self._ensure_simulator(dynamics)
+        if self.control_policy is not None:
+            kwargs["initial_policy_state"] = initial_policy_state
         return simulator.simulate(
             dynamics,
             rng_key=rng_key,
