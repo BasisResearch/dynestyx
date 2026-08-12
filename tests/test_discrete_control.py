@@ -999,7 +999,9 @@ def test_mppi_runs_end_to_end_without_a_key_argument():
         rng_key=jr.PRNGKey(0),
         predict_times=predict_times,
         control_policy=mppi,
-        filter_config=KFConfig(record_filtered_states_mean=True),
+        filter_config=KFConfig(
+            filter_source="cuthbert", record_filtered_states_mean=True
+        ),
         initial_policy_state=mppi.initial_state(),
     )
     assert isinstance(result, ControlledSimulatedResult)
