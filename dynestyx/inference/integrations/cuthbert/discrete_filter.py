@@ -14,6 +14,7 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
+from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.filter import (
@@ -390,7 +391,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     obs_dim = dynamics.observation_dim
 
     obs_model = dynamics.observation_model
-    if not isinstance(obs_model, (LinearGaussianObservation, GaussianObservation)):
+    if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
         _probe_state_independent_observation_noise(
             obs_model, state_dim=state_dim, obs_dim=obs_dim
         )
@@ -417,7 +418,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
         if isinstance(obs_model, LinearGaussianObservation):
             obs_params = obs_model.params_at(mi.time)
-            H = jnp.asarray(obs_params.H)
+
+            H = obs_params.H
+
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
@@ -452,7 +455,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             def observation_fn(x):
                 edist = obs_model(x, mi.u, mi.time)
                 if not (
-                    isinstance(edist, (dist.MultivariateNormal, dist.Normal))
+                    isinstance(edist, dist.MultivariateNormal | dist.Normal)
                     or (
                         isinstance(edist, dist.Independent)
                         and isinstance(edist.base_dist, dist.Normal)
@@ -590,6 +593,15 @@ def _cuthbert_filter_kalman(
     obs = dynamics.observation_model
     ic = dynamics.initial_condition
 
+    if isinstance(obs.H, jax_sparse.JAXSparse):
+        raise ValueError(
+            "A sparse observation matrix H was passed to KFConfig(filter_source="
+            "'cuthbert'). This is not supported with  filter_source = 'cuthbert' due "
+            "to internal incompatibilities. Either pass a dense H, use KFConfig(filter_source="
+            "'cd_dynamax') (works, verified bit-identical to dense), or use another config such as"
+            "EnKFConfig/EKFConfig."
+        )
+
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
@@ -620,6 +632,17 @@ def _cuthbert_filter_taylor_kf(
 ):
     if filter_kwargs is None:
         filter_kwargs = {}
+
+    obs_model = dynamics.observation_model
+    if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+        obs_model.H, jax_sparse.JAXSparse
+    ):
+        warnings.warn(
+            "A sparse observation matrix H was passed to EKFConfig. This works "
+            "correctly, but likely gives no efficiency gain due to internal"
+            "use of automatic differentiation.",
+            stacklevel=2,
+        )
 
     rtol = filter_kwargs.get("rtol", None)
 

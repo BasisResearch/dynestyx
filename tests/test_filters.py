@@ -3,6 +3,7 @@ import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 import pytest
+from jax.experimental import sparse as jax_sparse
 from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
@@ -22,7 +23,13 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
-from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel, FullDiffusion
+from dynestyx.models import (
+    ContinuousTimeStateEvolution,
+    DynamicalModel,
+    FullDiffusion,
+    LinearGaussianStateEvolution,
+)
+from dynestyx.models.observations import LinearGaussianObservation
 from tests.fixtures import (
     _squeeze_sim_dims,
     data_conditioned_jumpy_controls,
@@ -463,3 +470,202 @@ def test_default_discrete_filter_uses_cuthbert_enkf_on_nonlinear_model():
             substituted(obs_times=obs_times, obs_values=obs_values)
 
     assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
+
+
+# --- sparse H (LinearGaussianObservation) ----------------------------------
+
+
+def _sparse_h_test_dynamics(H) -> DynamicalModel:
+    """A small 3-state, LTI model observing 2 (of 3) state components via H.
+
+    Built directly from `LinearGaussianStateEvolution`/`LinearGaussianObservation` rather
+    than the `LTI_discrete` factory, since `LTI_discrete`'s own `H` parameter is typed as a
+    dense `Float[Array, ...]` and isn't part of this change's scope.
+    """
+    A = jnp.array([[0.9, 0.05, 0.0], [0.0, 0.85, 0.05], [0.0, 0.0, 0.8]])
+    Q = 0.05 * jnp.eye(3)
+    R = 0.1**2 * jnp.eye(H.shape[0])
+    return DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(3), jnp.eye(3)),
+        state_evolution=LinearGaussianStateEvolution(A=A, cov=Q),
+        observation_model=LinearGaussianObservation(H=H, R=R),
+        control_dim=0,
+    )
+
+
+def test_linear_gaussian_observation_sparse_h_matches_dense_h():
+    """A sparse H must give the same observation mean as its dense equivalent --
+    exercises the `H @ x` fix in LinearGaussianObservation.__call__ directly."""
+    H_dense = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    H_sparse = jax_sparse.BCOO.fromdense(H_dense)
+    x = jnp.array([0.4, -0.2, 1.1])
+
+    obs_dense = LinearGaussianObservation(H=H_dense, R=0.01 * jnp.eye(2))(x, None, 0.0)
+    obs_sparse = LinearGaussianObservation(H=H_sparse, R=0.01 * jnp.eye(2))(
+        x, None, 0.0
+    )
+
+    assert jnp.allclose(obs_dense.mean, obs_sparse.mean)
+
+
+@pytest.mark.xfail(
+    raises=ValueError,
+    strict=True,
+    reason="Sparse observation matrices are not supported inside dsx.plate.",
+)
+def test_sparse_h_in_plate():
+    dynamics = _sparse_h_test_dynamics(jax_sparse.BCOO.fromdense(jnp.eye(2, 3)))
+    with dsx.plate("members", 1):
+        dsx.sample("f", dynamics, predict_times=jnp.arange(1.0))
+
+
+def test_cuthbert_enkf_sparse_h_matches_dense_h():
+    """EnKF with a sparse H must give the same marginal_loglik and filtered means as the
+    dense H -- exercises the `_as_array_or_sparse` fix in the cuthbert EnKF backend."""
+    H_dense = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    H_sparse = jax_sparse.BCOO.fromdense(H_dense)
+
+    dynamics_dense = _sparse_h_test_dynamics(H_dense)
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = jnp.asarray(ground_truth.observations)[0]
+
+    # Fixed crn_seed: EnKF's randomness becomes a deterministic function of its inputs, so
+    # dense and sparse H should give numerically identical results, not just close ones.
+    crn_seed = jr.PRNGKey(42)
+    with Filter(filter_config=EnKFConfig(n_particles=32, crn_seed=crn_seed)):
+        result_dense = dsx.condition(
+            "f", dynamics_dense, obs_times=obs_times, obs_values=obs_values
+        )
+    with Filter(filter_config=EnKFConfig(n_particles=32, crn_seed=crn_seed)):
+        result_sparse = dsx.condition(
+            "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+        )
+
+    assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
+    means_dense = jnp.stack([d.mean for d in result_dense.dists])
+    means_sparse = jnp.stack([d.mean for d in result_sparse.dists])
+    assert jnp.allclose(means_dense, means_sparse)
+
+
+def test_kf_raises_on_sparse_observation_matrix_cuthbert():
+    """KF's cuthbert backend does not support a sparse H: cuthbert's Kalman internals
+    cannot handle it (vmap's sparse tracing breaks inside a jnp.block call), so dynestyx
+    raises a clear error up front rather than letting that confusing internal failure
+    surface."""
+    H_sparse = jax_sparse.BCOO.fromdense(jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.zeros((3, 2))
+
+    with pytest.raises(ValueError, match="not supported"):
+        with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+            dsx.condition(
+                "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+            )
+
+
+def test_compute_cuthbert_filter_raises_on_sparse_observation_matrix_direct_call():
+    """The sparse-H check must live at the actual cuthbert entry point
+    (_cuthbert_filter_kalman), not only in Filter: compute_cuthbert_filter is called
+    directly elsewhere (this test file, test_time_varying_linear_gaussian.py, and the
+    cuthbert smoother), bypassing Filter entirely. A direct call must raise the same
+    clear error rather than surfacing a confusing internal AssertionError."""
+    H_sparse = jax_sparse.BCOO.fromdense(jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.zeros((3, 2))
+
+    with pytest.raises(ValueError, match="not supported"):
+        compute_cuthbert_filter(
+            dynamics_sparse,
+            KFConfig(filter_source="cuthbert"),
+            key=jr.PRNGKey(0),
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+
+
+def test_kf_sparse_h_matches_dense_h_cd_dynamax():
+    """Unlike the cuthbert backend, KF's cd_dynamax backend handles a sparse H fine:
+    dynamax's own Kalman update only ever uses H in plain matmuls (H @ P @ H.T, etc.),
+    never mixed into a jnp.block/concatenate call, so there's no sparse-tracing collision.
+    marginal_loglik should match the dense H case exactly (deterministic filter, no CRN
+    needed)."""
+    H_dense = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    H_sparse = jax_sparse.BCOO.fromdense(H_dense)
+    dynamics_dense = _sparse_h_test_dynamics(H_dense)
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = jnp.asarray(ground_truth.observations)[0]
+
+    with Filter(filter_config=KFConfig(filter_source="cd_dynamax")):
+        result_dense = dsx.condition(
+            "f", dynamics_dense, obs_times=obs_times, obs_values=obs_values
+        )
+    with Filter(filter_config=KFConfig(filter_source="cd_dynamax")):
+        result_sparse = dsx.condition(
+            "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+        )
+    assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
+
+
+def test_ekf_warns_on_sparse_observation_matrix_but_still_works():
+    """EKF works correctly with a sparse H, but the warning should fire to flag that
+    there's likely no efficiency gain (EKF differentiates the log-density directly rather
+    than extracting H, so the underlying computation is dense-scaling regardless)."""
+    H_dense = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    H_sparse = jax_sparse.BCOO.fromdense(H_dense)
+    dynamics_dense = _sparse_h_test_dynamics(H_dense)
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = jnp.asarray(ground_truth.observations)[0]
+
+    with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+        result_dense = dsx.condition(
+            "f", dynamics_dense, obs_times=obs_times, obs_values=obs_values
+        )
+    with pytest.warns(UserWarning, match="no efficiency gain"):
+        with Filter(filter_config=EKFConfig(filter_source="cuthbert")):
+            result_sparse = dsx.condition(
+                "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+            )
+    assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
+
+
+def test_ekf_warns_on_sparse_observation_matrix_but_still_works_cd_dynamax():
+    """EKF's cd_dynamax backend also works correctly with a sparse H, and also warns of
+    likely no efficiency gain: cd_dynamax's EKF computes H as
+    jax.jacfwd(emission_function), which materializes a dense Jacobian at every step
+    regardless of H's sparsity (same root cause as the cuthbert EKF warning, different
+    mechanism)."""
+    H_dense = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    H_sparse = jax_sparse.BCOO.fromdense(H_dense)
+    dynamics_dense = _sparse_h_test_dynamics(H_dense)
+    dynamics_sparse = _sparse_h_test_dynamics(H_sparse)
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics_dense, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = jnp.asarray(ground_truth.observations)[0]
+
+    with Filter(filter_config=EKFConfig(filter_source="cd_dynamax")):
+        result_dense = dsx.condition(
+            "f", dynamics_dense, obs_times=obs_times, obs_values=obs_values
+        )
+    with pytest.warns(UserWarning, match="no efficiency gain"):
+        with Filter(filter_config=EKFConfig(filter_source="cd_dynamax")):
+            result_sparse = dsx.condition(
+                "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
+            )
+    assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
