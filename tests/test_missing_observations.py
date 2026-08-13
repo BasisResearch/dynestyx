@@ -10,7 +10,11 @@ import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Filter, Smoother
 from dynestyx.inference.checkers import _validate_missing_observation_support
 from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
-from dynestyx.inference.configs.smoother import EKFSmootherConfig, KFSmootherConfig
+from dynestyx.inference.configs.smoother import (
+    EKFSmootherConfig,
+    EnRTSSmootherConfig,
+    KFSmootherConfig,
+)
 
 _EQX_ERRORS = (
     ValueError,
@@ -120,13 +124,25 @@ def _partial_missing_observations(obs_values):
         ),
         pytest.param(
             "smoother",
+            EnRTSSmootherConfig(
+                n_particles=32,
+                record_smoothed_states_mean=True,
+                crn_seed=jr.PRNGKey(2),
+            ),
+            True,
+            "f_smoothed_states_mean",
+            None,
+            id="enrts-smoother",
+        ),
+        pytest.param(
+            "smoother",
             EKFSmootherConfig(
                 filter_source="cuthbert",
                 record_smoothed_states_mean=True,
             ),
             False,
             None,
-            "supported only for cuthbert KFSmootherConfig smoothers",
+            "supported only for cuthbert KFSmootherConfig and EnRTSSmootherConfig smoothers",
             id="ekf-smoother",
         ),
         pytest.param(

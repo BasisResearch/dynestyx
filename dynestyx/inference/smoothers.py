@@ -24,6 +24,7 @@ from dynestyx.inference.configs.smoother import (
     ContinuousTimeSmootherConfigs,
     DiscreteTimeSmootherConfigs,
     EKFSmootherConfig,
+    EnRTSSmootherConfig,
     KFSmootherConfig,
     PFSmootherConfig,
     UKFSmootherConfig,
@@ -68,7 +69,11 @@ from dynestyx.types import (
 from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
 
 DiscreteSmootherConfig = (
-    KFSmootherConfig | EKFSmootherConfig | UKFSmootherConfig | PFSmootherConfig
+    KFSmootherConfig
+    | EKFSmootherConfig
+    | EnRTSSmootherConfig
+    | UKFSmootherConfig
+    | PFSmootherConfig
 )
 ContinuousSmootherConfig = (
     ContinuousTimeKFSmootherConfig | ContinuousTimeEKFSmootherConfig
@@ -243,6 +248,12 @@ class Smoother(BaseSmootherLogFactorAdder):
                 f"Invalid smoother config: {type(config).__name__}. "
                 "Expected a smoother config class from dynestyx.inference.configs.smoother. "
                 f"Valid types: {valid}"
+            )
+        if isinstance(config, EnRTSSmootherConfig) and (
+            config.filter_source != "cuthbert"
+        ):
+            raise ValueError(
+                "EnRTSSmootherConfig is only supported with filter_source='cuthbert'."
             )
         obs_values = _validate_missing_observation_support(
             config,
@@ -586,7 +597,7 @@ def _smooth_discrete_time(
         raise ValueError(
             "UKF smoothing is not available in cuthbert. "
             "Use UKFSmootherConfig(filter_source='cd_dynamax') or a cuthbert-supported smoother "
-            "(KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig)."
+            "(KFSmootherConfig, EKFSmootherConfig, EnRTSSmootherConfig, PFSmootherConfig)."
         )
 
     if isinstance(smoother_config, PFSmootherConfig) and (
@@ -612,7 +623,7 @@ def _smooth_discrete_time(
             raise ValueError(
                 "UKF smoothing is not available in cuthbert. "
                 "Use UKFSmootherConfig(filter_source='cd_dynamax') or a cuthbert-supported smoother "
-                "(KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig)."
+                "(KFSmootherConfig, EKFSmootherConfig, EnRTSSmootherConfig, PFSmootherConfig)."
             )
         marginal_loglik, states, smoothed_dists = run_cuthbert_discrete_smoother(
             name,
@@ -671,6 +682,7 @@ __all__ = [
     "ContinuousTimeEKFSmootherConfig",
     "ContinuousTimeKFSmootherConfig",
     "EKFSmootherConfig",
+    "EnRTSSmootherConfig",
     "KFSmootherConfig",
     "PFSmootherConfig",
     "Smoother",

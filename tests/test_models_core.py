@@ -734,7 +734,7 @@ def test_linear_gaussian_observation_callable_fields_match_constant() -> None:
     resolved_D = params.D
     resolved_bias = params.bias
     assert resolved_D is not None and resolved_bias is not None
-    assert jnp.array_equal(params.H, H)
+    assert jnp.array_equal(jnp.asarray(params.H), H)
     assert jnp.array_equal(resolved_D, D)
     assert jnp.array_equal(resolved_bias, bias)
     assert jnp.array_equal(params.R, R)

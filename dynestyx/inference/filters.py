@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import warnings
 from abc import ABC, abstractmethod
 from typing import cast
 
@@ -327,8 +328,6 @@ class Filter(BaseLogFactorAdder):
         if config.crn_seed is not None:
             key = config.crn_seed
         else:
-            import warnings  # noqa: PLC0415
-
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 key = numpyro.prng_key()  # returns None outside seed handler
