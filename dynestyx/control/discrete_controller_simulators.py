@@ -232,6 +232,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             else _default_filter_config(dynamics)
         )
         if filter_config.filter_source != "cuthbert":
+            # TODO: lift this restriction once cd-dynamax filter sources support
+            # online one-step updates -- tracked in
+            # https://github.com/BasisResearch/dynestyx/pull/314.
             raise ValueError(
                 "DiscreteControlLoopSimulator requires filter_source='cuthbert' "
                 "because online one-step updates are not available for "
