@@ -243,15 +243,17 @@ def compute_cuthbert_filter_update(
 
     `u` is the control that drove the transition into the state being filtered:
     $u_k$ for the transition from $x_k$ to $x_{k+1}$ and observation
-    $y_{k+1}$. For a bootstrap update (`prev_state=None`), `t_prev` must still
-    precede `t`: some Cuthbert filters evaluate the nominal transition even
-    when the no-transition branch is selected, so a zero-width interval can
-    create a degenerate covariance and leak NaNs through differentiation.
+    $y_{k+1}$. For the initial observation update (`prev_state=None`), there is
+    no preceding state transition. Nevertheless, `t_prev` must precede `t`:
+    some Cuthbert filters evaluate the unused transition expression, so a
+    zero-width interval can create a degenerate covariance and leak NaNs through
+    differentiation.
 
     Args:
         dynamics: Discrete-time model used by the filter.
         filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
-        prev_state: Previous Cuthbert filter state, or `None` to bootstrap.
+        prev_state: Previous Cuthbert filter state, or `None` for the initial
+            observation update.
         key: PRNG key for filter preparation.
         y: Observation at `t`.
         u: Control applied between `t_prev` and `t`, or `None` for no control.

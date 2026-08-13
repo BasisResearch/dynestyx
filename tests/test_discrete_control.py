@@ -229,12 +229,12 @@ def test_compute_cuthbert_filter_update_matches_whole_trajectory(filter_config):
     assert jnp.allclose(means_batch, means_step, atol=1e-4)
 
 
-def test_compute_cuthbert_filter_update_bootstrap_ignores_u():
-    """The bootstrap call (prev_state=None) must skip the transition entirely
-    (is_first_step=True), regardless of what `u` is passed. This model's
-    transition is control-affine (B=1.0), so if the no-op gating broke and a
-    phantom transition used `u`, a huge `u` would visibly shift the mean --
-    making this a meaningful check, not just a no-op-by-construction one.
+def test_compute_cuthbert_initial_observation_update_ignores_u():
+    """The initial update must skip the nonexistent preceding transition.
+
+    Passing `prev_state=None` sets `is_first_step=True`, so `u` must have no
+    effect. This model's transition is control-affine (B=1.0); if a phantom
+    transition used `u`, a huge `u` would visibly shift the mean.
     """
     dynamics = _lti_1d()
     filter_obj, _ = build_cuthbert_filter(
@@ -301,8 +301,9 @@ def test_compute_cuthbert_filter_update_explicit_t_prev_avoids_degeneracy():
     `t_prev` collapses to dt=0 for the first real step, producing a
     zero-covariance distribution whose NaN log-density leaks through EKF's
     Taylor-linearization gradient (via jnp.where evaluating both branches).
-    An explicit, non-degenerate `t_prev` (as `DiscreteControlLoopSimulator`
-    always supplies for its bootstrap call) avoids this.
+    An explicit, non-degenerate dummy `t_prev` (as
+    `DiscreteControlLoopSimulator` always supplies for its initial observation
+    update) avoids this.
     """
     dynamics = _euler_maruyama_dynamics()
     filter_obj, _ = build_cuthbert_filter(
@@ -644,7 +645,7 @@ def test_observation_uses_previous_step_control_not_same_index():
     controls = tr["f_controls"]["value"][0, :, 0]
     observations = tr["f_observations"]["value"][0, :, 0]
 
-    # observations[0] has no control yet (bootstrap, u=None -> D contribution 0).
+    # No control precedes observations[0], so u=None and the D contribution is 0.
     assert jnp.allclose(observations[0], 0.0, atol=1e-2)
     # observations[k+1] should match controls[k] (u_k), not controls[k+1] (u_{k+1}).
     assert jnp.allclose(observations[1:], controls, atol=1e-2)
