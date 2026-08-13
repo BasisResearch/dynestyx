@@ -18,7 +18,10 @@ y_{k+1} \mid x_{k+1},u_k &\sim p(y_{k+1}\mid x_{k+1},u_k,t_{k+1}), \\
 
 The observation at `t[k + 1]` receives `u[k]`, the control that produced its
 state. This differs from the same-index convention used for a precomputed
-open-loop control trajectory.
+open-loop control trajectory. This is a temporary difference: [Issue
+#312](https://github.com/BasisResearch/dynestyx/issues/312) tracks aligning
+closed-loop control with the simulator convention and requiring controlled
+`DynamicalModel` observation models to follow that convention.
 
 Controlled simulation currently supports one trajectory at a time. Its online
 filter update is implemented with Cuthbert and supports `KFConfig`, `EKFConfig`,

@@ -109,6 +109,9 @@ class Simulator(BaseSimulator):
     regardless of `dynamics.state_evolution`. Otherwise the concrete backend is
     selected from `dynamics.state_evolution`:
 
+    `dsx.plate` is not currently supported when `control_policy` is given; see
+    [Issue #318](https://github.com/BasisResearch/dynestyx/issues/318).
+
     - `StochasticContinuousTimeStateEvolution` uses
       [SDESimulator][dynestyx.simulation.sde.SDESimulator].
     - `DeterministicContinuousTimeStateEvolution` uses

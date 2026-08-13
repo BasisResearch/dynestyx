@@ -131,9 +131,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     `dynamics.observation_model`.
 
     The online loop uses $u_k$ for both the transition into $x_{k+1}$ and the
-    observation $y_{k+1}$. The one-step filter update currently uses Cuthbert
-    and supports `KFConfig`, `EKFConfig`, `EnKFConfig`, and `PFConfig`.
-    Plated controlled simulation is not yet supported.
+    observation $y_{k+1}$. This control-observation alignment is temporary;
+    [Issue #312](https://github.com/BasisResearch/dynestyx/issues/312) tracks
+    aligning it with the regular simulator convention and requiring controlled
+    `DynamicalModel` observation models to follow that convention. The one-step
+    filter update currently uses Cuthbert and supports `KFConfig`, `EKFConfig`,
+    `EnKFConfig`, and `PFConfig`. Plated controlled simulation is not yet
+    supported; see
+    [Issue #318](https://github.com/BasisResearch/dynestyx/issues/318).
 
     Attributes:
         control_policy: Control policy $\pi$; see `PolicyCallable`. Its initial
