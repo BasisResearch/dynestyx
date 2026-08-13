@@ -2,7 +2,7 @@
 
 Deliberately simple: samples candidate control sequences as Gaussian
 perturbations around a nominal sequence, scores each with a user-supplied
-loss, and returns the softmax-weighted mean -- an MPPI-style control law.
+loss, and returns the softmax-weighted mean -- the standard MPPI-style control law.
 No colored noise, adaptive covariance, or other refinements; the goal is a
 plain example that plugs into `DiscreteControlLoopSimulator`'s
 `control_policy=` slot (see `dynestyx.control.discrete_controller_simulators.
@@ -39,7 +39,7 @@ class MPPI(eqx.Module):
     `horizon` steps through `dynamics.state_evolution` (built internally --
     the caller only ever supplies the *one-step* dynamics, never a
     hand-written rollout), score the resulting trajectories with `loss_fn`,
-    and combine them via the MPPI-style weighting
+    and combine them via the standard MPPI weighting
 
     $$w_i \\propto \\exp(-\\mathrm{loss}_i / \\lambda), \\qquad
       u_{0:H-1} = \\sum_i w_i\\, u^{(i)}_{0:H-1}$$
