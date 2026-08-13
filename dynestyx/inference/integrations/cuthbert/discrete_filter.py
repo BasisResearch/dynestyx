@@ -324,36 +324,13 @@ def compute_cuthbert_filter(
         is_first_step=jnp.arange(obs_len + 1) == 1,
     )
 
-    if isinstance(filter_config, PFConfig):
-        if key is None:
-            raise ValueError(
-                "Particle filter requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-            )
-        filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
-    elif isinstance(filter_config, EnKFConfig):
-        if key is None:
-            raise ValueError(
-                "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-            )
-        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
-    elif isinstance(filter_config, KFConfig):
-        filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
-    elif isinstance(filter_config, EKFConfig):
-        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
-    else:
-        raise ValueError(
-            f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
-        )
-
-    parallel = isinstance(filter_config, KFConfig) and filter_config.associative
-    if parallel and not filter_obj.associative:
-        raise ValueError(
-            "Associative filtering was requested, but the constructed cuthbert "
-            f"filter is not associative: {type(filter_config).__name__}."
-        )
+    filter_obj, parallel = build_cuthbert_filter(
+        dynamics,
+        filter_config,
+        key,
+        want_parallel=True,
+        extra_filter_kwargs={"store_predicted_ensemble": store_predicted_ensemble},
+    )
 
     init_inputs = jax.tree.map(lambda leaf: leaf[0], cuthbert_inputs)
     filter_inputs = jax.tree.map(lambda leaf: leaf[1:], cuthbert_inputs)
