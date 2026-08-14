@@ -1209,6 +1209,150 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Closed-loop Control
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Closed-loop Control
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/controller_demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/control_optimization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning in controlled dynamics: learning the control and system identification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/mpc_demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model predictive control (MPC)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3403,6 +3547,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../public/control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Closed-loop Control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../public/result_types/" class="md-nav__link">
         
   
@@ -3444,10 +3616,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_9" >
         
           
-          <label class="md-nav__link" for="__nav_4_2_8" id="__nav_4_2_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_2_9" id="__nav_4_2_9_label" tabindex="0">
             
   
   
@@ -3465,8 +3637,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_2_8">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2_9">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4532,7 +4704,7 @@ continuous-time models, pass an
 or
 <a class="autorefs autorefs-internal" href="../simulator_configs/#dynestyx.inference.configs.simulator.SDESimulatorConfig">SDESimulatorConfig</a>
 as <code>simulator_config</code> to control how the differential equation is solved.
-Use <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> instead when no NumPyro trace is
+Use <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> instead when no NumPyro trace is
 needed and an explicit <code>rng_key</code> is more convenient.</p>
 
 
@@ -4575,7 +4747,12 @@ handler and retain deterministic sites from <code>Predictive</code>:</p>
 <span class="gp">... </span>        <span class="p">)</span>
 </code></pre></div>
         <h3 id="dynestyx.simulation.auto.Simulator--what-this-does">What this does<a class="headerlink" href="#dynestyx.simulation.auto.Simulator--what-this-does" title="Permanent link">&para;</a></h3>
-<p>The concrete backend is selected from <code>dynamics.state_evolution</code>:</p>
+<p>If <code>control_policy</code> is given, the backend is always
+<a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" href="../../../public/control/#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator">DiscreteControlLoopSimulator</a>,
+regardless of <code>dynamics.state_evolution</code>. Otherwise the concrete backend is
+selected from <code>dynamics.state_evolution</code>:</p>
+<p><code>dsx.plate</code> is not currently supported when <code>control_policy</code> is given; see
+<a href="https://github.com/BasisResearch/dynestyx/issues/318">Issue #318</a>.</p>
 <ul>
 <li><code>StochasticContinuousTimeStateEvolution</code> uses
   <a class="autorefs autorefs-internal" href="../sde_simulator/#dynestyx.simulation.sde.SDESimulator">SDESimulator</a>.</li>
@@ -4651,8 +4828,8 @@ one requested prediction time are recorded. Inside <code>dsx.plate</code>, the s
 name also identifies the plate member, for example <code>"f_p0_1_x_0"</code>.</p>
 <p>If <code>predict_times</code> is omitted, the simulator performs no rollout and adds
 no simulator sites. Direct calls to
-<a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, **kwargs) -> SimulatedResult" href="#dynestyx.simulation.auto.Simulator.simulate">Simulator().simulate</a> and
-<a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> return a <code>SimulatedResult</code> and do not
+<a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, initial_policy_state: PyTree | None = None, **kwargs: Any) -> SimulatedResult" href="#dynestyx.simulation.auto.Simulator.simulate">Simulator().simulate</a> and
+<a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> return a <code>SimulatedResult</code> and do not
 add NumPyro sites.</p>
 
 
@@ -4665,7 +4842,7 @@ add NumPyro sites.</p>
   first dynamics object it handles. Use separate instances for models
   requiring different backend types.</li>
 <li><code>Simulator().simulate(...)</code> consumes an already allocated simulation
-  key. The public <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> function splits
+  key. The public <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> function splits
   its root key before dispatch.</li>
 </ul>
 </details>
@@ -4700,6 +4877,34 @@ must match the model selected at first use.</p>
               <div class="doc-md-description">
                 <p>Number of independent trajectories drawn per model
 execution. Defaults to one and must be greater than or equal to one.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.simulation.auto.Simulator.control_policy">control_policy</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional control policy (see
+<code>dynestyx.control.discrete_controller_simulators.PolicyCallable</code>).
+When given, routing ignores <code>dynamics.state_evolution</code>'s type
+entirely and always uses
+<a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" href="../../../public/control/#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator">DiscreteControlLoopSimulator</a>
+instead -- a policy is an orthogonal choice from the dynamics
+themselves, not something inferable from <code>dynamics</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.simulation.auto.Simulator.filter_config">filter_config</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Filter configuration forwarded to
+<code>DiscreteControlLoopSimulator</code> when <code>control_policy</code> is given;
+ignored otherwise.</p>
               </div>
             </td>
           </tr>
@@ -4742,7 +4947,7 @@ execution. Defaults to one and must be greater than or equal to one.</p>
 
 
 <h2 id="dynestyx.simulation.auto.Simulator.simulate" class="doc doc-heading">
-            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimulatedResult</span></code>
+            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">initial_policy_state</span><span class="p">:</span> <span class="n">PyTree</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimulatedResult</span></code>
 
 <a href="#dynestyx.simulation.auto.Simulator.simulate" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4750,10 +4955,13 @@ execution. Defaults to one and must be greater than or equal to one.</p>
     <div class="doc doc-contents ">
 
         <p>Auto-route to the appropriate pure-JAX simulator backend.</p>
-<p>Unlike <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a>, <code>rng_key</code> is consumed
+<p>Unlike <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a>, <code>rng_key</code> is consumed
 directly as an already-allocated simulation key and is not pre-split.
 Therefore, <code>dsx.simulate(..., rng_key=root_key)</code> is equivalent to
 <code>Simulator().simulate(..., rng_key=jax.random.split(root_key)[1])</code>.</p>
+<p><code>initial_policy_state</code> is forwarded to the controlled simulator when
+<code>control_policy</code> was supplied to this <code>Simulator</code>; it is ignored for
+ordinary open-loop simulation.</p>
 
 
     </div>

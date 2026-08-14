@@ -12,31 +12,31 @@
         <meta name="author" content="Basis Research Institute">
       
       
-        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/developer/models/checkers/">
+        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/control/">
       
       
-        <link rel="prev" href="../specialized_models/">
+        <link rel="prev" href="../simulators/simulator_configs/">
       
       
-        <link rel="next" href="../../inference/filters/">
+        <link rel="next" href="../result_types/">
       
       
         
       
       
-      <link rel="icon" href="../../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Checkers - dynestyx documentation</title>
+        <title>Closed-loop Control - dynestyx documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#model-checkers" class="md-skip">
+        <a href="#closed-loop-control" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +98,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Checkers
+              Closed-loop Control
             
           </span>
         </div>
@@ -208,7 +208,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../.." class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -229,7 +229,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../tutorials/quickstart/" class="md-tabs__link">
+        <a href="../../../tutorials/quickstart/" class="md-tabs__link">
           
   
   
@@ -249,7 +249,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../tutorials/" class="md-tabs__link">
+        <a href="../../../tutorials/" class="md-tabs__link">
           
   
   
@@ -271,7 +271,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../../" class="md-tabs__link">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -289,7 +289,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../../faq/" class="md-tabs__link">
+      <a href="../../../faq/" class="md-tabs__link">
         
   
   
@@ -326,7 +326,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -356,7 +356,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -435,7 +435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/quickstart/" class="md-nav__link">
+      <a href="../../../tutorials/quickstart/" class="md-nav__link">
         
   
   
@@ -463,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../math_intro/" class="md-nav__link">
+      <a href="../../../math_intro/" class="md-nav__link">
         
   
   
@@ -543,7 +543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
         
   
   
@@ -571,7 +571,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
         
   
   
@@ -599,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
         
   
   
@@ -627,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
         
   
   
@@ -655,7 +655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/03_filtering_mll_no_numpyro/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/03_filtering_mll_no_numpyro/" class="md-nav__link">
         
   
   
@@ -683,7 +683,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
         
   
   
@@ -711,7 +711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
         
   
   
@@ -739,7 +739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/05_svi_no_numpyro/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/05_svi_no_numpyro/" class="md-nav__link">
         
   
   
@@ -767,7 +767,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
         
   
   
@@ -795,7 +795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
         
   
   
@@ -823,7 +823,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
         
   
   
@@ -851,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
         
   
   
@@ -879,7 +879,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
         
   
   
@@ -907,7 +907,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
         
   
   
@@ -935,7 +935,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
         
   
   
@@ -963,7 +963,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc/" class="md-nav__link">
         
   
   
@@ -991,7 +991,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/gentle_intro/11c_missing_observations_hmms/" class="md-nav__link">
+      <a href="../../../tutorials/gentle_intro/11c_missing_observations_hmms/" class="md-nav__link">
         
   
   
@@ -1086,7 +1086,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/" class="md-nav__link">
+      <a href="../../../tutorials/" class="md-nav__link">
         
   
   
@@ -1166,7 +1166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../quick_example/" class="md-nav__link">
+      <a href="../../../quick_example/" class="md-nav__link">
         
   
   
@@ -1194,7 +1194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
+      <a href="../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
         
   
   
@@ -1274,7 +1274,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/control/controller_demo/" class="md-nav__link">
+      <a href="../../../tutorials/control/controller_demo/" class="md-nav__link">
         
   
   
@@ -1302,7 +1302,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/control/control_optimization/" class="md-nav__link">
+      <a href="../../../tutorials/control/control_optimization/" class="md-nav__link">
         
   
   
@@ -1330,7 +1330,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/control/mpc_demo/" class="md-nav__link">
+      <a href="../../../tutorials/control/mpc_demo/" class="md-nav__link">
         
   
   
@@ -1478,7 +1478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/state_space_models/kf_tracking/" class="md-nav__link">
+      <a href="../../../tutorials/state_space_models/kf_tracking/" class="md-nav__link">
         
   
   
@@ -1506,7 +1506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/state_space_models/kf_linreg/" class="md-nav__link">
+      <a href="../../../tutorials/state_space_models/kf_linreg/" class="md-nav__link">
         
   
   
@@ -1534,7 +1534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/state_space_models/lgssm_learning/" class="md-nav__link">
+      <a href="../../../tutorials/state_space_models/lgssm_learning/" class="md-nav__link">
         
   
   
@@ -1622,7 +1622,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/state_space_models/ekf_spiral/" class="md-nav__link">
+      <a href="../../../tutorials/state_space_models/ekf_spiral/" class="md-nav__link">
         
   
   
@@ -1650,7 +1650,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../tutorials/state_space_models/ekf_mlp/" class="md-nav__link">
+      <a href="../../../tutorials/state_space_models/ekf_mlp/" class="md-nav__link">
         
   
   
@@ -1746,7 +1746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
+      <a href="../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
         
   
   
@@ -1774,7 +1774,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
+      <a href="../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
         
   
   
@@ -1802,7 +1802,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
+      <a href="../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
         
   
   
@@ -1830,7 +1830,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
+      <a href="../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
   
@@ -1858,7 +1858,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/lv_uode/" class="md-nav__link">
+      <a href="../../../deep_dives/lv_uode/" class="md-nav__link">
         
   
   
@@ -1886,7 +1886,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -1914,7 +1914,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -1942,7 +1942,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/gp_drift/" class="md-nav__link">
+      <a href="../../../deep_dives/gp_drift/" class="md-nav__link">
         
   
   
@@ -2022,7 +2022,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/pde/heat_equation_inference/" class="md-nav__link">
+      <a href="../../../deep_dives/pde/heat_equation_inference/" class="md-nav__link">
         
   
   
@@ -2050,7 +2050,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deep_dives/pde/reaction_diffusion_inference/" class="md-nav__link">
+      <a href="../../../deep_dives/pde/reaction_diffusion_inference/" class="md-nav__link">
         
   
   
@@ -2158,7 +2158,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -2183,6 +2183,8 @@
                 
   
   
+    
+  
   
   
     
@@ -2198,11 +2200,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" checked>
         
           
           <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="">
@@ -2223,7 +2225,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2241,7 +2243,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -2373,7 +2375,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/dynamical_model/" class="md-nav__link">
+      <a href="../models/core/dynamical_model/" class="md-nav__link">
         
   
   
@@ -2401,7 +2403,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/continuous_time_state_evolution/" class="md-nav__link">
+      <a href="../models/core/continuous_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -2429,7 +2431,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
+      <a href="../models/core/diffusion/" class="md-nav__link">
         
   
   
@@ -2457,7 +2459,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
+      <a href="../models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -2485,7 +2487,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/observation_model/" class="md-nav__link">
+      <a href="../models/core/observation_model/" class="md-nav__link">
         
   
   
@@ -2513,7 +2515,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/drift/" class="md-nav__link">
+      <a href="../models/core/drift/" class="md-nav__link">
         
   
   
@@ -2541,7 +2543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/potential/" class="md-nav__link">
+      <a href="../models/core/potential/" class="md-nav__link">
         
   
   
@@ -2629,7 +2631,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/linear_gaussian_observation/" class="md-nav__link">
+      <a href="../models/specialized/linear_gaussian_observation/" class="md-nav__link">
         
   
   
@@ -2657,7 +2659,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/gaussian_observation/" class="md-nav__link">
+      <a href="../models/specialized/gaussian_observation/" class="md-nav__link">
         
   
   
@@ -2685,7 +2687,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/linear_gaussian_state_evolution/" class="md-nav__link">
+      <a href="../models/specialized/linear_gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2713,7 +2715,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/gaussian_state_evolution/" class="md-nav__link">
+      <a href="../models/specialized/gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2741,7 +2743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/affine_drift/" class="md-nav__link">
+      <a href="../models/specialized/affine_drift/" class="md-nav__link">
         
   
   
@@ -2769,7 +2771,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/lti_continuous/" class="md-nav__link">
+      <a href="../models/specialized/lti_continuous/" class="md-nav__link">
         
   
   
@@ -2797,7 +2799,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/specialized/lti_discrete/" class="md-nav__link">
+      <a href="../models/specialized/lti_discrete/" class="md-nav__link">
         
   
   
@@ -2893,7 +2895,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/filters/" class="md-nav__link">
+      <a href="../inference/filters/" class="md-nav__link">
         
   
   
@@ -2921,7 +2923,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/configs/filter_configs/" class="md-nav__link">
+      <a href="../inference/configs/filter_configs/" class="md-nav__link">
         
   
   
@@ -2949,7 +2951,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/latent_path_builder/" class="md-nav__link">
+      <a href="../inference/latent_path_builder/" class="md-nav__link">
         
   
   
@@ -2977,7 +2979,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/smoothers/" class="md-nav__link">
+      <a href="../inference/smoothers/" class="md-nav__link">
         
   
   
@@ -3005,7 +3007,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/configs/smoother_configs/" class="md-nav__link">
+      <a href="../inference/configs/smoother_configs/" class="md-nav__link">
         
   
   
@@ -3033,7 +3035,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/mcmc/" class="md-nav__link">
+      <a href="../inference/mcmc/" class="md-nav__link">
         
   
   
@@ -3061,7 +3063,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/inference/configs/mcmc_configs/" class="md-nav__link">
+      <a href="../inference/configs/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -3149,7 +3151,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/discretizers/discretizer/" class="md-nav__link">
+      <a href="../discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -3237,7 +3239,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/handlers/" class="md-nav__link">
+      <a href="../handlers/" class="md-nav__link">
         
   
   
@@ -3377,7 +3379,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/simulators/overview/" class="md-nav__link">
+      <a href="../simulators/overview/" class="md-nav__link">
         
   
   
@@ -3405,7 +3407,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/simulators/simulator_wrapper/" class="md-nav__link">
+      <a href="../simulators/simulator_wrapper/" class="md-nav__link">
         
   
   
@@ -3433,7 +3435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/simulators/discrete_time_simulator/" class="md-nav__link">
+      <a href="../simulators/discrete_time_simulator/" class="md-nav__link">
         
   
   
@@ -3461,7 +3463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/simulators/ode_simulator/" class="md-nav__link">
+      <a href="../simulators/ode_simulator/" class="md-nav__link">
         
   
   
@@ -3489,7 +3491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/simulators/sde_simulator/" class="md-nav__link">
+      <a href="../simulators/sde_simulator/" class="md-nav__link">
         
   
   
@@ -3517,7 +3519,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/simulators/simulator_configs/" class="md-nav__link">
+      <a href="../simulators/simulator_configs/" class="md-nav__link">
         
   
   
@@ -3558,10 +3560,19 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../public/control/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -3577,6 +3588,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -3589,7 +3601,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/result_types/" class="md-nav__link">
+      <a href="../result_types/" class="md-nav__link">
         
   
   
@@ -3669,7 +3681,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../diagnostics/plotting_utils/" class="md-nav__link">
         
   
   
@@ -3710,8 +3722,6 @@
                 
   
   
-    
-  
   
   
     
@@ -3727,11 +3737,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
         
           
           <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="">
@@ -3752,7 +3762,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3770,7 +3780,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../../developer/" class="md-nav__link">
         
   
   
@@ -3795,8 +3805,6 @@
                 
   
   
-    
-  
   
   
     
@@ -3809,11 +3817,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_2" >
         
           
           <label class="md-nav__link" for="__nav_4_3_2" id="__nav_4_3_2_label" tabindex="0">
@@ -3834,7 +3842,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_3_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3852,7 +3860,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core_models/" class="md-nav__link">
+      <a href="../../developer/models/core_models/" class="md-nav__link">
         
   
   
@@ -3880,7 +3888,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../diffusions/" class="md-nav__link">
+      <a href="../../developer/models/diffusions/" class="md-nav__link">
         
   
   
@@ -3908,7 +3916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../specialized_models/" class="md-nav__link">
+      <a href="../../developer/models/specialized_models/" class="md-nav__link">
         
   
   
@@ -3933,37 +3941,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Checkers
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../developer/models/checkers/" class="md-nav__link">
         
   
   
@@ -3979,169 +3960,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        checkers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._infer_observation_dim_in_plate_context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _infer_observation_dim_in_plate_context
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._infer_vector_dim_from_distribution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _infer_vector_dim_from_distribution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._inside_numpyro_plate_context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _inside_numpyro_plate_context
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._is_categorical_distribution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _is_categorical_distribution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._make_probe_state" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _make_probe_state
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._unwrap_base_distribution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _unwrap_base_distribution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_categorical_state" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_categorical_state
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_continuous_state_evolution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_continuous_state_evolution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_continuous_time_flag" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_continuous_time_flag
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_discrete_state_evolution_output_shape" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_discrete_state_evolution_output_shape
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_observation_dim" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_observation_dim
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.checkers._validate_state_dim" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        _validate_state_dim
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -4214,7 +4032,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/filters/" class="md-nav__link">
+      <a href="../../developer/inference/filters/" class="md-nav__link">
         
   
   
@@ -4242,7 +4060,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/checkers/" class="md-nav__link">
+      <a href="../../developer/inference/checkers/" class="md-nav__link">
         
   
   
@@ -4270,7 +4088,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/configs/filter_configs/" class="md-nav__link">
+      <a href="../../developer/inference/configs/filter_configs/" class="md-nav__link">
         
   
   
@@ -4298,7 +4116,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/latent_path_builder/" class="md-nav__link">
+      <a href="../../developer/inference/latent_path_builder/" class="md-nav__link">
         
   
   
@@ -4326,7 +4144,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/smoothers/" class="md-nav__link">
+      <a href="../../developer/inference/smoothers/" class="md-nav__link">
         
   
   
@@ -4354,7 +4172,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/configs/smoother_configs/" class="md-nav__link">
+      <a href="../../developer/inference/configs/smoother_configs/" class="md-nav__link">
         
   
   
@@ -4382,7 +4200,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/mcmc/" class="md-nav__link">
+      <a href="../../developer/inference/mcmc/" class="md-nav__link">
         
   
   
@@ -4410,7 +4228,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/configs/mcmc_configs/" class="md-nav__link">
+      <a href="../../developer/inference/configs/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -4438,7 +4256,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/blackjax_integration/" class="md-nav__link">
+      <a href="../../developer/inference/blackjax_integration/" class="md-nav__link">
         
   
   
@@ -4526,7 +4344,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../discretizers/discretizer/" class="md-nav__link">
+      <a href="../../developer/discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -4614,7 +4432,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../simulators/" class="md-nav__link">
+      <a href="../../developer/simulators/" class="md-nav__link">
         
   
   
@@ -4650,7 +4468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../handlers/" class="md-nav__link">
+      <a href="../../developer/handlers/" class="md-nav__link">
         
   
   
@@ -4678,7 +4496,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../utils/" class="md-nav__link">
+      <a href="../../developer/utils/" class="md-nav__link">
         
   
   
@@ -4706,7 +4524,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../result_types/" class="md-nav__link">
+      <a href="../../developer/result_types/" class="md-nav__link">
         
   
   
@@ -4786,7 +4604,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../developer/diagnostics/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4837,7 +4655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../faq/" class="md-nav__link">
+      <a href="../../../faq/" class="md-nav__link">
         
   
   
@@ -4877,18 +4695,124 @@
   
 
 
-<h1 id="model-checkers">Model checkers<a class="headerlink" href="#model-checkers" title="Permanent link">&para;</a></h1>
-<p>Validation and shape-inference helpers for <a href="../../../public/models/core/dynamical_model/"><code>DynamicalModel</code></a> construction and checks.</p>
+<h1 id="closed-loop-control">Closed-loop control<a class="headerlink" href="#closed-loop-control" title="Permanent link">&para;</a></h1>
+<p>Dynestyx can interleave simulation, observation, filtering, and control for a
+single discrete-time trajectory. At each step it performs</p>
+<div class="arithmatex">\[
+\begin{aligned}
+x_0 &amp;\sim p(x_0), \\
+y_0 \mid x_0 &amp;\sim p(y_0 \mid x_0, t_0), \\
+\hat{x}_{0\mid0} &amp;= \operatorname{FilterUpdate}(y_0, t_0), \\
+(u_k, s_{k+1}) &amp;= \pi(\hat{x}_{k\mid k}, t_k, t_{k+1}, s_k), \\
+x_{k+1} \mid x_k,u_k &amp;\sim p(x_{k+1}\mid x_k,u_k,t_k,t_{k+1}), \\
+y_{k+1} \mid x_{k+1},u_k &amp;\sim p(y_{k+1}\mid x_{k+1},u_k,t_{k+1}), \\
+\hat{x}_{k+1\mid k+1} &amp;= \operatorname{FilterUpdate}
+  (\hat{x}_{k\mid k},u_k,y_{k+1},t_k,t_{k+1}).
+\end{aligned}
+\]</div>
+<p>The observation at <code>t[k + 1]</code> receives <code>u[k]</code>, the control that produced its
+state. This differs from the same-index convention used for a precomputed
+open-loop control trajectory. This is a temporary difference: [Issue</p>
+<h1 id="312httpsgithubcombasisresearchdynestyxissues312-tracks-aligning">312](https://github.com/BasisResearch/dynestyx/issues/312) tracks aligning<a class="headerlink" href="#312httpsgithubcombasisresearchdynestyxissues312-tracks-aligning" title="Permanent link">&para;</a></h1>
+<p>closed-loop control with the simulator convention and requiring controlled
+<code>DynamicalModel</code> observation models to follow that convention.</p>
+<p>Controlled simulation currently supports one trajectory at a time. Its online
+filter update is implemented with Cuthbert and supports <code>KFConfig</code>, <code>EKFConfig</code>,
+<code>EnKFConfig</code>, and <code>PFConfig</code>. <code>dsx.plate</code> and <code>n_simulations &gt; 1</code> are rejected
+explicitly. Controlled simulation requires <code>filter_source="cuthbert"</code> and
+rejects configurations that request another backend.</p>
+<h2 id="simulator-and-policy-protocol">Simulator and policy protocol<a class="headerlink" href="#simulator-and-policy-protocol" title="Permanent link">&para;</a></h2>
 
 
-<div class="doc doc-object doc-module">
+<div class="doc doc-object doc-class">
 
 
 
-<a id="dynestyx.models.checkers"></a>
+<h2 id="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" class="doc doc-heading">
+            <code>dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator</code>
+
+
+<a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="dynestyx.simulation.base.BaseSimulator">BaseSimulator</span></code></p>
 
-        <p>Validation and shape-inference helpers for dynamical models.</p>
+
+
+        <p>Closed-loop simulator: simulate, observe, filter, and decide controls online.</p>
+<p>Unlike <code>DiscreteTimeSimulator</code>, which requires the entire control
+trajectory as a pre-supplied <code>ctrl_values</code> array, <code>DiscreteControlLoopSimulator</code>
+computes each <span class="arithmatex">\(u_k\)</span> online from the filtered belief <span class="arithmatex">\(\hat x_{k|k}\)</span> via
+<code>control_policy</code>. See the closed-loop control API page for the full loop
+equations and the control-index convention used by
+<code>dynamics.observation_model</code>.</p>
+<p>The online loop uses <span class="arithmatex">\(u_k\)</span> for both the transition into <span class="arithmatex">\(x_{k+1}\)</span> and the
+observation <span class="arithmatex">\(y_{k+1}\)</span>. This control-observation alignment is temporary;
+<a href="https://github.com/BasisResearch/dynestyx/issues/312">Issue #312</a> tracks
+aligning it with the regular simulator convention and requiring controlled
+<code>DynamicalModel</code> observation models to follow that convention. The one-step
+filter update currently uses Cuthbert and supports <code>KFConfig</code>, <code>EKFConfig</code>,
+<code>EnKFConfig</code>, and <code>PFConfig</code>. Plated controlled simulation is not yet
+supported; see
+<a href="https://github.com/BasisResearch/dynestyx/issues/318">Issue #318</a>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.control_policy">control_policy</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Control policy <span class="arithmatex">\(\pi\)</span>; see <code>PolicyCallable</code>. Its initial
+state <span class="arithmatex">\(s_0\)</span> is exactly <code>simulate</code>'s <code>initial_policy_state</code> argument
+(default <code>None</code>, for a stateless policy) -- <code>control_policy</code> is
+never introspected for an <code>initial_state()</code> method; a stateful
+policy's initial state must always be passed explicitly.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.filter_config">filter_config</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Selects the filtering algorithm
+(<code>KFConfig</code>/<code>EKFConfig</code>/<code>EnKFConfig</code>/<code>PFConfig</code>). Defaults to
+<code>_default_filter_config(dynamics)</code> when <code>None</code>. The online one-step
+update currently requires <code>filter_source="cuthbert"</code>. Its
+<code>record_filtered_states_mean</code>/<code>record_max_elems</code> fields gate
+whether the <code>filtered_states_mean</code> output is recorded, exactly
+as they do for <code>Filter</code> (see <code>dynestyx.utils._should_record_field</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.n_simulations">n_simulations</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Currently only <code>1</code> is supported.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
 
 
 
@@ -4913,15 +4837,362 @@
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.checkers._infer_observation_dim_in_plate_context" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_infer_observation_dim_in_plate_context</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]],</span> <span class="n">Any</span><span class="p">],</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
+<h3 id="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="doc doc-heading">
+            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">initial_policy_state</span><span class="p">:</span> <span class="n">PyTree</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControlledSimulatedResult</span></code>
 
-<a href="#dynestyx.models.checkers._infer_observation_dim_in_plate_context" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Infer observation dimension in plate context, falling back to explicit value.</p>
+        <p>Simulate one online controlled trajectory.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dynamics</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Discrete-time dynamical model.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rng_key</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.PRNGKeyArray">PRNGKeyArray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Root key for environment and fallback filter randomness.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ctrl_times</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; ctrl_time&#39;] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unsupported because controls are selected online.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ctrl_values</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; ctrl_time&#39;] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unsupported because controls are selected online.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>predict_times</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; predict_time&#39;] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Strictly increasing simulation times.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>initial_policy_state</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.PyTree">PyTree</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Initial state passed to <code>control_policy</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>**kwargs</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Additional shared simulator-handler metadata, ignored here.</p>
+              </div>
+            </td>
+            <td>
+                  <code>{}</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult
+
+
+  
+      dataclass
+  " href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult">ControlledSimulatedResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>States, observations, controls, filter means, and policy states.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If inputs are incompatible with online discrete control.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="NotImplementedError">NotImplementedError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the requested simulation mode is unsupported.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.control.discrete_controller_simulators.PolicyCallable" class="doc doc-heading">
+            <code>dynestyx.control.discrete_controller_simulators.PolicyCallable</code>
+
+
+<a href="#dynestyx.control.discrete_controller_simulators.PolicyCallable" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+
+
+
+        <p>Structural protocol for a control policy <span class="arithmatex">\(\pi\)</span>.</p>
+<div class="arithmatex">\[u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)\]</div>
+<p><code>x_hat</code> is a NumPyro <code>Distribution</code> -- <code>MultivariateNormal</code> for
+<code>KFConfig</code>/<code>EKFConfig</code>/<code>EnKFConfig</code>, <code>WeightedParticles</code> for <code>PFConfig</code>
+(see <code>filter_state_dist</code>); use <code>x_hat.mean</code> for a
+family-agnostic point estimate, or the distribution itself for
+uncertainty-aware planning. <code>t_now</code>/<code>t_next</code> are the current and next
+times -- always passed, even to a policy that ignores them, so that a
+policy needing genuine time-dependence (e.g. <code>dynestyx.control.mppi.MPPI</code>,
+which plans forward from <code>t_now</code>) doesn't need special-casing. Any plain
+callable matching this signature works, including an <code>equinox.Module</code>
+with a matching <code>__call__</code> (e.g. a learned neural policy) or a plain
+Python function (e.g. an LQR gain lookup).</p>
+<p><code>control_policy</code> never receives a PRNG key and must return a concrete
+value, not a NumPyro <code>Distribution</code> (returning one raises a <code>ValueError</code>
+-- not yet supported). A stochastic policy instead carries any
+randomness it needs (e.g. MPPI's exploration noise) inside <code>s</code>,
+splitting/advancing it internally on every call and sampling from its
+own distributions itself before returning a value. The policy owns and
+seeds this randomness entirely by itself -- see
+<code>dynestyx.control.mppi.MPPI</code>'s <code>seed</code> attribute for the pattern.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" class="doc doc-heading">
+            <code>dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.types.SimulatedResult" href="../../developer/result_types/#dynestyx.types.SimulatedResult">SimulatedResult</a></code></p>
+
+
+
+        <p><code>SimulatedResult</code> extended with the control loop's extra outputs.</p>
+<p>Registered as deterministic sites the same generic way as
+<code>SimulatedResult</code>'s own fields (<code>dynestyx.simulation.utils.
+_register_simulated_result_sites</code> iterates every dataclass field and
+skips <code>None</code> values) -- so the existing recording-gating logic just
+means passing <code>None</code> for a field instead of conditionally omitting a
+dict key, as the old (pre-refactor) version of this class did.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="policy-helpers">Policy helpers<a class="headerlink" href="#policy-helpers" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.control.discrete_controller_simulators.filter_state_mean" class="doc doc-heading">
+            <code class=" language-python"><span class="n">dynestyx</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">discrete_controller_simulators</span><span class="o">.</span><span class="n">filter_state_mean</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span></code>
+
+<a href="#dynestyx.control.discrete_controller_simulators.filter_state_mean" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+        <p>Point-estimate summary of a cuthbert filter state, any family.</p>
+<p>Kalman-family states (<code>KFConfig</code>, <code>EKFConfig</code>, <code>EnKFConfig</code>) expose a
+<code>.mean</code> property directly. <code>PFConfig</code> states (<code>ParticleFilterState</code>) have
+no such property -- they represent the belief as a weighted particle
+cloud (<code>.particles</code>, <code>.log_weights</code>), so the point estimate is the
+weighted mean instead. Broadcasts over any leading batch/time axis, so it
+works on both a single belief and a whole scanned-out sequence of them.</p>
 
 
     </div>
@@ -4931,20 +5202,237 @@
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.checkers._infer_vector_dim_from_distribution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_infer_vector_dim_from_distribution</span><span class="p">(</span><span class="n">distribution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">allow_batch_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span></code>
+<h2 id="dynestyx.control.discrete_controller_simulators.filter_state_dist" class="doc doc-heading">
+            <code class=" language-python"><span class="n">dynestyx</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">discrete_controller_simulators</span><span class="o">.</span><span class="n">filter_state_dist</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span></code>
 
-<a href="#dynestyx.models.checkers._infer_vector_dim_from_distribution" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.control.discrete_controller_simulators.filter_state_dist" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+        <p>Full-belief NumPyro distribution for a cuthbert filter state, any family.</p>
+<p>Kalman-family states (<code>KFConfig</code>, <code>EKFConfig</code>, <code>EnKFConfig</code>) expose
+<code>.mean</code>/<code>.chol_cov</code>, giving an exact <code>MultivariateNormal</code>. <code>PFConfig</code>
+states have no such property -- their belief is a weighted particle
+cloud (<code>.particles</code>, <code>.log_weights</code>), represented via <code>WeightedParticles</code>
+(dynestyx's own <code>Distribution</code>; NumPyro has no built-in equivalent).
+Unlike <code>filter_state_mean</code>, this does not broadcast over a leading
+time/batch axis -- call it once per (unbatched) state.</p>
+
+
+    </div>
+
+</div><h2 id="mppi-inspired-policy">MPPI-inspired policy<a class="headerlink" href="#mppi-inspired-policy" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.control.mppi.MPPI" class="doc doc-heading">
+            <code>dynestyx.control.mppi.MPPI</code>
+
+
+<a href="#dynestyx.control.mppi.MPPI" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="equinox.Module">Module</span></code></p>
+
+
+
+        <p>Model Predictive Path Integral (MPPI) controller.</p>
+<p>At each call: sample <code>n_samples</code> candidate control sequences of length
+<code>horizon</code> as Gaussian perturbations around a nominal sequence (the policy
+state <code>s</code>, warm-started from the previous call), roll each one forward
+<code>horizon</code> steps through <code>dynamics.state_evolution</code> (built internally --
+the caller only ever supplies the <em>one-step</em> dynamics, never a
+hand-written rollout), score the resulting trajectories with <code>loss_fn</code>,
+and combine them via the standard MPPI weighting</p>
+<div class="arithmatex">\[w_i \\propto \\exp(-\\mathrm{loss}_i / \\lambda), \\qquad
+  u_{0:H-1} = \\sum_i w_i\\, u^{(i)}_{0:H-1}\]</div>
+<p>i.e. a softmax over the (negated, temperature-scaled) per-sample losses.
+Only the first control of that weighted-mean sequence is applied this
+step (receding horizon); the remainder becomes next step's nominal
+sequence, shifted left by one with the last entry repeated.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.dynamics">dynamics</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>a <code>DynamicalModel</code> (the same model used for the real simulation
+or some approximate). Each candidate rollout is computed by calling <code>dsx.simulate</code>.
+If <code>dynamics</code> holds trainable parameters you're also
+fitting via the outer simulation, they remain in the differentiable
+pytree so gradients through planning are tracked too.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.loss_fn">loss_fn</span></code></td>
+            <td>
+                  <code><span title="dynestyx.control.mppi.MPPILossFn">MPPILossFn</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>MPPILossFn</code>, i.e. <code>(result: ControlledSimulatedResult) -&gt; scalar</code>,
+called once per sample (vmapped) on that candidate's full rollout. Every
+field carries a leading <code>n_simulations=1</code> axis -- e.g.
+<code>result.states.shape == (1, horizon + 1, state_dim)</code> -- matching how
+<code>dsx.simulate</code> never drops that axis, even for one trajectory;
+<code>jnp.sum(result.states**2)</code>-style reductions don't need to care, but
+explicit indexing does (<code>result.controls[0, 0]</code> is the whole first control
+vector, not a scalar). <code>times</code>/<code>states</code>/<code>observations</code> have length
+<code>horizon + 1</code> (including the starting state) and <code>controls</code> has length
+<code>horizon</code>, matching <code>ControlledSimulatedResult</code>'s own
+<code>control_time = time - 1</code> convention.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.horizon">horizon</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Planning horizon length <code>H</code> -- the number of internal
+one-step <code>dynamics</code> calls per rollout. Defaults to <code>10</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.noise_std">noise_std</span></code></td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; control_dim&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Standard deviation of the Gaussian perturbations added to
+the nominal sequence, scalar or shape <code>(control_dim,)</code>. Defaults
+to <code>1.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.n_samples">n_samples</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of sampled control sequences per call. Defaults to
+<code>20</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.dt">dt</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fixed planning step size. Defaults to <code>1.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.temperature">temperature</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>MPPI's <span class="arithmatex">\(\\lambda\)</span>; higher values flatten the weights
+toward a uniform average, lower values concentrate weight on the
+lowest-loss samples.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.batched">batched</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the <code>n_samples</code> candidate rollouts are computed with
+<code>jax.vmap</code> (default, fast, requires <code>dynamics.state_evolution</code> to
+be vmap-compatible) or <code>jax.lax.map</code> (a sequential loop -- slower,
+but works for a <code>dynamics.state_evolution</code> that isn't
+vmap-compatible, e.g. wraps an external simulator via
+<code>jax.pure_callback</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.mppi.MPPI.seed">seed</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Seeds MPPI's own PRNG key, carried inside the policy state <code>s</code>
+(as <code>(nominal_sequence, key)</code>) and split internally on every
+call.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.control.mppi.MPPI.initial_state" class="doc doc-heading">
+            <code class=" language-python"><span class="n">initial_state</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;horizon control_dim&#39;</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">]</span></code>
+
+<a href="#dynestyx.control.mppi.MPPI.initial_state" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Infer scalar/vector event dimension from a NumPyro-compatible distribution.</p>
-<p>When <code>allow_batch_shape</code> is true, leading batch dimensions are ignored and
-only the distribution event shape is used. This is needed inside
-<code>dsx.plate</code> where a vector-valued state distribution can have shape
-<code>(plate_size, state_dim)</code> but still represents a <code>state_dim</code> event.</p>
-<p>Note: Name is used only for error messages.</p>
+        <p>Zero nominal control sequence plus MPPI's own seeded PRNG key.
+Pass this call's result as <code>initial_policy_state</code> to <code>simulate</code>/
+<code>dsx.simulate</code> -- <code>DiscreteControlLoopSimulator</code> never calls this
+automatically, so it must be supplied explicitly.</p>
 
 
     </div>
@@ -4954,182 +5442,25 @@ only the distribution event shape is used. This is needed inside
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.checkers._inside_numpyro_plate_context" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_inside_numpyro_plate_context</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+<h3 id="dynestyx.control.mppi.MPPI.plan_step" class="doc doc-heading">
+            <code class=" language-python"><span class="n">plan_step</span><span class="p">(</span><span class="n">x_hat</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">t_now</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">s</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;horizon control_dim&#39;</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;horizon control_dim&#39;</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">],</span> <span class="n">ControlledSimulatedResult</span><span class="p">]</span></code>
 
-<a href="#dynestyx.models.checkers._inside_numpyro_plate_context" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Return True when currently executing inside any active numpyro.plate frame.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._is_categorical_distribution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_is_categorical_distribution</span><span class="p">(</span><span class="n">distribution</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
-
-<a href="#dynestyx.models.checkers._is_categorical_distribution" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.control.mppi.MPPI.plan_step" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Return True for class-label categorical distributions.</p>
-<p>This intentionally excludes one-hot categorical variants because the model
-logic here assumes scalar integer latent states.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._make_probe_state" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_make_probe_state</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]</span></code>
-
-<a href="#dynestyx.models.checkers._make_probe_state" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Build a synthetic state value used for shape-check probes.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._unwrap_base_distribution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_unwrap_base_distribution</span><span class="p">(</span><span class="n">distribution</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span></code>
-
-<a href="#dynestyx.models.checkers._unwrap_base_distribution" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Peel common NumPyro wrapper distributions to inspect the base distribution.</p>
-<p>NumPyro often wraps scalar/vector distributions in containers like
-<code>Independent</code>, <code>ExpandedDistribution</code>, or <code>MaskedDistribution</code>. For shape and
-categorical checks we want to reason about the base distribution semantics.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_categorical_state" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_categorical_state</span><span class="p">(</span><span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">inferred_categorical_state</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_categorical_state" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Ensure optional categorical_state agrees with inferred initial condition type.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_continuous_state_evolution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_continuous_state_evolution</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_continuous_state_evolution" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Validate the drift shape of a continuous-time state evolution.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_continuous_time_flag" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_continuous_time_flag</span><span class="p">(</span><span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">inferred_continuous_time</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_continuous_time_flag" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Ensure optional continuous_time agrees with inferred model type.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_discrete_state_evolution_output_shape" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_discrete_state_evolution_output_shape</span><span class="p">(</span><span class="n">state_evolution</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; state_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">u_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t_probe</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_discrete_state_evolution_output_shape" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Validate a discrete-time state evolution against the inferred state dimension.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_observation_dim" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_observation_dim</span><span class="p">(</span><span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">inferred_observation_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_observation_dim" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Ensure optional observation_dim agrees with inferred observation shape.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.models.checkers._validate_state_dim" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_state_dim</span><span class="p">(</span><span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">inferred_state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
-
-<a href="#dynestyx.models.checkers._validate_state_dim" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Ensure optional state_dim agrees with inferred initial condition shape.</p>
+        <p>Do MPPI's full planning step and also return the batch of every
+candidate rollout considered (<code>n_samples</code>-wide <code>ControlledSimulatedResult</code>)
+-- useful for debugging/plotting what MPPI weighed, or diagnosing a
+<code>loss_fn</code>. <code>__call__</code> (used by <code>DiscreteControlLoopSimulator</code>) is a
+thin wrapper around this that drops the rollout batch, since
+<code>PolicyCallable</code>'s return signature can't carry a third value.</p>
+<p>Note: the returned result's leading axis indexes <em>candidates</em>, not
+independent draws from the true generative process -- it's not a
+real simulated trajectory. <code>filtered_states_mean</code>/<code>policy_states</code>/
+<code>predicted_*</code> are always <code>None</code> (not meaningful for a planning
+rollout).</p>
 
 
     </div>
@@ -5219,12 +5550,12 @@ categorical checks we want to reason about the base distribution semantics.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="../../../../javascripts/mathjax.js"></script>
+        <script src="../../../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-svg.js"></script>
       

@@ -1209,6 +1209,150 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Closed-loop Control
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Closed-loop Control
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/controller_demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/control_optimization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning in controlled dynamics: learning the control and system identification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/mpc_demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model predictive control (MPC)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3403,6 +3547,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../public/control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Closed-loop Control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../public/result_types/" class="md-nav__link">
         
   
@@ -3444,10 +3616,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_9" >
         
           
-          <label class="md-nav__link" for="__nav_4_2_8" id="__nav_4_2_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_2_9" id="__nav_4_2_9_label" tabindex="0">
             
   
   
@@ -3465,8 +3637,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_2_8">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2_9">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4531,7 +4703,7 @@ supplies randomness, and the computed arrays are then attached to the trace
 as deterministic sites. Pass an
 <a class="autorefs autorefs-internal" href="../simulator_configs/#dynestyx.inference.configs.simulator.ODESimulatorConfig">ODESimulatorConfig</a>
 to choose the Diffrax solver, step-size controller, adjoint, step size, and
-step limit. Use <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> for standalone
+step limit. Use <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> for standalone
 pure-JAX generation without a NumPyro trace.</p>
 
 
@@ -4643,7 +4815,7 @@ return <code>SimulatedResult</code> without adding NumPyro sites.</p>
 <li>Use <code>Simulator</code> instead when automatic selection among discrete, ODE,
   and SDE backends is desirable.</li>
 <li><code>ODESimulator().simulate(...)</code> consumes an already allocated simulation
-  key. The public <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> function splits
+  key. The public <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a> function splits
   its root key before dispatch.</li>
 </ul>
 </details>
@@ -4796,7 +4968,7 @@ be greater than or equal to one.</p>
     <div class="doc doc-contents ">
 
         <p>Run pure-JAX forward simulation for deterministic continuous-time models.</p>
-<p>Unlike <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a>, <code>rng_key</code> is consumed
+<p>Unlike <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../handlers/#dynestyx.api.simulate">dsx.simulate</a>, <code>rng_key</code> is consumed
 directly as an already-allocated simulation key and is not pre-split.
 Therefore, <code>dsx.simulate(..., rng_key=root_key)</code> is equivalent to
 <code>ODESimulator().simulate(..., rng_key=jax.random.split(root_key)[1])</code>.</p>
