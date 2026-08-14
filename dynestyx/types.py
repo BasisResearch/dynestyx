@@ -17,14 +17,32 @@ class FunctionOfTime(Protocol):
 
 
 @dataclasses.dataclass
+class EvaluationResult:
+    """Outputs computed by an evaluation handler.
+
+    Evaluation handlers attach this object to the ``ConditionedResult`` they
+    consume.  NumPyro registration remains deferred so ``dsx.condition`` stays
+    side-effect free while ``dsx.sample`` can register the same outputs later.
+    """
+
+    observation_scores: dict[str, Real[Array, "..."]] = dataclasses.field(
+        default_factory=dict
+    )
+    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
+        default=None, repr=False
+    )
+
+
+@dataclasses.dataclass
 class ConditionedResult:
     """Common base for results from the NumPyro-free conditioning primitive.
 
     ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
     It carries the complete inference output through the handler stack without
-    registering NumPyro sites. Filter results may additionally expose canonical
-    one-step-ahead ``predicted_observations`` and per-time
-    ``observation_scores``. Posterior distributions are time-major:
+    registering NumPyro sites. Filter results may additionally expose the
+    canonical one-step-ahead ``predicted_observations`` and an
+    ``evaluation_result`` attached by an outer evaluation handler. Posterior
+    distributions are time-major:
     ``dists[i]`` corresponds to ``times[..., i]``. Leading axes on ``times``
     are optional plate axes, while each distribution may carry the matching
     plate axes in its batch shape.
@@ -35,9 +53,7 @@ class ConditionedResult:
     states: object = None
     dists: list | None = None
     predicted_observations: object = None
-    observation_scores: dict[str, Real[Array, "..."]] = dataclasses.field(
-        default_factory=dict
-    )
+    evaluation_result: EvaluationResult | None = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )

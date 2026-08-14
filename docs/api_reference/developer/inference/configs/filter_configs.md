@@ -2,7 +2,7 @@
 
 The single `Filter()` handler is directed to the appropriate filtering algorithm via the provided `FilterConfig`.
 
-Several shared fields on `BaseFilterConfig` control predicted-observation recordings (`record_predicted_observations_mean`, `record_predicted_observations_cov`, and `record_predicted_observations_ensemble`). These backend summaries are distinct from the scoring path documented on the companion [Scoring](../../evaluation/scoring.md) page: scoring can run without recording them into the trace.
+`include_predicted_observations` controls result-level collection of supported backend predictive-observation outputs. The `record_predicted_observations_mean`, `record_predicted_observations_cov`, and `record_predicted_observations_ensemble` fields separately control NumPyro recording. Collection and recording default to enabled; unavailable fields are omitted without making Filter fail.
 
 ::: dynestyx.inference.configs.filter
     options:

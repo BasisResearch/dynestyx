@@ -65,6 +65,21 @@ def test_infer_smoother_returns_infer_result():
     assert jnp.array_equal(result.times, obs_times)
 
 
+def test_smoother_rejects_already_conditioned_result():
+    obs_times, obs_values = _make_data()
+    dynamics = _make_lti_dynamics(0.5)
+
+    with pytest.raises(ValueError, match="already conditioned result"):
+        with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+            with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+                dsx.condition(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+
+
 def test_plated_condition_returns_backend_smoother_states():
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)

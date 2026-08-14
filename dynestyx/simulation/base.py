@@ -80,8 +80,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
           `LatentPathBuilder` (explicit latent paths) or `Filter` / `Smoother`
           (marginalized inference).
         - Posterior rollout remains supported because `Filter` / `Smoother`
-          consume `obs_times` / `obs_values` before forwarding rollout metadata
-          to the simulator.
+          condition on `obs_times` / `obs_values` before forwarding their result
+          and the unchanged observation inputs to the simulator.
     """
 
     n_simulations: int = 1
@@ -431,12 +431,17 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
-        if obs_times is not None or obs_values is not None:
+        has_observations = obs_times is not None or obs_values is not None
+        has_conditioned_result = (
+            filtered_result is not None or smoothed_result is not None
+        )
+        if has_observations and not has_conditioned_result:
             raise ValueError(
-                "Simulator handlers are generation-only and no longer accept "
-                "obs_times/obs_values directly. Use predict_times for forward "
-                "simulation, LatentPathBuilder for explicit latent-path inference, "
-                "or Filter/Smoother for marginalized inference."
+                "Simulator handlers are generation-only and do not condition "
+                "directly on obs_times/obs_values. Place Simulator outside "
+                "Filter/Smoother for posterior rollout, use predict_times for prior "
+                "simulation, or use LatentPathBuilder for explicit latent-path "
+                "inference."
             )
         need_simulation = predict_times is not None
         simulation_key = None
@@ -476,11 +481,16 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             name,
             dynamics,
             plate_shapes=plate_shapes,
-            obs_times=None,
-            obs_values=None,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            _obs_values_filled=_obs_values_filled,
+            _obs_mask=_obs_mask,
+            _obs_has_missing=_obs_has_missing,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
+            filtered_result=filtered_result,
+            smoothed_result=smoothed_result,
             **kwargs,
         )
 

@@ -89,7 +89,6 @@ nav:
       - Inference:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/configs/filter_configs.md
-        - ScoringConfigs: api_reference/public/inference/configs/scoring_configs.md
         - LatentPathBuilder: api_reference/public/inference/latent_path_builder.md
         - Smoothers: api_reference/public/inference/smoothers.md
         - SmootherOptions: api_reference/public/inference/configs/smoother_configs.md
@@ -110,6 +109,8 @@ nav:
       - Closed-loop Control: api_reference/public/control.md
       - Result Types: api_reference/public/result_types.md
       - Evaluation:
+        - Evaluation: api_reference/public/evaluation/handlers.md
+        - ScoringConfigs: api_reference/public/inference/configs/scoring_configs.md
         - Scoring: api_reference/public/evaluation/scoring.md
         - Plotting Utilities: api_reference/public/evaluation/plotting_utils.md
     - Developer API:
@@ -123,7 +124,6 @@ nav:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
         - FilterConfigs: api_reference/developer/inference/configs/filter_configs.md
-        - ScoringConfigs: api_reference/developer/inference/configs/scoring_configs.md
         - LatentPathBuilder: api_reference/developer/inference/latent_path_builder.md
         - Smoothers: api_reference/developer/inference/smoothers.md
         - SmootherOptions: api_reference/developer/inference/configs/smoother_configs.md
@@ -138,6 +138,8 @@ nav:
       - Utils: api_reference/developer/utils.md
       - Result Types: api_reference/developer/result_types.md
       - Evaluation:
+        - Evaluation: api_reference/developer/evaluation/handlers.md
+        - ScoringConfigs: api_reference/developer/inference/configs/scoring_configs.md
         - Scoring: api_reference/developer/evaluation/scoring.md
         - Plotting Utilities: api_reference/developer/evaluation/plotting_utils.md
   - FAQ: faq.md

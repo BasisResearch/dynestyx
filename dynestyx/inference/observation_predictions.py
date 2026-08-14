@@ -1,37 +1,27 @@
-"""Canonical predicted-observation summaries and scoring helpers.
+"""Canonical predicted-observation summaries produced by filters.
 
 These utilities translate backend-specific predictive-observation fields into a
-small Dynestyx-level representation used for scoring and trace recording.
+small Dynestyx-level representation used by downstream handlers.
 """
 
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping
 from typing import Any
 
 import jax
 import jax.numpy as jnp
-import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
-from dynestyx.evaluation.scoring import (
-    DawidSebastianiScore,
-    EnergyScore,
-    GaussianLogProbScore,
-    ObservationWiseCRPSScore,
-)
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
-    ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
 )
-from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.utils import _array_has_plate_dims, _should_record_field
@@ -65,60 +55,6 @@ def _canonicalize_observations(
     if arr.ndim == time_axis + 1:
         return arr[..., None]
     return arr
-
-
-def _canonicalize_observed_values(
-    arr: Float[Array, ...],
-    *,
-    observation_dim: int,
-    plate_shapes: tuple[int, ...],
-) -> Float[Array, "*plate time observation_dim"]:
-    """Add a scalar event axis and broadcast observations shared by plates."""
-    obs_arr = jnp.asarray(arr)
-    has_plate_dims = _array_has_plate_dims(
-        obs_arr,
-        plate_shapes,
-        min_suffix_ndim=1,
-    )
-    if has_plate_dims:
-        if obs_arr.ndim == len(plate_shapes) + 1:
-            obs_arr = obs_arr[..., None]
-        return obs_arr
-
-    if obs_arr.ndim == 1:
-        obs_arr = obs_arr[..., None]
-    if obs_arr.shape[-1] != observation_dim:
-        raise ValueError(
-            "Observation values have an incompatible trailing dimension: "
-            f"expected {observation_dim}, got {obs_arr.shape[-1]}."
-        )
-    return jnp.broadcast_to(obs_arr, (*plate_shapes, *obs_arr.shape))
-
-
-def _compute_sample_covariance(
-    ensemble: Float[Array, "*plate time n_members observation_dim"],
-) -> Float[Array, "*plate time observation_dim observation_dim"]:
-    n_members = ensemble.shape[-2]
-    if n_members <= 1:
-        raise ValueError("Predicted observation ensembles require at least 2 members.")
-    mean = jnp.mean(ensemble, axis=-2)
-    centered = ensemble - mean[..., None, :]
-    return jnp.einsum("...tni,...tnj->...tij", centered, centered) / (n_members - 1)
-
-
-def _sample_data_predictive_ensemble(
-    ensemble: Float[Array, "*plate time n_members observation_dim"],
-    noise_cov: Float[Array, "*plate time observation_dim observation_dim"],
-    *,
-    sample_seed: int,
-) -> Float[Array, "*plate time n_members observation_dim"]:
-    n_members = ensemble.shape[-2]
-    sampled_noise = dist.MultivariateNormal(
-        loc=jnp.zeros_like(ensemble[..., 0, :]),
-        covariance_matrix=noise_cov,
-    ).sample(jr.PRNGKey(sample_seed), sample_shape=(n_members,))
-    sampled_noise = jnp.moveaxis(sampled_noise, 0, -2)
-    return ensemble + sampled_noise
 
 
 def _observation_control_values(
@@ -206,32 +142,11 @@ def _observation_noise_covariance_sequence(
     return jnp.moveaxis(covs_time_major, 0, len(plate_shapes))
 
 
-def _filter_requests_observation_predictions(filter_config: BaseFilterConfig) -> bool:
-    return any(
-        flag is True
-        for flag in (
-            filter_config.record_predicted_observations_mean,
-            filter_config.record_predicted_observations_cov,
-            filter_config.record_predicted_observations_ensemble,
-        )
-    )
-
-
-def _filter_requests_scoring(
-    scoring_config: ObservationScoringConfig | None,
-) -> bool:
-    return scoring_config is not None and len(scoring_config.rules) > 0
-
-
 def wants_observation_prediction_diagnostics(
     filter_config: BaseFilterConfig,
-    *,
-    scoring_config: ObservationScoringConfig | None = None,
 ) -> bool:
-    """Return whether predictive-observation enrichment work is needed."""
-    return _filter_requests_observation_predictions(
-        filter_config
-    ) or _filter_requests_scoring(scoring_config)
+    """Return whether the filter should collect predictive observations."""
+    return filter_config.include_predicted_observations
 
 
 def _build_prediction_outputs(
@@ -345,44 +260,24 @@ def _build_prediction_outputs(
     )
 
 
-def enrich_continuous_filter_output(
+def extract_continuous_filter_predictions(
     posterior: Any,
     *,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
     obs_times: Real[Array, "... time"],
-    obs_values: Real[Array, "... time observation_dim"] | Real[Array, "... time"],
     ctrl_values: Real[Array, "... control_time control_dim"]
     | Real[Array, "... control_time"]
     | None,
-    scoring_config: ObservationScoringConfig | None = None,
     plate_shapes: tuple[int, ...] = (),
-) -> tuple[
-    Any,
-    PredictedObservationOutputs | None,
-    dict[
-        str,
-        Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"],
-    ],
-]:
-    """Compute canonical predicted-observation outputs and score arrays.
+) -> PredictedObservationOutputs | None:
+    """Extract canonical predicted observations when the backend supports them.
 
-    The returned ``posterior`` is the original backend object. Canonical
-    predicted-observation summaries and score arrays are returned separately
-    instead of being written back into ``posterior.posterior_extras``.
+    Collection is capability-aware: unsupported filter backends keep running
+    and return ``None``. An Evaluation handler decides whether missing outputs
+    are an error for its requested evaluation.
     """
-    wants_predictions = _filter_requests_observation_predictions(filter_config)
-    wants_scores = _filter_requests_scoring(scoring_config)
-    if not wants_predictions and not wants_scores:
-        return posterior, None, {}
-
-    if isinstance(filter_config, ContinuousTimeDPFConfig):
-        raise NotImplementedError(
-            "Predicted observation summaries and observation scoring rules are "
-            "not implemented yet for ContinuousTimeDPFConfig."
-        )
-
-    if not isinstance(
+    if not filter_config.include_predicted_observations or not isinstance(
         filter_config,
         (
             ContinuousTimeKFConfig,
@@ -391,13 +286,9 @@ def enrich_continuous_filter_output(
             ContinuousTimeEnKFConfig,
         ),
     ):
-        raise NotImplementedError(
-            "Predicted observation summaries and observation scoring rules are "
-            "currently supported only for continuous-time cd_dynamax Gaussian "
-            "filters (KF, EKF, UKF, EnKF)."
-        )
+        return None
 
-    predictions = _build_prediction_outputs(
+    return _build_prediction_outputs(
         posterior,
         dynamics=dynamics,
         filter_config=filter_config,
@@ -406,121 +297,14 @@ def enrich_continuous_filter_output(
         plate_shapes=plate_shapes,
     )
 
-    score_arrays: dict[
-        str,
-        Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"],
-    ] = {}
-    if wants_scores:
-        assert scoring_config is not None
-        obs_arr = _canonicalize_observed_values(
-            jnp.asarray(obs_values),
-            observation_dim=dynamics.observation_dim,
-            plate_shapes=plate_shapes,
-        )
-        assert predictions.mean is not None
-        if predictions.obs_cov is None:
-            raise NotImplementedError(
-                "Observation scoring requires predictive observation covariance."
-            )
-        score_mean = predictions.mean
-        score_cov = predictions.obs_cov
-        for rule in scoring_config.rules:
-            try:
-                if isinstance(
-                    rule,
-                    (
-                        GaussianLogProbScore,
-                        DawidSebastianiScore,
-                        ObservationWiseCRPSScore,
-                    ),
-                ):
-                    score_arrays[rule.site_name] = rule.compute(
-                        obs_values=obs_arr,
-                        pred_mean=score_mean,
-                        pred_cov=score_cov,
-                    )
-                elif isinstance(rule, EnergyScore):
-                    score_ensemble = _select_scoring_ensemble(
-                        predictions,
-                        scoring_config=scoring_config,
-                    )
-                    score_arrays[rule.site_name] = rule.compute(
-                        obs_values=obs_arr,
-                        pred_mean=score_mean,
-                        pred_cov=score_cov,
-                        pred_ensemble=score_ensemble,
-                        sample_seed=scoring_config.sample_seed,
-                    )
-                else:
-                    raise NotImplementedError(
-                        f"Unsupported observation scoring rule type: {type(rule).__name__}."
-                    )
-            except NotImplementedError:
-                if scoring_config.unsupported == "skip":
-                    continue
-                raise
 
-    return posterior, predictions, score_arrays
-
-
-def _select_scoring_ensemble(
-    predictions: PredictedObservationOutputs,
-    *,
-    scoring_config: ObservationScoringConfig,
-) -> Float[Array, "*plate time n_members observation_dim"] | None:
-    if scoring_config.sample_source == "gaussian_moments":
-        return None
-
-    if scoring_config.sample_source == "backend_ensemble":
-        if predictions.obs_ensemble is not None:
-            return predictions.obs_ensemble
-        raise NotImplementedError(
-            "Backend predictive observation ensembles are unavailable. "
-            "Use `sample_source='latent_ensemble_plus_noise'` or "
-            "`sample_source='gaussian_moments'`."
-        )
-
-    if scoring_config.sample_source == "latent_ensemble_plus_noise":
-        if predictions.ensemble is None or predictions.noise_cov is None:
-            raise NotImplementedError(
-                "Synthesizing predictive observation ensembles from a latent "
-                "ensemble requires both a latent predictive ensemble and "
-                "observation noise covariance."
-            )
-        return _sample_data_predictive_ensemble(
-            predictions.ensemble,
-            predictions.noise_cov,
-            sample_seed=scoring_config.sample_seed,
-        )
-
-    if scoring_config.sample_source == "auto":
-        if predictions.obs_ensemble is not None:
-            return predictions.obs_ensemble
-        if predictions.ensemble is not None and predictions.noise_cov is not None:
-            return _sample_data_predictive_ensemble(
-                predictions.ensemble,
-                predictions.noise_cov,
-                sample_seed=scoring_config.sample_seed,
-            )
-        return None
-
-    raise NotImplementedError(
-        f"Unsupported scoring sample source: {scoring_config.sample_source}."
-    )
-
-
-def add_observation_prediction_and_score_sites(
+def add_observation_prediction_sites(
     name: str,
     *,
     filter_config: BaseFilterConfig,
-    scoring_config: ObservationScoringConfig | None,
     predictions: PredictedObservationOutputs | None,
-    score_arrays: Mapping[
-        str,
-        Float[Array, "*plate time 1"] | Float[Array, "*plate time observation_dim"],
-    ],
 ) -> None:
-    """Record canonical predicted observations and score arrays to the trace."""
+    """Record requested canonical predicted observations to the trace."""
     if predictions is None:
         return
 
@@ -547,69 +331,11 @@ def add_observation_prediction_and_score_sites(
             predictions.ensemble,
         )
 
-    if (
-        scoring_config is None
-        or not scoring_config.record_as_numpyro_sites
-        or len(score_arrays) == 0
-    ):
-        return
-
-    for site_name, score_arr in score_arrays.items():
-        if _should_record_field(True, score_arr.shape, max_elems):
-            numpyro.deterministic(f"{name}_{site_name}", score_arr)
-
-
-def enrich_and_record_continuous_filter_output(
-    name: str,
-    posterior: Any,
-    *,
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    obs_times: Real[Array, "... time"],
-    obs_values: Real[Array, "... time observation_dim"] | Real[Array, "... time"],
-    ctrl_values: Real[Array, "... control_time control_dim"]
-    | Real[Array, "... control_time"]
-    | None,
-    scoring_config: ObservationScoringConfig | None = None,
-    plate_shapes: tuple[int, ...] = (),
-) -> Any:
-    """Enrich a continuous filter result and record requested trace sites.
-
-    This wrapper is used by the filter handler path, which only needs score
-    arrays when they will actually be written to the NumPyro trace. If
-    ``record_as_numpyro_sites=False``, callers that need the score arrays
-    themselves should use ``enrich_continuous_filter_output`` directly.
-    """
-    scoring_config_for_recording = (
-        scoring_config
-        if scoring_config is not None and scoring_config.record_as_numpyro_sites
-        else None
-    )
-    posterior, predictions, score_arrays = enrich_continuous_filter_output(
-        posterior,
-        dynamics=dynamics,
-        filter_config=filter_config,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_values=ctrl_values,
-        scoring_config=scoring_config_for_recording,
-        plate_shapes=plate_shapes,
-    )
-    add_observation_prediction_and_score_sites(
-        name,
-        filter_config=filter_config,
-        scoring_config=scoring_config_for_recording,
-        predictions=predictions,
-        score_arrays=score_arrays,
-    )
-    return posterior
-
 
 __all__ = [
     "PredictedObservationOutputs",
     "SupportedObservationPredictionConfig",
-    "add_observation_prediction_and_score_sites",
-    "enrich_continuous_filter_output",
-    "enrich_and_record_continuous_filter_output",
+    "add_observation_prediction_sites",
+    "extract_continuous_filter_predictions",
     "wants_observation_prediction_diagnostics",
 ]

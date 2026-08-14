@@ -48,16 +48,19 @@ class BaseFilterConfig(abc.ABC):
             at each step (particle-based filters only).
         record_filtered_log_weights (bool | None): Save the log importance
             weights at each step (particle-based filters only).
+        include_predicted_observations (bool): Collect supported one-step-ahead
+            predictive-observation outputs in ``ConditionedResult``. This is
+            independent of whether those outputs are recorded to a NumPyro
+            trace. Defaults to `True`.
         record_predicted_observations_mean (bool): Save the one-step-ahead
             predicted observation mean at each observation time, before
-            conditioning on that observation. Defaults to `False`; scoring
-            does not require recording this summary.
+            conditioning on that observation. Defaults to `True`.
         record_predicted_observations_cov (bool): Save the backend predicted
             observation covariance before observation noise is added. Defaults
-            to `False`.
+            to `True`.
         record_predicted_observations_ensemble (bool): Save the backend
             predicted observation ensemble before observation noise is added
-            (ensemble filters only). Defaults to `False`.
+            (ensemble filters only). Defaults to `True` when available.
         record_max_elems (int): Hard cap on total scalar elements saved across
             all `record_*` sites. Prevents accidentally filling device memory
             for long sequences or large state spaces. Defaults to `100_000`.
@@ -85,9 +88,10 @@ class BaseFilterConfig(abc.ABC):
     record_filtered_particles: bool | None = None
     record_filtered_log_weights: bool | None = None
     record_filtered_states_chol_cov: bool | None = None
-    record_predicted_observations_mean: bool = False
-    record_predicted_observations_cov: bool = False
-    record_predicted_observations_ensemble: bool = False
+    include_predicted_observations: bool = True
+    record_predicted_observations_mean: bool = True
+    record_predicted_observations_cov: bool = True
+    record_predicted_observations_ensemble: bool = True
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
     cov_rescaling: float | None = None

@@ -59,6 +59,7 @@ def test_infer_returns_infer_result():
     assert result.states is not None
     assert result.dists is not None
     assert jnp.array_equal(result.times, obs_times)
+    assert result.evaluation_result is None
 
 
 def test_plated_condition_returns_backend_filter_states():
@@ -102,6 +103,21 @@ def test_infer_enkf_with_crn_seed():
     assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
     assert jnp.isfinite(result.marginal_loglik)
+
+
+def test_filter_rejects_already_conditioned_result():
+    obs_times, obs_values = _make_data()
+    dynamics = _make_lti_dynamics(0.5)
+
+    with pytest.raises(ValueError, match="already conditioned result"):
+        with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+            with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+                dsx.condition(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
 
 
 def test_infer_optax_mle():

@@ -29,7 +29,6 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
 from dynestyx.inference.observation_predictions import (
     wants_observation_prediction_diagnostics,
 )
-from dynestyx.inference.scoring_configs import ObservationScoringConfig
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
@@ -120,8 +119,6 @@ def _config_to_cd_dynamax_filter_kwargs(
 
 def _continuous_filter_output_fields(
     filter_config: ContinuousTimeFilterConfig,
-    *,
-    scoring_config: ObservationScoringConfig | None,
 ) -> list[str] | None:
     """Select the CD-Dynamax posterior fields required for this run."""
     if isinstance(filter_config, ContinuousTimeDPFConfig):
@@ -132,10 +129,7 @@ def _continuous_filter_output_fields(
         "filtered_means",
         "filtered_covariances",
     ]
-    if not wants_observation_prediction_diagnostics(
-        filter_config,
-        scoring_config=scoring_config,
-    ):
+    if not wants_observation_prediction_diagnostics(filter_config):
         return output_fields
 
     output_fields.extend(
@@ -187,7 +181,6 @@ def compute_continuous_filter(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    scoring_config: ObservationScoringConfig | None = None,
 ) -> Any:
     """Pure-JAX continuous-time filter computation (no numpyro side-effects)."""
     obs_times_arr = jnp.asarray(obs_times)
@@ -200,10 +193,7 @@ def compute_continuous_filter(
         if ctrl_values is not None
         else jnp.zeros((obs_times_arr.shape[0], control_dim))
     )
-    output_fields = _continuous_filter_output_fields(
-        filter_config,
-        scoring_config=scoring_config,
-    )
+    output_fields = _continuous_filter_output_fields(filter_config)
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
         filtered = _run_linear_kf(
@@ -263,7 +253,6 @@ def run_continuous_filter(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    scoring_config: ObservationScoringConfig | None = None,
     **kwargs,
 ) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
     """Run continuous-time filter via CD-Dynamax.
@@ -287,7 +276,6 @@ def run_continuous_filter(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        scoring_config=scoring_config,
     )
 
     filtered_dists = _posterior_sequence_to_dists(

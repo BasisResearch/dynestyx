@@ -113,8 +113,16 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
+        filtered_result: ConditionedResult | None = None,
+        smoothed_result: ConditionedResult | None = None,
         **kwargs,
     ) -> FunctionOfTime:
+        if filtered_result is not None or smoothed_result is not None:
+            raise ValueError(
+                "Smoother cannot condition an already conditioned result. Use only "
+                "one Filter or Smoother for a dsx.condition/dsx.sample operation."
+            )
+
         smoothed_dists = None
         self.marginal_loglik = self.smoothed_states = self._smoother_config_used = None
         if not (obs_times is None or obs_values is None):
@@ -160,8 +168,8 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             name,
             dynamics,
             plate_shapes=plate_shapes,
-            obs_times=None,
-            obs_values=None,
+            obs_times=obs_times,
+            obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
