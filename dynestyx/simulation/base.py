@@ -70,6 +70,9 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             )
         self.n_simulations = n_simulations
 
+    def _validate_plate_support(self) -> None:
+        """Validate that this simulator supports plated execution."""
+
     def _run_single_member_simulation(
         self,
         name: str,
@@ -287,6 +290,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         Plated simulation enumerates over all plate members and runs
         individual simulations. This is somewhat slower than vmapping,
         but maintains full compatibility with NumPyro's sample semantics."""
+        self._validate_plate_support()
         if predict_times is None:
             return None
 
