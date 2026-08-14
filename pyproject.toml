@@ -78,6 +78,9 @@ dev = [
     "optax>=0.2.0",
     "exponax>=0.2.0",
 ]
+pdes = [
+  "exponax>=0.2.0",
+]
 
 [tool.ruff.lint]
 select = [
