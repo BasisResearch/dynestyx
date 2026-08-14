@@ -40,6 +40,10 @@ nav:
     - Examples:
       - Quick Example L63: quick_example.ipynb
       - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
+      - Closed-loop Control:
+        - Controller basics: tutorials/control/controller_demo.ipynb
+        - Optimizing a controller: tutorials/control/control_optimization.ipynb
+        - MPPI-inspired model-predictive control: tutorials/control/mpc_demo.ipynb
     - State Space Models:
       - Linear Gaussian SSMs:
         - Tracking an object with a Kalman filter: tutorials/state_space_models/kf_tracking.ipynb
@@ -101,6 +105,7 @@ nav:
           - ODESimulator: api_reference/public/simulators/ode_simulator.md
           - SDESimulator: api_reference/public/simulators/sde_simulator.md
           - Simulator Configurations: api_reference/public/simulators/simulator_configs.md
+      - Closed-loop Control: api_reference/public/control.md
       - Result Types: api_reference/public/result_types.md
       - Diagnostics:
         - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
