@@ -44,7 +44,7 @@ def _make_dirac_ode_dynamics():
 
 
 def test_infer_returns_infer_result():
-    """dsx.condition returns an ConditionedResult with marginal_loglik."""
+    """dsx.condition under Filter returns a ConditionedResult."""
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)
 
@@ -58,6 +58,7 @@ def test_infer_returns_infer_result():
     assert jnp.isfinite(result.marginal_loglik)
     assert result.states is not None
     assert result.dists is not None
+    assert jnp.array_equal(result.times, obs_times)
 
 
 def test_plated_condition_returns_backend_filter_states():
@@ -151,7 +152,7 @@ def test_infer_does_not_register_numpyro_sites():
 
 
 def test_condition_no_observations():
-    """dsx.condition with no obs returns ConditionedResult with marginal_loglik=None."""
+    """Filter without observations returns an empty ConditionedResult."""
     dynamics = _make_lti_dynamics(0.5)
     obs_times, obs_values = _make_data()
 

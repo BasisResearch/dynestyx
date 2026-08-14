@@ -279,8 +279,8 @@ joint_log_prob = dsx.log_prob(
 
 `dsx.condition` returns a
 [`ConditionedResult`](api_reference/public/result_types.md#dynestyx.types.ConditionedResult)
-containing the
-marginal log likelihood and state summaries requested by the active handler.
+containing the inference times, marginal log likelihood, state summaries, and
+per-time distributions requested by the active filter or smoother handler.
 Pass a filter or smoother config when you need a specific algorithm.
 `dsx.log_prob` returns the joint density of a fixed latent path. For a native
 SDE latent-path workflow, first choose a
@@ -344,8 +344,8 @@ tutorial](tutorials/gentle_intro/03_filtering_mll_no_numpyro.ipynb), the
 example](tutorials/state_space_models/kf_tracking.ipynb), and the
 [NumPyro-free differentiable optimization
 tutorial](tutorials/gentle_intro/05_svi_no_numpyro.ipynb). The [result-type
-reference](api_reference/public/result_types.md) documents
-`SimulatedResult` and `ConditionedResult`.
+reference](api_reference/public/result_types.md) documents `SimulatedResult`
+and `ConditionedResult`.
 
 ## What about hierarchical models?
 

@@ -138,20 +138,24 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
                 "Please use `Filter` for in-window predictions for now."
             ),
         )
-        filtered_times = None
-        filtered_dists = None
-        posterior_rollout_final_only = False
-        smoothed_times = obs_times
-        result_smoothed_dists = smoothed_dists
-        if predict_times is not None and smoothed_dists:
+        result = self._build_infer_result(obs_times, smoothed_dists)
+        filtered_result = None
+        rollout_smoothed_result = result if smoothed_dists is not None else None
+        posterior_rollout_final_only = predict_times is not None and bool(
+            smoothed_dists
+        )
+        if posterior_rollout_final_only:
             assert obs_times is not None
-            filtered_times = _final_times_for_rollout(obs_times)
-            filtered_dists = [smoothed_dists[-1]]
-            posterior_rollout_final_only = True
-            smoothed_times = None
-            smoothed_dists = None
+            assert smoothed_dists is not None
+            filtered_result = ConditionedResult(
+                times=_final_times_for_rollout(obs_times),
+                dists=[smoothed_dists[-1]],
+            )
+            rollout_smoothed_result = None
 
-        # fwd() lets handlers above (e.g. Simulator) use smoothed_dists for rollout.
+        # Future-only smoothing rollout is represented as a filtered anchor at
+        # the final smoothing time. This makes the current lack of in-window
+        # smoothing prediction explicit to downstream handlers.
         forwarded_result = fwd(
             name,
             dynamics,
@@ -161,15 +165,12 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
-            filtered_times=filtered_times,
-            filtered_dists=filtered_dists,
-            smoothed_times=smoothed_times,
-            smoothed_dists=smoothed_dists,
+            filtered_result=filtered_result,
+            smoothed_result=rollout_smoothed_result,
             _posterior_rollout_final_only=posterior_rollout_final_only,
             **kwargs,
         )
 
-        result = self._build_infer_result(name, result_smoothed_dists)
         forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
         result._register_numpyro_sites = chain_numpyro_site_registrations(
             result._register_numpyro_sites,
@@ -198,7 +199,9 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
 
     @abstractmethod
     def _build_infer_result(
-        self, name: str, smoothed_dists: list | None
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        smoothed_dists: list | None,
     ) -> ConditionedResult: ...
 
 
@@ -335,9 +338,11 @@ class Smoother(BaseSmootherLogFactorAdder):
         return smoothed_dists
 
     def _build_infer_result(
-        self, name: str, smoothed_dists: list | None
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        smoothed_dists: list | None,
     ) -> ConditionedResult:
-        """Construct ConditionedResult with a deferred numpyro registration callback."""
+        """Construct a ConditionedResult with deferred NumPyro registration."""
         marginal_loglik = self.marginal_loglik
         states = self.smoothed_states
         config = self._smoother_config_used
@@ -357,6 +362,7 @@ class Smoother(BaseSmootherLogFactorAdder):
 
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
+            times=times,
             states=states,
             dists=smoothed_dists,
             _register_numpyro_sites=_register,

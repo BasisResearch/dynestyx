@@ -18,15 +18,20 @@ class FunctionOfTime(Protocol):
 
 @dataclasses.dataclass
 class ConditionedResult:
-    """Result of dsx.condition — the numpyro-free conditioning primitive.
+    """Common base for results from the NumPyro-free conditioning primitive.
 
-    Carries all outputs from the handler stack (Filter, Smoother, etc.)
-    without registering any NumPyro sites. Filter results may additionally
-    expose canonical one-step-ahead ``predicted_observations`` and a mapping
-    of per-time ``observation_scores``.
+    ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
+    It carries the complete inference output through the handler stack without
+    registering NumPyro sites. Filter results may additionally expose canonical
+    one-step-ahead ``predicted_observations`` and per-time
+    ``observation_scores``. Posterior distributions are time-major:
+    ``dists[i]`` corresponds to ``times[..., i]``. Leading axes on ``times``
+    are optional plate axes, while each distribution may carry the matching
+    plate axes in its batch shape.
     """
 
     marginal_loglik: Real[Array, "*plate"] | None = None
+    times: Real[Array, "*time_plate time"] | None = None
     states: object = None
     dists: list | None = None
     predicted_observations: object = None
@@ -42,7 +47,7 @@ class ConditionedResult:
     ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError(
             "ConditionedResult is not callable as a FunctionOfTime. "
-            "Access .marginal_loglik, .states, or .dists instead."
+            "Access .marginal_loglik, .times, .states, or .dists instead."
         )
 
 

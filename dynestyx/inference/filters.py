@@ -123,8 +123,10 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
                 **kwargs,
             )
 
+        result = self._build_infer_result(obs_times, filtered_dists)
+
         # Filter consumes obs_times and obs_values, so they are passed forward as None.
-        # fwd() lets handlers above (e.g. Simulator) use filtered_dists for rollout.
+        # fwd() lets handlers above (e.g. Simulator) use the complete filter result.
         forwarded_result = fwd(
             name,
             dynamics,
@@ -133,12 +135,10 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             obs_values=None,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
-            filtered_times=obs_times,
-            filtered_dists=filtered_dists,
+            filtered_result=(result if filtered_dists is not None else None),
             **kwargs,
         )
 
-        result = self._build_infer_result(name, filtered_dists)
         forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
         result._register_numpyro_sites = chain_numpyro_site_registrations(
             result._register_numpyro_sites,
@@ -167,7 +167,9 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
 
     @abstractmethod
     def _build_infer_result(
-        self, name: str, filtered_dists: list | None
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        filtered_dists: list | None,
     ) -> ConditionedResult: ...
 
 
@@ -427,9 +429,11 @@ class Filter(BaseLogFactorAdder):
         return filtered_dists
 
     def _build_infer_result(
-        self, name: str, filtered_dists: list | None
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        filtered_dists: list | None,
     ) -> ConditionedResult:
-        """Construct ConditionedResult with a deferred numpyro registration callback."""
+        """Construct a ConditionedResult with deferred NumPyro registration."""
         marginal_loglik = self.marginal_loglik
         states = self.filtered_states
         config = self._filter_config_used
@@ -466,6 +470,7 @@ class Filter(BaseLogFactorAdder):
 
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
+            times=times,
             states=states,
             dists=filtered_dists,
             predicted_observations=predictions,

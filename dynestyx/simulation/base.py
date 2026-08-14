@@ -29,12 +29,36 @@ from dynestyx.simulation.utils import (
     _stack_simulated_results,
     _tile_times,
 )
-from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
+from dynestyx.types import (
+    ConditionedResult,
+    SimulatedResult,
+    chain_numpyro_site_registrations,
+)
 from dynestyx.utils import (
     _get_val_or_None,
     _has_any_batched_plate_source,
     _validate_site_sorting,
 )
+
+
+def _slice_rollout_result_for_plate_member(
+    result: ConditionedResult | None,
+    plate_shapes: tuple[int, ...],
+    plate_idx: tuple[int, ...],
+) -> ConditionedResult | None:
+    """Extract the rollout-bearing fields for one plate member."""
+    if result is None:
+        return None
+
+    member_times = _slice_array_for_plate_member(result.times, plate_shapes, plate_idx)
+    member_dists = None
+    if result.dists is not None:
+        member_dists = [
+            _slice_dist_for_plate_member(dist, plate_shapes, plate_idx)
+            for dist in result.dists
+        ]
+
+    return ConditionedResult(times=member_times, dists=member_dists)
 
 
 class BaseSimulator(ObjectInterpretation, HandlesSelf):
@@ -84,34 +108,38 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         | Real[Array, " ctrl_time"]
         | None = None,
         predict_times: Real[Array, " predict_time"] | None = None,
-        filtered_times: Real[Array, " filtered_time"] | None = None,
-        filtered_dists: list[numpyro.distributions.Distribution] | None = None,
-        smoothed_times: Real[Array, " smoothed_time"] | None = None,
-        smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
+        filtered_result: ConditionedResult | None = None,
+        smoothed_result: ConditionedResult | None = None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> SimulatedResult | None:
         """Run simulator logic for one unbatched member and return trajectories."""
-        use_smoothed_rollout = smoothed_times is not None or smoothed_dists is not None
-        if use_smoothed_rollout and (
-            filtered_times is not None or filtered_dists is not None
-        ):
+        if filtered_result is not None and smoothed_result is not None:
             raise ValueError(
-                "Smoothed rollout metadata was provided alongside filtered rollout "
-                "metadata. When smoothed_times or smoothed_dists is provided, "
-                "filtered_times and filtered_dists must be None."
+                "Both filtered_result and smoothed_result were provided for posterior "
+                "rollout. Provide exactly one inference result."
             )
-        rollout_times = smoothed_times if use_smoothed_rollout else filtered_times
-        rollout_dists = smoothed_dists if use_smoothed_rollout else filtered_dists
-        rollout_label = "smoothed" if use_smoothed_rollout else "filtered"
+
+        rollout_result = (
+            smoothed_result if smoothed_result is not None else filtered_result
+        )
+        rollout_times = None if rollout_result is None else rollout_result.times
+        rollout_dists = None if rollout_result is None else rollout_result.dists
+        rollout_label = "smoothed" if smoothed_result is not None else "filtered"
         if (
             rollout_times is not None
             and rollout_dists is None
             and predict_times is not None
         ):
             raise ValueError(
-                f"Rollout requested with {rollout_label}_times but missing {rollout_label}_dists. "
-                "Plate-aware rollout requires posterior distributions from Filter/Smoother."
+                f"Rollout requested with {rollout_label} result times but missing "
+                "posterior distributions. Plate-aware rollout requires distributions "
+                "from Filter/Smoother."
+            )
+        if rollout_dists is not None and rollout_times is None:
+            raise ValueError(
+                f"Rollout requested with {rollout_label} result distributions but "
+                "missing times."
             )
 
         if predict_times is None:
@@ -121,6 +149,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
 
         if posterior_rollout:
             assert predict_times is not None
+            if rollout_times.shape[-1] != len(rollout_dists):
+                raise ValueError(
+                    f"The {rollout_label} rollout result must provide one distribution "
+                    "per time point: result.dists[i] corresponds to "
+                    "result.times[..., i]. Got "
+                    f"{rollout_times.shape[-1]} times and {len(rollout_dists)} "
+                    "distributions."
+                )
             if rng_key is None:
                 raise ValueError("PRNG key required for simulator rollout.")
             _validate_site_sorting(rollout_times, name=f"{rollout_label}_times")
@@ -278,10 +314,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-        filtered_times: Real[Array, "*filtered_time_plate filtered_time"] | None = None,
-        filtered_dists: list[numpyro.distributions.Distribution] | None = None,
-        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"] | None = None,
-        smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
+        filtered_result: ConditionedResult | None = None,
+        smoothed_result: ConditionedResult | None = None,
         _posterior_rollout_final_only: bool = False,
         **kwargs,
     ) -> SimulatedResult | None:
@@ -301,10 +335,16 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ctrl_times,
                 ctrl_values,
                 predict_times,
-                filtered_times,
-                smoothed_times,
+                None if filtered_result is None else filtered_result.times,
+                None if smoothed_result is None else smoothed_result.times,
             ),
-            dists=smoothed_dists if smoothed_dists is not None else filtered_dists,
+            dists=(
+                smoothed_result.dists
+                if smoothed_result is not None
+                else None
+                if filtered_result is None
+                else filtered_result.dists
+            ),
         ):
             raise ValueError(
                 "Plate simulator received plate_shapes but no plate-batched dynamics/data "
@@ -333,26 +373,12 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             member_predict_times = _slice_array_for_plate_member(
                 predict_times, plate_shapes, plate_idx
             )
-            member_filtered_times = _slice_array_for_plate_member(
-                filtered_times, plate_shapes, plate_idx
+            member_filtered_result = _slice_rollout_result_for_plate_member(
+                filtered_result, plate_shapes, plate_idx
             )
-            member_smoothed_times = _slice_array_for_plate_member(
-                smoothed_times, plate_shapes, plate_idx
+            member_smoothed_result = _slice_rollout_result_for_plate_member(
+                smoothed_result, plate_shapes, plate_idx
             )
-
-            # Same distribution slicing logic as above, but for prediction.
-            member_filtered_dists = None
-            if filtered_dists is not None:
-                member_filtered_dists = [
-                    _slice_dist_for_plate_member(d, plate_shapes, plate_idx)
-                    for d in filtered_dists
-                ]
-            member_smoothed_dists = None
-            if smoothed_dists is not None:
-                member_smoothed_dists = [
-                    _slice_dist_for_plate_member(d, plate_shapes, plate_idx)
-                    for d in smoothed_dists
-                ]
 
             member_result = self._run_single_member_simulation(
                 member_name,
@@ -361,10 +387,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ctrl_times=member_ctrl_times,
                 ctrl_values=member_ctrl_values,
                 predict_times=member_predict_times,
-                filtered_times=member_filtered_times,
-                filtered_dists=member_filtered_dists,
-                smoothed_times=member_smoothed_times,
-                smoothed_dists=member_smoothed_dists,
+                filtered_result=member_filtered_result,
+                smoothed_result=member_smoothed_result,
                 _posterior_rollout_final_only=_posterior_rollout_final_only,
                 **kwargs,
             )
@@ -400,10 +424,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
-        filtered_times: Real[Array, "*filtered_time_plate filtered_time"] | None = None,
-        filtered_dists: list[numpyro.distributions.Distribution] | None = None,
-        smoothed_times: Real[Array, "*smoothed_time_plate smoothed_time"] | None = None,
-        smoothed_dists: list[numpyro.distributions.Distribution] | None = None,
+        filtered_result: ConditionedResult | None = None,
+        smoothed_result: ConditionedResult | None = None,
         **kwargs,
     ) -> object:
         posterior_rollout_final_only = kwargs.pop(
@@ -431,10 +453,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
-                filtered_times=filtered_times,
-                filtered_dists=filtered_dists,
-                smoothed_times=smoothed_times,
-                smoothed_dists=smoothed_dists,
+                filtered_result=filtered_result,
+                smoothed_result=smoothed_result,
                 _posterior_rollout_final_only=posterior_rollout_final_only,
                 **kwargs,
             )
@@ -446,10 +466,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 predict_times=predict_times,
-                filtered_times=filtered_times,
-                filtered_dists=filtered_dists,
-                smoothed_times=smoothed_times,
-                smoothed_dists=smoothed_dists,
+                filtered_result=filtered_result,
+                smoothed_result=smoothed_result,
                 _posterior_rollout_final_only=posterior_rollout_final_only,
                 **kwargs,
             )
