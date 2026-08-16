@@ -2,7 +2,7 @@ import dataclasses
 from collections.abc import Callable
 from typing import Literal
 
-import numpy as np
+import jax.numpy as jnp
 from jax.typing import ArrayLike
 from numpyro.infer.initialization import init_to_sample
 
@@ -71,18 +71,22 @@ class NUTSConfig(BaseMCMCConfig):
 
 @dataclasses.dataclass
 class AdaptiveMetropolisConfig(BaseMCMCConfig):
-    """Adaptive componentwise random-walk Metropolis configuration.
+    """Adaptive random-walk Metropolis-within-Gibbs configuration.
 
     One transition updates each flattened unconstrained coordinate in order.
-    Proposal scales adapt during warmup toward the requested acceptance rate
-    and remain fixed while retained samples are generated.
+    Each coordinate update uses a one-dimensional Gaussian random-walk proposal
+    that is accepted or rejected before the next coordinate is visited; the
+    sampler does not make a single joint multivariate-normal proposal. Proposal
+    scales adapt during warmup toward the requested acceptance rate and remain
+    fixed while retained samples are generated.
 
     This sampler is currently implemented by the BlackJAX integration only.
 
     Attributes:
         initial_proposal_scale (ArrayLike): Positive scalar proposal scale, or
             one positive scale per flattened unconstrained coordinate.
-        target_acceptance_rate (float): Per-coordinate target acceptance rate.
+        target_acceptance_rate (float): Shared target acceptance rate applied
+            to each coordinate update.
         adaptation_rate (float): Exponent in the diminishing adaptation step
             ``n_iter ** -adaptation_rate``.
         max_adaptation (float): Maximum change to a log proposal scale in one
@@ -107,12 +111,12 @@ class AdaptiveMetropolisConfig(BaseMCMCConfig):
         if self.max_adaptation <= 0.0:
             raise ValueError("max_adaptation must be positive")
 
-        proposal_scale = np.asarray(self.initial_proposal_scale)
+        proposal_scale = jnp.asarray(self.initial_proposal_scale)
         if proposal_scale.ndim > 1:
             raise ValueError("initial_proposal_scale must be a scalar or 1D array")
-        if proposal_scale.size == 0 or not np.all(np.isfinite(proposal_scale)):
+        if proposal_scale.size == 0 or not jnp.all(jnp.isfinite(proposal_scale)):
             raise ValueError("initial_proposal_scale must contain finite values")
-        if np.any(proposal_scale <= 0.0):
+        if jnp.any(proposal_scale <= 0.0):
             raise ValueError("initial_proposal_scale must be positive")
 
 

@@ -1,4 +1,4 @@
-"""Adaptive random-walk Metropolis for the BlackJAX integration."""
+"""Adaptive random-walk Metropolis-within-Gibbs for BlackJAX."""
 
 # The diminishing adaptation rule is inspired by PFJAX:
 # https://github.com/mlysy/pfjax/blob/97652aa1bdff73a92c0286549b010e99cc6f7264/src/pfjax/mcmc.py
@@ -48,7 +48,7 @@ def resolve_proposal_scale(
 
 
 class AdaptiveMetropolisState(NamedTuple):
-    """State carried by the adaptive Metropolis kernel."""
+    """State carried by the adaptive Metropolis-within-Gibbs kernel."""
 
     position: jax.Array
     proposal_scale: jax.Array
@@ -57,7 +57,7 @@ class AdaptiveMetropolisState(NamedTuple):
 
 
 class AdaptiveMetropolisInfo(NamedTuple):
-    """Per-coordinate acceptance indicators for one transition."""
+    """Acceptance indicators for the coordinate updates in one transition."""
 
     is_accepted: jax.Array
 
@@ -78,7 +78,7 @@ def init(
 
 
 def build_kernel() -> Callable:
-    """Build one complete componentwise random-walk Metropolis transition."""
+    """Build one complete random-walk Metropolis-within-Gibbs transition."""
     rmh_step = blackjax.mcmc.random_walk.build_rmh()
 
     def kernel(
@@ -149,7 +149,7 @@ def adaptive_metropolis(
     max_adaptation: float,
     num_warmup: int,
 ) -> SamplingAlgorithm:
-    """Return the adaptive Metropolis kernel as a BlackJAX algorithm."""
+    """Return adaptive Metropolis-within-Gibbs as a BlackJAX algorithm."""
     return build_sampling_algorithm(
         build_kernel(),
         init,
