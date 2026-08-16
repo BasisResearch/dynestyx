@@ -4291,6 +4291,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AdaptiveMetropolisConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.inference.configs.mcmc.AdjustedMCLMCDynamicConfig" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4846,6 +4857,132 @@ backend integrations.</p>
 
 
 
+<h2 id="dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig" class="doc doc-heading">
+            <code>AdaptiveMetropolisConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseMCMCConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.mcmc.BaseMCMCConfig)" href="#dynestyx.inference.configs.mcmc.BaseMCMCConfig">BaseMCMCConfig</a></code></p>
+
+
+
+        <p>Adaptive random-walk Metropolis-within-Gibbs configuration.</p>
+<p>One transition updates each flattened unconstrained coordinate in order.
+Each coordinate update uses a one-dimensional Gaussian random-walk proposal
+that is accepted or rejected before the next coordinate is visited; the
+sampler does not make a single joint multivariate-normal proposal. Proposal
+scales adapt during warmup toward the requested acceptance rate and remain
+fixed while retained samples are generated.</p>
+<p>This sampler is currently implemented by the BlackJAX integration only.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig.initial_proposal_scale">initial_proposal_scale</span></code></td>
+            <td>
+                  <code><span title="jax.typing.ArrayLike">ArrayLike</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Positive scalar proposal scale, or
+one positive scale per flattened unconstrained coordinate.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig.target_acceptance_rate">target_acceptance_rate</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Shared target acceptance rate applied
+to each coordinate update.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig.adaptation_rate">adaptation_rate</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Exponent in the diminishing adaptation step
+<code>n_iter ** -adaptation_rate</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.mcmc.AdaptiveMetropolisConfig.max_adaptation">max_adaptation</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum change to a log proposal scale in one
+warmup transition.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h2 id="dynestyx.inference.configs.mcmc.AdjustedMCLMCDynamicConfig" class="doc doc-heading">
             <code>AdjustedMCLMCDynamicConfig</code>
 
@@ -4994,8 +5131,8 @@ integration steps per proposal.</p>
 
         <p>Shared configuration options inherited by all MCMC configs.</p>
 <p>You do not instantiate this class directly; use one of the concrete
-subclasses (<code>NUTSConfig</code>, <code>HMCConfig</code>, <code>SGLDConfig</code>, <code>MALAConfig</code>,
-<code>AdjustedMCLMCDynamicConfig</code>).</p>
+subclasses (<code>NUTSConfig</code>, <code>HMCConfig</code>, <code>AdaptiveMetropolisConfig</code>,
+<code>SGLDConfig</code>, <code>MALAConfig</code>, <code>AdjustedMCLMCDynamicConfig</code>).</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5314,6 +5451,32 @@ step size is known in advance).</p>
 
 
         <p>No-U-Turn Sampler (NUTS) configuration.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.mcmc.NUTSConfig.target_acceptance_rate">target_acceptance_rate</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target acceptance probability used
+during warmup. Must lie strictly between zero and one.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 

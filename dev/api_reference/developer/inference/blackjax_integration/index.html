@@ -4330,6 +4330,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.inference.integrations.blackjax.mcmc._run_chains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _run_chains
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.inference.integrations.blackjax.mcmc.init_model" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4345,6 +4356,17 @@
     <span class="md-ellipsis">
       
         run_blackjax_mcmc
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.integrations.blackjax.mcmc.run_blackjax_mcmc_with_diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_blackjax_mcmc_with_diagnostics
       
     </span>
   </a>
@@ -4816,7 +4838,7 @@
 
 
 <h2 id="dynestyx.inference.integrations.blackjax.mcmc._run_chain_scan" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_run_chain_scan</span><span class="p">(</span><span class="n">rng_key</span><span class="p">,</span> <span class="n">make_step</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">,</span> <span class="n">num_steps</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="n">_run_chain_scan</span><span class="p">(</span><span class="n">rng_key</span><span class="p">,</span> <span class="n">make_step</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">,</span> <span class="n">num_steps</span><span class="p">,</span> <span class="n">info_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#dynestyx.inference.integrations.blackjax.mcmc._run_chain_scan" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -4824,6 +4846,24 @@
     <div class="doc doc-contents ">
 
         <p>Scan <code>num_steps</code> MCMC steps, passing a fresh density key to each.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.integrations.blackjax.mcmc._run_chains" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_run_chains</span><span class="p">(</span><span class="n">chain_keys</span><span class="p">,</span> <span class="n">run_chain</span><span class="p">,</span> <span class="n">initial_states</span><span class="p">)</span></code>
+
+<a href="#dynestyx.inference.integrations.blackjax.mcmc._run_chains" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply one BlackJAX chain runner with standard chain semantics.</p>
 
 
     </div>
@@ -4896,6 +4936,24 @@ accept an explicit <code>density_key</code>, so a fresh key can be passed at eac
     <div class="doc doc-contents ">
 
         <p>Run BlackJAX-based inference and return posterior samples.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.inference.integrations.blackjax.mcmc.run_blackjax_mcmc_with_diagnostics" class="doc doc-heading">
+            <code class=" language-python"><span class="n">run_blackjax_mcmc_with_diagnostics</span><span class="p">(</span><span class="n">mcmc_config</span><span class="p">:</span> <span class="n">BaseMCMCConfig</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">]]</span></code>
+
+<a href="#dynestyx.inference.integrations.blackjax.mcmc.run_blackjax_mcmc_with_diagnostics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run BlackJAX inference and return samples plus compact diagnostics.</p>
 
 
     </div>

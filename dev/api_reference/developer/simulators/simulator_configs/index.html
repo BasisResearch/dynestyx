@@ -4774,6 +4774,19 @@ this is the fixed integration step. Defaults to <code>1e-3</code>.</p>
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.simulator.ODESimulatorConfig.throw">throw</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether Diffrax raises when a solve fails. Set this to
+<code>False</code> when inference should reject invalid parameter proposals
+instead of aborting the complete run. Defaults to <code>True</code>.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 

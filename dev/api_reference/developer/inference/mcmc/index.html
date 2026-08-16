@@ -4275,6 +4275,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#dynestyx.inference.mcmc.MCMCInference.get_diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dynestyx.inference.mcmc.MCMCInference.run" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4861,7 +4872,8 @@
             <td>
               <div class="doc-md-description">
                 <p>Sampler configuration dataclass (<code>NUTSConfig</code>,
-<code>HMCConfig</code>, <code>SGLDConfig</code>, or <code>MALAConfig</code>).</p>
+<code>HMCConfig</code>, <code>AdaptiveMetropolisConfig</code>, <code>SGLDConfig</code>, or
+<code>MALAConfig</code>).</p>
               </div>
             </td>
           </tr>
@@ -4899,6 +4911,50 @@
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.inference.mcmc.MCMCInference.get_diagnostics" class="doc doc-heading">
+            <code class=" language-python"><span class="n">get_diagnostics</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">]</span></code>
+
+<a href="#dynestyx.inference.mcmc.MCMCInference.get_diagnostics" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return compact diagnostics from the most recent successful run.</p>
+<p>NUTS reports <code>mean_acceptance_rate</code> and <code>num_divergences</code> per
+chain. Adaptive Metropolis reports <code>mean_acceptance_rate</code> and
+<code>final_proposal_scale</code> per chain and unconstrained coordinate.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If inference has not completed successfully.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -5079,14 +5135,14 @@
 
 
 <h2 id="dynestyx.inference.mcmc._blackjax_mcmc" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_blackjax_mcmc</span><span class="p">(</span><span class="n">mcmc_config</span><span class="p">:</span> <span class="n">BaseMCMCConfig</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span></code>
+            <code class=" language-python"><span class="n">_blackjax_mcmc</span><span class="p">(</span><span class="n">mcmc_config</span><span class="p">:</span> <span class="n">BaseMCMCConfig</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">]]</span></code>
 
 <a href="#dynestyx.inference.mcmc._blackjax_mcmc" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Run BlackJAX-based inference via the BlackJAX integration module.</p>
+        <p>Run BlackJAX inference via the BlackJAX integration module.</p>
 
 
     </div>
@@ -5097,14 +5153,14 @@
 
 
 <h2 id="dynestyx.inference.mcmc._numpyro_mcmc" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_numpyro_mcmc</span><span class="p">(</span><span class="n">mcmc_config</span><span class="p">:</span> <span class="n">BaseMCMCConfig</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span></code>
+            <code class=" language-python"><span class="n">_numpyro_mcmc</span><span class="p">(</span><span class="n">mcmc_config</span><span class="p">:</span> <span class="n">BaseMCMCConfig</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">]]</span></code>
 
 <a href="#dynestyx.inference.mcmc._numpyro_mcmc" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Run NumPyro-based MCMC (<code>NUTS</code> or <code>HMC</code>) and return samples.</p>
+        <p>Run NumPyro MCMC and return samples plus compact diagnostics.</p>
 
 
     </div>
