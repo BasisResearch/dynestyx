@@ -1,7 +1,6 @@
 # MCMC Configurations
 
-`MCMCInference` is configured via MCMC config dataclasses. These specify sampler family,
-backend source, and algorithm hyperparameters.
+`MCMCInference` is configured via MCMC config dataclasses. These specify sampler family, backend source, and algorithm hyperparameters. 
 
 ::: dynestyx.inference.configs.mcmc
     options:
@@ -9,4 +8,6 @@ backend source, and algorithm hyperparameters.
         - BaseMCMCConfig
         - NUTSConfig
         - HMCConfig
+        - AdaptiveMetropolisConfig
         - SGLDConfig
+        - MALAConfig
