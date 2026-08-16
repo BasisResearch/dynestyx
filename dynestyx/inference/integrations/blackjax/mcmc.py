@@ -12,11 +12,16 @@ from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model, potential_energy
 
 from dynestyx.inference.configs.mcmc import (
+    AdaptiveMetropolisConfig,
     BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
     SGLDConfig,
+)
+from dynestyx.inference.integrations.blackjax.adaptive_metropolis import (
+    adaptive_metropolis,
+    resolve_proposal_scale,
 )
 
 
@@ -30,38 +35,40 @@ def _has_chain_axis(initial_positions, num_chains: int) -> bool:
     )
 
 
-def _run_chain_scan(rng_key, make_step, initial_state, num_steps):
+def _run_chain_scan(
+    rng_key,
+    make_step,
+    initial_state,
+    num_steps,
+    info_fn=None,
+):
     """Scan ``num_steps`` MCMC steps, passing a fresh density key to each."""
+    if info_fn is None:
+        info_fn = lambda state, info: ()
 
     def one_step(state, keys):
         mcmc_key, density_key = keys
-        state, _ = make_step(density_key)(mcmc_key, state)
-        return state, state
+        state, info = make_step(density_key)(mcmc_key, state)
+        return state, (state.position, info_fn(state, info))
 
     key_mcmc, key_density = jr.split(rng_key)
-    _, states = jax.lax.scan(
+    final_state, result = jax.lax.scan(
         one_step,
         initial_state,
         (jr.split(key_mcmc, num_steps), jr.split(key_density, num_steps)),
     )
-    return states
+    return final_state, result
 
 
-def _run_chains(chain_keys, make_step, initial_states, num_steps):
+def _run_chains(chain_keys, run_chain, initial_states):
+    """Apply one BlackJAX chain runner with standard chain semantics."""
     if chain_keys.shape[0] == 1:
-        single = _run_chain_scan(
-            chain_keys[0],
-            make_step,
-            jax.tree_util.tree_map(lambda x: x[0], initial_states),
-            num_steps,
-        )
-        return jax.tree_util.tree_map(lambda x: x[None, ...], single)
-
-    return jax.pmap(
-        _run_chain_scan,
-        in_axes=(0, None, 0, None),
-        static_broadcasted_argnums=(1, 3),
-    )(chain_keys, make_step, initial_states, num_steps)
+        state = jax.tree_util.tree_map(lambda x: x[0], initial_states)
+        result = run_chain(chain_keys[0], state)
+        return jax.tree_util.tree_map(lambda x: x[None, ...], result)
+    if jax.local_device_count() >= chain_keys.shape[0]:
+        return jax.pmap(run_chain)(chain_keys, initial_states)
+    return jax.vmap(run_chain)(chain_keys, initial_states)
 
 
 def _run_blackjax(
@@ -73,7 +80,9 @@ def _run_blackjax(
     num_steps: int,
     transform_fn: Callable,
     num_warmup: int = 0,
-) -> dict:
+    info_fn: Callable | None = None,
+    diagnostics_fn: Callable | None = None,
+) -> tuple[dict, dict[str, jax.Array]]:
     mcmc_key, init_density_key = jr.split(mcmc_key)
     algorithm = make_algorithm(init_density_key)
 
@@ -83,17 +92,30 @@ def _run_blackjax(
         else algorithm.init(initial_positions)  # type: ignore[call-arg]
     )
 
-    full_states = _run_chains(
-        jr.split(mcmc_key, num_chains),
-        lambda dk: make_algorithm(dk).step,
+    chain_keys = jr.split(mcmc_key, num_chains)
+    make_step = lambda dk: make_algorithm(dk).step
+
+    def run_chain(key, state):
+        return _run_chain_scan(
+            key,
+            make_step,
+            state,
+            num_steps,
+            info_fn,
+        )
+
+    final_states, (positions, info) = _run_chains(
+        chain_keys,
+        run_chain,
         initial_states,
-        num_steps,
     )
-    constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(full_states.position)
+    diagnostics = diagnostics_fn(final_states, info) if diagnostics_fn else {}
+    constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(positions)
 
     if num_warmup == 0:
-        return constrained
-    return jax.vmap(lambda s: {k: v[num_warmup:] for k, v in s.items()})(constrained)
+        return constrained, diagnostics
+    samples = jax.vmap(lambda s: {k: v[num_warmup:] for k, v in s.items()})(constrained)
+    return samples, diagnostics
 
 
 def init_model(
@@ -138,7 +160,7 @@ def init_model(
     return init_params, potential_fn_gen, postprocess_fn
 
 
-def run_blackjax_mcmc(
+def run_blackjax_mcmc_with_diagnostics(
     mcmc_config: BaseMCMCConfig,
     rng_key: jnp.ndarray,
     model: Callable,
@@ -148,8 +170,8 @@ def run_blackjax_mcmc(
     ctrl_values: jnp.ndarray | None = None,
     *model_args,
     **model_kwargs,
-) -> dict:
-    """Run BlackJAX-based inference and return posterior samples."""
+) -> tuple[dict, dict[str, jax.Array]]:
+    """Run BlackJAX inference and return samples plus compact diagnostics."""
     rng_key, init_key_master = jr.split(rng_key)
     init_keys = jr.split(init_key_master, mcmc_config.num_chains)
 
@@ -176,7 +198,9 @@ def run_blackjax_mcmc(
     if isinstance(mcmc_config, NUTSConfig):
         rng_key, warmup_key, warmup_density_key, mcmc_key = jr.split(rng_key, 4)
         warmup = blackjax.window_adaptation(
-            blackjax.nuts, make_logdensity(warmup_density_key)
+            blackjax.nuts,
+            make_logdensity(warmup_density_key),
+            target_acceptance_rate=mcmc_config.target_acceptance_rate,
         )
         warmup_position = (
             jax.tree_util.tree_map(lambda x: x[0], initial_positions)
@@ -190,6 +214,18 @@ def run_blackjax_mcmc(
         def make_nuts(density_key):
             return blackjax.nuts(make_logdensity(density_key), **warmup_parameters)
 
+        def nuts_info(state, info):
+            del state
+            return info.acceptance_rate, info.is_divergent
+
+        def nuts_diagnostics(final_state, info):
+            del final_state
+            acceptance_rate, is_divergent = info
+            return {
+                "mean_acceptance_rate": jnp.mean(acceptance_rate, axis=1),
+                "num_divergences": jnp.sum(is_divergent, axis=1),
+            }
+
         return _run_blackjax(
             mcmc_key=mcmc_key,
             make_algorithm=make_nuts,
@@ -198,6 +234,8 @@ def run_blackjax_mcmc(
             num_chains=mcmc_config.num_chains,
             num_steps=mcmc_config.num_samples,
             transform_fn=transform_fn,
+            info_fn=nuts_info,
+            diagnostics_fn=nuts_diagnostics,
         )
 
     if isinstance(mcmc_config, HMCConfig):
@@ -293,8 +331,70 @@ def run_blackjax_mcmc(
             return jax.vmap(transform_fn)(post_warmup)
 
         rng_key, mcmc_key = jr.split(rng_key)
-        return jax.vmap(_run_sgld_chain)(
+        samples = jax.vmap(_run_sgld_chain)(
             jr.split(mcmc_key, mcmc_config.num_chains), initial_positions
+        )
+        return samples, {}
+
+    if isinstance(mcmc_config, AdaptiveMetropolisConfig):
+        reference_position = (
+            jax.tree_util.tree_map(lambda x: x[0], initial_positions)
+            if has_chain_axis
+            else initial_positions
+        )
+        reference_flat, unravel_fn = ravel_pytree(reference_position)
+        flat_initial_positions = (
+            jax.vmap(lambda x: ravel_pytree(x)[0])(initial_positions)
+            if has_chain_axis
+            else reference_flat[None, ...]
+        )
+        proposal_scale = resolve_proposal_scale(
+            jnp.asarray(mcmc_config.initial_proposal_scale),
+            reference_flat.size,
+        ).astype(reference_flat.dtype)
+
+        def make_adaptive_metropolis(density_key):
+            logdensity_fn = make_logdensity(density_key)
+
+            def flat_logdensity(position):
+                return logdensity_fn(unravel_fn(position))
+
+            return adaptive_metropolis(
+                flat_logdensity,
+                proposal_scale,
+                target_acceptance_rate=mcmc_config.target_acceptance_rate,
+                adaptation_rate=mcmc_config.adaptation_rate,
+                max_adaptation=mcmc_config.max_adaptation,
+                num_warmup=mcmc_config.num_warmup,
+            )
+
+        def flat_transform(position):
+            return transform_fn(unravel_fn(position))
+
+        def acceptance_info(state, info):
+            del state
+            return info.is_accepted
+
+        def adaptive_diagnostics(final_state, is_accepted):
+            return {
+                "mean_acceptance_rate": jnp.mean(
+                    is_accepted[:, mcmc_config.num_warmup :], axis=1
+                ),
+                "final_proposal_scale": final_state.proposal_scale,
+            }
+
+        rng_key, mcmc_key = jr.split(rng_key)
+        return _run_blackjax(
+            mcmc_key=mcmc_key,
+            make_algorithm=make_adaptive_metropolis,
+            initial_positions=flat_initial_positions,
+            has_chain_axis=True,
+            num_chains=mcmc_config.num_chains,
+            num_steps=mcmc_config.num_warmup + mcmc_config.num_samples,
+            transform_fn=flat_transform,
+            num_warmup=mcmc_config.num_warmup,
+            info_fn=acceptance_info,
+            diagnostics_fn=adaptive_diagnostics,
         )
 
     if isinstance(mcmc_config, MALAConfig):
@@ -317,3 +417,29 @@ def run_blackjax_mcmc(
         )
 
     raise ValueError(f"Invalid MCMC config: {mcmc_config}")
+
+
+def run_blackjax_mcmc(
+    mcmc_config: BaseMCMCConfig,
+    rng_key: jnp.ndarray,
+    model: Callable,
+    obs_times: jnp.ndarray,
+    obs_values: jnp.ndarray,
+    ctrl_times: jnp.ndarray | None = None,
+    ctrl_values: jnp.ndarray | None = None,
+    *model_args,
+    **model_kwargs,
+) -> dict:
+    """Run BlackJAX-based inference and return posterior samples."""
+    samples, _ = run_blackjax_mcmc_with_diagnostics(
+        mcmc_config,
+        rng_key,
+        model,
+        obs_times,
+        obs_values,
+        ctrl_times,
+        ctrl_values,
+        *model_args,
+        **model_kwargs,
+    )
+    return samples
