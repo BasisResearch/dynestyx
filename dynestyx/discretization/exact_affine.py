@@ -50,9 +50,7 @@ def _van_loan_covariance(
     )
     short_exponential = jsp.linalg.expm(van_loan * short_h)
     short_A = short_exponential[:state_dim, :state_dim]
-    short_Q = _symmetrize(
-        short_exponential[:state_dim, state_dim:] @ short_A.T
-    )
+    short_Q = _symmetrize(short_exponential[:state_dim, state_dim:] @ short_A.T)
 
     def _double_interval(carry):
         A, Q = carry
