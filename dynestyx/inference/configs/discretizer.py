@@ -66,16 +66,10 @@ class EulerMaruyamaConfig(BaseDiscretizerConfig):
     The method applies to nonlinear drift and state-, time-, or
     control-dependent diffusion. Under the usual global Lipschitz and growth
     assumptions it has strong order \(1/2\) and weak order \(1\); for additive
-    noise its strong order improves to \(1\). It requires one drift and one
-    diffusion evaluation per transition, but a single large step can poorly
-    represent nonlinear, stiff, or rapidly varying dynamics.
-
-    The result is a tractable Gaussian *conditional transition*. It can be
-    sampled by simulation, ensemble filters, and particle filters and evaluated
-    by consumers that use transition densities or moments. It does not assert
-    that a downstream filtering posterior is Gaussian. A singular covariance
-    is not currently representable by the Gaussian transition implementation;
-    use a positive jitter when the model is intentionally degenerate.
+    noise its strong order improves to \(1\). See Kloeden and Platen (1992)
+    for more details. It requires one drift and one diffusion evaluation per
+    transition, but a single large step can poorly represent nonlinear, stiff,
+    or rapidly varying dynamics.
 
     Attributes:
         covariance_jitter (float): Nonnegative \(\epsilon\) added to the
@@ -141,18 +135,13 @@ class ExactAffineConfig(BaseDiscretizerConfig):
     filtering when the rest of the model is also linear Gaussian.
 
     Matrix exponentials cost cubic time in the augmented state dimension and
-    can be expensive when many distinct interval lengths are used. Callable
-    drifts that merely happen to be affine, callable diffusions that merely
-    happen to be constant, state-dependent diffusion, and potentials are
-    deliberately rejected rather than guessed from numerical probes. Singular
-    \(Q_h\) requires positive jitter until singular Gaussian distributions are
-    supported.
+    can be expensive when many distinct interval lengths are used. Drfits
+    not explicitly marked as affine/constant, state-dependent diffusion, and
+    potentials are rejected. Singular \(Q_h\) requires positive jitter.
 
     Attributes:
         covariance_jitter (float): Nonnegative \(\epsilon\) added to \(Q_h\)
-            as \(\epsilon I\). Defaults to `0.0`. A positive value makes the
-            transition nondegenerate but changes the exact continuous-time
-            model.
+            as \(\epsilon I\). Defaults to `0.0`.
 
     ??? note "Algorithm Reference"
         - Van Loan, C. F. (1978). Computing integrals involving the matrix
@@ -212,25 +201,18 @@ class LocalLinearizationConfig(BaseDiscretizerConfig):
     \(\mathcal N(m_h,P_h+\epsilon I)\), where \(\epsilon\) is
     `covariance_jitter`.
 
-    The method is exact for affine drift when the diffusion is additive. It can
-    be markedly more accurate than Euler--Maruyama across moderate intervals
-    because it propagates the local drift Jacobian analytically. Its cost is
-    substantially higher: each conditional transition requires automatic
-    differentiation of the drift and augmented matrix exponentials. This is
-    especially noticeable when vectorized over a large particle or ensemble
-    population.
+    The method is exact for affine drift with additive diffusion. With some amount
+    of nonlinearity, it can be more accurate than Euler--Maruyama, but at higher
+    cost, since Jacobians must be computed.
 
-    State-, time-, or control-dependent diffusion is outside this version's
-    applicability and is rejected. The returned object is a tractable Gaussian
-    conditional transition and is compatible with sampling-, density-, and
-    moment-based inference consumers; it does not require the filtering
-    posterior itself to be Gaussian. Degenerate transition covariance requires
-    explicit positive jitter.
+    State-, time-, or control-dependent diffusion are rejected.
+    The returned object is a Gaussian transition distribution, compatible
+    with any method using Gaussian transitions. Degenerate transition covariance
+    requires explicit positive jitter.
 
     Attributes:
         covariance_jitter (float): Nonnegative \(\epsilon\) added to \(P_h\)
-            as \(\epsilon I\). Defaults to `0.0`. Positive jitter changes the
-            stochastic model.
+            as \(\epsilon I\). Defaults to `0.0`.
 
     ??? note "Algorithm Reference"
         - Särkkä, S., & Svensson, L. (2023). *Bayesian Filtering and
@@ -286,23 +268,19 @@ class MeanTrajectoryLinearizationConfig(BaseDiscretizerConfig):
     control-dependent diffusion. It is exact for affine drift with additive
     diffusion up to the numerical ODE solver tolerance. Relative to a
     left-endpoint local linearization, it updates the Jacobian along the mean
-    trajectory; relative to sigma-point moment closures, it uses fewer model
-    evaluations but discards higher-order drift curvature around the mean.
+    trajectory.
 
     Every transition performs a joint mean/covariance ODE solve and evaluates a
     state Jacobian at each right-hand-side call, so it is considerably more
-    expensive than Euler--Maruyama. The returned Gaussian is an approximation
-    to the *conditional transition*, not a claim that the filtering posterior
-    is Gaussian. It remains usable by sampling-, density-, and moment-based
-    consumers. A singular final covariance requires explicit positive jitter.
+    expensive than Euler--Maruyama. A singular final covariance requires explicit
+    positive jitter.
 
     Attributes:
         ode_solver (ODESimulatorConfig): Existing Diffrax ODE configuration
             used unchanged for the joint mean/covariance integration.
             Defaults to `ODESimulatorConfig()`.
         covariance_jitter (float): Nonnegative \(\epsilon\) added to the final
-            covariance as \(\epsilon I\). Defaults to `0.0`. Positive jitter
-            changes the stochastic model.
+            covariance as \(\epsilon I\). Defaults to `0.0`.
 
     ??? note "Algorithm Reference"
         - Särkkä, S., & Solin, A. (2019). *Applied Stochastic Differential
@@ -373,12 +351,10 @@ class DiffraxSampleConfig(BaseDiscretizerConfig):
     Brownian increments, including `diffrax.Euler()` and `diffrax.Heun()`.
     The default inner config selects `diffrax.Euler()`, the Euler--Maruyama
     solver. Cost scales with the number of internal solver steps and requested
-    samples. `source="em_scan"` is rejected because this config specifically
-    shares the Diffrax interval-solver path. Reverse-mode differentiation
-    through the default
-    `diffrax.RecursiveCheckpointAdjoint()` requires a finite
+    samples. `source="em_scan"` is rejected. Reverse-mode differentiation
+    through the default `diffrax.RecursiveCheckpointAdjoint()` requires a finite
     `sde_solver.max_steps`; set that bound explicitly for gradient-based
-    inference, as in the Lorenz--63 comparison notebook.
+    inference.
 
     Attributes:
         sde_solver (SDESimulatorConfig): Existing SDE simulator configuration
