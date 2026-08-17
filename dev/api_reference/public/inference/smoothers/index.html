@@ -1012,6 +1012,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3746,7 +3774,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3762,7 +3790,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3775,7 +3803,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4669,7 +4781,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4685,7 +4797,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4698,7 +4810,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4798,7 +4994,7 @@
 <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">(</span><span class="n">n_simulations</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">Smoother</span><span class="p">(</span>
         <span class="n">smoother_config</span><span class="o">=</span><span class="n">KFSmootherConfig</span><span class="p">(</span>
-            <span class="n">filter_source</span><span class="o">=</span><span class="s2">&quot;cd_dynamax&quot;</span><span class="p">,</span>
+            <span class="n">filter_source</span><span class="o">=</span><span class="s2">"cd_dynamax"</span><span class="p">,</span>
             <span class="n">record_smoothed_states_mean</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="p">):</span>

@@ -1012,6 +1012,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3640,7 +3668,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3656,7 +3684,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3669,7 +3697,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../../public/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../public/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../public/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../public/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4790,7 +4902,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4806,7 +4918,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4819,7 +4931,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4912,6 +5108,7 @@
 
 <h1 id="filter-configurations">Filter Configurations<a class="headerlink" href="#filter-configurations" title="Permanent link">&para;</a></h1>
 <p>The single <code>Filter()</code> handler is directed to the appropriate filtering algorithm via the provided <code>FilterConfig</code>.</p>
+<p><code>include_predicted_observations</code> controls result-level collection of supported backend predictive-observation outputs. The <code>record_predicted_observations_mean</code>, <code>record_predicted_observations_cov</code>, and <code>record_predicted_observations_ensemble</code> fields separately control NumPyro recording. Collection and recording default to enabled; unavailable fields are omitted without making Filter fail.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -5052,6 +5249,59 @@ at each step (particle-based filters only).</p>
               <div class="doc-md-description">
                 <p>Save the log importance
 weights at each step (particle-based filters only).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.BaseFilterConfig.include_predicted_observations">include_predicted_observations</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Collect supported one-step-ahead
+predictive-observation outputs in <code>ConditionedResult</code>. This is
+independent of whether those outputs are recorded to a NumPyro
+trace. Defaults to <code>True</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.BaseFilterConfig.record_predicted_observations_mean">record_predicted_observations_mean</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the one-step-ahead
+predicted observation mean at each observation time, before
+conditioning on that observation. Defaults to <code>True</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.BaseFilterConfig.record_predicted_observations_cov">record_predicted_observations_cov</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the backend predicted
+observation covariance before observation noise is added. Defaults
+to <code>True</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.BaseFilterConfig.record_predicted_observations_ensemble">record_predicted_observations_ensemble</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Save the backend
+predicted observation ensemble before observation noise is added
+(ensemble filters only). Defaults to <code>True</code> when available.</p>
               </div>
             </td>
           </tr>

@@ -15,7 +15,7 @@
         <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/faq/">
       
       
-        <link rel="prev" href="../api_reference/developer/diagnostics/plotting_utils/">
+        <link rel="prev" href="../api_reference/developer/evaluation/plotting_utils/">
       
       
       
@@ -997,6 +997,34 @@
     
   
     Part 11c: Missing Observations in HMMs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
   
 
     
@@ -3630,7 +3658,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3646,7 +3674,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3659,7 +3687,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../api_reference/public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../api_reference/public/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/public/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/public/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/public/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4550,7 +4662,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4566,7 +4678,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4579,7 +4691,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../api_reference/developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../api_reference/developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4856,7 +5052,7 @@
     <span class="n">params</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
     <span class="n">dynamics</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">DynamicalModel</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
     <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
-        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+        <span class="s2">"f"</span><span class="p">,</span>
         <span class="n">dynamics</span><span class="p">,</span>
         <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
         <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -4957,7 +5153,7 @@ parameters in <code>model</code>:</p>
             <span class="n">num_samples</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span>
             <span class="n">num_warmup</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span>
             <span class="n">num_chains</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-            <span class="n">mcmc_source</span><span class="o">=</span><span class="s2">&quot;numpyro&quot;</span><span class="p">,</span>
+            <span class="n">mcmc_source</span><span class="o">=</span><span class="s2">"numpyro"</span><span class="p">,</span>
         <span class="p">),</span>
         <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
     <span class="p">)</span>
@@ -5044,7 +5240,7 @@ as shown above; filtering, smoothing, and latent-path scoring use:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Auto-routed filtering and its marginal log likelihood.</span>
 <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">Filter</span><span class="p">():</span>
     <span class="n">filtered</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">condition</span><span class="p">(</span>
-        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+        <span class="s2">"f"</span><span class="p">,</span>
         <span class="n">dynamics</span><span class="p">,</span>
         <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
         <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -5053,7 +5249,7 @@ as shown above; filtering, smoothing, and latent-path scoring use:</p>
 <span class="c1"># Auto-routed smoothing and its marginal log likelihood.</span>
 <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">Smoother</span><span class="p">():</span>
     <span class="n">smoothed</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">condition</span><span class="p">(</span>
-        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+        <span class="s2">"f"</span><span class="p">,</span>
         <span class="n">dynamics</span><span class="p">,</span>
         <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
         <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -5070,8 +5266,8 @@ as shown above; filtering, smoothing, and latent-path scoring use:</p>
 </code></pre></div>
 <p><code>dsx.condition</code> returns a
 <a href="../api_reference/public/result_types/#dynestyx.types.ConditionedResult"><code>ConditionedResult</code></a>
-containing the
-marginal log likelihood and state summaries requested by the active handler.
+containing the inference times, marginal log likelihood, state summaries, and
+per-time distributions requested by the active filter or smoother handler.
 Pass a filter or smoother config when you need a specific algorithm.
 <code>dsx.log_prob</code> returns the joint density of a fixed latent path. For a native
 SDE latent-path workflow, first choose a
@@ -5090,7 +5286,7 @@ filter:</p>
     <span class="n">dynamics</span> <span class="o">=</span> <span class="n">build_dynamics</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span>
     <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">my_filter_config</span><span class="p">):</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">condition</span><span class="p">(</span>
-            <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+            <span class="s2">"f"</span><span class="p">,</span>
             <span class="n">dynamics</span><span class="p">,</span>
             <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
             <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -5127,8 +5323,8 @@ tutorial</a>, the
 example</a>, and the
 <a href="../tutorials/gentle_intro/05_svi_no_numpyro/">NumPyro-free differentiable optimization
 tutorial</a>. The <a href="../api_reference/public/result_types/">result-type
-reference</a> documents
-<code>SimulatedResult</code> and <code>ConditionedResult</code>.</p>
+reference</a> documents <code>SimulatedResult</code>
+and <code>ConditionedResult</code>.</p>
 <h2 id="what-about-hierarchical-models">What about hierarchical models?<a class="headerlink" href="#what-about-hierarchical-models" title="Permanent link">&para;</a></h2>
 <p>Hierarchical models are supported by the <a href="../api_reference/public/handlers/"><code>dsx.plate</code></a> primitive! This allows for multiple levels of hierarchy (e.g., modelling populations, treatment arms, and individuals within each treatment arm), or simple multi-trajectory inference. You can see an example <a href="../tutorials/gentle_intro/08_hierarchical_inference/">here</a>.</p>
 <h2 id="what-about-neural-nets">What about neural nets?<a class="headerlink" href="#what-about-neural-nets" title="Permanent link">&para;</a></h2>

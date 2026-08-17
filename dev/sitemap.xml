@@ -45,11 +45,19 @@
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
-         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/diagnostics/plotting_utils/</loc>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/discretizers/discretizer/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
-         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/discretizers/discretizer/</loc>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/evaluation/handlers/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/evaluation/plotting_utils/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/evaluation/scoring/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
@@ -82,6 +90,10 @@
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/configs/mcmc_configs/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/inference/configs/scoring_configs/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
@@ -145,11 +157,19 @@
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
-         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/diagnostics/plotting_utils/</loc>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/discretizers/discretizer/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
-         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/discretizers/discretizer/</loc>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/evaluation/handlers/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/evaluation/plotting_utils/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/evaluation/scoring/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
@@ -174,6 +194,10 @@
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/inference/configs/mcmc_configs/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/inference/configs/scoring_configs/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>
@@ -398,6 +422,10 @@
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/11c_missing_observations_hmms/</loc>
+         <lastmod>2026-08-17</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/12_observation_scoring_with_filters/</loc>
          <lastmod>2026-08-17</lastmod>
     </url>
     <url>

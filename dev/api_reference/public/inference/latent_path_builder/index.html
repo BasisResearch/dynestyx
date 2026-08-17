@@ -1012,6 +1012,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3791,7 +3819,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3807,7 +3835,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3820,7 +3848,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4714,7 +4826,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4730,7 +4842,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4743,7 +4855,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4845,14 +5041,14 @@ y_t \sim p(y_t \,|\, x_t).
 \]</div>
 <p>Then we can perform inference on the joint distribution <span class="arithmatex">\(p(x_{0:T}, \theta \,|\, y_{1:T})\)</span> by considering a probabilistic program that computes recursions in a <code>for</code> loop, conceptually something like
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">model</span><span class="p">(</span><span class="n">ys</span><span class="p">):</span>
-  <span class="n">x_0</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;x0&quot;</span><span class="p">,</span> <span class="n">p_x0</span><span class="p">)</span>
-  <span class="n">theta</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;theta&quot;</span><span class="p">,</span> <span class="n">p_theta</span><span class="p">)</span>
+  <span class="n">x_0</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"x0"</span><span class="p">,</span> <span class="n">p_x0</span><span class="p">)</span>
+  <span class="n">theta</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"theta"</span><span class="p">,</span> <span class="n">p_theta</span><span class="p">)</span>
 
   <span class="n">x_i</span> <span class="o">=</span> <span class="n">x_0</span>
 
   <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
-    <span class="n">x_i</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;x_</span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">p_transition</span><span class="p">(</span><span class="n">x_i</span><span class="p">))</span>
-    <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;y_</span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">p_observation</span><span class="p">(</span><span class="n">x_i</span><span class="p">),</span> <span class="n">obs</span><span class="o">=</span><span class="n">ys</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="n">x_i</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="sa">f</span><span class="s2">"x_</span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">p_transition</span><span class="p">(</span><span class="n">x_i</span><span class="p">))</span>
+    <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="sa">f</span><span class="s2">"y_</span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">p_observation</span><span class="p">(</span><span class="n">x_i</span><span class="p">),</span> <span class="n">obs</span><span class="o">=</span><span class="n">ys</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
 </code></pre></div></p>
 <p><code>LatentPathBuilder</code> provides such a representation for joint learning, with support for arbitrary missingness in the data <code>y</code>. To support missingness and be more efficient, the pseudocode above <em>is not</em> how <code>LatentPathBuilder</code> is implemented, but is a useful mental model.</p>
 <p><code>LatentPathBuilder</code> is a NumPyro-facing handler: use it through <code>dsx.sample(...)</code> inside a
@@ -4887,7 +5083,7 @@ handler when the model runs. Examples of the three paths follow.</p>
 <h3 id="1-concrete-execution">1. Concrete execution<a class="headerlink" href="#1-concrete-execution" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">conditioned_model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
-        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+        <span class="s2">"f"</span><span class="p">,</span>
         <span class="n">dynamics</span><span class="p">,</span>
         <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
         <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -4934,7 +5130,7 @@ concrete data. You can also create it directly:</p>
 <p>All fields must match the layout of <code>obs_values</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">conditioned_model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
-        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+        <span class="s2">"f"</span><span class="p">,</span>
         <span class="n">dynamics</span><span class="p">,</span>
         <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
         <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -5092,7 +5288,7 @@ evaluates batches of that size with <code>jax.vmap</code>.</p>
     <div class="codehilite"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">builder</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">LatentPathBuilder</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">builder</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">result</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">"f"</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">dynamics</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -5124,7 +5320,7 @@ evaluates batches of that size with <code>jax.vmap</code>.</p>
 
 
 <h3 id="dynestyx.inference.latent.builder.LatentPathBuilder.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">ode_simulator_config</span><span class="p">:</span> <span class="n">ODESimulatorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">missing_observation_strategy</span><span class="p">:</span> <span class="n">MissingObservationStrategy</span> <span class="o">=</span> <span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">ode_simulator_config</span><span class="p">:</span> <span class="n">ODESimulatorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">missing_observation_strategy</span><span class="p">:</span> <span class="n">MissingObservationStrategy</span> <span class="o">=</span> <span class="s1">'auto'</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.inference.latent.builder.LatentPathBuilder.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 

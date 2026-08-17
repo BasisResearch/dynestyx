@@ -1012,6 +1012,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3812,7 +3840,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3828,7 +3856,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3841,7 +3869,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4735,7 +4847,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4751,7 +4863,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4764,7 +4876,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../../developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4870,9 +5066,9 @@ recording fields such as <code>record_smoothed_states_mean</code>,
     <span class="n">PFSmootherConfig</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">kf</span> <span class="o">=</span> <span class="n">KFSmootherConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">&quot;cd_dynamax&quot;</span><span class="p">)</span>
+<span class="n">kf</span> <span class="o">=</span> <span class="n">KFSmootherConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">"cd_dynamax"</span><span class="p">)</span>
 <span class="n">enrts</span> <span class="o">=</span> <span class="n">EnRTSSmootherConfig</span><span class="p">(</span><span class="n">n_particles</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
-<span class="n">pf</span> <span class="o">=</span> <span class="n">PFSmootherConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">&quot;cuthbert&quot;</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
+<span class="n">pf</span> <span class="o">=</span> <span class="n">PFSmootherConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">"cuthbert"</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
 <span class="n">ct_kf</span> <span class="o">=</span> <span class="n">ContinuousTimeKFSmootherConfig</span><span class="p">()</span>
 </code></pre></div>
 <p><code>EnRTSSmootherConfig</code> inherits the EnKF ensemble-size, inflation, and perturbed-observation options. <code>PFSmootherConfig</code> exposes particle-smoother options: <code>pf_backward_sampling_method</code>, <code>pf_mcmc_n_steps</code>, and <code>pf_n_smoother_particles</code>. <code>ContinuousTimeKFSmootherConfig</code> exposes <code>cdlgssm_smoother_type</code> for the CD-Dynamax continuous-discrete linear Gaussian smoother variant.</p>

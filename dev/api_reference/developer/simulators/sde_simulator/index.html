@@ -1006,6 +1006,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3626,7 +3654,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3642,7 +3670,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3655,7 +3683,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../public/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../public/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../public/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../public/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4546,7 +4658,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4562,7 +4674,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4575,7 +4687,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4721,8 +4917,8 @@ without a NumPyro trace.</p>
 <span class="gp">... </span>        <span class="p">),</span>
 <span class="gp">... </span>        <span class="n">observation_model</span><span class="o">=</span><span class="n">observation</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="p">)</span>
-<span class="gp">... </span>    <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;em_scan&quot;</span><span class="p">,</span> <span class="n">dt0</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"em_scan"</span><span class="p">,</span> <span class="n">dt0</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">n_simulations</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
 <span class="gp">... </span>        <span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span>
@@ -4730,13 +4926,13 @@ without a NumPyro trace.</p>
 <span class="gp">... </span>    <span class="n">draws</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span>
 <span class="gp">... </span>        <span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mi">51</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">draws</span><span class="p">[</span><span class="s2">&quot;f_states&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">draws</span><span class="p">[</span><span class="s2">"f_states"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">(10, 4, 51, state_dim)</span>
 </code></pre></div>
     <p>Use the Diffrax backend when a different SDE solver or step-size
 controller is required:</p>
     <div class="codehilite"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">SDESimulatorConfig</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">source</span><span class="o">=</span><span class="s2">&quot;diffrax&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">source</span><span class="o">=</span><span class="s2">"diffrax"</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">solver</span><span class="o">=</span><span class="n">diffrax</span><span class="o">.</span><span class="n">EulerHeun</span><span class="p">(),</span>
 <span class="gp">... </span>    <span class="n">dt0</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
@@ -4994,7 +5190,7 @@ be greater than or equal to one.</p>
 
 
 <h2 id="dynestyx.simulation.sde.SDESimulator.simulate" class="doc doc-heading">
-            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimulatedResult</span></code>
+            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'ctrl_time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' predict_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimulatedResult</span></code>
 
 <a href="#dynestyx.simulation.sde.SDESimulator.simulate" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -5039,9 +5235,9 @@ Therefore, <code>dsx.simulate(..., rng_key=root_key)</code> is equivalent to
 <span class="n">bm_dim</span> <span class="o">=</span> <span class="mi">1</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">model</span><span class="p">(</span><span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="n">theta</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;theta&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">LogNormal</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">))</span>
-    <span class="n">sigma_x</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;sigma_x&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">LogNormal</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">))</span>
-    <span class="n">sigma_y</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;sigma_y&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">LogNormal</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">))</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"theta"</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">LogNormal</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">))</span>
+    <span class="n">sigma_x</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"sigma_x"</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">LogNormal</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">))</span>
+    <span class="n">sigma_y</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"sigma_y"</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">LogNormal</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">))</span>
     <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span>
         <span class="n">control_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">initial_condition</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span><span class="p">(</span>
@@ -5057,13 +5253,13 @@ Therefore, <code>dsx.simulate(..., rng_key=root_key)</code> is equivalent to
             <span class="n">sigma_y</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">observation_dim</span><span class="p">),</span>
         <span class="p">),</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
 
 <span class="n">predict_times</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mi">51</span><span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">():</span>
     <span class="n">prior_pred</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">5</span><span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Predictive keys:&quot;</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">prior_pred</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>  <span class="c1"># e.g. [&#39;f_observations&#39;, &#39;f_states&#39;, &#39;f_times&#39;, &#39;sigma_x&#39;, &#39;sigma_y&#39;, &#39;theta&#39;, ...]</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Predictive shapes:&quot;</span><span class="p">,</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">prior_pred</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>  <span class="c1"># trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Predictive keys:"</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">prior_pred</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>  <span class="c1"># e.g. ['f_observations', 'f_states', 'f_times', 'sigma_x', 'sigma_y', 'theta', ...]</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Predictive shapes:"</span><span class="p">,</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">prior_pred</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>  <span class="c1"># trajectory arrays: (num_samples, n_sim, T, dim); here num_samples=5, n_sim=1</span>
 </code></pre></div>
 </details>
 <div class="admonition note">

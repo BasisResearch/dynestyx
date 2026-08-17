@@ -1012,6 +1012,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3752,7 +3780,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3768,7 +3796,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3781,7 +3809,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4675,7 +4787,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4691,7 +4803,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4704,7 +4816,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../../developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4796,7 +4992,8 @@
 
 
 <h1 id="filters">Filters<a class="headerlink" href="#filters" title="Permanent link">&para;</a></h1>
-<p>One of the principal functions of a dynamical systems inference engine is <em>filtering</em>, i.e., computation of the distribution <span class="arithmatex">\(p(x_t \mid y_{1:T}, \theta)\)</span>. In the computation of a filtering distribution, we also obtain estimates of the marginal likelihood, <span class="arithmatex">\(p(y_{1:T} | \theta)\)</span>, used for parameter inference/system identification. To tell <code>dynestyx</code> that a dynamical system should be processed via a filtering algorithm, we use the <code>Filter</code> class.</p>
+<p>One of the principal functions of a dynamical systems inference engine is <em>filtering</em>, i.e., computation of the distribution <span class="arithmatex">\(p(x_t \mid y_{1:t}, \theta)\)</span>. In the computation of a filtering distribution, we also obtain estimates of the marginal likelihood, <span class="arithmatex">\(p(y_{1:T} | \theta)\)</span>, used for parameter inference/system identification. To tell <code>dynestyx</code> that a dynamical system should be processed via a filtering algorithm, we use the <code>Filter</code> class.</p>
+<p>Where supported, <code>Filter</code> includes one-step-ahead predictive-observation outputs from the filter in its <code>ConditionedResult</code> via <code>include_predicted_observations</code>. </p>
 
 
 <div class="doc doc-object doc-module">
@@ -4856,7 +5053,7 @@ marginal log-likelihood as a NumPyro factor, allowing for downstream parameter i
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="codehilite"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">filtered_model</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">KFConfig</span><span class="p">()):</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
@@ -4887,6 +5084,9 @@ For a summary table of all config classes and when to use them, see
 <li>If your latent state is <em>discrete</em> (an HMM), you must use <code>HMMConfig</code>.</li>
 <li>What gets recorded to the trace (means/covariances, particles/weights,
 etc.) depends on <code>filter_config.record_*</code> and the backend implementation.</li>
+<li>Supported one-step-ahead predictive-observation outputs are included
+in <code>ConditionedResult</code> by default. The
+<code>record_predicted_observations_*</code> fields control NumPyro trace sites.</li>
 </ul>
 </details>
 

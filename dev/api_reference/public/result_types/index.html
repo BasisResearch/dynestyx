@@ -18,7 +18,7 @@
         <link rel="prev" href="../control/">
       
       
-        <link rel="next" href="../diagnostics/plotting_utils/">
+        <link rel="next" href="../evaluation/handlers/">
       
       
         
@@ -999,6 +999,34 @@
     
   
     Part 11c: Missing Observations in HMMs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
   
 
     
@@ -3662,6 +3690,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.types.EvaluationResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EvaluationResult
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.types.SimulatedResult" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3711,7 +3750,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3727,7 +3766,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3740,7 +3779,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4634,7 +4757,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4650,7 +4773,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4663,7 +4786,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4767,9 +4974,59 @@
 
 
 
-        <p>Result of dsx.condition — the numpyro-free conditioning primitive.</p>
-<p>Carries all outputs from the handler stack (Filter, Smoother, etc.)
-without registering any numpyro sites.</p>
+        <p>Common base for results from the NumPyro-free conditioning primitive.</p>
+<p><code>dsx.condition</code> returns this type under both <code>Filter</code> and <code>Smoother</code>.
+It carries the complete inference output through the handler stack without
+registering NumPyro sites. Filter results may additionally expose the
+canonical one-step-ahead <code>predicted_observations</code> and an
+<code>evaluation_result</code> attached by an outer evaluation handler. Posterior
+distributions are time-major:
+<code>dists[i]</code> corresponds to <code>times[..., i]</code>. Leading axes on <code>times</code>
+are optional plate axes, while each distribution may carry the matching
+plate axes in its batch shape.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynestyx.types.EvaluationResult"></a>
+    <div class="doc doc-contents first">
+
+
+
+        <p>Outputs computed by an evaluation handler.</p>
+<p>Evaluation handlers attach this object to the <code>ConditionedResult</code> they
+consume.  NumPyro registration remains deferred so <code>dsx.condition</code> stays
+side-effect free while <code>dsx.sample</code> can register the same outputs later.</p>
 
 
 

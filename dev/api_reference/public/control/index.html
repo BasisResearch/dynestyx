@@ -1012,6 +1012,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3652,7 +3680,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3668,7 +3696,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3681,7 +3709,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4575,7 +4687,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4591,7 +4703,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4604,7 +4716,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../../developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4838,7 +5034,7 @@ as they do for <code>Filter</code> (see <code>dynestyx.utils._should_record_fiel
 
 
 <h3 id="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="doc doc-heading">
-            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;ctrl_time control_dim&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; ctrl_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; predict_time&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">initial_policy_state</span><span class="p">:</span> <span class="n">PyTree</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControlledSimulatedResult</span></code>
+            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'ctrl_time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' predict_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">initial_policy_state</span><span class="p">:</span> <span class="n">PyTree</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControlledSimulatedResult</span></code>
 
 <a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -5422,7 +5618,7 @@ call.</p>
 
 
 <h3 id="dynestyx.control.mppi.MPPI.initial_state" class="doc doc-heading">
-            <code class=" language-python"><span class="n">initial_state</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;horizon control_dim&#39;</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">]</span></code>
+            <code class=" language-python"><span class="n">initial_state</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'horizon control_dim'</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">]</span></code>
 
 <a href="#dynestyx.control.mppi.MPPI.initial_state" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -5443,7 +5639,7 @@ automatically, so it must be supplied explicitly.</p>
 
 
 <h3 id="dynestyx.control.mppi.MPPI.plan_step" class="doc doc-heading">
-            <code class=" language-python"><span class="n">plan_step</span><span class="p">(</span><span class="n">x_hat</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">t_now</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">],</span> <span class="n">s</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;horizon control_dim&#39;</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39; control_dim&#39;</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">&#39;horizon control_dim&#39;</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">],</span> <span class="n">ControlledSimulatedResult</span><span class="p">]</span></code>
+            <code class=" language-python"><span class="n">plan_step</span><span class="p">(</span><span class="n">x_hat</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">t_now</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="n">s</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'horizon control_dim'</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' control_dim'</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'horizon control_dim'</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">],</span> <span class="n">ControlledSimulatedResult</span><span class="p">]</span></code>
 
 <a href="#dynestyx.control.mppi.MPPI.plan_step" class="headerlink" title="Permanent link">&para;</a></h3>
 

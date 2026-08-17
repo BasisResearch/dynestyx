@@ -1134,6 +1134,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3754,7 +3782,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3770,7 +3798,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3783,7 +3811,91 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="api_reference/public/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api_reference/public/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api_reference/public/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api_reference/public/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4674,7 +4786,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4690,7 +4802,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4703,7 +4815,91 @@
   
   
     <li class="md-nav__item">
-      <a href="api_reference/developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="api_reference/developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api_reference/developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api_reference/developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api_reference/developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4835,14 +5031,14 @@ synthetic trajectories at <code>predict_times</code>:</p>
     <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">predict_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
-    <span class="n">phi</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;phi&quot;</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">obs</span><span class="o">=</span><span class="n">phi</span><span class="p">)</span>
+    <span class="n">phi</span> <span class="o">=</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"phi"</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">obs</span><span class="o">=</span><span class="n">phi</span><span class="p">)</span>
     <span class="n">dynamics</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">DynamicalModel</span><span class="p">(</span>
         <span class="n">initial_condition</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
         <span class="n">state_evolution</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">phi</span> <span class="o">*</span> <span class="n">x</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
         <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
-        <span class="s2">&quot;f&quot;</span><span class="p">,</span>
+        <span class="s2">"f"</span><span class="p">,</span>
         <span class="n">dynamics</span><span class="p">,</span>
         <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
         <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -4864,8 +5060,8 @@ data and infer parameters with a filter plus NUTS (no explicit state sampling):<
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCMC</span><span class="p">,</span> <span class="n">NUTS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.inference.filters</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousTimeEnKFConfig</span>
 
-<span class="n">obs_times</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;f_times&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
-<span class="n">obs_values</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;f_observations&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="n">obs_times</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">"f_times"</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="n">obs_values</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">"f_observations"</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">inference_model</span><span class="p">():</span>
     <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">ContinuousTimeEnKFConfig</span><span class="p">(</span><span class="n">n_particles</span><span class="o">=</span><span class="mi">25</span><span class="p">)):</span>

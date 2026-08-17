@@ -1178,6 +1178,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 12: Observation scoring for filter predictive distributions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3798,7 +3826,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -3814,7 +3842,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -3827,7 +3855,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../api_reference/public/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../api_reference/public/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/public/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/public/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/public/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4718,7 +4830,7 @@
   <span class="md-ellipsis">
     
   
-    Diagnostics
+    Evaluation
   
 
     
@@ -4734,7 +4846,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Diagnostics
+    Evaluation
   
 
           </label>
@@ -4747,7 +4859,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../api_reference/developer/diagnostics/plotting_utils/" class="md-nav__link">
+      <a href="../api_reference/developer/evaluation/handlers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/inference/configs/scoring_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ScoringConfigs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/evaluation/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_reference/developer/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4878,7 +5074,7 @@
 <p>To sample from the dynamical model, we call <code>dsx.sample</code> inside of any <code>numpyro</code> model:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
 
-<span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span>
+<span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span>
 </code></pre></div>
 <p>In subsequent tutorials, we give concrete examples of defining many different types of dynamical models in <code>dynestyx</code>. Some examples include:</p>
 <ul>
@@ -4910,7 +5106,7 @@ models do not require a simulator configuration. In every case,
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Predictive</span>
 
 <span class="n">predict_times</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
-<span class="n">simulator_config</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;em_scan&quot;</span><span class="p">,</span> <span class="n">dt0</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
+<span class="n">simulator_config</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"em_scan"</span><span class="p">,</span> <span class="n">dt0</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
 
 <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">Simulator</span><span class="p">(</span>
     <span class="n">simulator_config</span><span class="o">=</span><span class="n">simulator_config</span><span class="p">,</span>
