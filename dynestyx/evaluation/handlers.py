@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import cast
 
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -11,6 +12,7 @@ from jaxtyping import Array, Bool, Real
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.observation_scoring import build_evaluation_result
 from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.models import DynamicalModel
 from dynestyx.types import (
     ConditionedResult,
@@ -67,8 +69,12 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
             raise ValueError(_MISSING_OBSERVATIONS_ERROR)
 
         evaluation_result = build_evaluation_result(
-            filtered_result=filtered_result,
+            predicted_observations=cast(
+                PredictedObservationOutputs | None,
+                filtered_result.predicted_observations,
+            ),
             obs_values=obs_values,
+            observation_dim=dynamics.observation_dim,
             scoring_config=self.observation_scoring_config,
             plate_shapes=plate_shapes,
         )

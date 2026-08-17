@@ -61,16 +61,13 @@ def evaluate_continuous_filter_output(
     )
     if scoring_config is None:
         return posterior, predictions, {}
-    result = dsx.ConditionedResult(
-        times=obs_times,
-        predicted_observations=predictions,
-    )
     return (
         posterior,
         predictions,
         compute_observation_scores(
-            filtered_result=result,
+            predicted_observations=predictions,
             obs_values=obs_values,
+            observation_dim=dynamics.observation_dim,
             scoring_config=scoring_config,
             plate_shapes=plate_shapes,
         ),
