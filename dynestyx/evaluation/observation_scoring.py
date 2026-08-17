@@ -188,42 +188,37 @@ def compute_observation_scores(
         ObservationWiseCRPSScore,
     )
     for rule in scoring_config.rules:
-        try:
-            if isinstance(rule, gaussian_rules):
-                if predictions.mean is None:
-                    raise NotImplementedError(
-                        _missing_prediction_error(rule.site_name, "mean", "")
-                    )
-                if predictions.obs_cov is None:
-                    raise NotImplementedError(
-                        _missing_prediction_error(rule.site_name, "obs_cov", "")
-                    )
-                score_arrays[rule.site_name] = rule.compute(
-                    obs_values=obs_arr,
-                    pred_mean=predictions.mean,
-                    pred_cov=predictions.obs_cov,
-                )
-            elif isinstance(rule, EnergyScore):
-                score_ensemble = _select_scoring_ensemble(
-                    predictions,
-                    scoring_config=scoring_config,
-                    rule_name=rule.site_name,
-                )
-                score_arrays[rule.site_name] = rule.compute(
-                    obs_values=obs_arr,
-                    pred_mean=predictions.mean,
-                    pred_cov=predictions.obs_cov,
-                    pred_ensemble=score_ensemble,
-                    sample_seed=scoring_config.sample_seed,
-                )
-            else:
+        if isinstance(rule, gaussian_rules):
+            if predictions.mean is None:
                 raise NotImplementedError(
-                    f"Unsupported observation scoring rule type: {type(rule).__name__}."
+                    _missing_prediction_error(rule.site_name, "mean", "")
                 )
-        except NotImplementedError:
-            if scoring_config.unsupported == "skip":
-                continue
-            raise
+            if predictions.obs_cov is None:
+                raise NotImplementedError(
+                    _missing_prediction_error(rule.site_name, "obs_cov", "")
+                )
+            score_arrays[rule.site_name] = rule.compute(
+                obs_values=obs_arr,
+                pred_mean=predictions.mean,
+                pred_cov=predictions.obs_cov,
+            )
+        elif isinstance(rule, EnergyScore):
+            score_ensemble = _select_scoring_ensemble(
+                predictions,
+                scoring_config=scoring_config,
+                rule_name=rule.site_name,
+            )
+            score_arrays[rule.site_name] = rule.compute(
+                obs_values=obs_arr,
+                pred_mean=predictions.mean,
+                pred_cov=predictions.obs_cov,
+                pred_ensemble=score_ensemble,
+                sample_seed=scoring_config.sample_seed,
+            )
+        else:
+            raise NotImplementedError(
+                f"Unsupported observation scoring rule type: {type(rule).__name__}."
+            )
 
     return score_arrays
 

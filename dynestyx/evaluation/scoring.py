@@ -14,7 +14,6 @@ import jax.scipy as jsp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float
 
-UnsupportedScoringPolicy = Literal["raise", "skip"]
 ObservationEnsembleSampleSource = Literal[
     "auto",
     "backend_ensemble",
@@ -283,5 +282,4 @@ __all__ = [
     "GaussianLogProbScore",
     "ObservationEnsembleSampleSource",
     "ObservationWiseCRPSScore",
-    "UnsupportedScoringPolicy",
 ]

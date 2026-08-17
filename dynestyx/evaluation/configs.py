@@ -7,7 +7,6 @@ import dataclasses
 from dynestyx.evaluation.scoring import (
     BaseObservationScore,
     ObservationEnsembleSampleSource,
-    UnsupportedScoringPolicy,
 )
 
 
@@ -22,7 +21,6 @@ class ObservationScoringConfig:
 
     rules: tuple[BaseObservationScore, ...] = dataclasses.field(default_factory=tuple)
     record_as_numpyro_sites: bool = True
-    unsupported: UnsupportedScoringPolicy = "raise"
     sample_source: ObservationEnsembleSampleSource = "auto"
     sample_seed: int = 0
 
