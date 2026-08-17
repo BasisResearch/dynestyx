@@ -6,6 +6,7 @@ from numpyro.infer import Predictive
 
 from dynestyx import Simulator
 from dynestyx.inference.configs.mcmc import (
+    AdaptiveMetropolisConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
@@ -120,6 +121,22 @@ def test_filter_based_sgmcmc_smoke():
             model=continuous_time_stochastic_l63_model,
         )
         posterior_samples = inference.run(jr.PRNGKey(2), obs_times, obs_values)
+    assert "rho" in posterior_samples
+
+
+def test_filter_based_adaptive_metropolis_smoke():
+    obs_times, obs_values = _make_data_continuous()
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=AdaptiveMetropolisConfig(
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
+                num_chains=1,
+                initial_proposal_scale=0.1,
+            ),
+            model=continuous_time_stochastic_l63_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(4), obs_times, obs_values)
     assert "rho" in posterior_samples
 
 

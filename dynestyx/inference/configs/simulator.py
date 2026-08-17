@@ -33,6 +33,9 @@ class ODESimulatorConfig:
             this is the fixed integration step. Defaults to `1e-3`.
         max_steps (int): Maximum number of integration steps permitted by
             `diffrax.diffeqsolve`. Defaults to `100_000`.
+        throw (bool): Whether Diffrax raises when a solve fails. Set this to
+            `False` when inference should reject invalid parameter proposals
+            instead of aborting the complete run. Defaults to `True`.
 
     Properties:
         diffeqsolve_settings (dict[str, Any]): Normalized keyword arguments passed
@@ -49,6 +52,7 @@ class ODESimulatorConfig:
     )
     dt0: float | int | Real[Array, ""] = 1e-3
     max_steps: int = 100_000
+    throw: bool = True
 
     @property
     def diffeqsolve_settings(self) -> dict[str, Any]:
@@ -59,6 +63,7 @@ class ODESimulatorConfig:
             "adjoint": self.adjoint,
             "dt0": as_scalar_time_array(self.dt0, name="dt0"),
             "max_steps": self.max_steps,
+            "throw": self.throw,
         }
 
 
