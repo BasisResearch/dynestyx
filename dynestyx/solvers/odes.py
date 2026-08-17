@@ -71,7 +71,7 @@ def solve_ode_state_path(
     # Check if the solver requires a MultiTerm (IMEX) split.
     # Raises ValueError if the solver requires a MultiTerm but the drift is not an ImExDrift.
     # Raises a warning if the drift is an ImExDrift but the solver does not require a MultiTerm (will still solve, but the explicit/implicit split will be ignored).
-    needs_multi_term = get_origin(settings["solver"].term_structure) is dfx.MultiTerm 
+    needs_multi_term = get_origin(settings["solver"].term_structure) is dfx.MultiTerm
     is_imex_drift = isinstance(state_evolution.drift, ImExDrift)
     if needs_multi_term and not is_imex_drift:
         raise ValueError(
