@@ -1,7 +1,7 @@
 """Validation and shape-inference helpers for dynamical models."""
 
 from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -9,6 +9,8 @@ import numpyro.distributions as dist
 import numpyro.primitives
 from jax import Array
 from jaxtyping import Real
+
+from dynestyx.types import ImExDrift
 
 
 def _unwrap_base_distribution(distribution: Any) -> Any:
@@ -103,28 +105,6 @@ def _make_probe_state(
     return jnp.zeros((state_dim,))
 
 
-@runtime_checkable
-class _ImExDriftLike(Protocol):
-    """Structural check for ImExDrift-shaped drifts.
-
-    Checked structurally (not via `isinstance(..., ImExDrift)`) because the
-    concrete `ImExDrift` class lives in `state_evolution.py`, which imports
-    from `core.py`, which imports from this module -- importing it here
-    would cycle.
-    """
-
-    def make_imex_tuple(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> tuple[
-        Real[Array, " state_dim"] | Real[Array, ""],
-        Real[Array, " state_dim"] | Real[Array, ""],
-    ]:
-        raise NotImplementedError()
-
-
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
@@ -134,13 +114,13 @@ def _validate_continuous_state_evolution(
 ) -> None:
     """Validate the drift shape of a continuous-time state evolution.
 
-    When `drift` is ImExDrift-like, shapes are checked via `make_imex_tuple`
+    When `drift` is an `ImExDrift`, shapes are checked via `make_imex_tuple`
     (validating both the explicit and implicit parts directly) rather than
     `total_drift`.
     """
     drift = state_evolution.drift
 
-    if isinstance(drift, _ImExDriftLike):
+    if isinstance(drift, ImExDrift):
         if state_evolution.potential is not None:
             raise ValueError(
                 "ContinuousTimeStateEvolution cannot combine `potential` "

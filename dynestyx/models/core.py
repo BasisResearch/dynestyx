@@ -390,7 +390,7 @@ class ContinuousTimeStateEvolution(eqx.Module):
     Note:
         For IMEX (implicit-explicit) diffrax solvers (e.g. `diffrax.KenCarp3/4/5`,
         `diffrax.Sil3`), pass an `ImExDrift` instance as `drift` instead of a
-        plain callable; see `dynestyx.models.state_evolution.ImExDrift`.
+        plain callable; see `dynestyx.types.ImExDrift`.
     """
 
     drift: Drift | None = None

@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
-from dynestyx.models.core import DiscreteTimeStateEvolution, Drift
+from dynestyx.models.core import DiscreteTimeStateEvolution
 
 
 class LinearGaussianParams(NamedTuple):
@@ -317,70 +317,3 @@ class AffineDrift(eqx.Module):
         if self.b is not None:
             out = out + self.b
         return out
-
-
-class ImExDrift(eqx.Module):
-    """
-    Split explicit/implicit drift for IMEX (implicit-explicit) solvers.
-
-    Wraps two drift terms so a single object serves two roles:
-
-    1. As a drop-in `drift` for `ContinuousTimeStateEvolution` used with an
-       ordinary explicit solver (e.g. `diffrax.Tsit5`) or a fully-implicit
-       solver (e.g. `diffrax.Kvaerno4`) -- `__call__` returns the combined
-       vector field $f(x, u, t) = f_{ex}(x, u, t) + f_{im}(x, u, t)$.
-    2. As the source of the explicit/implicit split consumed by diffrax's
-       IMEX solvers (e.g. `diffrax.KenCarp3/4/5`, `diffrax.Sil3`, which
-       require diffrax's `MultiTerm`), via `make_imex_tuple`.
-
-    Construct with keyword-only arguments to avoid silently swapping the two
-    terms: `ImExDrift(explicit_term=..., implicit_term=...)`, whihc would fail silently.
-
-    Wherever a plain `Drift`-shaped callable `(x, u, t) -> R^{d_x}` is
-    expected, an `ImExDrift` instance may be used directly. When used with a
-    solver that doesn't request diffrax's `MultiTerm` (i.e. not an IMEX
-    solver), `dynestyx.solvers.odes.solve_ode_state_path` emits a warning.
-
-    Attributes:
-        explicit_term (Drift): Non-stiff component of the vector field,
-            integrated explicitly by IMEX solvers.
-        implicit_term (Drift): Stiff component of the vector field,
-            integrated implicitly by IMEX solvers.
-
-    Note:
-        Cannot be combined with `potential` on `ContinuousTimeStateEvolution`
-        -- doing so raises a `ValueError` when the `DynamicalModel` is
-        constructed. Fold any potential-gradient contribution into
-        `explicit_term` or `implicit_term` directly instead.
-    """
-
-    explicit_term: Drift
-    implicit_term: Drift
-
-    def __init__(self, *, explicit_term: Drift, implicit_term: Drift):
-        self.explicit_term = explicit_term
-        self.implicit_term = implicit_term
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
-        return self.explicit_term(x, u, t) + self.implicit_term(x, u, t)
-
-    def make_imex_tuple(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> tuple[
-        Real[Array, " state_dim"] | Real[Array, ""],
-        Real[Array, " state_dim"] | Real[Array, ""],
-    ]:
-        """Return `(explicit_term(x, u, t), implicit_term(x, u, t))`.
-
-        Order matches diffrax's `MultiTerm(ODETerm(explicit), ODETerm(implicit))`
-        convention used by `solve_ode_state_path`.
-        """
-        return self.explicit_term(x, u, t), self.implicit_term(x, u, t)

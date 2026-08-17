@@ -28,10 +28,10 @@ from dynestyx.models.observations import (
 from dynestyx.models.state_evolution import (
     AffineDrift,
     GaussianStateEvolution,
-    ImExDrift,
     LinearGaussianParams,
     LinearGaussianStateEvolution,
 )
+from dynestyx.types import ImExDrift
 
 __all__ = [
     "ContinuousTimeStateEvolution",
