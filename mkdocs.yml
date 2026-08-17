@@ -35,6 +35,7 @@ nav:
       - "Part 11a: Missing observations with Filters and Smoothers": tutorials/gentle_intro/11_missing_observations.ipynb
       - "Part 11b: Missing observations with LatentPathBuilder + MCMC": tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc.ipynb
       - "Part 11c: Missing observations in HMMs": tutorials/gentle_intro/11c_missing_observations_hmms.ipynb
+      - "Part 12: Observation scoring with filters": tutorials/gentle_intro/12_observation_scoring_with_filters.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -107,8 +108,11 @@ nav:
           - Simulator Configurations: api_reference/public/simulators/simulator_configs.md
       - Closed-loop Control: api_reference/public/control.md
       - Result Types: api_reference/public/result_types.md
-      - Diagnostics:
-        - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
+      - Evaluation:
+        - Evaluation: api_reference/public/evaluation/handlers.md
+        - ScoringConfigs: api_reference/public/inference/configs/scoring_configs.md
+        - Scoring: api_reference/public/evaluation/scoring.md
+        - Plotting Utilities: api_reference/public/evaluation/plotting_utils.md
     - Developer API:
       - Overview: api_reference/developer/index.md
       - Models:
@@ -133,8 +137,11 @@ nav:
       - Handlers: api_reference/developer/handlers.md
       - Utils: api_reference/developer/utils.md
       - Result Types: api_reference/developer/result_types.md
-      - Diagnostics:
-        - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
+      - Evaluation:
+        - Evaluation: api_reference/developer/evaluation/handlers.md
+        - ScoringConfigs: api_reference/developer/inference/configs/scoring_configs.md
+        - Scoring: api_reference/developer/evaluation/scoring.md
+        - Plotting Utilities: api_reference/developer/evaluation/plotting_utils.md
   - FAQ: faq.md
 
 theme:

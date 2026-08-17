@@ -2,6 +2,8 @@
 
 The single `Filter()` handler is directed to the appropriate filtering algorithm via the provided `FilterConfig`. We provide a summary below, as well as an exhaustive list of classes.
 
+`include_predicted_observations` controls whether supported backend predictive-observation outputs are collected into `ConditionedResult` and defaults to `True`. The shared `record_predicted_observations_*` fields independently control whether available means, covariances, or ensembles are recorded to the NumPyro trace; they also default to `True`. Observation scoring is configured on the separate `Evaluation` handler.
+
 ## Available filter configurations
 
 | Config class               | Time domain         | When it fits best |
