@@ -2,6 +2,8 @@ import dataclasses
 from collections.abc import Callable
 from typing import Literal
 
+import jax.numpy as jnp
+from jax.typing import ArrayLike
 from numpyro.infer.initialization import init_to_sample
 
 MCMCSource = Literal["numpyro", "blackjax"]
@@ -12,8 +14,8 @@ class BaseMCMCConfig:
     """Shared configuration options inherited by all MCMC configs.
 
     You do not instantiate this class directly; use one of the concrete
-    subclasses (`NUTSConfig`, `HMCConfig`, `SGLDConfig`, `MALAConfig`,
-    `AdjustedMCLMCDynamicConfig`).
+    subclasses (`NUTSConfig`, `HMCConfig`, `AdaptiveMetropolisConfig`,
+    `SGLDConfig`, `MALAConfig`, `AdjustedMCLMCDynamicConfig`).
 
     Attributes:
         num_samples (int): Number of post-warmup samples to return.
@@ -53,7 +55,69 @@ class HMCConfig(BaseMCMCConfig):
 
 @dataclasses.dataclass
 class NUTSConfig(BaseMCMCConfig):
-    """No-U-Turn Sampler (NUTS) configuration."""
+    """No-U-Turn Sampler (NUTS) configuration.
+
+    Attributes:
+        target_acceptance_rate (float): Target acceptance probability used
+            during warmup. Must lie strictly between zero and one.
+    """
+
+    target_acceptance_rate: float = 0.8
+
+    def __post_init__(self) -> None:
+        if not 0.0 < self.target_acceptance_rate < 1.0:
+            raise ValueError("target_acceptance_rate must be between 0 and 1")
+
+
+@dataclasses.dataclass
+class AdaptiveMetropolisConfig(BaseMCMCConfig):
+    """Adaptive random-walk Metropolis-within-Gibbs configuration.
+
+    One transition updates each flattened unconstrained coordinate in order.
+    Each coordinate update uses a one-dimensional Gaussian random-walk proposal
+    that is accepted or rejected before the next coordinate is visited; the
+    sampler does not make a single joint multivariate-normal proposal. Proposal
+    scales adapt during warmup toward the requested acceptance rate and remain
+    fixed while retained samples are generated.
+
+    This sampler is currently implemented by the BlackJAX integration only.
+
+    Attributes:
+        initial_proposal_scale (ArrayLike): Positive scalar proposal scale, or
+            one positive scale per flattened unconstrained coordinate.
+        target_acceptance_rate (float): Shared target acceptance rate applied
+            to each coordinate update.
+        adaptation_rate (float): Exponent in the diminishing adaptation step
+            ``n_iter ** -adaptation_rate``.
+        max_adaptation (float): Maximum change to a log proposal scale in one
+            warmup transition.
+    """
+
+    mcmc_source: MCMCSource = "blackjax"
+    initial_proposal_scale: ArrayLike = 1.0
+    target_acceptance_rate: float = 0.44
+    adaptation_rate: float = 0.5
+    max_adaptation: float = 0.01
+
+    def __post_init__(self) -> None:
+        if self.mcmc_source != "blackjax":
+            raise ValueError(
+                "AdaptiveMetropolisConfig only supports mcmc_source='blackjax'"
+            )
+        if not 0.0 < self.target_acceptance_rate < 1.0:
+            raise ValueError("target_acceptance_rate must be between 0 and 1")
+        if self.adaptation_rate <= 0.0:
+            raise ValueError("adaptation_rate must be positive")
+        if self.max_adaptation <= 0.0:
+            raise ValueError("max_adaptation must be positive")
+
+        proposal_scale = jnp.asarray(self.initial_proposal_scale)
+        if proposal_scale.ndim > 1:
+            raise ValueError("initial_proposal_scale must be a scalar or 1D array")
+        if proposal_scale.size == 0 or not jnp.all(jnp.isfinite(proposal_scale)):
+            raise ValueError("initial_proposal_scale must contain finite values")
+        if jnp.any(proposal_scale <= 0.0):
+            raise ValueError("initial_proposal_scale must be positive")
 
 
 @dataclasses.dataclass

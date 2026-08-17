@@ -1,16 +1,20 @@
 from collections.abc import Callable
 
+import jax
 import jax.numpy as jnp
 from numpyro.infer import HMC, MCMC, NUTS
 
 from dynestyx.inference.configs.mcmc import (
+    AdaptiveMetropolisConfig,
     BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
     SGLDConfig,
 )
-from dynestyx.inference.integrations.blackjax import run_blackjax_mcmc
+from dynestyx.inference.integrations.blackjax import (
+    run_blackjax_mcmc_with_diagnostics,
+)
 
 
 class MCMCInference:
@@ -20,7 +24,8 @@ class MCMCInference:
 
     Attributes:
         mcmc_config: Sampler configuration dataclass (`NUTSConfig`,
-            `HMCConfig`, `SGLDConfig`, or `MALAConfig`).
+            `HMCConfig`, `AdaptiveMetropolisConfig`, `SGLDConfig`, or
+            `MALAConfig`).
         model: Callable probabilistic model with signature
             `model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)`.
     """
@@ -28,6 +33,21 @@ class MCMCInference:
     def __init__(self, mcmc_config: BaseMCMCConfig, model: Callable):
         self.mcmc_config = mcmc_config
         self.model = model
+        self._diagnostics: dict[str, jax.Array] | None = None
+
+    def get_diagnostics(self) -> dict[str, jax.Array]:
+        """Return compact diagnostics from the most recent successful run.
+
+        NUTS reports ``mean_acceptance_rate`` and ``num_divergences`` per
+        chain. Adaptive Metropolis reports ``mean_acceptance_rate`` and
+        ``final_proposal_scale`` per chain and unconstrained coordinate.
+
+        Raises:
+            RuntimeError: If inference has not completed successfully.
+        """
+        if self._diagnostics is None:
+            raise RuntimeError("No MCMC diagnostics are available; call run() first")
+        return self._diagnostics.copy()
 
     def run(
         self,
@@ -54,8 +74,9 @@ class MCMCInference:
             Dict-like pytree of posterior samples.
         """
 
+        self._diagnostics = None
         if self.mcmc_config.mcmc_source == "numpyro":
-            return _numpyro_mcmc(  # type: ignore
+            samples, diagnostics = _numpyro_mcmc(  # type: ignore
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
                 model=self.model,
@@ -67,7 +88,7 @@ class MCMCInference:
                 **model_kwargs,
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
-            return _blackjax_mcmc(  # type: ignore
+            samples, diagnostics = _blackjax_mcmc(  # type: ignore
                 mcmc_config=self.mcmc_config,
                 rng_key=rng_key,
                 model=self.model,
@@ -80,6 +101,8 @@ class MCMCInference:
             )
         else:
             raise ValueError(f"Invalid MCMC source: {self.mcmc_config.mcmc_source}")
+        self._diagnostics = diagnostics
+        return samples
 
 
 def _numpyro_mcmc(
@@ -92,11 +115,15 @@ def _numpyro_mcmc(
     ctrl_values: jnp.ndarray | None = None,
     *model_args,
     **model_kwargs,
-) -> dict:
-    """Run NumPyro-based MCMC (`NUTS` or `HMC`) and return samples."""
+) -> tuple[dict, dict[str, jax.Array]]:
+    """Run NumPyro MCMC and return samples plus compact diagnostics."""
     if isinstance(mcmc_config, NUTSConfig):
         mcmc = MCMC(
-            NUTS(model, init_strategy=mcmc_config.init_strategy),
+            NUTS(
+                model,
+                init_strategy=mcmc_config.init_strategy,
+                target_accept_prob=mcmc_config.target_acceptance_rate,
+            ),
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
             num_chains=mcmc_config.num_chains,
@@ -117,6 +144,9 @@ def _numpyro_mcmc(
         )
     else:
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
+    run_kwargs = dict(model_kwargs)
+    if isinstance(mcmc_config, NUTSConfig):
+        run_kwargs["extra_fields"] = ("accept_prob", "diverging")
     mcmc.run(  # type: ignore
         rng_key,
         obs_times,
@@ -124,9 +154,16 @@ def _numpyro_mcmc(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         *model_args,
-        **model_kwargs,
+        **run_kwargs,
     )
-    return mcmc.get_samples()
+    diagnostics = {}
+    if isinstance(mcmc_config, NUTSConfig):
+        extra_fields = mcmc.get_extra_fields(group_by_chain=True)
+        diagnostics = {
+            "mean_acceptance_rate": jnp.mean(extra_fields["accept_prob"], axis=1),
+            "num_divergences": jnp.sum(extra_fields["diverging"], axis=1),
+        }
+    return mcmc.get_samples(), diagnostics
 
 
 def _blackjax_mcmc(
@@ -139,14 +176,14 @@ def _blackjax_mcmc(
     ctrl_values: jnp.ndarray | None = None,
     *model_args,
     **model_kwargs,
-) -> dict:
-    """Run BlackJAX-based inference via the BlackJAX integration module."""
+) -> tuple[dict, dict[str, jax.Array]]:
+    """Run BlackJAX inference via the BlackJAX integration module."""
     if not isinstance(
         mcmc_config,
-        NUTSConfig | HMCConfig | SGLDConfig | MALAConfig,
+        NUTSConfig | HMCConfig | AdaptiveMetropolisConfig | SGLDConfig | MALAConfig,
     ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    return run_blackjax_mcmc(  # type: ignore
+    return run_blackjax_mcmc_with_diagnostics(  # type: ignore
         mcmc_config=mcmc_config,
         rng_key=rng_key,
         model=model,
