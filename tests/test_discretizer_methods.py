@@ -9,7 +9,6 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
-from dynestyx.discretization.exact_affine import _affine_transition_parameters
 from dynestyx.discretizers import (
     DiffraxSampleConfig,
     Discretizer,
