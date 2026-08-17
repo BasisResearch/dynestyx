@@ -6,6 +6,7 @@ __version__ = version("dynestyx")
 
 from dynestyx.api import log_prob, simulate
 from dynestyx.discretizers import Discretizer
+from dynestyx.evaluation import Evaluation, ObservationScoringConfig
 from dynestyx.handlers import condition, plate, sample
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
@@ -47,7 +48,7 @@ from dynestyx.simulation import (
     SDESimulator,
     Simulator,
 )
-from dynestyx.types import ConditionedResult, SimulatedResult
+from dynestyx.types import ConditionedResult, EvaluationResult, SimulatedResult
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -70,12 +71,15 @@ __all__ = [
     "Discretizer",
     "ObservationModel",
     "Filter",
+    "Evaluation",
     "LatentPathBuilder",
     "MissingObservationMetadata",
     "Smoother",
     "flatten_draws",
     "condition",
     "ConditionedResult",
+    "EvaluationResult",
+    "ObservationScoringConfig",
     "SimulatedResult",
     "log_prob",
     "plate",

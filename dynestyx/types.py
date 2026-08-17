@@ -17,16 +17,43 @@ class FunctionOfTime(Protocol):
 
 
 @dataclasses.dataclass
-class ConditionedResult:
-    """Result of dsx.condition — the numpyro-free conditioning primitive.
+class EvaluationResult:
+    """Outputs computed by an evaluation handler.
 
-    Carries all outputs from the handler stack (Filter, Smoother, etc.)
-    without registering any numpyro sites.
+    Evaluation handlers attach this object to the ``ConditionedResult`` they
+    consume.  NumPyro registration remains deferred so ``dsx.condition`` stays
+    side-effect free while ``dsx.sample`` can register the same outputs later.
+    """
+
+    observation_scores: dict[str, Real[Array, "..."]] = dataclasses.field(
+        default_factory=dict
+    )
+    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
+        default=None, repr=False
+    )
+
+
+@dataclasses.dataclass
+class ConditionedResult:
+    """Common base for results from the NumPyro-free conditioning primitive.
+
+    ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
+    It carries the complete inference output through the handler stack without
+    registering NumPyro sites. Filter results may additionally expose the
+    canonical one-step-ahead ``predicted_observations`` and an
+    ``evaluation_result`` attached by an outer evaluation handler. Posterior
+    distributions are time-major:
+    ``dists[i]`` corresponds to ``times[..., i]``. Leading axes on ``times``
+    are optional plate axes, while each distribution may carry the matching
+    plate axes in its batch shape.
     """
 
     marginal_loglik: Real[Array, "*plate"] | None = None
+    times: Real[Array, "*time_plate time"] | None = None
     states: object = None
     dists: list | None = None
+    predicted_observations: object = None
+    evaluation_result: EvaluationResult | None = None
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )
@@ -36,7 +63,7 @@ class ConditionedResult:
     ) -> Real[Array, " state_dim"] | Real[Array, ""]:
         raise NotImplementedError(
             "ConditionedResult is not callable as a FunctionOfTime. "
-            "Access .marginal_loglik, .states, or .dists instead."
+            "Access .marginal_loglik, .times, .states, or .dists instead."
         )
 
 

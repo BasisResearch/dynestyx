@@ -630,22 +630,25 @@ def _explicit_rollout_metadata_model(predict_times=None):
         H=jnp.array([[1.0, 0.0]]),
         R=jnp.array([[0.1]]),
     )
-    filtered_dists = [
-        dist.MultivariateNormal(jnp.zeros(2), covariance_matrix=jnp.eye(2))
-    ]
+    filtered_result = dsx.ConditionedResult(
+        times=jnp.array([0.0]),
+        dists=[dist.MultivariateNormal(jnp.zeros(2), covariance_matrix=jnp.eye(2))],
+    )
+    smoothed_result = dsx.ConditionedResult(
+        times=jnp.array([0.0]),
+        dists=[dist.MultivariateNormal(jnp.zeros(2), covariance_matrix=jnp.eye(2))],
+    )
     dsx.sample(
         "f",
         dynamics,
         predict_times=predict_times,
-        filtered_times=jnp.array([0.0]),
-        filtered_dists=filtered_dists,
-        smoothed_times=jnp.array([0.0]),
-        smoothed_dists=None,
+        filtered_result=filtered_result,
+        smoothed_result=smoothed_result,
     )
 
 
 def test_simulator_rejects_smoothed_and_filtered_rollout_metadata_together():
-    with pytest.raises(ValueError, match="filtered_times and filtered_dists"):
+    with pytest.raises(ValueError, match="filtered_result and smoothed_result"):
         with seed(rng_seed=jr.PRNGKey(0)):
             with DiscreteTimeSimulator(n_simulations=1):
                 _explicit_rollout_metadata_model(
