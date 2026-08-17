@@ -22,9 +22,13 @@ class ODESimulatorConfig:
             [solver guide](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/)
             when selecting an alternative. IMEX solvers (e.g. `diffrax.KenCarp3/4/5`,
             `diffrax.Sil3`) are supported, but require the state evolution's
-            `implicit_drift` to be set to the stiff component of the vector field
-            (see `ContinuousTimeStateEvolution.implicit_drift`); conversely, setting
-            `implicit_drift` while using a non-IMEX solver raises an error.
+            `drift` to be an `ImExDrift` instance (see
+            `dynestyx.models.state_evolution.ImExDrift`), splitting the vector
+            field into `explicit_term`/`implicit_term`; conversely, using a
+            plain (non-`ImExDrift`) `drift` with an IMEX solver raises an
+            error. Using an `ImExDrift` with a non-IMEX solver is allowed
+            (both terms are summed) but emits a warning, since the split
+            goes unused.
         adjoint (diffrax.AbstractAdjoint): Strategy used to differentiate
             through the solve. Defaults to
             `diffrax.RecursiveCheckpointAdjoint()`.

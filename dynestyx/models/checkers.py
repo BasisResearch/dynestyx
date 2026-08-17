@@ -1,7 +1,7 @@
 """Validation and shape-inference helpers for dynamical models."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -103,6 +103,28 @@ def _make_probe_state(
     return jnp.zeros((state_dim,))
 
 
+@runtime_checkable
+class _ImExDriftLike(Protocol):
+    """Structural check for ImExDrift-shaped drifts.
+
+    Checked structurally (not via `isinstance(..., ImExDrift)`) because the
+    concrete `ImExDrift` class lives in `state_evolution.py`, which imports
+    from `core.py`, which imports from this module -- importing it here
+    would cycle.
+    """
+
+    def make_imex_tuple(
+        self,
+        x: Real[Array, " state_dim"] | Real[Array, ""],
+        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> tuple[
+        Real[Array, " state_dim"] | Real[Array, ""],
+        Real[Array, " state_dim"] | Real[Array, ""],
+    ]:
+        raise NotImplementedError()
+
+
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
@@ -110,7 +132,38 @@ def _validate_continuous_state_evolution(
     u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
     t_probe: Real[Array, ""],
 ) -> None:
-    """Validate the drift shape of a continuous-time state evolution."""
+    """Validate the drift shape of a continuous-time state evolution.
+
+    When `drift` is ImExDrift-like, shapes are checked via `make_imex_tuple`
+    (validating both the explicit and implicit parts directly) rather than
+    `total_drift`.
+    """
+    drift = state_evolution.drift
+
+    if isinstance(drift, _ImExDriftLike):
+        if state_evolution.potential is not None:
+            raise ValueError(
+                "ContinuousTimeStateEvolution cannot combine `potential` "
+                "with an ImExDrift `drift`: potential's gradient term has "
+                "no explicit/implicit split. Fold the potential gradient "
+                "into `explicit_term` or `implicit_term` of the ImExDrift "
+                "instance instead."
+            )
+        explicit_shape, implicit_shape = jax.eval_shape(
+            lambda: drift.make_imex_tuple(x_probe, u_probe, t_probe)
+        )
+        if explicit_shape.shape != (state_dim,):
+            raise ValueError(
+                "ImExDrift explicit_term shape is inconsistent with "
+                f"state_dim. Expected {(state_dim,)}, got {explicit_shape.shape}."
+            )
+        if implicit_shape.shape != (state_dim,):
+            raise ValueError(
+                "ImExDrift implicit_term shape is inconsistent with "
+                f"state_dim. Expected {(state_dim,)}, got {implicit_shape.shape}."
+            )
+        return
+
     drift_shape = jax.eval_shape(
         lambda: state_evolution.total_drift(x_probe, u_probe, t_probe)
     ).shape
@@ -119,17 +172,6 @@ def _validate_continuous_state_evolution(
             "State drift shape is inconsistent with state_dim. "
             f"Expected {(state_dim,)}, got {drift_shape}."
         )
-
-    implicit_drift = getattr(state_evolution, "implicit_drift", None)
-    if implicit_drift is not None:
-        implicit_drift_shape = jax.eval_shape(
-            lambda: implicit_drift(x_probe, u_probe, t_probe)
-        ).shape
-        if implicit_drift_shape != (state_dim,):
-            raise ValueError(
-                "implicit_drift shape is inconsistent with state_dim. "
-                f"Expected {(state_dim,)}, got {implicit_drift_shape}."
-            )
 
 
 def _validate_discrete_state_evolution_output_shape(

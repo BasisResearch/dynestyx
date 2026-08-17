@@ -28,6 +28,7 @@ from dynestyx.models.observations import (
 from dynestyx.models.state_evolution import (
     AffineDrift,
     GaussianStateEvolution,
+    ImExDrift,
     LinearGaussianParams,
     LinearGaussianStateEvolution,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "FullDiffusion",
     "GaussianObservation",
     "GaussianStateEvolution",
+    "ImExDrift",
     "LinearGaussianObservation",
     "LinearGaussianObservationParams",
     "LinearGaussianParams",
