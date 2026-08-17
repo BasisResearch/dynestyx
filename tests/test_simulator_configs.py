@@ -74,6 +74,11 @@ def test_odesimulator_accepts_structured_config():
     assert tr["f_observations"]["value"].shape == (2, len(predict_times), 1)
 
 
+def test_odesimulator_config_forwards_throw_setting():
+    assert dsx.ODESimulatorConfig().diffeqsolve_settings["throw"] is True
+    assert dsx.ODESimulatorConfig(throw=False).diffeqsolve_settings["throw"] is False
+
+
 def test_sdesimulator_accepts_structured_config():
     config = dsx.SDESimulatorConfig(dt0=5e-2, source="em_scan")
     predict_times = jnp.array([0.0, 0.5, 1.0])
