@@ -127,15 +127,19 @@ class ExactAffineConfig(BaseDiscretizerConfig):
     Q_h=\int_0^h e^{Fs}LL^\top e^{F^\top s}\,ds.
     $$
 
-    The implementation uses augmented and Van Loan matrix exponentials. It
-    never forms \(F^{-1}\), so singular drift matrices are supported. With
-    `covariance_jitter=0`, the transition is exact for every positive interval
-    length, including nonuniform observation grids. It preserves a linear
-    Gaussian state-evolution representation and therefore enables exact Kalman
-    filtering when the rest of the model is also linear Gaussian.
+    The implementation uses an augmented matrix exponential for the forcing
+    terms and evaluates the Van Loan covariance on a safely scaled interval
+    before composing it to the requested interval. This avoids overflowing the
+    growing block associated with a stable, stiff drift. It never forms
+    \(F^{-1}\), so singular drift matrices are supported. With
+    `covariance_jitter=0`, the transition is exact up to floating-point error
+    for every positive interval length, including nonuniform observation grids.
+    It preserves a linear Gaussian state-evolution representation and therefore
+    enables exact Kalman filtering when the rest of the model is also linear
+    Gaussian.
 
     Matrix exponentials cost cubic time in the augmented state dimension and
-    can be expensive when many distinct interval lengths are used. Drfits
+    can be expensive when many distinct interval lengths are used. Drifts
     not explicitly marked as affine/constant, state-dependent diffusion, and
     potentials are rejected. Singular \(Q_h\) requires positive jitter.
 

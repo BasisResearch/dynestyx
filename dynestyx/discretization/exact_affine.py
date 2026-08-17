@@ -3,6 +3,7 @@
 from typing import ClassVar, Literal
 
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
 from jaxtyping import Array, Real
@@ -10,6 +11,7 @@ from jaxtyping import Array, Real
 from dynestyx.discretization.numerics import (
     _finalize_covariance,
     _positive_interval,
+    _symmetrize,
 )
 from dynestyx.models import (
     AffineDrift,
@@ -17,6 +19,61 @@ from dynestyx.models import (
     LinearGaussianStateEvolution,
     StochasticContinuousTimeStateEvolution,
 )
+
+_MAX_COVARIANCE_SQUARINGS = 16
+
+
+def _van_loan_covariance(
+    F: Real[Array, "state_dim state_dim"],
+    diffusion_cov: Real[Array, "state_dim state_dim"],
+    h: Real[Array, ""],
+) -> Real[Array, "state_dim state_dim"]:
+    """Evaluate the Van Loan covariance on a safe interval and compose it."""
+    state_dim = F.shape[-1]
+    interval_drift_norm = jnp.linalg.norm(F * h, ord=1)
+    outer_squarings = jnp.ceil(
+        jnp.log2(jnp.maximum(jnp.asarray(1.0, dtype=F.dtype), interval_drift_norm))
+    ).astype(jnp.int32)
+    h = eqx.error_if(
+        h,
+        outer_squarings > _MAX_COVARIANCE_SQUARINGS,
+        "Discretization requires more than 16 covariance scaling squarings; "
+        "reduce the interval length or drift magnitude.",
+    )
+    short_h = h / (2.0 ** outer_squarings.astype(F.dtype))
+
+    van_loan = jnp.block(
+        [
+            [F, diffusion_cov],
+            [jnp.zeros_like(F), -F.T],
+        ]
+    )
+    short_exponential = jsp.linalg.expm(van_loan * short_h)
+    short_A = short_exponential[:state_dim, :state_dim]
+    short_Q = _symmetrize(
+        short_exponential[:state_dim, state_dim:] @ short_A.T
+    )
+
+    def _double_interval(carry):
+        A, Q = carry
+        doubled_Q = _symmetrize(Q + A @ Q @ A.T)
+        return A @ A, doubled_Q
+
+    def _scan_step(carry, index):
+        carry = jax.lax.cond(
+            index < outer_squarings,
+            _double_interval,
+            lambda values: values,
+            carry,
+        )
+        return carry, None
+
+    (_, covariance), _ = jax.lax.scan(
+        _scan_step,
+        (short_A, short_Q),
+        jnp.arange(_MAX_COVARIANCE_SQUARINGS),
+    )
+    return covariance
 
 
 def _affine_transition_parameters(
@@ -68,14 +125,7 @@ def _affine_transition_parameters(
 
     L = jnp.asarray(L, dtype=F.dtype)
     diffusion_cov = L @ L.T
-    van_loan = jnp.block(
-        [
-            [F, diffusion_cov],
-            [jnp.zeros_like(F), -F.T],
-        ]
-    )
-    exp_van_loan = jsp.linalg.expm(van_loan * h)
-    Q_h = exp_van_loan[:state_dim, state_dim:] @ exp_van_loan[:state_dim, :state_dim].T
+    Q_h = _van_loan_covariance(F, diffusion_cov, h)
     Q_h = _finalize_covariance(Q_h, covariance_jitter=covariance_jitter)
     return LinearGaussianParams(A=A_h, B=B_h, bias=bias_h, cov=Q_h)
 

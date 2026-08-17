@@ -9,6 +9,7 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from dynestyx.discretization.exact_affine import _affine_transition_parameters
 from dynestyx.discretizers import (
     DiffraxSampleConfig,
     Discretizer,
@@ -28,6 +29,7 @@ from dynestyx.models import (
     DynamicalModel,
     FullDiffusion,
     LinearGaussianObservation,
+    StochasticContinuousTimeStateEvolution,
 )
 
 
@@ -89,6 +91,63 @@ def test_exact_affine_matches_scalar_ou_transition():
     expected_cov = 0.4**2 * jnp.expm1(-1.4 * h) / -1.4
     assert jnp.allclose(transition.mean, expected_decay * x)
     assert jnp.allclose(transition.covariance_matrix, expected_cov[None, None])
+
+
+def test_exact_affine_stiff_covariance_is_finite_in_float32():
+    model = dsx.LTI_continuous(
+        A=jnp.array([[-100.0]], dtype=jnp.float32),
+        L=jnp.ones((1, 1), dtype=jnp.float32),
+        H=jnp.ones((1, 1), dtype=jnp.float32),
+        R=jnp.eye(1, dtype=jnp.float32),
+    )
+    evolution = _discretize_state_evolution(
+        model.state_evolution,
+        ExactAffineConfig(),
+    )
+
+    transition = evolution(jnp.ones(1, dtype=jnp.float32), None, 0.0, 1.0)
+
+    expected_cov = -jnp.expm1(jnp.asarray(-200.0, dtype=jnp.float32)) / 200.0
+    assert jnp.all(jnp.isfinite(transition.covariance_matrix))
+    assert jnp.allclose(
+        transition.covariance_matrix,
+        expected_cov[None, None],
+        rtol=2e-5,
+    )
+
+
+def test_exact_affine_integrator_covariance_remains_exact():
+    model = dsx.LTI_continuous(
+        A=jnp.zeros((1, 1)),
+        L=jnp.array([[0.4]]),
+        H=jnp.ones((1, 1)),
+        R=jnp.eye(1),
+    )
+    evolution = _discretize_state_evolution(
+        model.state_evolution,
+        ExactAffineConfig(),
+    )
+    h = 0.3
+
+    transition = evolution(jnp.array([1.2]), None, 0.0, h)
+
+    assert jnp.allclose(transition.mean, jnp.array([1.2]))
+    assert jnp.allclose(transition.covariance_matrix, jnp.array([[h * 0.4**2]]))
+
+
+def test_local_linearization_stiff_covariance_is_finite_in_float32():
+    evolution = _discretize_state_evolution(
+        StochasticContinuousTimeStateEvolution(
+            drift=lambda x, u, t: -100.0 * x,
+            diffusion=FullDiffusion(jnp.ones((1, 1), dtype=jnp.float32)),
+        ),
+        LocalLinearizationConfig(),
+    )
+
+    transition = evolution(jnp.ones(1, dtype=jnp.float32), None, 0.0, 1.0)
+
+    assert jnp.all(jnp.isfinite(transition.covariance_matrix))
+    assert jnp.allclose(transition.covariance_matrix, 0.005, rtol=2e-5)
 
 
 @pytest.mark.parametrize(
