@@ -33,7 +33,7 @@ dependencies = [
     "effectful>=0.4.0",
     "cuthbert==0.0.14",
     "cuthbertlib==0.0.14",
-    "cd-dynamax>=0.3.3",
+    "cd-dynamax>=0.4.0",
     "matplotlib>=3.10.7",
     # numpyro<0.21.0 fails to import against jax>=0.10 (removed xla_pmap_p);
     # keep this floor aligned with the jax floor below.
@@ -47,7 +47,7 @@ dependencies = [
     "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
     "jaxtyping>=0.3.9",
-    "diffrax>=0.6.2",
+    "diffrax>=0.7.2",
     "numpy>=2.0",
     "jax>=0.8.2",
     "jaxlib>=0.8.2",
