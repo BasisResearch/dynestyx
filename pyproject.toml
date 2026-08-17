@@ -61,9 +61,6 @@ packages = ["dynestyx"]
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.uv.sources]
-cd-dynamax = { path = "/Users/matthieu/Documents/GitHub/cd_dynamax" }
-
 [dependency-groups]
 dev = [
     "mike>=2.1.0",
