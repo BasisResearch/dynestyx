@@ -185,6 +185,24 @@ def test_dynamical_model_rejects_potential_with_imex_drift_in_plate():
             )
 
 
+def test_solve_ode_state_path_rejects_sde_solver():
+    path_times = jnp.array([0.0, 1.0])
+    with pytest.raises(ValueError, match="SDE solver"):
+        solve_ode_state_path(
+            _make_imex_dynamics(use_imex_drift=False),
+            initial_state=jnp.array([1.0]),
+            t0=jnp.array(0.0),
+            path_times=path_times,
+            diffeqsolve_settings={
+                "solver": dfx.EulerHeun(),
+                "stepsize_controller": dfx.ConstantStepSize(),
+                "adjoint": dfx.RecursiveCheckpointAdjoint(),
+                "dt0": jnp.array(0.01),
+                "max_steps": 1_000,
+            },
+        )
+
+
 def test_solve_sde_state_path_applies_controls():
     path_times = jnp.array([0.0, 0.5, 1.0])
     states = solve_sde_state_path(
