@@ -58,7 +58,8 @@ class ODEFlowConfig(BaseDiscretizerConfig):
     $\phi(x,u_k,t_{\mathrm{now}},t_{\mathrm{next}})$, the returned
     transition is a Delta distribution when ``jitter_scale == 0``. For
     positive ``jitter_scale`` it is an independent Normal distribution with
-    mean $\phi$ and covariance ``jitter_scale * I``.
+    mean $\phi$, component scale ``jitter_scale``, and covariance
+    ``jitter_scale**2 * I``.
 
     All Diffrax settings come from the existing ``ODESimulatorConfig``.
 

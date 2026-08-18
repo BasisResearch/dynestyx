@@ -117,7 +117,7 @@ def test_ode_flow_matches_controlled_linear_analytic_solution():
 def test_ode_flow_positive_jitter_returns_independent_normal():
     evolution = _discretize_state_evolution(
         _ode_state_evolution(),
-        ODEFlowConfig(simulator_config=_ode_config(), jitter_scale=0.09),
+        ODEFlowConfig(simulator_config=_ode_config(), jitter_scale=0.3),
     )
 
     transition = evolution(jnp.array([1.2, -0.7]), jnp.array([0.3]), 0.2, 0.55)
@@ -125,6 +125,7 @@ def test_ode_flow_positive_jitter_returns_independent_normal():
     assert isinstance(transition, dist.Independent)
     assert isinstance(transition.base_dist, dist.Normal)
     assert transition.event_shape == (2,)
+    assert jnp.allclose(transition.base_dist.scale, jnp.full((2,), 0.3))
     assert jnp.allclose(transition.variance, jnp.full((2,), 0.09))
 
 
