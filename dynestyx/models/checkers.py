@@ -10,7 +10,7 @@ import numpyro.primitives
 from jax import Array
 from jaxtyping import Real
 
-from dynestyx.types import ImExDrift
+from dynestyx.models.drifts import ImExDrift
 
 
 def _unwrap_base_distribution(distribution: Any) -> Any:

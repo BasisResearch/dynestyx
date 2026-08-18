@@ -8,7 +8,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array
-from jaxtyping import Real, Shaped
+from jaxtyping import Real
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
@@ -25,6 +25,7 @@ from dynestyx.models.checkers import (
     _validate_state_dim,
 )
 from dynestyx.models.diffusions import Diffusion
+from dynestyx.models.drifts import Drift, Potential
 from dynestyx.types import as_scalar_time_array
 
 
@@ -280,85 +281,6 @@ class DynamicalModel(eqx.Module):
         self.categorical_state = bool(inferred_categorical_state)
 
 
-class Drift(Protocol):
-    """
-    Drift vector field for continuous-time state evolution.
-
-    Mathematically, the drift is a mapping
-    $\\mu: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
-    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto \\mu(x, u, t)$.
-    In the SDE formulation used by `ContinuousTimeStateEvolution`,
-    $dx_t = \\mu(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
-    mapping forms the $\\mu$ term.
-
-    Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
-    `jax.vmap`, and `jax.grad` when differentiable).
-
-    Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
-        t (Time): Current time (scalar or array).
-
-    Returns:
-        dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
-
-    Note:
-        This is a protocol interface; implement this callable signature; do not instantiate.
-        We recommend simply using a plain Python function that matches this signature, e.g.:
-
-        ```python
-        def drift(x, u, t):
-            return - x + u
-        ```
-        or `lambda x, u, t: - x + u`
-    """
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
-        raise NotImplementedError()
-
-
-class Potential(Protocol):
-    """
-    Scalar potential energy for gradient-based drift.
-
-    A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
-    gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling
-    Langevin-type dynamics. It is used in `ContinuousTimeStateEvolution` when
-    `potential` is set; the sign is controlled by `use_negative_gradient`.
-
-    Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
-        t (Time): Current time.
-
-    Returns:
-        jax.Array: Scalar potential value $V(x, u, t) \\in \\mathbb{R}$.
-
-    Note:
-        This is a protocol interface; implement this callable signature; do not instantiate.
-        We recommend simply using a plain Python function that matches this signature, e.g.:
-
-        ```python
-        def potential(x, u, t):
-            return x[0]**2 + x[1]**2 + x[2]**2
-        ```
-        or `lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2`
-    """
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Shaped[Array, ""]:
-        raise NotImplementedError()
-
-
 class ContinuousTimeStateEvolution(eqx.Module):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
@@ -390,7 +312,7 @@ class ContinuousTimeStateEvolution(eqx.Module):
     Note:
         For IMEX (implicit-explicit) diffrax solvers (e.g. `diffrax.KenCarp3/4/5`,
         `diffrax.Sil3`), pass an `ImExDrift` instance as `drift` instead of a
-        plain callable; see `dynestyx.types.ImExDrift`.
+        plain callable; see `dynestyx.models.drifts.ImExDrift`.
     """
 
     drift: Drift | None = None

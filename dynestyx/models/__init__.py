@@ -7,7 +7,6 @@ from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
-    Drift,
     DynamicalModel,
     ObservationModel,
     StochasticContinuousTimeStateEvolution,
@@ -18,6 +17,7 @@ from dynestyx.models.diffusions import (
     FullDiffusion,
     ScalarDiffusion,
 )
+from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
@@ -26,12 +26,10 @@ from dynestyx.models.observations import (
     LinearGaussianObservationParams,
 )
 from dynestyx.models.state_evolution import (
-    AffineDrift,
     GaussianStateEvolution,
     LinearGaussianParams,
     LinearGaussianStateEvolution,
 )
-from dynestyx.types import ImExDrift
 
 __all__ = [
     "ContinuousTimeStateEvolution",

@@ -30,18 +30,6 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
     }
 
 
-def _solver_needs_multi_term(solver: dfx.AbstractSolver) -> bool:
-    """Whether `solver` requires diffrax's `MultiTerm` (e.g. IMEX solvers like
-    `KenCarp3/4/5`, `Sil3`), rather than a single `ODETerm`.
-
-    Mirrors the check diffrax itself performs (see
-    `diffrax._solver.runge_kutta.AbstractRungeKutta.__init_subclass__` and
-    `diffrax._integrate._assert_term_compatible`), so it covers any current or
-    future diffrax solver without hardcoding solver names.
-    """
-    return get_origin(solver.term_structure) is dfx.MultiTerm
-
-
 def solve_ode_state_path(
     dynamics: DynamicalModel,
     *,

@@ -23,7 +23,7 @@ class ODESimulatorConfig:
             when selecting an alternative. IMEX solvers (e.g. `diffrax.KenCarp3/4/5`,
             `diffrax.Sil3`) are supported, but require the state evolution's
             `drift` to be an `ImExDrift` instance (see
-            `dynestyx.types.ImExDrift`), splitting the vector
+            `dynestyx.models.drifts.ImExDrift`), splitting the vector
             field into `explicit_term`/`implicit_term`; conversely, using a
             plain (non-`ImExDrift`) `drift` with an IMEX solver raises an
             error. Using an `ImExDrift` with a non-IMEX solver is allowed
