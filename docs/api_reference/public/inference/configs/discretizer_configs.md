@@ -6,6 +6,7 @@ Discretizer configs specify the discretization method used by a `Discretizer` ha
 
 | Configuration | Applicability | Transition interface | Typical cost per interval | Main tradeoff |
 |---|---|---|---|---|
+| `ODEFlowConfig` | Deterministic ODE | Delta or independent Normal density and samples | Numerical ODE solve | Accurate numerical flow; optional jitter changes the deterministic model |
 | `EulerMaruyamaConfig` | General drift and diffusion | Gaussian density and samples | One drift and diffusion evaluation | Very cheap, inacurate over long discretization intervals |
 | `ExactAffineConfig` | Affine drift, constant additive diffusion, no potential | Exact linear-Gaussian density and samples | Matrix exponentials | Only applicable to `AffineDrift` |
 | `LocalLinearizationConfig` | Nonlinear drift, constant additive diffusion | Gaussian density and samples | Jacobian and matrix exponentials | Captures local stiffness; relinearizes at every state |
@@ -21,6 +22,7 @@ See [Comparing SDE discretization methods on Lorenz–63](../../../../deep_dives
       members:
         - BaseDiscretizerConfig
         - DiscretizerConfig
+        - ODEFlowConfig
         - EulerMaruyamaConfig
         - ExactAffineConfig
         - LocalLinearizationConfig
