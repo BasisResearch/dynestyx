@@ -1858,6 +1858,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../deep_dives/sde_discretization_comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparing SDE discretization methods on Lorenz–63
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
@@ -2011,10 +2039,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_9" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_10" >
         
           
-          <label class="md-nav__link" for="__nav_3_4_9" id="__nav_3_4_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_4_10" id="__nav_3_4_10_label" tabindex="0">
             
   
   
@@ -2032,8 +2060,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_4_9">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3185,6 +3213,34 @@
     
   
     Discretizer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../public/inference/configs/discretizer_configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Discretizer Configurations
   
 
     
@@ -4508,6 +4564,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.BaseDiscretizerConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BaseDiscretizerConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.DiffraxSampleConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiffraxSampleConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.discretizers.Discretizer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4519,38 +4597,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution" class="md-nav__link">
+  <a href="#dynestyx.discretizers.EulerMaruyamaConfig" class="md-nav__link">
     <span class="md-ellipsis">
       
-        EulerMaruyamaGaussianStateEvolution
+        EulerMaruyamaConfig
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="EulerMaruyamaGaussianStateEvolution">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution.__call__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __call__
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.discretizers.euler_maruyama" class="md-nav__link">
+  <a href="#dynestyx.discretizers.ExactAffineConfig" class="md-nav__link">
     <span class="md-ellipsis">
       
-        euler_maruyama
+        ExactAffineConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.LocalLinearizationConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LocalLinearizationConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.MeanTrajectoryLinearizationConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MeanTrajectoryLinearizationConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers._discretize_state_evolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _discretize_state_evolution
       
     </span>
   </a>
@@ -4991,6 +5085,8 @@
 
     <div class="doc doc-contents first">
 
+        <p>Configuration-driven discretization of stochastic continuous-time models.</p>
+
 
 
 
@@ -5009,6 +5105,194 @@
 
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.discretizers.BaseDiscretizerConfig" class="doc doc-heading">
+            <code>BaseDiscretizerConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.BaseDiscretizerConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>Base class for continuous-to-discrete SDE configuration objects.</p>
+<p>Do not instantiate this marker class directly. Pass one of its concrete
+subclasses to <code>Discretizer</code>. For default settings, pass None
+as the config to <code>Discretizer</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.discretizers.DiffraxSampleConfig" class="doc doc-heading">
+            <code>DiffraxSampleConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.DiffraxSampleConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
+
+
+
+        <p>Sample-only transition obtained by solving each interval with Diffrax.</p>
+<p>This config is for simulation, ensemble Kalman filtering, bootstrap
+particle filtering, and genealogy-tracing particle smoothing when a
+numerical SDE path solver is preferable to an analytic transition
+approximation. For</p>
+<div class="arithmatex">\[
+dX_s=f(X_s,u_k,s)\,ds+L(X_s,u_k,s)\,dW_s,
+\]</div>
+<p>over <span class="arithmatex">\(s\in[t_k,t_{k+1}]\)</span>, with <span class="arithmatex">\(u_k\)</span> held fixed, it defines the
+transition operationally as</p>
+<div class="arithmatex">\[
+X_{k+1}
+=
+\Psi_{\mathrm{Diffrax}}
+(x,u_k,t_k,t_{k+1};\omega),
+\]</div>
+<p>where <span class="arithmatex">\(\Psi_{\mathrm{Diffrax}}\)</span> is the numerical solution selected by
+<code>sde_solver</code> and <span class="arithmatex">\(\omega\)</span> is generated from the key passed to
+<code>sample</code> or <code>rsample</code>. A fresh Brownian tree is used for each Markov
+interval. The transition stores no PRNG key and performs no solve when it
+is constructed; solving is deferred until sampling so model shape probes
+remain cheap.</p>
+<p>This transition has no tractable density in general. It supports
+<code>sample_shape</code>, reparameterized <code>rsample</code>, JIT compilation, external <code>vmap</code>,
+deterministic replay with the same key, <code>DiscreteTimeSimulator</code>, cuthbert
+EnKF, and cuthbert bootstrap PF. A cuthbert <code>PFSmootherConfig</code> using
+genealogy tracing is also compatible because it follows stored ancestors
+without evaluating a transition density. <code>log_prob</code>, <code>mean</code>, and <code>variance</code>
+raise targeted errors at the point where they are requested. Kalman,
+extended/unscented Kalman,
+density-based particle smoothers, latent-path scoring, and proposals that
+require transition densities or analytic moments are not supported.</p>
+<p>The implementation supports any Diffrax solver that operates from ordinary
+Brownian increments, including <code>diffrax.Euler()</code> and <code>diffrax.Heun()</code>.
+The default inner config selects <code>diffrax.Euler()</code>, the Euler--Maruyama
+solver. Cost scales with the number of internal solver steps and requested
+samples. <code>source="em_scan"</code> is rejected. Reverse-mode differentiation
+through the default <code>diffrax.RecursiveCheckpointAdjoint()</code> requires a finite
+<code>sde_solver.max_steps</code>; set that bound explicitly for gradient-based
+inference.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.DiffraxSampleConfig.sde_solver">sde_solver</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.inference.configs.simulator.SDESimulatorConfig" href="../../simulators/simulator_configs/#dynestyx.inference.configs.simulator.SDESimulatorConfig">SDESimulatorConfig</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Existing SDE simulator configuration
+used for each interval. It must have <code>source="diffrax"</code>. Defaults
+to <code>SDESimulatorConfig(source="diffrax",
+solver=diffrax.Euler())</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<ul>
+<li>Kidger, P. Diffrax documentation:
+  <a href="https://docs.kidger.site/diffrax/api/solvers/sde_solvers/">SDE solvers</a>
+  and the
+  <a href="https://docs.kidger.site/diffrax/devdocs/SDE_solver_table/">SDE solver/order table</a>.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -5028,55 +5312,20 @@
 
 
         <p>Performs discretization of a continuous-time state evolution, converting it to a discrete-time state evolution.</p>
-<p>A <code>Discretizer</code> object should be used as a context manager around a call to a model with a <code>dsx.sample(...)</code>
-statement to discretize a continuous-time state evolution to a discrete-time state evolution. The <code>Discretizer</code>
-should be at a lower (i.e. inner) level in the current context stack than any inference (e.g., <code>Filter</code> or <code>Simulator</code>)
-objects.</p>
-<details class="example">
-<summary>Using a Euler Maruyama Discretizer</summary>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.discretizers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Discretizer</span><span class="p">,</span> <span class="n">euler_maruyama</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.inference.filters</span><span class="w"> </span><span class="kn">import</span> <span class="n">Filter</span><span class="p">,</span> <span class="n">EKFConfig</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ContinuousTimeStateEvolution</span><span class="p">,</span>
-    <span class="n">DiscreteTimeStateEvolution</span><span class="p">,</span>
-    <span class="n">DynamicalModel</span><span class="p">,</span>
-    <span class="n">FullDiffusion</span><span class="p">,</span>
+<p>A <code>Discretizer</code> interpretation should be used inside an inference or simulation context. The outside inference/simulation
+context may then use the resulting <code>DiscreteTimeStateEvolution</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.discretizers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Discretizer</span><span class="p">,</span>
+    <span class="n">EnKFConfig</span><span class="p">,</span>
+    <span class="n">Filter</span><span class="p">,</span>
+    <span class="n">MeanTrajectoryLinearizationConfig</span><span class="p">,</span>
 <span class="p">)</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">model_with_ctse</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">DynamicalModel</span><span class="p">(</span>
-        <span class="n">control_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-        <span class="n">initial_condition</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span><span class="p">(</span>
-            <span class="n">loc</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">state_dim</span><span class="p">),</span>
-            <span class="n">covariance_matrix</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">),</span>
-        <span class="p">),</span>
-        <span class="n">state_evolution</span><span class="o">=</span><span class="n">ContinuousTimeStateEvolution</span><span class="p">(</span>
-            <span class="n">drift</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span>
-            <span class="n">diffusion</span><span class="o">=</span><span class="n">FullDiffusion</span><span class="p">(</span>
-                <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">state_dim</span><span class="p">,</span> <span class="n">bm_dim</span><span class="p">)</span>
-            <span class="p">),</span>
-        <span class="p">),</span>
-        <span class="n">observation_model</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span><span class="p">(</span>
-            <span class="n">x</span><span class="p">,</span>
-            <span class="mf">0.1</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">observation_dim</span><span class="p">),</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">discretized_data_conditioned_model</span><span class="p">():</span>
-    <span class="c1"># We use a discrete-time filter now</span>
-    <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">EKFConfig</span><span class="p">()):</span>
-        <span class="k">with</span> <span class="n">Discretizer</span><span class="p">(</span><span class="n">discretize</span><span class="o">=</span><span class="n">euler_maruyama</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">model_with_ctse</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">EnKFConfig</span><span class="p">()):</span>
+    <span class="k">with</span> <span class="n">Discretizer</span><span class="p">(</span><span class="n">MeanTrajectoryLinearizationConfig</span><span class="p">()):</span>
+        <span class="n">model</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 </code></pre></div>
-</details>
-<details class="note">
-<summary>Algorithm Reference</summary>
-<p>For an overview of discretization methods for SDEs, see Chapter 9 of: Särkkä, S., &amp; Solin, A. (2019).
-Applied Stochastic Differential Equations. Cambridge University Press.
-<a href="https://users.aalto.fi/~asolin/sde-book/sde-book.pdf">Available Online</a>.</p>
-</details>
+<p>When no config is provided to <code>Discretizer</code>, an exact Gaussian discretization will be applied for models with an <code>AffineDrift</code>,
+and an Euler-Maruyama discretization applied otherwise.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5090,12 +5339,13 @@ Applied Stochastic Differential Equations. Cambridge University Press.
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code><span title="dynestyx.discretizers.Discretizer.discretize">discretize</span></code></td>
+            <td><code><span title="dynestyx.discretizers.Discretizer.discretizer_config">discretizer_config</span></code></td>
             <td>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A callable that converts a continuous-time state evolution to a discrete-time state evolution. Defaults to euler_maruyama.</p>
+                <p>Explicit discretization config, or <code>None</code> for
+automatic routing.</p>
               </div>
             </td>
           </tr>
@@ -5135,20 +5385,94 @@ Applied Stochastic Differential Equations. Cambridge University Press.
 
 
 
-<h2 id="dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution" class="doc doc-heading">
-            <code>EulerMaruyamaGaussianStateEvolution</code>
+<h2 id="dynestyx.discretizers.EulerMaruyamaConfig" class="doc doc-heading">
+            <code>EulerMaruyamaConfig</code>
 
 
-<a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution" class="headerlink" title="Permanent link">&para;</a></h2>
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.EulerMaruyamaConfig" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="GaussianStateEvolution (dynestyx.models.GaussianStateEvolution)" href="../../models/specialized_models/#dynestyx.models.state_evolution.GaussianStateEvolution">GaussianStateEvolution</a></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
 
 
 
-        <p><code>GaussianStateEvolution</code> backed by Euler-Maruyama moments.</p>
+        <p>Euler--Maruyama Gaussian transition for a general Itô SDE.</p>
+<p>This is the inexpensive, general-purpose discretization. Consider</p>
+<div class="arithmatex">\[
+dX_s=f(X_s,u_k,s)\,ds+L(X_s,u_k,s)\,dW_s,
+\qquad
+a(x,u,s)=L(x,u,s)L(x,u,s)^\top ,
+\]</div>
+<p>on <span class="arithmatex">\(s\in[t_k,t_{k+1}]\)</span>, where <span class="arithmatex">\(W_s\)</span> is standard Brownian motion,
+<span class="arithmatex">\(h=t_{k+1}-t_k&gt;0\)</span>, and the control <span class="arithmatex">\(u_k\)</span> is held fixed over the
+interval. Euler--Maruyama freezes both coefficients at its left endpoint:</p>
+<div class="arithmatex">\[
+X_{k+1}\mid X_k=x,u_k
+\;\approx\;
+\mathcal N\!\left(
+    x+h f(x,u_k,t_k),
+    h\,a(x,u_k,t_k)+\epsilon I
+\right),
+\]</div>
+<p>where <span class="arithmatex">\(\epsilon\)</span> is <code>covariance_jitter</code>.</p>
+<p>The method applies to nonlinear drift and state-, time-, or
+control-dependent diffusion. Under the usual global Lipschitz and growth
+assumptions it has strong order <span class="arithmatex">\(1/2\)</span> and weak order <span class="arithmatex">\(1\)</span>; for additive
+noise its strong order improves to <span class="arithmatex">\(1\)</span>. See Kloeden and Platen (1992)
+for more details. It requires one drift and one diffusion evaluation per
+transition, but a single large step can poorly represent nonlinear, stiff,
+or rapidly varying dynamics.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.EulerMaruyamaConfig.covariance_jitter">covariance_jitter</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nonnegative <span class="arithmatex">\(\epsilon\)</span> added to the
+transition covariance as <span class="arithmatex">\(\epsilon I\)</span>. Defaults to <code>0.0</code>.
+Positive jitter changes the stochastic model and should be chosen
+explicitly rather than treated as an invisible numerical fix.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<ul>
+<li>Särkkä, S., &amp; Solin, A. (2019). <em>Applied Stochastic Differential
+  Equations</em>. Cambridge University Press, Algorithm 8.1 and
+  Equations (8.28)--(8.30).
+  <a href="https://users.aalto.fi/~asolin/sde-book/sde-book.pdf">Online book</a>.</li>
+<li>Kloeden, P. E., &amp; Platen, E. (1992). <em>Numerical Solution of
+  Stochastic Differential Equations</em>. Springer, Chapter 10.
+  <a href="https://doi.org/10.1007/978-3-662-12616-5">https://doi.org/10.1007/978-3-662-12616-5</a>.</li>
+</ul>
+</details>
 
 
 
@@ -5171,23 +5495,411 @@ Applied Stochastic Differential Equations. Cambridge University Press.
 
 
 
-<div class="doc doc-object doc-function">
 
 
-<h3 id="dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution.__call__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__call__</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">)</span></code>
-
-<a href="#dynestyx.discretizers.EulerMaruyamaGaussianStateEvolution.__call__" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Single-pass transition step (or batched time steps).</p>
-
+  </div>
 
     </div>
 
 </div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.discretizers.ExactAffineConfig" class="doc doc-heading">
+            <code>ExactAffineConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.ExactAffineConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
+
+
+
+        <p>Exact discrete transition for an affine SDE with additive noise.</p>
+<p>Use this config only when the continuous transition has an <code>AffineDrift</code>,
+constant diffusion, and no potential. For the Itô SDE</p>
+<div class="arithmatex">\[
+dX_s=(F X_s+B u_k+b)\,ds+L\,dW_s
+\]</div>
+<p>over an interval of length <span class="arithmatex">\(h=t_{k+1}-t_k&gt;0\)</span>, with standard Brownian
+motion and a held control <span class="arithmatex">\(u_k\)</span>, the exact conditional transition is</p>
+<div class="arithmatex">\[
+X_{k+1}\mid X_k=x,u_k
+\sim
+\mathcal N(A_hx+B_hu_k+b_h,\;Q_h+\epsilon I),
+\]</div>
+<p>with</p>
+<div class="arithmatex">\[
+A_h=e^{Fh},\qquad
+B_h=\int_0^h e^{Fs}B\,ds,\qquad
+b_h=\int_0^h e^{Fs}b\,ds,
+\]</div>
+<p>and</p>
+<div class="arithmatex">\[
+Q_h=\int_0^h e^{Fs}LL^\top e^{F^\top s}\,ds.
+\]</div>
+<p>The implementation uses an augmented matrix exponential for the forcing
+terms and evaluates the Van Loan covariance on a safely scaled interval
+before composing it to the requested interval. This avoids overflowing the
+growing block associated with a stable, stiff drift. It never forms
+<span class="arithmatex">\(F^{-1}\)</span>, so singular drift matrices are supported. With
+<code>covariance_jitter=0</code>, the transition is exact up to floating-point error
+for every positive interval length, including nonuniform observation grids.
+It preserves a linear Gaussian state-evolution representation and therefore
+enables exact Kalman filtering when the rest of the model is also linear
+Gaussian.</p>
+<p>Matrix exponentials cost cubic time in the augmented state dimension and
+can be expensive when many distinct interval lengths are used. Drifts
+not explicitly marked as affine/constant, state-dependent diffusion, and
+potentials are rejected. Singular <span class="arithmatex">\(Q_h\)</span> requires positive jitter.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.ExactAffineConfig.covariance_jitter">covariance_jitter</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nonnegative <span class="arithmatex">\(\epsilon\)</span> added to <span class="arithmatex">\(Q_h\)</span>
+as <span class="arithmatex">\(\epsilon I\)</span>. Defaults to <code>0.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<ul>
+<li>Van Loan, C. F. (1978). Computing integrals involving the matrix
+  exponential. <em>IEEE Transactions on Automatic Control</em>, 23(3),
+  395--404.
+  <a href="https://doi.org/10.1109/TAC.1978.1101743">https://doi.org/10.1109/TAC.1978.1101743</a>.</li>
+<li>Särkkä, S., &amp; Svensson, L. (2023). <em>Bayesian Filtering and
+  Smoothing</em>, 2nd ed. Cambridge University Press, Theorem 4.3 and
+  Lemma A.9.
+  <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Online book</a>.</li>
+<li>Axelsson, P., &amp; Gustafsson, F. (2015). Discrete-time solutions to
+  the continuous-time differential Lyapunov equation. <em>IEEE
+  Transactions on Automatic Control</em>, 60(3), 632--643.
+  <a href="https://doi.org/10.1109/TAC.2014.2353112">https://doi.org/10.1109/TAC.2014.2353112</a>.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.discretizers.LocalLinearizationConfig" class="doc doc-heading">
+            <code>LocalLinearizationConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.LocalLinearizationConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
+
+
+
+        <p>Locally linearized Gaussian transition with frozen additive noise.</p>
+<p>This method is intended for nonlinear drift with structurally constant,
+additive diffusion. For the Itô SDE</p>
+<div class="arithmatex">\[
+dX_s=f(X_s,u_k,s)\,ds+L\,dW_s,
+\]</div>
+<p>define, at the left endpoint <span class="arithmatex">\(x=X_{t_k}\)</span>,</p>
+<div class="arithmatex">\[
+f_0=f(x,u_k,t_k),\qquad
+J=\left.\frac{\partial f}{\partial x}\right|_{(x,u_k,t_k)} .
+\]</div>
+<p>With standard Brownian motion, <span class="arithmatex">\(h=t_{k+1}-t_k&gt;0\)</span>, and <span class="arithmatex">\(u_k\)</span> held
+fixed, approximate the original process by</p>
+<div class="arithmatex">\[
+dZ_s=\left[f_0+J(Z_s-x)\right]ds+L\,dW_s,\qquad Z_0=x.
+\]</div>
+<p>Its exact Gaussian transition has</p>
+<div class="arithmatex">\[
+m_h=x+\int_0^h e^{Js}f_0\,ds,
+\qquad
+P_h=\int_0^h e^{Js}LL^\top e^{J^\top s}\,ds,
+\]</div>
+<p>and this config returns
+<span class="arithmatex">\(\mathcal N(m_h,P_h+\epsilon I)\)</span>, where <span class="arithmatex">\(\epsilon\)</span> is
+<code>covariance_jitter</code>.</p>
+<p>The method is exact for affine drift with additive diffusion. With some amount
+of nonlinearity, it can be more accurate than Euler--Maruyama, but at higher
+cost, since Jacobians must be computed.</p>
+<p>State-, time-, or control-dependent diffusion are rejected.
+The returned object is a Gaussian transition distribution, compatible
+with any method using Gaussian transitions. Degenerate transition covariance
+requires explicit positive jitter.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.LocalLinearizationConfig.covariance_jitter">covariance_jitter</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nonnegative <span class="arithmatex">\(\epsilon\)</span> added to <span class="arithmatex">\(P_h\)</span>
+as <span class="arithmatex">\(\epsilon I\)</span>. Defaults to <code>0.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<ul>
+<li>Särkkä, S., &amp; Svensson, L. (2023). <em>Bayesian Filtering and
+  Smoothing</em>, 2nd ed. Cambridge University Press, Theorem 4.18.
+  <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Online book</a>.</li>
+<li>Ozaki, T. (1992). A bridge between nonlinear time series models and
+  nonlinear stochastic dynamical systems: A local linearization
+  approach. <em>Statistica Sinica</em>, 2(1), 113--135.
+  <a href="https://www3.stat.sinica.edu.tw/statistica/j2n1/j2n16/j2n16.htm">Article</a>.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.discretizers.MeanTrajectoryLinearizationConfig" class="doc doc-heading">
+            <code>MeanTrajectoryLinearizationConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.MeanTrajectoryLinearizationConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
+
+
+
+        <p>Gaussian moment transition linearized along the conditional mean.</p>
+<p>This config integrates a first-order Gaussian assumed-density
+approximation for the Itô SDE</p>
+<div class="arithmatex">\[
+dX_s=f(X_s,u_k,s)\,ds+L(X_s,u_k,s)\,dW_s,\qquad
+a(x,u,s)=L(x,u,s)L(x,u,s)^\top .
+\]</div>
+<p>On <span class="arithmatex">\(s\in[t_k,t_{k+1}]\)</span>, standard Brownian motion is assumed and <span class="arithmatex">\(u_k\)</span>
+is held fixed. Starting from the deterministic conditional state</p>
+<div class="arithmatex">\[
+m(t_k)=x,\qquad P(t_k)=0,
+\]</div>
+<p>integrate</p>
+<div class="arithmatex">\[
+\dot m_s=f(m_s,u_k,s),
+\]</div>
+<div class="arithmatex">\[
+\dot P_s=J_sP_s+P_sJ_s^\top+a(m_s,u_k,s),
+\qquad
+J_s=\frac{\partial f}{\partial x}(m_s,u_k,s),
+\]</div>
+<p>and return
+<span class="arithmatex">\(\mathcal N(m(t_{k+1}),P(t_{k+1})+\epsilon I)\)</span>.</p>
+<p>This approximation supports nonlinear drift and state-, time-, or
+control-dependent diffusion. It is exact for affine drift with additive
+diffusion up to the numerical ODE solver tolerance. Relative to a
+left-endpoint local linearization, it updates the Jacobian along the mean
+trajectory.</p>
+<p>Every transition performs a joint mean/covariance ODE solve and evaluates a
+state Jacobian at each right-hand-side call, so it is considerably more
+expensive than Euler--Maruyama. A singular final covariance requires explicit
+positive jitter.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.MeanTrajectoryLinearizationConfig.ode_solver">ode_solver</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.inference.configs.simulator.ODESimulatorConfig" href="../../simulators/simulator_configs/#dynestyx.inference.configs.simulator.ODESimulatorConfig">ODESimulatorConfig</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Existing Diffrax ODE configuration
+used unchanged for the joint mean/covariance integration.
+Defaults to <code>ODESimulatorConfig()</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.MeanTrajectoryLinearizationConfig.covariance_jitter">covariance_jitter</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nonnegative <span class="arithmatex">\(\epsilon\)</span> added to the final
+covariance as <span class="arithmatex">\(\epsilon I\)</span>. Defaults to <code>0.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <details class="note">
+<summary>Algorithm Reference</summary>
+<ul>
+<li>Särkkä, S., &amp; Solin, A. (2019). <em>Applied Stochastic Differential
+  Equations</em>. Cambridge University Press, Algorithm 9.4,
+  Equation (9.15), and Algorithm 9.8 with Equation (9.28).
+  <a href="https://users.aalto.fi/~asolin/sde-book/sde-book.pdf">Online book</a>.</li>
+<li>Särkkä, S., &amp; Svensson, L. (2023). <em>Bayesian Filtering and
+  Smoothing</em>, 2nd ed. Cambridge University Press, Theorem 4.13 and
+  Algorithm 4.14.
+  <a href="https://users.aalto.fi/~ssarkka/pub/bfs_book_2023_online.pdf">Online book</a>.</li>
+<li>Särkkä, S., &amp; Sarmavuori, J. (2013). Gaussian filtering and
+  smoothing for continuous-discrete dynamic systems. <em>Signal
+  Processing</em>, 93(2), 500--510.
+  <a href="https://doi.org/10.1016/j.sigpro.2012.09.002">https://doi.org/10.1016/j.sigpro.2012.09.002</a>.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 
 
 
@@ -5201,77 +5913,15 @@ Applied Stochastic Differential Equations. Cambridge University Press.
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.discretizers.euler_maruyama" class="doc doc-heading">
-            <code class=" language-python"><span class="n">euler_maruyama</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">StochasticContinuousTimeStateEvolution</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GaussianStateEvolution</span></code>
+<h2 id="dynestyx.discretizers._discretize_state_evolution" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_discretize_state_evolution</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseDiscretizerConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiscreteTimeStateEvolution</span></code>
 
-<a href="#dynestyx.discretizers.euler_maruyama" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.discretizers._discretize_state_evolution" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Discretize continuous-time state evolution via Euler-Maruyama.</p>
-<p>Euler-Maruyama is a first-order discrete approximation of a continuous-time
-SDE. The result is a <code>GaussianStateEvolution</code> with mean
-<code>x + drift(x,u,t)*dt</code> and covariance <code>(L@Q@L.T)*dt</code> (<code>Q = I</code>),
-where <code>dt = t_next - t_now</code>. The process covariance is <strong>time-varying</strong>
-(depends on <code>t_next - t_now</code>) and passed as a callable <code>cov</code>.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>cte</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="StochasticContinuousTimeStateEvolution (dynestyx.models.StochasticContinuousTimeStateEvolution)" href="../../models/core_models/#dynestyx.models.core.StochasticContinuousTimeStateEvolution">StochasticContinuousTimeStateEvolution</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p><code>StochasticContinuousTimeStateEvolution</code> to discretize.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-        <p>Returns:
-    GaussianStateEvolution: Discrete-time Gaussian transition with the
-    same Euler–Maruyama semantics as before this refactor.</p>
-
-
-<details class="note" open>
-  <summary>Note</summary>
-  <p>Each transition uses one Euler-Maruyama step with
-<code>dt = t_next - t_now</code>.</p>
-</details>        <details class="note">
-<summary>Algorithm Reference</summary>
-<p>The Euler Maruyama is a first order discretization.
-The resulting discrete-time state evolution is approximated as</p>
-<p>x_{t+1} ~ N(x_t + drift * delta_t, (L@Q@L.T)*delta_t)</p>
-<p>where:
-    x_t is the current state
-    drift is the drift function
-    L is the diffusion coefficient
-    Q is the diffusion covariance
-    delta_t is the time step between timepoints (t_next - t_now)</p>
-<p>This is the first-order Ito-Taylor approximation.</p>
-<p>References:
-    - This is the first-order Ito-Taylor approximation, discussed in Chapter 9.2 of: Särkkä, S., &amp; Solin, A. (2019).
-        Applied Stochastic Differential Equations. Cambridge University Press.
-        <a href="https://users.aalto.fi/~asolin/sde-book/sde-book.pdf">Available Online</a>.</p>
-</details>
+        <p>Build the private discrete transition selected by a config.</p>
 
 
     </div>
