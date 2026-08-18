@@ -56,15 +56,6 @@ def solve_ode_state_path(
         dynamics.state_evolution,
     )
 
-    if isinstance(
-        settings["solver"], (dfx.AbstractStratonovichSolver, dfx.AbstractItoSolver)
-    ):
-        raise ValueError(
-            "solve_ode_state_path only supports deterministic ODE solvers, "
-            f"but got an SDE solver ({type(settings['solver']).__name__}). "
-            "Use solve_sde_state_path instead."
-        )
-
     # Check if the solver is a genuine IMEX solver (requires the explicit/
     # implicit MultiTerm split, e.g. KenCarp3/4/5, Sil3 -- see _is_imex_solver).
     # Raises ValueError if the solver requires the split but the drift is not an ImExDrift.

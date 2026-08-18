@@ -185,9 +185,35 @@ def test_dynamical_model_rejects_potential_with_imex_drift_in_plate():
             )
 
 
-def test_solve_ode_state_path_rejects_sde_solver():
+def test_solve_ode_state_path_allows_generic_solver_marked_ito():
+    # dfx.Euler is a generic explicit solver usable on plain ODETerms; it's
+    # also tagged AbstractItoSolver because it converges correctly on SDE
+    # terms too. That tag must not cause solve_ode_state_path to reject it
+    # for ordinary (non-IMEX, non-SDE) ODE use.
+    path_times = jnp.array([0.0, 0.5, 1.0])
+    states = solve_ode_state_path(
+        _make_imex_dynamics(use_imex_drift=False),
+        initial_state=jnp.array([1.0]),
+        t0=jnp.array(0.0),
+        path_times=path_times,
+        diffeqsolve_settings={
+            "solver": dfx.Euler(),
+            "stepsize_controller": dfx.ConstantStepSize(),
+            "adjoint": dfx.RecursiveCheckpointAdjoint(),
+            "dt0": jnp.array(0.001),
+            "max_steps": 10_000,
+        },
+    )
+
+    expected = jnp.exp(-0.7 * path_times)
+    assert jnp.allclose(states[:, 0], expected, atol=1e-2)
+
+
+def test_solve_ode_state_path_rejects_dedicated_sde_solver_via_diffrax():
+    # EulerHeun requires a genuine SDE MultiTerm (drift + Brownian control);
+    # this backend never builds one, so diffrax itself rejects the mismatch.
     path_times = jnp.array([0.0, 1.0])
-    with pytest.raises(ValueError, match="SDE solver"):
+    with pytest.raises(Exception, match="not compatible"):
         solve_ode_state_path(
             _make_imex_dynamics(use_imex_drift=False),
             initial_state=jnp.array([1.0]),
