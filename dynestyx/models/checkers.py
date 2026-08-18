@@ -105,6 +105,25 @@ def _make_probe_state(
     return jnp.zeros((state_dim,))
 
 
+def _validate_imex_potential_conflict(state_evolution: Any) -> None:
+    """Forbid combining `potential` with an `ImExDrift` `drift`.
+
+    Unlike the shape checks in `_validate_continuous_state_evolution`, this
+    needs no probe values and is equally valid for batched (plated)
+    parameters, so it must run unconditionally -- including inside
+    `dsx.plate`, where shape validation is otherwise skipped.
+    """
+    drift = state_evolution.drift
+    if isinstance(drift, ImExDrift) and state_evolution.potential is not None:
+        raise ValueError(
+            "ContinuousTimeStateEvolution cannot combine `potential` "
+            "with an ImExDrift `drift`: potential's gradient term has "
+            "no explicit/implicit split. Fold the potential gradient "
+            "into `explicit_term` or `implicit_term` of the ImExDrift "
+            "instance instead."
+        )
+
+
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
@@ -121,14 +140,6 @@ def _validate_continuous_state_evolution(
     drift = state_evolution.drift
 
     if isinstance(drift, ImExDrift):
-        if state_evolution.potential is not None:
-            raise ValueError(
-                "ContinuousTimeStateEvolution cannot combine `potential` "
-                "with an ImExDrift `drift`: potential's gradient term has "
-                "no explicit/implicit split. Fold the potential gradient "
-                "into `explicit_term` or `implicit_term` of the ImExDrift "
-                "instance instead."
-            )
         explicit_shape, implicit_shape = jax.eval_shape(
             lambda: drift.make_imex_tuple(x_probe, u_probe, t_probe)
         )

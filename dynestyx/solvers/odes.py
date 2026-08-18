@@ -30,9 +30,6 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
     }
 
 
-
-
-
 def solve_ode_state_path(
     dynamics: DynamicalModel,
     *,
@@ -63,7 +60,7 @@ def solve_ode_state_path(
     # implicit MultiTerm split, e.g. KenCarp3/4/5, Sil3 -- see _is_imex_solver).
     # Raises ValueError if the solver requires the split but the drift is not an ImExDrift.
     # Raises a warning if the drift is an ImExDrift but the solver does not require the split (will still solve, but the explicit/implicit split will be ignored).
-    needs_multi_term =(
+    needs_multi_term = (
         isinstance(settings["solver"], dfx.AbstractImplicitSolver)
         and get_origin(settings["solver"].term_structure) is dfx.MultiTerm
     )

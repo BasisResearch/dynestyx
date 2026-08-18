@@ -21,6 +21,7 @@ from dynestyx.models.checkers import (
     _validate_continuous_state_evolution,
     _validate_continuous_time_flag,
     _validate_discrete_state_evolution_output_shape,
+    _validate_imex_potential_conflict,
     _validate_observation_dim,
     _validate_state_dim,
 )
@@ -232,6 +233,12 @@ class DynamicalModel(eqx.Module):
                 use_negative_gradient=current_state_evolution.use_negative_gradient,
                 diffusion=resolved_diffusion,
             )
+
+        if self.continuous_time:
+            # Needs no shape/probe data, so unlike the checks below it must
+            # run unconditionally -- including inside dsx.plate, where those
+            # shape checks are skipped.
+            _validate_imex_potential_conflict(state_evolution)
 
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.

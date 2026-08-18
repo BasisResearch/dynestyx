@@ -166,6 +166,25 @@ def test_dynamical_model_rejects_potential_with_imex_drift():
         )
 
 
+def test_dynamical_model_rejects_potential_with_imex_drift_in_plate():
+    # This check needs no shape/probe data, so it must fire even inside
+    # dsx.plate, where the (probe-dependent) shape validation is skipped.
+    with pytest.raises(ValueError, match="potential"):
+        with dsx.plate("trajectories", 2):
+            dsx.DynamicalModel(
+                control_dim=0,
+                initial_condition=dist.Delta(jnp.zeros((2, 1)), event_dim=1),
+                state_evolution=dsx.ContinuousTimeStateEvolution(
+                    drift=dsx.ImExDrift(
+                        explicit_term=lambda x, u, t: -0.7 * x,
+                        implicit_term=lambda x, u, t: -1.3 * x,
+                    ),
+                    potential=lambda x, u, t: jnp.sum(x**2),
+                ),
+                observation_model=lambda x, u, t: dist.Delta(x, event_dim=1),
+            )
+
+
 def test_solve_sde_state_path_applies_controls():
     path_times = jnp.array([0.0, 0.5, 1.0])
     states = solve_sde_state_path(
