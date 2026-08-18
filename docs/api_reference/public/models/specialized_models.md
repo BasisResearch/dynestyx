@@ -16,7 +16,12 @@
       members:
         - LinearGaussianStateEvolution
         - GaussianStateEvolution
+
+::: dynestyx.models.drifts
+    options:
+      members:
         - AffineDrift
+        - ImExDrift
 
 ## LTI model factories
 

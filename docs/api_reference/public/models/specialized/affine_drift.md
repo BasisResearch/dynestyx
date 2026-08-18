@@ -1,6 +1,6 @@
 # AffineDrift
 
-::: dynestyx.models.state_evolution.AffineDrift
+::: dynestyx.models.drifts.AffineDrift
     options:
       show_root_heading: false
       show_root_toc_entry: false
