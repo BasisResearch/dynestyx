@@ -62,6 +62,10 @@ def solve_ode_state_path(
     # Raises a warning if the drift is an ImExDrift but the solver does not require the split (will still solve, but the explicit/implicit split will be ignored).
     needs_multi_term = (
         isinstance(settings["solver"], dfx.AbstractImplicitSolver)
+        and not isinstance(
+            settings["solver"],
+            (dfx.AbstractStratonovichSolver, dfx.AbstractItoSolver),
+        )
         and get_origin(settings["solver"].term_structure) is dfx.MultiTerm
     )
     is_imex_drift = isinstance(state_evolution.drift, ImExDrift)
