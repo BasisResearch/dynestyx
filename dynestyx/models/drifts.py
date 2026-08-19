@@ -146,7 +146,7 @@ class ImExDrift(eqx.Module):
        IMEX solvers (e.g. `diffrax.KenCarp3/4/5`, `diffrax.Sil3`, which
        require diffrax's `MultiTerm`), via `make_imex_tuple`.
 
-    Construct with keyword-only arguments to avoid silently swapping the two
+    Must be constructed with keyword-only arguments to avoid silently swapping the two
     terms: `ImExDrift(explicit_term=..., implicit_term=...)`.
 
     Wherever a plain `Drift`-shaped callable `(x, u, t) -> R^{d_x}` is
