@@ -53,7 +53,7 @@ class Drift(Protocol):
 class Potential(Protocol):
     """
     Scalar potential energy for gradient-based drift
-    
+
     $$dx_t = \\mu(x_t, u_t, t)dt -\\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.$$
 
     A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
