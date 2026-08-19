@@ -13,6 +13,7 @@ from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import (
     _ensure_trailing_dim,
     _sample_initial_states,
+    _sample_observation_path,
     _tile_times,
 )
 from dynestyx.types import SimulatedResult
@@ -49,10 +50,25 @@ def _sample_discrete_state_path_from_initial_state(
     initial_state: Real[Array, " state_dim"] | Real[Array, ""],
     rng_key: PRNGKeyArray,
     times: Real[Array, " time"],
-    ctrl_values: Real[Array, "time control_dim"] | Real[Array, " time"] | None,
-) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
-    """Sample one canonical discrete state path from a fixed initial state."""
-    if len(times) == 1:
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None,
+    include_initial_condition: bool = True,
+) -> Real[Array, "state_path_time state_dim"] | Real[Array, " state_path_time"]:
+    """Sample one canonical discrete state path from a fixed initial state.
+
+    ctrl_values has its own length ("ctrl_time"), decoupled from `times`: it
+    is len(times) for same_time (one entry per transition plus one unused by
+    any transition, reserved for the final same_time observation) or
+    len(times) - 1 for previous_transition (exactly one entry per
+    transition). The returned path's length also depends on
+    include_initial_condition, hence the separate "state_path_time" name.
+
+    Returns x_0..x_{T-1} when include_initial_condition is True (same_time
+    convention, default). Returns x_1..x_{T-1} only when False
+    (previous_transition convention) -- x_0 is the given seed, not re-emitted.
+    """
+    if len(times) == 1 and include_initial_condition:
         return jnp.expand_dims(initial_state, axis=0)
 
     state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
@@ -74,7 +90,77 @@ def _sample_discrete_state_path_from_initial_state(
         (initial_state, rng_key),
         jnp.arange(len(times) - 1),
     )
-    return jnp.concatenate([jnp.expand_dims(initial_state, 0), scan_states], axis=0)
+    if include_initial_condition:
+        return jnp.concatenate([jnp.expand_dims(initial_state, 0), scan_states], axis=0)
+    return scan_states
+
+
+def _sample_discrete_observation_path(
+    dynamics: DynamicalModel,
+    *,
+    states: Real[Array, "obs_path_time state_dim"] | Real[Array, " obs_path_time"],
+    times: Real[Array, " time"],
+    ctrl_values: Real[Array, "obs_path_time control_dim"]
+    | Real[Array, " obs_path_time"]
+    | None,
+    rng_key: PRNGKeyArray,
+    include_initial_condition: bool = True,
+) -> Real[Array, "obs_path_time observation_dim"] | Real[Array, " obs_path_time"]:
+    """Sample observations for a discrete state path.
+
+    states/ctrl_values/the return value all share one length ("obs_path_time"),
+    decoupled from `times` (always the full predict_times grid, length T):
+    that shared length is T for same_time or T-1 for previous_transition.
+
+    include_initial_condition=True (same_time, default): states/times are the
+    FULL path (length T, x_0/t_0 included); delegates to the shared
+    _sample_observation_path so same_time logic has one source of truth,
+    unchanged from today.
+
+    include_initial_condition=False (previous_transition): states is
+    x_1..x_{T-1} (length T-1, the output of the state function above with
+    include_initial_condition=False); times is still the FULL predict_times
+    (length T) so times[k+1] is available. y_{k+1} ~ p(x_{k+1}, ctrl_values[k],
+    t_{k+1}), k=0..T-2. y_0 is never sampled -- no wasted draw.
+    """
+    if include_initial_condition:
+        ctrl_eval = (
+            (lambda t: ctrl_values[jnp.searchsorted(times, t, side="left")])
+            if ctrl_values is not None
+            else None
+        )
+        return _sample_observation_path(
+            dynamics,
+            states=states,
+            times=times,
+            rng_key=rng_key,
+            control_path_eval=ctrl_eval,
+        )
+
+    n = states.shape[0]
+    obs_keys = jr.split(rng_key, n)
+    future_times = times[1:]
+
+    # Map directly over the pre-sliced arrays (states/ctrl_values/future_times/
+    # obs_keys) rather than indexing by a scanned integer inside the mapped
+    # body. jax.vmap traces its body once regardless of batch size, so
+    # indexing into a genuinely zero-length array (the n=0 edge case, e.g.
+    # predict_times of length 1) raises immediately; mapping over already-
+    # sliced arrays instead lets vmap's native zero-size handling take over,
+    # with no indexing operation in the body at all.
+    if ctrl_values is None:
+
+        def _sample_one(x_next, t_next, key):
+            obs_dist = dynamics.observation_model(x=x_next, u=None, t=t_next)
+            return obs_dist.sample(key)
+
+        return jax.vmap(_sample_one)(states, future_times, obs_keys)
+
+    def _sample_one(x_next, u, t_next, key):
+        obs_dist = dynamics.observation_model(x=x_next, u=u, t=t_next)
+        return obs_dist.sample(key)
+
+    return jax.vmap(_sample_one)(states, ctrl_values, future_times, obs_keys)
 
 
 def _sample_discrete_state_path(
@@ -108,7 +194,10 @@ class DiscreteTimeSimulator(BaseSimulator):
     r"""Generate trajectories from a discrete-time dynamical model.
 
     For prediction times \(t_0,\ldots,t_{T-1}\), this simulator draws
-    `n_simulations` independent paths according to
+    `n_simulations` independent paths. The observation/control pairing
+    depends on `dynamics.observation_control_alignment`:
+
+    For `"same_time"` (default):
 
     \[
     x_0^{(m)} \sim p_0(x_0), \qquad
@@ -121,7 +210,30 @@ class DiscreteTimeSimulator(BaseSimulator):
     The first state in the returned path is the initial-condition draw at
     `predict_times[0]`; the simulator then makes one transition draw for each
     adjacent pair of prediction times and samples one observation conditional
-    on every realized state. See
+    on every realized state, including \(y_0\) (paired with \(u_0\)).
+
+    For `"previous_transition"`:
+
+    \[
+    x_0^{(m)} \sim p_0(x_0), \qquad
+    x_{k+1}^{(m)} \sim p\!\left(x_{k+1}\mid x_k^{(m)},u_k,t_k,t_{k+1}\right),
+    \qquad
+    y_{k+1}^{(m)} \sim p(y_{k+1}\mid x_{k+1}^{(m)},u_k,t_{k+1}).
+    \]
+
+    Here \(x_0\) is only the seed for the rollout: \(y_0\) is never sampled,
+    and neither \(x_0\) nor \(t_0\) appears in the returned result --
+    `SimulatedResult.x_0` is `None` and `.times`/`.states`/`.observations` all
+    have length \(T-1\), matching the \(T-1\) controls \(u_0,\ldots,u_{T-2}\)
+    the caller supplies via `ctrl_values` (aligned to `predict_times[:-1]`,
+    not the full `predict_times`). This matches
+    [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]'s
+    closed-loop convention. Only discrete-time models generated through the
+    plain `Simulator`/`DiscreteTimeSimulator`/`dsx.simulate` path honor this
+    convention today -- see
+    [issue #312](https://github.com/BasisResearch/dynestyx/issues/312).
+
+    See
     [DiscreteTimeStateEvolution][dynestyx.models.core.DiscreteTimeStateEvolution]
     for how a discrete transition model is represented in a `DynamicalModel`.
 
@@ -165,10 +277,14 @@ class DiscreteTimeSimulator(BaseSimulator):
     not be uniformly spaced, provided the model's transition accepts those
     intervals.
 
-    If controls are supplied, `ctrl_times` must contain every prediction time
-    exactly. `ctrl_values[k]` is used for the transition beginning at \(t_k\)
-    and for the observation at \(t_k\). The paired control arrays are validated
-    before simulation.
+    If controls are supplied, `ctrl_times` must exactly match the grid
+    required by `dynamics.observation_control_alignment`: the full
+    `predict_times` for `"same_time"` (default) -- `ctrl_values[k]` is used
+    for the transition beginning at \(t_k\) and for the observation at
+    \(t_k\) -- or `predict_times[:-1]` for `"previous_transition"` --
+    `ctrl_values[k]` drives the transition into \(x_{k+1}\) and the
+    observation \(y_{k+1}\). The paired control arrays are validated before
+    simulation.
 
     This handler is generation-only and does not condition on `obs_times` or
     `obs_values`. Use
@@ -250,15 +366,20 @@ class DiscreteTimeSimulator(BaseSimulator):
         | Real[Array, " n_simulations"],
         rng_key: PRNGKeyArray,
         times: Real[Array, " time"],
-        ctrl_values: Real[Array, "time control_dim"] | Real[Array, " time"] | None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None,
     ) -> SimulatedResult:
-        """Run pure forward simulation for a discrete-time model."""
+        """Run pure forward simulation for a discrete-time model.
+
+        ctrl_values has its own length ("ctrl_time"), decoupled from `times`
+        (always the full predict_times grid): len(times) for same_time or
+        len(times) - 1 for previous_transition.
+        """
         n_sim = initial_state.shape[0]
         sim_keys = jr.split(rng_key, n_sim)
-        ctrl_eval = (
-            (lambda t: ctrl_values[jnp.searchsorted(times, t, side="left")])
-            if ctrl_values is not None
-            else None
+        include_initial_condition = (
+            dynamics.observation_control_alignment != "previous_transition"
         )
 
         def _sim_one_trajectory(
@@ -272,22 +393,29 @@ class DiscreteTimeSimulator(BaseSimulator):
                 rng_key=key_states,
                 times=times,
                 ctrl_values=ctrl_values,
+                include_initial_condition=include_initial_condition,
             )
-            observations = self._emit_observations(
-                "",
+            observations = _sample_discrete_observation_path(
                 dynamics,
-                states,
-                times,
-                None,
-                ctrl_eval,
-                key=key_obs,
+                states=states,
+                times=times,
+                ctrl_values=ctrl_values,
+                rng_key=key_obs,
+                include_initial_condition=include_initial_condition,
             )
             return states, observations
 
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
+        if include_initial_condition:
+            return SimulatedResult(
+                times=_tile_times(times, n_sim),
+                x_0=initial_state,
+                states=_ensure_trailing_dim(states),
+                observations=_ensure_trailing_dim(observations),
+            )
         return SimulatedResult(
-            times=_tile_times(times, n_sim),
-            x_0=initial_state,
+            times=_tile_times(times[1:], n_sim),
+            x_0=None,
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
         )
@@ -315,8 +443,13 @@ class DiscreteTimeSimulator(BaseSimulator):
         if predict_times is None:
             raise ValueError("predict_times must be provided")
 
+        align_times = (
+            predict_times[:-1]
+            if dynamics.observation_control_alignment == "previous_transition"
+            else predict_times
+        )
         aligned_ctrl_values = _align_ctrl_values_to_times(
-            times=predict_times,
+            times=align_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )
