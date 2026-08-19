@@ -1,4 +1,4 @@
-"""Configuration objects for continuous-to-discrete SDE approximations."""
+"""Configuration objects for continuous-to-discrete approximations."""
 
 from __future__ import annotations
 
@@ -22,18 +22,61 @@ def _validate_covariance_jitter(covariance_jitter: float) -> None:
         )
 
 
+def _validate_jitter_scale(jitter_scale: float) -> None:
+    if not math.isfinite(jitter_scale) or jitter_scale < 0.0:
+        raise ValueError(
+            f"jitter_scale must be a finite, nonnegative float, got {jitter_scale!r}."
+        )
+
+
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:
     return SDESimulatorConfig(source="diffrax", solver=dfx.Euler())
 
 
 @dataclasses.dataclass
 class BaseDiscretizerConfig(abc.ABC):
-    r"""Base class for continuous-to-discrete SDE configuration objects.
+    r"""Base class for continuous-to-discrete configuration objects.
 
     Do not instantiate this marker class directly. Pass one of its concrete
     subclasses to `Discretizer`. For default settings, pass None
     as the config to `Discretizer`.
     """
+
+
+@dataclasses.dataclass
+class ODEFlowConfig(BaseDiscretizerConfig):
+    r"""Numerical flow transition for a deterministic ODE.
+
+    For the controlled ODE
+
+    $$
+    \dot X_s=f(X_s,u_k,s),
+    $$
+
+    this config numerically integrates from ``t_now`` to ``t_next`` while
+    holding ``u_k`` fixed. With endpoint
+    $\phi(x,u_k,t_{\mathrm{now}},t_{\mathrm{next}})$, the returned
+    transition is a Delta distribution when ``jitter_scale == 0``. For
+    positive ``jitter_scale`` it is an independent Normal distribution with
+    mean $\phi$, component scale ``jitter_scale``, and covariance
+    ``jitter_scale**2 * I``.
+
+    All Diffrax settings come from the existing ``ODESimulatorConfig``.
+
+    Attributes:
+        simulator_config (ODESimulatorConfig): Diffrax ODE solver settings.
+            Defaults to ``ODESimulatorConfig()``.
+        jitter_scale (float): Finite, nonnegative component scale added
+            after integrating the flow. Defaults to ``0.0``.
+    """
+
+    simulator_config: ODESimulatorConfig = dataclasses.field(
+        default_factory=ODESimulatorConfig
+    )
+    jitter_scale: float = 0.0
+
+    def __post_init__(self) -> None:
+        _validate_jitter_scale(self.jitter_scale)
 
 
 @dataclasses.dataclass
@@ -386,7 +429,8 @@ class DiffraxSampleConfig(BaseDiscretizerConfig):
 
 
 type DiscretizerConfig = (
-    EulerMaruyamaConfig
+    ODEFlowConfig
+    | EulerMaruyamaConfig
     | ExactAffineConfig
     | LocalLinearizationConfig
     | MeanTrajectoryLinearizationConfig

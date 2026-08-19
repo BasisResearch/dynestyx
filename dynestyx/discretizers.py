@@ -1,4 +1,4 @@
-"""Configuration-driven discretization of stochastic continuous-time models."""
+"""Configuration-driven discretization of continuous-time models."""
 
 from typing import Any
 
@@ -9,6 +9,7 @@ from jaxtyping import Array, Real
 from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
 from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
 from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.handlers import HandlesSelf, _condition_intp
 from dynestyx.inference.configs.discretizer import (
     BaseDiscretizerConfig,
@@ -18,9 +19,11 @@ from dynestyx.inference.configs.discretizer import (
     ExactAffineConfig,
     LocalLinearizationConfig,
     MeanTrajectoryLinearizationConfig,
+    ODEFlowConfig,
 )
 from dynestyx.models import (
     AffineDrift,
+    DeterministicContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
     StochasticContinuousTimeStateEvolution,
@@ -29,8 +32,11 @@ from dynestyx.models.core import StateEvolutionLike
 
 
 def _automatic_discretizer_config(
-    cte: StochasticContinuousTimeStateEvolution,
+    cte: DeterministicContinuousTimeStateEvolution
+    | StochasticContinuousTimeStateEvolution,
 ) -> DiscretizerConfig:
+    if isinstance(cte, DeterministicContinuousTimeStateEvolution):
+        return ODEFlowConfig()
     if (
         isinstance(cte.drift, AffineDrift)
         and cte.potential is None
@@ -45,12 +51,30 @@ def _discretize_state_evolution(
     config: BaseDiscretizerConfig | None = None,
 ) -> DiscreteTimeStateEvolution:
     """Build the private discrete transition selected by a config."""
-    if not isinstance(cte, StochasticContinuousTimeStateEvolution):
+    if not isinstance(
+        cte,
+        (
+            DeterministicContinuousTimeStateEvolution,
+            StochasticContinuousTimeStateEvolution,
+        ),
+    ):
         raise TypeError(
-            "Discretizer configs require a stochastic continuous-time state "
+            "Discretizer configs require a continuous-time state "
             f"evolution; got {type(cte).__name__}."
         )
     resolved = _automatic_discretizer_config(cte) if config is None else config
+    if isinstance(cte, DeterministicContinuousTimeStateEvolution):
+        if isinstance(resolved, ODEFlowConfig):
+            return _ODEFlowStateEvolution(cte, resolved)
+        raise TypeError(
+            f"{type(resolved).__name__} requires a stochastic continuous-time "
+            "state evolution; got DeterministicContinuousTimeStateEvolution."
+        )
+    if isinstance(resolved, ODEFlowConfig):
+        raise TypeError(
+            "ODEFlowConfig requires a deterministic continuous-time state "
+            "evolution; got StochasticContinuousTimeStateEvolution."
+        )
     if isinstance(resolved, ExactAffineConfig):
         return _ExactAffineStateEvolution(
             cte,
@@ -98,8 +122,9 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
             model(...)
     ```
 
-    When no config is provided to `Discretizer`, an exact Gaussian discretization will be applied for models with an `AffineDrift`,
-    and an Euler-Maruyama discretization applied otherwise.
+    When no config is provided, ODE models use their numerical flow, SDE models
+    with an affine drift use an exact Gaussian discretization, and other SDE
+    models use Euler--Maruyama.
 
     Attributes:
         discretizer_config: Explicit discretization config, or `None` for
@@ -139,7 +164,10 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
     ) -> Any:
         if isinstance(
             dynamics.state_evolution,
-            StochasticContinuousTimeStateEvolution,
+            (
+                DeterministicContinuousTimeStateEvolution,
+                StochasticContinuousTimeStateEvolution,
+            ),
         ):
             dynamics = DynamicalModel(
                 initial_condition=dynamics.initial_condition,
@@ -173,4 +201,5 @@ __all__ = [
     "ExactAffineConfig",
     "LocalLinearizationConfig",
     "MeanTrajectoryLinearizationConfig",
+    "ODEFlowConfig",
 ]

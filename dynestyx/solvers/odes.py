@@ -6,6 +6,7 @@ import warnings
 from typing import Any, cast, get_origin
 
 import diffrax as dfx
+import equinox as eqx
 import jax.numpy as jnp
 from jax import lax
 from jaxtyping import Array, Real
@@ -28,6 +29,40 @@ def default_ode_diffeqsolve_settings() -> dict[str, Any]:
         "dt0": jnp.asarray(1e-3),
         "max_steps": 100_000,
     }
+
+
+def solve_ode_interval(
+    state_evolution: DeterministicContinuousTimeStateEvolution,
+    *,
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    t0: float | int | Real[Array, ""],
+    t1: float | int | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    diffeqsolve_settings: dict[str, Any],
+) -> Real[Array, " state_dim"] | Real[Array, ""]:
+    """Integrate one ODE interval with a control held constant."""
+    state_dtype = jnp.result_type(jnp.asarray(initial_state), 0.0)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=state_dtype)
+    t1_arr = as_scalar_time_array(t1, name="t1", dtype=state_dtype)
+    t1_arr = eqx.error_if(
+        t1_arr,
+        t1_arr <= t0_arr,
+        "ODE flow intervals require t1 > t0.",
+    )
+
+    def _drift(t, y, args):
+        return state_evolution.total_drift(x=y, u=args, t=t)
+
+    solution = dfx.diffeqsolve(
+        dfx.ODETerm(_drift),
+        t0=t0_arr,
+        t1=t1_arr,
+        y0=initial_state,
+        saveat=dfx.SaveAt(t1=True),
+        args=u,
+        **diffeqsolve_settings,
+    )
+    return solution.ys[0]
 
 
 def solve_ode_state_path(
