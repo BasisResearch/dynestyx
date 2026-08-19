@@ -143,6 +143,16 @@ class SimulatedResult:
     posterior rollout, the same result object instead carries
     ``predicted_times``, ``predicted_states``, and
     ``predicted_observations``.
+
+    For a discrete-time model with
+    ``dynamics.observation_control_alignment="previous_transition"``, ``x_0``
+    is ``None`` -- the seed state is not part of the rollout output -- and
+    ``times``, ``states``, and ``observations`` are all exactly the length of
+    the ``ctrl_values`` the caller supplied (one shorter than
+    ``predict_times``, since :math:`y_0` is never sampled under this
+    convention). ``x``, ``y``, ``u``, and ``t`` are therefore all the same
+    shape, with no :math:`t_0`/:math:`x_0` remnant anywhere in the result. See
+    [DiscreteTimeSimulator][dynestyx.simulation.discrete.DiscreteTimeSimulator].
     """
 
     times: Real[Array, "*plate n_simulations time"] | None = None
