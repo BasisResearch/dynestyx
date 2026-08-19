@@ -3,7 +3,7 @@
 `Drift` objects define the deterministic term $f$ in a continuous-time state evolution
 $$
 \begin{aligned}
-dx_t &= f(x_t, u_t, t)\,dt + \sigma(x_t, u_t, t)\,dW_t,
+dx_t &= f(x_t, u_t, t)\,dt + L(x_t, u_t, t)\,dW_t,
 \end{aligned}
 $$
 where the stochastic term $W_t$ may be absent, yileding an ODE.
