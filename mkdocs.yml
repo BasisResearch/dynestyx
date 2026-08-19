@@ -75,11 +75,10 @@ nav:
         - Core Models:
           - DynamicalModel: api_reference/public/models/core/dynamical_model.md
           - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
-          - Diffusion: api_reference/public/models/core/diffusion.md
           - DiscreteTimeStateEvolution: api_reference/public/models/core/discrete_time_state_evolution.md
           - ObservationModel: api_reference/public/models/core/observation_model.md
-          - Drift: api_reference/public/models/core/drift.md
-          - Potential: api_reference/public/models/core/potential.md
+          - Drifts: api_reference/public/models/core/drifts.md
+          - Diffusions: api_reference/public/models/core/diffusions.md
         - Specialized Models:
           - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
           - GaussianObservation: api_reference/public/models/specialized/gaussian_observation.md

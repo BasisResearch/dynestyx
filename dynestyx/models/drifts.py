@@ -52,7 +52,9 @@ class Drift(Protocol):
 
 class Potential(Protocol):
     """
-    Scalar potential energy for gradient-based drift.
+    Scalar potential energy for gradient-based drift
+    
+    $$dx_t = \\mu(x_t, u_t, t)dt -\\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.$$
 
     A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
     gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling
@@ -130,7 +132,9 @@ class AffineDrift(eqx.Module):
 
 class ImExDrift(eqx.Module):
     """
-    Split explicit/implicit drift for IMEX (implicit-explicit) solvers.
+    Split explicit/implicit drift for IMEX (implicit-explicit) solvers:
+
+    $$x_{n+1} = x_n + \\Delta t \\big( f_{ex}(x_n, u_n, t_n) + f_{im}(x_{n+1}, u_{n+1}, t_{n+1})\\big)$$
 
     Wraps two drift terms so a single object serves two roles:
 
@@ -143,10 +147,7 @@ class ImExDrift(eqx.Module):
        require diffrax's `MultiTerm`), via `make_imex_tuple`.
 
     Construct with keyword-only arguments to avoid silently swapping the two
-    terms: `ImExDrift(explicit_term=..., implicit_term=...)`. Positional
-    construction is intentionally unsupported -- getting explicit/implicit
-    backwards silently produces different (wrong) dynamics with no error,
-    since both terms share the same `(x, u, t) -> state_dim` signature.
+    terms: `ImExDrift(explicit_term=..., implicit_term=...)`.
 
     Wherever a plain `Drift`-shaped callable `(x, u, t) -> R^{d_x}` is
     expected, an `ImExDrift` instance may be used directly. When used with a
