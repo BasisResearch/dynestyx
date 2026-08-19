@@ -51,7 +51,7 @@ class PredictedObservationOutputs:
     noise_cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
 
 
-def _gaussian_observation_mean_and_covariance(
+def _gaussian_mean_and_covariance(
     observation_dist: dist.Distribution,
     *,
     observation_dim: int,
@@ -168,7 +168,7 @@ def _observation_noise_covariance_sequence(
         t = obs_times_time_major[t_idx]
         u_t = None if ctrl_values_time_major is None else ctrl_values_time_major[t_idx]
         obs_dist = dynamics.observation_model(x_probe, u_t, t)
-        _, covariance = _gaussian_observation_mean_and_covariance(
+        _, covariance = _gaussian_mean_and_covariance(
             obs_dist,
             observation_dim=dynamics.observation_dim,
         )
@@ -313,7 +313,7 @@ def _extract_single_cuthbert_enkf_prediction_arrays(
     def project_at_time(state_ensemble_t, time_t, control_t):
         def project_member(state):
             observation_dist = dynamics.observation_model(state, control_t, time_t)
-            mean, _ = _gaussian_observation_mean_and_covariance(
+            mean, _ = _gaussian_mean_and_covariance(
                 observation_dist,
                 observation_dim=dynamics.observation_dim,
             )
@@ -328,7 +328,7 @@ def _extract_single_cuthbert_enkf_prediction_arrays(
             control_t,
             time_t,
         )
-        _, noise_cov_t = _gaussian_observation_mean_and_covariance(
+        _, noise_cov_t = _gaussian_mean_and_covariance(
             probe_dist,
             observation_dim=dynamics.observation_dim,
         )
@@ -454,31 +454,6 @@ def extract_filter_predictions(
     return None
 
 
-def extract_continuous_filter_predictions(
-    posterior: Any,
-    *,
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    obs_times: Real[Array, "... time"],
-    ctrl_values: Real[Array, "... control_time control_dim"]
-    | Real[Array, "... control_time"]
-    | None,
-    plate_shapes: tuple[int, ...] = (),
-) -> PredictedObservationOutputs | None:
-    """Compatibility wrapper for continuous-filter prediction extraction.
-
-    New dispatch sites should call :func:`extract_filter_predictions`.
-    """
-    return extract_filter_predictions(
-        posterior,
-        dynamics=dynamics,
-        filter_config=filter_config,
-        obs_times=obs_times,
-        ctrl_values=ctrl_values,
-        plate_shapes=plate_shapes,
-    )
-
-
 def add_observation_prediction_sites(
     name: str,
     *,
@@ -517,7 +492,6 @@ __all__ = [
     "PredictedObservationOutputs",
     "SupportedObservationPredictionConfig",
     "add_observation_prediction_sites",
-    "extract_continuous_filter_predictions",
     "extract_filter_predictions",
     "wants_observation_prediction_diagnostics",
 ]

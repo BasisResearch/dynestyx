@@ -32,7 +32,7 @@ from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
 )
 from dynestyx.inference.observation_predictions import (
     _observation_noise_covariance_sequence,
-    extract_continuous_filter_predictions,
+    extract_filter_predictions,
 )
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.simulation import SDESimulator
@@ -53,7 +53,7 @@ def evaluate_continuous_filter_output(
     scoring_config=None,
     plate_shapes=(),
 ):
-    predictions = extract_continuous_filter_predictions(
+    predictions = extract_filter_predictions(
         posterior,
         dynamics=dynamics,
         filter_config=filter_config,
