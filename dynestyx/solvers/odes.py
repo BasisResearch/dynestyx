@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+import warnings
+from typing import Any, cast, get_origin
 
 import diffrax as dfx
 import equinox as eqx
@@ -10,7 +11,11 @@ import jax.numpy as jnp
 from jax import lax
 from jaxtyping import Array, Real
 
-from dynestyx.models import DeterministicContinuousTimeStateEvolution, DynamicalModel
+from dynestyx.models import (
+    DeterministicContinuousTimeStateEvolution,
+    DynamicalModel,
+    ImExDrift,
+)
 from dynestyx.types import as_scalar_time_array
 from dynestyx.utils import _build_control_path_eval
 
@@ -86,18 +91,63 @@ def solve_ode_state_path(
         dynamics.state_evolution,
     )
 
+    # Check if the solver is a genuine IMEX solver (requires the explicit/
+    # implicit MultiTerm split, e.g. KenCarp3/4/5, Sil3 -- see _is_imex_solver).
+    # Raises ValueError if the solver requires the split but the drift is not an ImExDrift.
+    # Raises a warning if the drift is an ImExDrift but the solver does not require the split (will still solve, but the explicit/implicit split will be ignored).
+    needs_multi_term = (
+        isinstance(settings["solver"], dfx.AbstractImplicitSolver)
+        and get_origin(settings["solver"].term_structure) is dfx.MultiTerm
+    )
+    is_imex_drift = isinstance(state_evolution.drift, ImExDrift)
+    if needs_multi_term and not is_imex_drift:
+        raise ValueError(
+            "Solver requires separate explicit/implicit terms (diffrax "
+            "MultiTerm), but `drift` is not an `ImExDrift` instance on this "
+            "ContinuousTimeStateEvolution. Set drift=ImExDrift(explicit_term=..., "
+            f"implicit_term=...) with the stiff component as implicit_term, or "
+            f"choose a non-IMEX solver (selected solver: "
+            f"{type(settings['solver']).__name__})."
+        )
+    if is_imex_drift and not needs_multi_term:
+        warnings.warn(
+            "ContinuousTimeStateEvolution's `drift` is an ImExDrift, but the "
+            f"selected solver ({type(settings['solver']).__name__}) is not an IMEX solver and will ignore the explicit/implicit split."
+            "Use an IMEX solver (e.g. diffrax.KenCarp4, "
+            "diffrax.Sil3) to exploit the split.",
+            stacklevel=2,
+        )
+
     def _early_return():
         return jnp.broadcast_to(
             initial_state, (len(path_times),) + jnp.shape(initial_state)
         )
 
     def _solve():
-        def _drift(t, y, args):
-            u_t = args(t) if args is not None else None
-            return state_evolution.total_drift(x=y, u=u_t, t=t)
+        if needs_multi_term:
+            imex_drift = cast(ImExDrift, state_evolution.drift)
+
+            def _explicit(t, y, args):
+                u_t = args(t) if args is not None else None
+                return imex_drift.explicit_term(y, u_t, t)
+
+            def _implicit(t, y, args):
+                u_t = args(t) if args is not None else None
+                return imex_drift.implicit_term(y, u_t, t)
+
+            terms: dfx.AbstractTerm = dfx.MultiTerm(
+                dfx.ODETerm(_explicit), dfx.ODETerm(_implicit)
+            )
+        else:
+
+            def _drift(t, y, args):
+                u_t = args(t) if args is not None else None
+                return state_evolution.total_drift(x=y, u=u_t, t=t)
+
+            terms = dfx.ODETerm(_drift)
 
         sol = dfx.diffeqsolve(
-            dfx.ODETerm(_drift),
+            terms,
             t0=t0_arr,
             t1=t1,
             y0=initial_state,

@@ -4,15 +4,33 @@ Specialty implementations for discrete-time systems. Structure allows future
 extension to LTI factories, Neural SDEs, etc.
 """
 
+import warnings
 from collections.abc import Callable
 from typing import NamedTuple, cast
 
-import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
+from dynestyx.models.drifts import AffineDrift as _AffineDrift
+
+
+class AffineDrift(_AffineDrift):
+    """Deprecated alias for `dynestyx.models.drifts.AffineDrift`.
+
+    Deprecated: import `AffineDrift` from `dynestyx.models.drifts` (or
+    `dynestyx`) instead. This alias will be removed in v0.5.0.
+    """
+
+    def __check_init__(self) -> None:
+        warnings.warn(
+            "`dynestyx.models.state_evolution.AffineDrift` is deprecated; "
+            "import `AffineDrift` from `dynestyx.models.drifts` (or "
+            "`dynestyx`) instead. This alias will be removed in v0.5.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 class LinearGaussianParams(NamedTuple):
@@ -276,44 +294,3 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
             cov = self.cov
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
-
-
-class AffineDrift(eqx.Module):
-    """
-    Affine drift function for continuous-time models.
-
-    This implements an affine map of the form
-
-    $$f(x, u, t) = A x + B u + b,$$
-
-    where $A \\in \\mathbb{R}^{d_x \\times d_x}$, $B \\in \\mathbb{R}^{d_x \\times d_u}$
-    (optional), and $b \\in \\mathbb{R}^{d_x}$ (optional). The time argument $t$
-    is accepted for compatibility with the `Drift` protocol but is not used.
-
-    This is commonly used as the drift term $\\mu(x_t, u_t, t)$ inside
-    `ContinuousTimeStateEvolution`, and is a building block for LTI models such as
-    `LTI_continuous`.
-
-    Attributes:
-        A (jax.Array): Drift matrix with shape $(d_x, d_x)$.
-        B (jax.Array | None): Optional control matrix with shape $(d_x, d_u)$.
-        b (jax.Array | None): Optional additive bias with shape $(d_x,)$.
-    """
-
-    A: Float[Array, "*a_plate state_dim state_dim"]
-    B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None
-    b: Float[Array, "*bias_plate state_dim"] | None = None
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Real[Array, " state_dim"]:
-        out = jnp.dot(self.A, x)
-        if self.B is not None:
-            u_vec = u if u is not None else jnp.zeros(self.B.shape[1])
-            out = out + jnp.dot(self.B, u_vec)
-        if self.b is not None:
-            out = out + self.b
-        return out

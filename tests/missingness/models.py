@@ -13,7 +13,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.models.state_evolution import AffineDrift
+from dynestyx.models.drifts import AffineDrift
 
 DISCRETE_A = jnp.array([[0.72, 0.08], [0.0, 0.65]])
 DISCRETE_Q = jnp.array([[0.05, 0.01], [0.01, 0.04]])

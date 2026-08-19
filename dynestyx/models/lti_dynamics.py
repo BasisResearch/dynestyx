@@ -7,8 +7,9 @@ from dynestyx.models.core import (
     DynamicalModel,
 )
 from dynestyx.models.diffusions import FullDiffusion
+from dynestyx.models.drifts import AffineDrift
 from dynestyx.models.observations import LinearGaussianObservation
-from dynestyx.models.state_evolution import AffineDrift, LinearGaussianStateEvolution
+from dynestyx.models.state_evolution import LinearGaussianStateEvolution
 
 
 def LTI_discrete(
