@@ -100,7 +100,13 @@ def _validate_and_prepare(
     _validate_site_sorting(ctrl_times, name="ctrl_times")
     _validate_site_sorting(predict_times, name="predict_times")
 
-    _validate_controls(obs_times, predict_times, ctrl_times, ctrl_values)
+    _validate_controls(
+        obs_times,
+        predict_times,
+        ctrl_times,
+        ctrl_values,
+        observation_control_alignment=dynamics.observation_control_alignment,
+    )
     _validate_control_dim(dynamics, ctrl_values)
 
     # Initial dynamics may not have t0, which is then inferred from obs_times
