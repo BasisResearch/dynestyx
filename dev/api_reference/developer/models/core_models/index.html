@@ -2513,34 +2513,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Diffusion
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -2597,14 +2569,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/drift/" class="md-nav__link">
+      <a href="../../../public/models/core/drifts/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Drift
+    Drifts
   
 
     
@@ -2625,14 +2597,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/potential/" class="md-nav__link">
+      <a href="../../../public/models/core/diffusions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Potential
+    Diffusions
   
 
     
@@ -4152,17 +4124,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.models.core.Drift" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Drift
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#dynestyx.models.core.DynamicalModel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4195,17 +4156,6 @@
     <span class="md-ellipsis">
       
         ObservationModel
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.core.Potential" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Potential
       
     </span>
   </a>
@@ -5210,7 +5160,7 @@ Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.drift">drift</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.core.Drift)" href="#dynestyx.models.core.Drift">Drift</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.drifts.Drift)" href="../../../public/models/core_models/#dynestyx.models.drifts.Drift">Drift</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5223,7 +5173,7 @@ At least one of <code>drift</code> or <code>potential</code> must be non-None.</
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.potential">potential</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Potential (dynestyx.models.core.Potential)" href="#dynestyx.models.core.Potential">Potential</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="Potential (dynestyx.models.drifts.Potential)" href="../../../public/models/core_models/#dynestyx.models.drifts.Potential">Potential</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5261,6 +5211,13 @@ the stochastic part of the SDE. Pass <code>None</code> for deterministic dynamic
       </tbody>
     </table>
 
+
+<details class="note" open>
+  <summary>Note</summary>
+  <p>For IMEX (implicit-explicit) diffrax solvers (e.g. <code>diffrax.KenCarp3/4/5</code>,
+<code>diffrax.Sil3</code>), pass an <code>ImExDrift</code> instance as <code>drift</code> instead of a
+plain callable; see <code>dynestyx.models.drifts.ImExDrift</code>.</p>
+</details>
 
 
 
@@ -5476,157 +5433,6 @@ In practice this should be a <code>numpyro.distributions.Distribution</code> ins
       </tbody>
     </table>
 
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="dynestyx.models.core.Drift" class="doc doc-heading">
-            <code>Drift</code>
-
-
-<a href="#dynestyx.models.core.Drift" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
-
-
-
-        <p>Drift vector field for continuous-time state evolution.</p>
-<p>Mathematically, the drift is a mapping
-<span class="arithmatex">\(\mu: \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}
-\to \mathbb{R}^{d_x}\)</span>, i.e., <span class="arithmatex">\((x, u, t) \mapsto \mu(x, u, t)\)</span>.
-In the SDE formulation used by <code>ContinuousTimeStateEvolution</code>,
-<span class="arithmatex">\(dx_t = \mu(x_t, u_t, t) \, dt + \sigma(x_t, u_t, t) \, dW_t\)</span>, this
-mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
-<p>Implementations should be compatible with JAX transformations (e.g., <code>jax.jit</code>,
-<code>jax.vmap</code>, and <code>jax.grad</code> when differentiable).</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>x</code>
-            </td>
-            <td>
-                  <code><span title="State">State</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Current state <span class="arithmatex">\(x \in \mathbb{R}^{d_x}\)</span>.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>u</code>
-            </td>
-            <td>
-                  <code><span title="Control">Control</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Current control input <span class="arithmatex">\(u \in \mathbb{R}^{d_u}\)</span> or None.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>t</code>
-            </td>
-            <td>
-                  <code><span title="Time">Time</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Current time (scalar or array).</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-<th>Name</th>          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-<td><code>dState</code></td>            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Drift vector <span class="arithmatex">\(\mu(x, u, t) \in \mathbb{R}^{d_x}\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<details class="note" open>
-  <summary>Note</summary>
-  <p>This is a protocol interface; implement this callable signature; do not instantiate.
-We recommend simply using a plain Python function that matches this signature, e.g.:</p>
-<p><div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">drift</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
-    <span class="k">return</span> <span class="o">-</span> <span class="n">x</span> <span class="o">+</span> <span class="n">u</span>
-</code></pre></div>
-or <code>lambda x, u, t: - x + u</code></p>
-</details>
 
 
 
@@ -5953,153 +5759,6 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
       </tbody>
     </table>
 
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="dynestyx.models.core.Potential" class="doc doc-heading">
-            <code>Potential</code>
-
-
-<a href="#dynestyx.models.core.Potential" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
-
-
-
-        <p>Scalar potential energy for gradient-based drift.</p>
-<p>A potential <span class="arithmatex">\(V(x, u, t)\)</span> maps state, control, and time to a scalar. Its
-gradient contributes to the drift via <span class="arithmatex">\(\pm \nabla_x V(x, u, t)\)</span>, enabling
-Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> when
-<code>potential</code> is set; the sign is controlled by <code>use_negative_gradient</code>.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>x</code>
-            </td>
-            <td>
-                  <code><span title="State">State</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Current state <span class="arithmatex">\(x \in \mathbb{R}^{d_x}\)</span>.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>u</code>
-            </td>
-            <td>
-                  <code><span title="Control">Control</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Current control input <span class="arithmatex">\(u \in \mathbb{R}^{d_u}\)</span> or None.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>t</code>
-            </td>
-            <td>
-                  <code><span title="Time">Time</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Current time.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>jax.Array: Scalar potential value <span class="arithmatex">\(V(x, u, t) \in \mathbb{R}\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<details class="note" open>
-  <summary>Note</summary>
-  <p>This is a protocol interface; implement this callable signature; do not instantiate.
-We recommend simply using a plain Python function that matches this signature, e.g.:</p>
-<p><div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">potential</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span>
-</code></pre></div>
-or <code>lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2</code></p>
-</details>
 
 
 

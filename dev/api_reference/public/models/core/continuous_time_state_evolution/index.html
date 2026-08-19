@@ -18,7 +18,7 @@
         <link rel="prev" href="../dynamical_model/">
       
       
-        <link rel="next" href="../diffusion/">
+        <link rel="next" href="../discrete_time_state_evolution/">
       
       
         
@@ -2529,34 +2529,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../diffusion/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Diffusion
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -2613,14 +2585,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../drift/" class="md-nav__link">
+      <a href="../drifts/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Drift
+    Drifts
   
 
     
@@ -2641,14 +2613,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../potential/" class="md-nav__link">
+      <a href="../diffusions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Potential
+    Diffusions
   
 
     
@@ -4982,8 +4954,8 @@
 <h1 id="continuoustimestateevolution">ContinuousTimeStateEvolution<a class="headerlink" href="#continuoustimestateevolution" title="Permanent link">&para;</a></h1>
 <p><code>ContinuousTimeStateEvolution</code> is the public entry point for defining continuous-time
 state evolution. Most users should instantiate this class directly and pass an optional
-<code>diffusion=</code> built from <a href="../diffusion/"><code>FullDiffusion</code></a>,
-<a href="../diffusion/"><code>DiagonalDiffusion</code></a>, or <a href="../diffusion/"><code>ScalarDiffusion</code></a>.</p>
+<code>diffusion=</code> built from <a href="./diffusion.md"><code>FullDiffusion</code></a>,
+<a href="./diffusion.md"><code>DiagonalDiffusion</code></a>, or <a href="./diffusion.md"><code>ScalarDiffusion</code></a>.</p>
 <p>Internally, <code>DynamicalModel</code> refines continuous-time dynamics to
 deterministic and stochastic subclasses. Those specialized classes are intended for
 developer-facing integrations and are documented in the developer API rather than the
@@ -5025,7 +4997,7 @@ Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.drift">drift</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.core.Drift)" href="../../../../developer/models/core_models/#dynestyx.models.core.Drift">Drift</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.drifts.Drift)" href="../../core_models/#dynestyx.models.drifts.Drift">Drift</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5038,7 +5010,7 @@ At least one of <code>drift</code> or <code>potential</code> must be non-None.</
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.potential">potential</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Potential (dynestyx.models.core.Potential)" href="../../../../developer/models/core_models/#dynestyx.models.core.Potential">Potential</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="Potential (dynestyx.models.drifts.Potential)" href="../../core_models/#dynestyx.models.drifts.Potential">Potential</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5076,6 +5048,13 @@ the stochastic part of the SDE. Pass <code>None</code> for deterministic dynamic
       </tbody>
     </table>
 
+
+<details class="note" open>
+  <summary>Note</summary>
+  <p>For IMEX (implicit-explicit) diffrax solvers (e.g. <code>diffrax.KenCarp3/4/5</code>,
+<code>diffrax.Sil3</code>), pass an <code>ImExDrift</code> instance as <code>drift</code> instead of a
+plain callable; see <code>dynestyx.models.drifts.ImExDrift</code>.</p>
+</details>
 
 
 

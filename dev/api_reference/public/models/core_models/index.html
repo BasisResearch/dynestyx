@@ -2499,34 +2499,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/diffusion/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Diffusion
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -2583,14 +2555,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/drift/" class="md-nav__link">
+      <a href="../core/drifts/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Drift
+    Drifts
   
 
     
@@ -2611,14 +2583,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/potential/" class="md-nav__link">
+      <a href="../core/diffusions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Potential
+    Diffusions
   
 
     
@@ -5249,7 +5221,7 @@ Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.drift">drift</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.core.Drift)" href="../../../developer/models/core_models/#dynestyx.models.core.Drift">Drift</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.drifts.Drift)" href="#dynestyx.models.drifts.Drift">Drift</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5262,7 +5234,7 @@ At least one of <code>drift</code> or <code>potential</code> must be non-None.</
           <tr class="doc-section-item">
             <td><code><span title="dynestyx.models.core.ContinuousTimeStateEvolution.potential">potential</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Potential (dynestyx.models.core.Potential)" href="../../../developer/models/core_models/#dynestyx.models.core.Potential">Potential</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="Potential (dynestyx.models.drifts.Potential)" href="#dynestyx.models.drifts.Potential">Potential</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5300,6 +5272,13 @@ the stochastic part of the SDE. Pass <code>None</code> for deterministic dynamic
       </tbody>
     </table>
 
+
+<details class="note" open>
+  <summary>Note</summary>
+  <p>For IMEX (implicit-explicit) diffrax solvers (e.g. <code>diffrax.KenCarp3/4/5</code>,
+<code>diffrax.Sil3</code>), pass an <code>ImExDrift</code> instance as <code>drift</code> instead of a
+plain callable; see <code>dynestyx.models.drifts.ImExDrift</code>.</p>
+</details>
 
 
 
@@ -5585,15 +5564,52 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
 
 </div>
 
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="dynestyx.models.drifts"></a>
+    <div class="doc doc-contents first">
+
+        <p>Drift building blocks for continuous-time state evolution.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 <div class="doc doc-object doc-class">
 
 
 
-<h2 id="dynestyx.models.core.Drift" class="doc doc-heading">
+<h2 id="dynestyx.models.drifts.Drift" class="doc doc-heading">
             <code>Drift</code>
 
 
-<a href="#dynestyx.models.core.Drift" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.models.drifts.Drift" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
@@ -5740,11 +5756,11 @@ or <code>lambda x, u, t: - x + u</code></p>
 
 
 
-<h2 id="dynestyx.models.core.Potential" class="doc doc-heading">
+<h2 id="dynestyx.models.drifts.Potential" class="doc doc-heading">
             <code>Potential</code>
 
 
-<a href="#dynestyx.models.core.Potential" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.models.drifts.Potential" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
@@ -5753,7 +5769,8 @@ or <code>lambda x, u, t: - x + u</code></p>
 
 
 
-        <p>Scalar potential energy for gradient-based drift.</p>
+        <p>Scalar potential energy for gradient-based drift</p>
+<div class="arithmatex">\[dx_t = \mu(x_t, u_t, t)dt -\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
 <p>A potential <span class="arithmatex">\(V(x, u, t)\)</span> maps state, control, and time to a scalar. Its
 gradient contributes to the drift via <span class="arithmatex">\(\pm \nabla_x V(x, u, t)\)</span>, enabling
 Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> when

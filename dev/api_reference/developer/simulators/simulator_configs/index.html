@@ -2499,34 +2499,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Diffusion
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -2583,14 +2555,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/drift/" class="md-nav__link">
+      <a href="../../../public/models/core/drifts/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Drift
+    Drifts
   
 
     
@@ -2611,14 +2583,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/potential/" class="md-nav__link">
+      <a href="../../../public/models/core/diffusions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Potential
+    Diffusions
   
 
     
@@ -4998,7 +4970,15 @@ simulator configuration.</p>
                 <p>Diffrax solver used for integration.
 Defaults to <code>diffrax.Tsit5()</code>. See Diffrax's
 <a href="https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/">solver guide</a>
-when selecting an alternative.</p>
+when selecting an alternative. IMEX solvers (e.g. <code>diffrax.KenCarp3/4/5</code>,
+<code>diffrax.Sil3</code>) are supported, but require the state evolution's
+<code>drift</code> to be an <code>ImExDrift</code> instance (see
+<code>dynestyx.models.drifts.ImExDrift</code>), splitting the vector
+field into <code>explicit_term</code>/<code>implicit_term</code>; conversely, using a
+plain (non-<code>ImExDrift</code>) <code>drift</code> with an IMEX solver raises an
+error. Using an <code>ImExDrift</code> with a non-IMEX solver is allowed
+(both terms are summed) but emits a warning, since the split
+goes unused.</p>
               </div>
             </td>
           </tr>

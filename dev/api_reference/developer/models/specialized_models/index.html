@@ -2513,34 +2513,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/diffusion/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Diffusion
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
@@ -2597,14 +2569,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/drift/" class="md-nav__link">
+      <a href="../../../public/models/core/drifts/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Drift
+    Drifts
   
 
     
@@ -2625,14 +2597,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../public/models/core/potential/" class="md-nav__link">
+      <a href="../../../public/models/core/diffusions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Potential
+    Diffusions
   
 
     
@@ -5836,66 +5808,13 @@ extension to LTI factories, Neural SDEs, etc.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="equinox.Module">Module</span></code></p>
+              Bases: <code><span title="dynestyx.models.drifts.AffineDrift">AffineDrift</span></code></p>
 
 
 
-        <p>Affine drift function for continuous-time models.</p>
-<p>This implements an affine map of the form</p>
-<div class="arithmatex">\[f(x, u, t) = A x + B u + b,\]</div>
-<p>where <span class="arithmatex">\(A \in \mathbb{R}^{d_x \times d_x}\)</span>, <span class="arithmatex">\(B \in \mathbb{R}^{d_x \times d_u}\)</span>
-(optional), and <span class="arithmatex">\(b \in \mathbb{R}^{d_x}\)</span> (optional). The time argument <span class="arithmatex">\(t\)</span>
-is accepted for compatibility with the <code>Drift</code> protocol but is not used.</p>
-<p>This is commonly used as the drift term <span class="arithmatex">\(\mu(x_t, u_t, t)\)</span> inside
-<code>ContinuousTimeStateEvolution</code>, and is a building block for LTI models such as
-<code>LTI_continuous</code>.</p>
-
-
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.state_evolution.AffineDrift.A">A</span></code></td>
-            <td>
-                  <code><span title="jax.Array">Array</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Drift matrix with shape <span class="arithmatex">\((d_x, d_x)\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.state_evolution.AffineDrift.B">B</span></code></td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional control matrix with shape <span class="arithmatex">\((d_x, d_u)\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.models.state_evolution.AffineDrift.b">b</span></code></td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional additive bias with shape <span class="arithmatex">\((d_x,)\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Deprecated alias for <code>dynestyx.models.drifts.AffineDrift</code>.</p>
+<p>Deprecated: import <code>AffineDrift</code> from <code>dynestyx.models.drifts</code> (or
+<code>dynestyx</code>) instead. This alias will be removed in v0.5.0.</p>
 
 
 
