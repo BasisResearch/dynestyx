@@ -803,3 +803,60 @@ def test_dynamical_model_infers_dims_with_callable_linear_gaussian_fields() -> N
             ),
             observation_model=dsx.LinearGaussianObservation(H=jnp.eye(2), R=jnp.eye(2)),
         )
+
+
+# ---------------------------------------------------------------------------
+# observation_control_alignment field (#312)
+# ---------------------------------------------------------------------------
+
+
+def test_observation_control_alignment_defaults_to_same_time() -> None:
+    model = _simple_discrete_model()
+    assert model.observation_control_alignment == "same_time"
+
+
+def test_observation_control_alignment_previous_transition_stored() -> None:
+    model = DynamicalModel(
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.1),
+        control_dim=0,
+        observation_control_alignment="previous_transition",
+    )
+    assert model.observation_control_alignment == "previous_transition"
+
+
+def test_observation_control_alignment_rejects_invalid_literal() -> None:
+    # Under the pytest jaxtyping import hook (see pyproject.toml addopts),
+    # jaxtyping's own Literal[...] enforcement rejects an invalid value before
+    # DynamicalModel.__init__'s body -- and _validate_observation_control_alignment
+    # within it -- ever runs, raising jaxtyping.TypeCheckError (a TypeError
+    # subclass) rather than the ValueError _validate_observation_control_alignment
+    # raises outside that instrumented context. Accept either so this test is
+    # correct with or without the import hook active.
+    with pytest.raises((ValueError, TypeError)):
+        DynamicalModel(
+            initial_condition=dist.Normal(0.0, 1.0),
+            state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
+            observation_model=lambda x, u, t: dist.Normal(x, 0.1),
+            control_dim=0,
+            observation_control_alignment="bogus",  # ty: ignore[invalid-argument-type]
+        )
+
+
+def test_observation_control_alignment_previous_transition_rejects_continuous_time() -> (
+    None
+):
+    with pytest.raises(
+        ValueError,
+        match="observation_control_alignment='previous_transition' is only supported "
+        "for discrete-time models",
+    ):
+        DynamicalModel(
+            initial_condition=_initial_condition_2d(),
+            state_evolution=ContinuousTimeStateEvolution(
+                drift=lambda x, u, t: -0.3 * x
+            ),
+            observation_model=_observation_model_2d,
+            observation_control_alignment="previous_transition",
+        )

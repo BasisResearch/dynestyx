@@ -235,6 +235,32 @@ def _validate_categorical_state(
         )
 
 
+_VALID_OBSERVATION_CONTROL_ALIGNMENTS = ("same_time", "previous_transition")
+
+
+def _validate_observation_control_alignment(
+    observation_control_alignment: str, continuous_time: bool
+) -> None:
+    """Validate the observation/control alignment convention.
+
+    Unlike continuous_time/categorical_state, this field has no inferred
+    counterpart -- it is purely user-supplied with a default, so this only
+    checks (1) the value is one of the two supported literals and (2)
+    'previous_transition' is only used with discrete-time state evolution.
+    """
+    if observation_control_alignment not in _VALID_OBSERVATION_CONTROL_ALIGNMENTS:
+        raise ValueError(
+            "observation_control_alignment must be one of "
+            f"{_VALID_OBSERVATION_CONTROL_ALIGNMENTS}, got "
+            f"{observation_control_alignment!r}."
+        )
+    if observation_control_alignment == "previous_transition" and continuous_time:
+        raise ValueError(
+            "observation_control_alignment='previous_transition' is only "
+            "supported for discrete-time models (continuous_time=False)."
+        )
+
+
 def _inside_numpyro_plate_context() -> bool:
     """Return True when currently executing inside any active numpyro.plate frame."""
     return any(
