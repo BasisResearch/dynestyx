@@ -1,4 +1,4 @@
-"""Minimal tests for the configuration-driven SDE discretizers."""
+"""Minimal tests for the configuration-driven continuous-time discretizers."""
 
 import diffrax as dfx
 import jax
@@ -15,6 +15,7 @@ from dynestyx.discretizers import (
     ExactAffineConfig,
     LocalLinearizationConfig,
     MeanTrajectoryLinearizationConfig,
+    ODEFlowConfig,
     _discretize_state_evolution,
 )
 from dynestyx.inference.configs.filter import EnKFConfig, PFConfig
@@ -25,11 +26,25 @@ from dynestyx.inference.configs.simulator import (
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
     FullDiffusion,
     LinearGaussianObservation,
     StochasticContinuousTimeStateEvolution,
 )
+
+
+def _ode_state_evolution():
+    model = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(2), jnp.eye(2)),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.array([-0.4 * x[0] + u[0], 0.2 * x[1]])
+        ),
+        observation_model=LinearGaussianObservation(H=jnp.eye(2), R=jnp.eye(2)),
+        control_dim=1,
+    )
+    assert isinstance(model.state_evolution, DeterministicContinuousTimeStateEvolution)
+    return model.state_evolution
 
 
 def _affine_model() -> DynamicalModel:
@@ -75,6 +90,164 @@ def _diffrax_config() -> DiffraxSampleConfig:
             max_steps=100,
         )
     )
+
+
+def test_ode_flow_matches_controlled_linear_analytic_solution():
+    evolution = _discretize_state_evolution(
+        _ode_state_evolution(),
+        ODEFlowConfig(simulator_config=_ode_config()),
+    )
+    x = jnp.array([1.2, -0.7])
+    u = jnp.array([0.3])
+    h = 0.35
+
+    transition = evolution(x, u, 0.2, 0.2 + h)
+
+    expected = jnp.array(
+        [
+            jnp.exp(-0.4 * h) * x[0] + (1.0 - jnp.exp(-0.4 * h)) * u[0] / 0.4,
+            jnp.exp(0.2 * h) * x[1],
+        ]
+    )
+    assert isinstance(transition, dist.Delta)
+    assert transition.event_shape == (2,)
+    assert jnp.allclose(transition.mean, expected, rtol=2e-5, atol=2e-5)
+
+
+def test_ode_flow_positive_jitter_returns_independent_normal():
+    evolution = _discretize_state_evolution(
+        _ode_state_evolution(),
+        ODEFlowConfig(simulator_config=_ode_config(), jitter_scale=0.3),
+    )
+
+    transition = evolution(jnp.array([1.2, -0.7]), jnp.array([0.3]), 0.2, 0.55)
+
+    assert isinstance(transition, dist.Independent)
+    assert isinstance(transition.base_dist, dist.Normal)
+    assert transition.event_shape == (2,)
+    assert jnp.allclose(transition.base_dist.scale, jnp.full((2,), 0.3))
+    assert jnp.allclose(transition.variance, jnp.full((2,), 0.09))
+
+
+def test_ode_flow_passes_simulator_config_settings(monkeypatch):
+    simulator_config = ODESimulatorConfig(
+        solver=dfx.Euler(),
+        adjoint=dfx.DirectAdjoint(),
+        stepsize_controller=dfx.ConstantStepSize(),
+        dt0=0.02,
+        max_steps=37,
+        throw=False,
+    )
+    captured = {}
+
+    def fake_solve(state_evolution, **kwargs):
+        del state_evolution
+        captured.update(kwargs["diffeqsolve_settings"])
+        return kwargs["initial_state"]
+
+    monkeypatch.setattr(
+        "dynestyx.discretization.ode_flow.solve_ode_interval", fake_solve
+    )
+    evolution = _discretize_state_evolution(
+        _ode_state_evolution(),
+        ODEFlowConfig(simulator_config=simulator_config),
+    )
+
+    evolution(jnp.ones(2), jnp.ones(1), 0.0, 0.1)
+
+    assert isinstance(captured["solver"], dfx.Euler)
+    assert isinstance(captured["adjoint"], dfx.DirectAdjoint)
+    assert isinstance(captured["stepsize_controller"], dfx.ConstantStepSize)
+    assert jnp.array_equal(captured["dt0"], jnp.asarray(0.02))
+    assert captured["max_steps"] == 37
+    assert captured["throw"] is False
+
+
+@pytest.mark.parametrize("jitter_scale", [-1.0, jnp.inf, jnp.nan])
+def test_ode_flow_rejects_invalid_jitter_scale(jitter_scale):
+    with pytest.raises(ValueError, match="jitter_scale"):
+        ODEFlowConfig(jitter_scale=float(jitter_scale))
+
+
+def test_ode_flow_automatic_routing_and_config_type_errors():
+    ode = _ode_state_evolution()
+    assert isinstance(
+        _discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01),
+        dist.Delta,
+    )
+
+    with pytest.raises(TypeError, match="requires a stochastic"):
+        _discretize_state_evolution(ode, ExactAffineConfig())
+    with pytest.raises(TypeError, match="requires a deterministic"):
+        _discretize_state_evolution(
+            _nonlinear_model().state_evolution,
+            ODEFlowConfig(),
+        )
+
+
+def test_ode_flow_is_jittable_and_differentiable():
+    evolution = _discretize_state_evolution(
+        _ode_state_evolution(),
+        ODEFlowConfig(simulator_config=_ode_config()),
+    )
+
+    @jax.jit
+    def endpoint(initial_value):
+        return evolution(
+            jnp.array([initial_value, -0.7]), jnp.array([0.3]), 0.2, 0.55
+        ).mean[0]
+
+    assert jnp.isfinite(endpoint(1.2))
+    assert jnp.allclose(jax.grad(endpoint)(1.2), jnp.exp(-0.4 * 0.35), rtol=2e-5)
+
+
+def test_ode_flow_discretizer_runs_discrete_simulator():
+    def model(predict_times=None):
+        dynamics = DynamicalModel(
+            initial_condition=dist.MultivariateNormal(jnp.ones(1), 0.1 * jnp.eye(1)),
+            state_evolution=ContinuousTimeStateEvolution(
+                drift=lambda x, u, t: -0.2 * x
+            ),
+            observation_model=LinearGaussianObservation(
+                H=jnp.ones((1, 1)), R=0.1 * jnp.eye(1)
+            ),
+        )
+        return dsx.sample("f", dynamics, predict_times=predict_times)
+
+    with dsx.DiscreteTimeSimulator():
+        with Discretizer(ODEFlowConfig(jitter_scale=0.01)):
+            with trace() as tr, seed(rng_seed=2):
+                model(jnp.array([0.0, 0.05, 0.12]))
+
+    assert tr["f_states"]["value"].shape == (1, 3, 1)
+    assert jnp.all(jnp.isfinite(tr["f_states"]["value"]))
+
+
+@pytest.mark.parametrize(
+    "filter_config",
+    [
+        EnKFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)),
+        PFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)),
+    ],
+)
+def test_ode_flow_runs_sample_based_filters(filter_config):
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.ones(1), 0.1 * jnp.eye(1)),
+        state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -0.2 * x),
+        observation_model=LinearGaussianObservation(
+            H=jnp.ones((1, 1)), R=0.1 * jnp.eye(1)
+        ),
+    )
+
+    def model(obs_times, obs_values):
+        return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
+
+    with Filter(filter_config):
+        with Discretizer(ODEFlowConfig(jitter_scale=0.01)):
+            with trace() as tr, seed(rng_seed=2):
+                model(jnp.array([0.0, 0.05, 0.12]), jnp.ones((3, 1)))
+
+    assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
 
 
 def test_exact_affine_matches_scalar_ou_transition():

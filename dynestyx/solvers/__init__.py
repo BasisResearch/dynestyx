@@ -2,6 +2,7 @@
 
 from .odes import (
     default_ode_diffeqsolve_settings,
+    solve_ode_interval,
     solve_ode_state_path,
 )
 from .sde import (
@@ -13,6 +14,7 @@ from .sde import (
 
 __all__ = [
     "default_ode_diffeqsolve_settings",
+    "solve_ode_interval",
     "solve_ode_state_path",
     "solve_diffrax_sde_interval",
     "solve_sde_state_path",
