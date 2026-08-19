@@ -13,10 +13,10 @@ class Drift(Protocol):
     Drift vector field for continuous-time state evolution.
 
     Mathematically, the drift is a mapping
-    $\\mu: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
-    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto \\mu(x, u, t)$.
+    $f: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
+    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto f(x, u, t)$.
     In the SDE formulation used by `ContinuousTimeStateEvolution`,
-    $dx_t = \\mu(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
+    $dx_t = f(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
     mapping forms the $\\mu$ term.
 
     Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
@@ -28,7 +28,7 @@ class Drift(Protocol):
         t (Time): Current time (scalar or array).
 
     Returns:
-        dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
+        dState: Drift vector $f(x, u, t) \\in \\mathbb{R}^{d_x}$.
 
     Note:
         This is a protocol interface; implement this callable signature; do not instantiate.
@@ -54,7 +54,7 @@ class Potential(Protocol):
     """
     Scalar potential energy for gradient-based drift
 
-    $$dx_t = \\mu(x_t, u_t, t)dt -\\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.$$
+    $$dx_t = f(x_t, u_t, t)dt \\pm\\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.$$
 
     A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
     gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling

@@ -295,11 +295,11 @@ class ContinuousTimeStateEvolution(eqx.Module):
     The state evolves according to
 
     $$
-    dx_t = \\bigl[ \\mu(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
-         + L(x_t, u_t, t) \\, dW_t
+    dx_t = \\bigl[ f(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
+         + \\sigma(x_t, u_t, t) \\, dW_t
     $$
 
-    where $\\mu$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
+    where $f$ is the drift, $V$ is an optional potential, and $\\sigma$ is the diffusion
     coefficient. The sign $s$ is $-1$ when `use_negative_gradient` is True (e.g., for
     Langevin dynamics) and $+1$ otherwise.
 
