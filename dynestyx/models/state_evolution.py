@@ -4,6 +4,7 @@ Specialty implementations for discrete-time systems. Structure allows future
 extension to LTI factories, Neural SDEs, etc.
 """
 
+import warnings
 from collections.abc import Callable
 from typing import NamedTuple, cast
 
@@ -12,6 +13,24 @@ import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
+from dynestyx.models.drifts import AffineDrift as _AffineDrift
+
+
+class AffineDrift(_AffineDrift):
+    """Deprecated alias for `dynestyx.models.drifts.AffineDrift`.
+
+    Deprecated: import `AffineDrift` from `dynestyx.models.drifts` (or
+    `dynestyx`) instead. This alias will be removed in v0.5.0.
+    """
+
+    def __check_init__(self) -> None:
+        warnings.warn(
+            "`dynestyx.models.state_evolution.AffineDrift` is deprecated; "
+            "import `AffineDrift` from `dynestyx.models.drifts` (or "
+            "`dynestyx`) instead. This alias will be removed in v0.5.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 class LinearGaussianParams(NamedTuple):
