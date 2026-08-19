@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dynestyx"
-version = "0.3.1"
-description = "NumPyro integration for dynamical systems"
+version = "0.4.0"
+description = "Probabilistic programming for dynamical systems; support for NumPyro, continuous & discrete-time systems, stochastic & deterministic processes."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.14"
