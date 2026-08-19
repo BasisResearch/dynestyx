@@ -21,16 +21,21 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
+    EnKFConfig,
 )
+from dynestyx.inference.utils.plate_utils import _make_plate_in_axes
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.utils import _array_has_plate_dims, _should_record_field
 
-type SupportedObservationPredictionConfig = (
+type ContinuousObservationPredictionConfig = (
     ContinuousTimeKFConfig
     | ContinuousTimeEKFConfig
     | ContinuousTimeUKFConfig
     | ContinuousTimeEnKFConfig
+)
+type SupportedObservationPredictionConfig = (
+    ContinuousObservationPredictionConfig | EnKFConfig
 )
 
 
@@ -44,6 +49,38 @@ class PredictedObservationOutputs:
     ensemble: Float[Array, "*plate time n_members observation_dim"] | None = None
     obs_ensemble: Float[Array, "*plate time n_members observation_dim"] | None = None
     noise_cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
+
+
+def _gaussian_observation_mean_and_covariance(
+    observation_dist: dist.Distribution,
+    *,
+    observation_dim: int,
+) -> tuple[
+    Float[Array, " observation_dim"],
+    Float[Array, "observation_dim observation_dim"],
+]:
+    """Canonicalize Gaussian observation moments accepted by the Cuthbert EnKF."""
+    mean = jnp.atleast_1d(jnp.asarray(observation_dist.mean))
+    if isinstance(observation_dist, dist.MultivariateNormal):
+        covariance = jnp.atleast_2d(jnp.asarray(observation_dist.covariance_matrix))
+        return mean, covariance
+
+    if isinstance(observation_dist, dist.Normal):
+        scale = jnp.atleast_1d(jnp.asarray(observation_dist.scale))
+    elif isinstance(observation_dist, dist.Independent) and isinstance(
+        observation_dist.base_dist, dist.Normal
+    ):
+        scale = jnp.atleast_1d(jnp.asarray(observation_dist.base_dist.scale))
+    else:
+        raise TypeError(
+            "Predicted observation extraction for the Cuthbert EnKF requires "
+            "Normal, Independent(Normal), or MultivariateNormal observations; "
+            f"got {type(observation_dist).__name__}."
+        )
+
+    if scale.size == 1 and observation_dim > 1:
+        scale = jnp.full((observation_dim,), scale[0])
+    return mean, jnp.diag(jnp.square(scale))
 
 
 def _canonicalize_observations(
@@ -131,12 +168,11 @@ def _observation_noise_covariance_sequence(
         t = obs_times_time_major[t_idx]
         u_t = None if ctrl_values_time_major is None else ctrl_values_time_major[t_idx]
         obs_dist = dynamics.observation_model(x_probe, u_t, t)
-        if not isinstance(obs_dist, dist.MultivariateNormal):
-            raise NotImplementedError(
-                "Predicted observation scoring currently requires Gaussian "
-                "observation models that produce MultivariateNormal distributions."
-            )
-        return jnp.asarray(obs_dist.covariance_matrix)
+        _, covariance = _gaussian_observation_mean_and_covariance(
+            obs_dist,
+            observation_dim=dynamics.observation_dim,
+        )
+        return covariance
 
     covs_time_major = jax.lax.map(covariance_at_time, jnp.arange(t_len))
     return jnp.moveaxis(covs_time_major, 0, len(plate_shapes))
@@ -153,7 +189,7 @@ def _build_prediction_outputs(
     posterior: Any,
     *,
     dynamics: DynamicalModel,
-    filter_config: SupportedObservationPredictionConfig,
+    filter_config: ContinuousObservationPredictionConfig,
     obs_times: Real[Array, "... time"],
     ctrl_values: Real[Array, "... control_time control_dim"]
     | Real[Array, "... control_time"]
@@ -260,6 +296,164 @@ def _build_prediction_outputs(
     )
 
 
+def _extract_single_cuthbert_enkf_prediction_arrays(
+    dynamics: DynamicalModel,
+    state_ensemble: Float[Array, "time n_members state_dim"],
+    times: Real[Array, " time"],
+    controls: Real[Array, "time control_dim"],
+) -> tuple[
+    Float[Array, "time observation_dim"],
+    Float[Array, "time observation_dim observation_dim"],
+    Float[Array, "time observation_dim observation_dim"],
+    Float[Array, "time n_members observation_dim"],
+    Float[Array, "time observation_dim observation_dim"],
+]:
+    """Project one observation-aligned Cuthbert forecast sequence into data space."""
+
+    def project_at_time(state_ensemble_t, time_t, control_t):
+        def project_member(state):
+            observation_dist = dynamics.observation_model(state, control_t, time_t)
+            mean, _ = _gaussian_observation_mean_and_covariance(
+                observation_dist,
+                observation_dim=dynamics.observation_dim,
+            )
+            return mean
+
+        observation_ensemble_t = jax.vmap(project_member)(state_ensemble_t)
+        # Match the state-independent-noise probe used while constructing the
+        # Cuthbert EnKF. In particular, do not let a particular ensemble member
+        # select the observation covariance.
+        probe_dist = dynamics.observation_model(
+            jnp.zeros((dynamics.state_dim,), dtype=state_ensemble_t.dtype),
+            control_t,
+            time_t,
+        )
+        _, noise_cov_t = _gaussian_observation_mean_and_covariance(
+            probe_dist,
+            observation_dim=dynamics.observation_dim,
+        )
+        return observation_ensemble_t, noise_cov_t
+
+    observation_ensemble, noise_cov = jax.vmap(project_at_time)(
+        state_ensemble,
+        times,
+        controls,
+    )
+    n_members = int(observation_ensemble.shape[-2])
+    if n_members < 2:
+        raise ValueError(
+            "Cuthbert EnKF predicted-observation covariance requires at least "
+            "two ensemble members."
+        )
+    pred_mean = jnp.mean(observation_ensemble, axis=-2)
+    deviations = observation_ensemble - pred_mean[..., None, :]
+    pred_cov = jnp.einsum(
+        "...ni,...nj->...ij",
+        deviations,
+        deviations,
+    ) / (n_members - 1)
+
+    return (
+        pred_mean,
+        pred_cov,
+        pred_cov + noise_cov,
+        observation_ensemble,
+        noise_cov,
+    )
+
+
+def _extract_cuthbert_enkf_predictions(
+    posterior: Any,
+    *,
+    dynamics: DynamicalModel,
+    plate_shapes: tuple[int, ...],
+) -> PredictedObservationOutputs:
+    """Extract Cuthbert EnKF forecasts, preserving any leading plate axes."""
+    state_ensemble_raw = getattr(posterior, "predicted_ensemble", None)
+    model_inputs = getattr(posterior, "model_inputs", None)
+    if state_ensemble_raw is None or model_inputs is None:
+        raise ValueError(
+            "Cuthbert EnKF predicted-observation collection requires filter states "
+            "built with `store_predicted_ensemble=True`."
+        )
+
+    state_ensemble = jnp.asarray(state_ensemble_raw)
+    times = jnp.asarray(model_inputs.time)
+    controls = jnp.asarray(model_inputs.u)
+
+    extract_arrays = _extract_single_cuthbert_enkf_prediction_arrays
+    if plate_shapes:
+        in_axes = (
+            _make_plate_in_axes(dynamics, plate_shapes),
+            0,
+            0,
+            0,
+        )
+        for _ in plate_shapes:
+            extract_arrays = jax.vmap(extract_arrays, in_axes=in_axes)
+
+    pred_mean, pred_cov, obs_cov, observation_ensemble, noise_cov = extract_arrays(
+        dynamics,
+        state_ensemble,
+        times,
+        controls,
+    )
+    return PredictedObservationOutputs(
+        mean=pred_mean,
+        cov=pred_cov,
+        obs_cov=obs_cov,
+        ensemble=observation_ensemble,
+        obs_ensemble=None,
+        noise_cov=noise_cov,
+    )
+
+
+def extract_filter_predictions(
+    posterior: Any,
+    *,
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    obs_times: Real[Array, "... time"],
+    ctrl_values: Real[Array, "... control_time control_dim"]
+    | Real[Array, "... control_time"]
+    | None,
+    plate_shapes: tuple[int, ...] = (),
+) -> PredictedObservationOutputs | None:
+    """Extract canonical predictions from any filter backend that supports them."""
+    if not filter_config.include_predicted_observations or posterior is None:
+        return None
+
+    if isinstance(
+        filter_config,
+        (
+            ContinuousTimeKFConfig,
+            ContinuousTimeEKFConfig,
+            ContinuousTimeUKFConfig,
+            ContinuousTimeEnKFConfig,
+        ),
+    ):
+        return _build_prediction_outputs(
+            posterior,
+            dynamics=dynamics,
+            filter_config=filter_config,
+            obs_times=obs_times,
+            ctrl_values=ctrl_values,
+            plate_shapes=plate_shapes,
+        )
+
+    if (
+        isinstance(filter_config, EnKFConfig)
+        and filter_config.filter_source == "cuthbert"
+    ):
+        return _extract_cuthbert_enkf_predictions(
+            posterior,
+            dynamics=dynamics,
+            plate_shapes=plate_shapes,
+        )
+
+    return None
+
+
 def extract_continuous_filter_predictions(
     posterior: Any,
     *,
@@ -271,24 +465,11 @@ def extract_continuous_filter_predictions(
     | None,
     plate_shapes: tuple[int, ...] = (),
 ) -> PredictedObservationOutputs | None:
-    """Extract canonical predicted observations when the backend supports them.
+    """Compatibility wrapper for continuous-filter prediction extraction.
 
-    Collection is capability-aware: unsupported filter backends keep running
-    and return ``None``. An Evaluation handler decides whether missing outputs
-    are an error for its requested evaluation.
+    New dispatch sites should call :func:`extract_filter_predictions`.
     """
-    if not filter_config.include_predicted_observations or not isinstance(
-        filter_config,
-        (
-            ContinuousTimeKFConfig,
-            ContinuousTimeEKFConfig,
-            ContinuousTimeUKFConfig,
-            ContinuousTimeEnKFConfig,
-        ),
-    ):
-        return None
-
-    return _build_prediction_outputs(
+    return extract_filter_predictions(
         posterior,
         dynamics=dynamics,
         filter_config=filter_config,
@@ -337,5 +518,6 @@ __all__ = [
     "SupportedObservationPredictionConfig",
     "add_observation_prediction_sites",
     "extract_continuous_filter_predictions",
+    "extract_filter_predictions",
     "wants_observation_prediction_diagnostics",
 ]

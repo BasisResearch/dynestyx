@@ -18,6 +18,9 @@ from dynestyx.discretizers import (
     ODEFlowConfig,
     _discretize_state_evolution,
 )
+from dynestyx.evaluation.configs import ObservationScoringConfig
+from dynestyx.evaluation.handlers import Evaluation
+from dynestyx.evaluation.scoring import EnergyScore, GaussianLogProbScore
 from dynestyx.inference.configs.filter import EnKFConfig, PFConfig
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
@@ -248,6 +251,79 @@ def test_ode_flow_runs_sample_based_filters(filter_config):
                 model(jnp.array([0.0, 0.05, 0.12]), jnp.ones((3, 1)))
 
     assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
+
+
+def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
+    obs_times = jnp.array([0.0, 0.05, 0.12])
+    obs_values = jnp.array([1.0, 0.9, 0.8])
+    n_particles = 12
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.ones(1), 0.1 * jnp.eye(1)),
+        state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -0.2 * x),
+        observation_model=LinearGaussianObservation(
+            H=jnp.ones((1, 1)),
+            R=0.1 * jnp.eye(1),
+        ),
+    )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(6)):
+        with Evaluation(
+            observation_scoring_config=ObservationScoringConfig(
+                rules=(GaussianLogProbScore(), EnergyScore(beta=1.0)),
+                sample_seed=7,
+            )
+        ):
+            with Filter(
+                EnKFConfig(
+                    n_particles=n_particles,
+                    crn_seed=jr.PRNGKey(8),
+                )
+            ):
+                with Discretizer(
+                    ODEFlowConfig(
+                        simulator_config=_ode_config(),
+                        jitter_scale=0.0,
+                    )
+                ):
+                    result = dsx.sample(
+                        "f",
+                        dynamics,
+                        obs_times=obs_times,
+                        obs_values=obs_values,
+                    )
+
+    predictions = result.predicted_observations
+    scores = result.evaluation_result.observation_scores
+    assert predictions is not None
+    assert predictions.ensemble.shape == (
+        len(obs_times),
+        n_particles,
+        1,
+    )
+    assert predictions.mean.shape == (len(obs_times), 1)
+    assert predictions.cov.shape == (len(obs_times), 1, 1)
+    assert scores["gaussian_log_prob"].shape == (len(obs_times), 1)
+    assert scores["energy_score"].shape == (len(obs_times), 1)
+    assert jnp.all(jnp.isfinite(scores["gaussian_log_prob"]))
+    assert jnp.all(jnp.isfinite(scores["energy_score"]))
+
+    cumulative_loglik = result.states.log_normalizing_constant
+    per_step_loglik = jnp.diff(
+        jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
+    )
+    assert jnp.allclose(
+        scores["gaussian_log_prob"][:, 0],
+        per_step_loglik,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    assert jnp.allclose(
+        jnp.sum(scores["gaussian_log_prob"]),
+        result.marginal_loglik,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    assert "f_predicted_observations_ensemble" in tr
 
 
 def test_exact_affine_matches_scalar_ou_transition():
