@@ -1886,6 +1886,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../deep_dives/filtering_deterministic_processes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filtering of Deterministic Continuous-Time Processes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
@@ -2039,10 +2067,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_10" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_11" >
         
           
-          <label class="md-nav__link" for="__nav_3_4_10" id="__nav_3_4_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_4_11" id="__nav_3_4_11_label" tabindex="0">
             
   
   
@@ -2060,8 +2088,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_4_10">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4641,6 +4669,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.ODEFlowConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ODEFlowConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.discretizers._discretize_state_evolution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5075,7 +5114,7 @@
 
 
 <h1 id="discretizers">Discretizers<a class="headerlink" href="#discretizers" title="Permanent link">&para;</a></h1>
-<p>Using continuous state evolutions can be inconvenient as they entail running full SDE solves for all transitions.  <code>dynestyx</code> provides a set of <code>Discretizer</code> objects to discretize a continuous time state evolution to a discrete time state evolution.</p>
+<p>Using continuous state evolutions can be inconvenient because they entail solving an ODE or SDE between observation times. <code>dynestyx</code> provides a <code>Discretizer</code> handler with configuration-driven methods for converting a continuous-time state evolution into a discrete-time state evolution.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -5085,7 +5124,7 @@
 
     <div class="doc doc-contents first">
 
-        <p>Configuration-driven discretization of stochastic continuous-time models.</p>
+        <p>Configuration-driven discretization of continuous-time models.</p>
 
 
 
@@ -5127,7 +5166,7 @@
 
 
 
-        <p>Base class for continuous-to-discrete SDE configuration objects.</p>
+        <p>Base class for continuous-to-discrete configuration objects.</p>
 <p>Do not instantiate this marker class directly. Pass one of its concrete
 subclasses to <code>Discretizer</code>. For default settings, pass None
 as the config to <code>Discretizer</code>.</p>
@@ -5324,8 +5363,9 @@ context may then use the resulting <code>DiscreteTimeStateEvolution</code>:</p>
     <span class="k">with</span> <span class="n">Discretizer</span><span class="p">(</span><span class="n">MeanTrajectoryLinearizationConfig</span><span class="p">()):</span>
         <span class="n">model</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 </code></pre></div>
-<p>When no config is provided to <code>Discretizer</code>, an exact Gaussian discretization will be applied for models with an <code>AffineDrift</code>,
-and an Euler-Maruyama discretization applied otherwise.</p>
+<p>When no config is provided, ODE models use their numerical flow, SDE models
+with an affine drift use an exact Gaussian discretization, and other SDE
+models use Euler--Maruyama.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5879,6 +5919,113 @@ covariance as <span class="arithmatex">\(\epsilon I\)</span>. Defaults to <code>
   <a href="https://doi.org/10.1016/j.sigpro.2012.09.002">https://doi.org/10.1016/j.sigpro.2012.09.002</a>.</li>
 </ul>
 </details>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.discretizers.ODEFlowConfig" class="doc doc-heading">
+            <code>ODEFlowConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.discretizers.ODEFlowConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
+
+
+
+        <p>Numerical flow transition for a deterministic ODE.</p>
+<p>For the controlled ODE</p>
+<div class="arithmatex">\[
+\dot X_s=f(X_s,u_k,s),
+\]</div>
+<p>this config numerically integrates from <code>t_now</code> to <code>t_next</code> while
+holding <code>u_k</code> fixed. With endpoint
+<span class="arithmatex">\(\phi(x,u_k,t_{\mathrm{now}},t_{\mathrm{next}})\)</span>, the returned
+transition is a Delta distribution when <code>jitter_scale == 0</code>. For
+positive <code>jitter_scale</code> it is an independent Normal distribution with
+mean <span class="arithmatex">\(\phi\)</span>, component scale <code>jitter_scale</code>, and covariance
+<code>jitter_scale**2 * I</code>.</p>
+<p>All Diffrax settings come from the existing <code>ODESimulatorConfig</code>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.ODEFlowConfig.simulator_config">simulator_config</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.inference.configs.simulator.ODESimulatorConfig" href="../../simulators/simulator_configs/#dynestyx.inference.configs.simulator.ODESimulatorConfig">ODESimulatorConfig</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Diffrax ODE solver settings.
+Defaults to <code>ODESimulatorConfig()</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.discretizers.ODEFlowConfig.jitter_scale">jitter_scale</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Finite, nonnegative component scale added
+after integrating the flow. Defaults to <code>0.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 

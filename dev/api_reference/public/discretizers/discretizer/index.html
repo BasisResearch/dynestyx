@@ -1886,6 +1886,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../deep_dives/filtering_deterministic_processes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filtering of Deterministic Continuous-Time Processes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
@@ -2039,10 +2067,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_10" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_11" >
         
           
-          <label class="md-nav__link" for="__nav_3_4_10" id="__nav_3_4_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_4_11" id="__nav_3_4_11_label" tabindex="0">
             
   
   
@@ -2060,8 +2088,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_4_10">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4998,7 +5026,7 @@
 
 
 <h1 id="discretizers">Discretizers<a class="headerlink" href="#discretizers" title="Permanent link">&para;</a></h1>
-<p>A <code>Discretizer</code> maps a <code>ContinuousTimeStateEvolution</code> to a <code>DiscreteTimeStateEvolution</code> by discretizing the corresponding SDE; the resulting model is compatible with discrete-time inference techniques in <code>dynestyx</code> (i.e., discrete time filters, smoothers, and <code>LatentPathBuilder</code>). The discretizer context should be placed <em>inside</em> the corresponding inference context:</p>
+<p>A <code>Discretizer</code> maps a <code>ContinuousTimeStateEvolution</code> to a <code>DiscreteTimeStateEvolution</code> by discretizing the corresponding ODE or SDE; the resulting model is compatible with discrete-time inference techniques in <code>dynestyx</code> when the selected transition interface supplies what the inference method requires. The discretizer context should be placed <em>inside</em> the corresponding inference context:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.discretizers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Discretizer</span><span class="p">,</span>
@@ -5010,13 +5038,15 @@
     <span class="k">with</span> <span class="n">Discretizer</span><span class="p">(</span><span class="n">MeanTrajectoryLinearizationConfig</span><span class="p">()):</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 </code></pre></div>
-<p>The config (in the above, <code>MeanTrajectoryLinearizationConfig</code>) changes the corresponding method for discretizing the SDE. See <a href="../../inference/configs/discretizer_configs/">Discretizer configurations</a> for more information about each.</p>
+<p>The config (in the above, <code>MeanTrajectoryLinearizationConfig</code>) changes the corresponding method for discretizing the continuous-time dynamics. See <a href="../../inference/configs/discretizer_configs/">Discretizer configurations</a> for more information about each.</p>
 <h2 id="automatic-routing">Automatic routing<a class="headerlink" href="#automatic-routing" title="Permanent link">&para;</a></h2>
 <p>When no configuration is supplied, <code>Discretizer()</code> chooses automatically:</p>
 <ul>
+<li>a deterministic ODE is integrated with <code>ODEFlowConfig()</code>, producing a Delta transition at the numerical flow endpoint;</li>
 <li>an <code>AffineDrift</code> with constant diffusion and no potential is discretized exactly; and</li>
-<li>other models use Euler-Maruyma discretization by default.</li>
+<li>other SDE models use Euler--Maruyama discretization by default.</li>
 </ul>
+<p>Pass <code>ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)</code> to customize ODE integration; all Diffrax settings are taken from the nested <code>ODESimulatorConfig</code>.</p>
 
 
 

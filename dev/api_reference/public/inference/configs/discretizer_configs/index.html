@@ -1886,6 +1886,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../../deep_dives/filtering_deterministic_processes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filtering of Deterministic Continuous-Time Processes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
@@ -2039,10 +2067,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_10" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_11" >
         
           
-          <label class="md-nav__link" for="__nav_3_4_10" id="__nav_3_4_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_4_11" id="__nav_3_4_11_label" tabindex="0">
             
   
   
@@ -2060,8 +2088,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_4_10">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3334,6 +3362,17 @@
     <span class="md-ellipsis">
       
         BaseDiscretizerConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.configs.discretizer.ODEFlowConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ODEFlowConfig
       
     </span>
   </a>
@@ -5100,6 +5139,13 @@
 </thead>
 <tbody>
 <tr>
+<td><code>ODEFlowConfig</code></td>
+<td>Deterministic ODE</td>
+<td>Delta or independent Normal density and samples</td>
+<td>Numerical ODE solve</td>
+<td>Accurate numerical flow; optional jitter changes the deterministic model</td>
+</tr>
+<tr>
 <td><code>EulerMaruyamaConfig</code></td>
 <td>General drift and diffusion</td>
 <td>Gaussian density and samples</td>
@@ -5147,7 +5193,7 @@
 
     <div class="doc doc-contents first">
 
-        <p>Configuration objects for continuous-to-discrete SDE approximations.</p>
+        <p>Configuration objects for continuous-to-discrete approximations.</p>
 
 
 
@@ -5172,7 +5218,7 @@
 
 
 <h2 id="dynestyx.inference.configs.discretizer.DiscretizerConfig" class="doc doc-heading">
-            <code class=" language-python"><span class="n">DiscretizerConfig</span> <span class="o">=</span> <span class="n">EulerMaruyamaConfig</span> <span class="o">|</span> <span class="n">ExactAffineConfig</span> <span class="o">|</span> <span class="n">LocalLinearizationConfig</span> <span class="o">|</span> <span class="n">MeanTrajectoryLinearizationConfig</span> <span class="o">|</span> <span class="n">DiffraxSampleConfig</span></code>
+            <code class=" language-python"><span class="n">DiscretizerConfig</span> <span class="o">=</span> <span class="n">ODEFlowConfig</span> <span class="o">|</span> <span class="n">EulerMaruyamaConfig</span> <span class="o">|</span> <span class="n">ExactAffineConfig</span> <span class="o">|</span> <span class="n">LocalLinearizationConfig</span> <span class="o">|</span> <span class="n">MeanTrajectoryLinearizationConfig</span> <span class="o">|</span> <span class="n">DiffraxSampleConfig</span></code>
 
 <a href="#dynestyx.inference.configs.discretizer.DiscretizerConfig" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -5204,10 +5250,117 @@
 
 
 
-        <p>Base class for continuous-to-discrete SDE configuration objects.</p>
+        <p>Base class for continuous-to-discrete configuration objects.</p>
 <p>Do not instantiate this marker class directly. Pass one of its concrete
 subclasses to <code>Discretizer</code>. For default settings, pass None
 as the config to <code>Discretizer</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.inference.configs.discretizer.ODEFlowConfig" class="doc doc-heading">
+            <code>ODEFlowConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.configs.discretizer.ODEFlowConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a></code></p>
+
+
+
+        <p>Numerical flow transition for a deterministic ODE.</p>
+<p>For the controlled ODE</p>
+<div class="arithmatex">\[
+\dot X_s=f(X_s,u_k,s),
+\]</div>
+<p>this config numerically integrates from <code>t_now</code> to <code>t_next</code> while
+holding <code>u_k</code> fixed. With endpoint
+<span class="arithmatex">\(\phi(x,u_k,t_{\mathrm{now}},t_{\mathrm{next}})\)</span>, the returned
+transition is a Delta distribution when <code>jitter_scale == 0</code>. For
+positive <code>jitter_scale</code> it is an independent Normal distribution with
+mean <span class="arithmatex">\(\phi\)</span>, component scale <code>jitter_scale</code>, and covariance
+<code>jitter_scale**2 * I</code>.</p>
+<p>All Diffrax settings come from the existing <code>ODESimulatorConfig</code>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.discretizer.ODEFlowConfig.simulator_config">simulator_config</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="dynestyx.inference.configs.simulator.ODESimulatorConfig" href="../../../../developer/simulators/simulator_configs/#dynestyx.inference.configs.simulator.ODESimulatorConfig">ODESimulatorConfig</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Diffrax ODE solver settings.
+Defaults to <code>ODESimulatorConfig()</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.discretizer.ODEFlowConfig.jitter_scale">jitter_scale</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Finite, nonnegative component scale added
+after integrating the flow. Defaults to <code>0.0</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
