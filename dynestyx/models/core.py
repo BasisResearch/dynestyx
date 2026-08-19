@@ -430,7 +430,11 @@ class DiscreteTimeStateEvolution(eqx.Module):
     $$
 
     Implementations must return a NumPyro-compatible distribution (e.g.,
-    `numpyro.distributions.Distribution`) that can be sampled and evaluated.
+    `numpyro.distributions.Distribution`). Most transitions provide sampling,
+    moments, and `log_prob`; explicitly sample-only transitions are also valid
+    for simulators, ensemble filters, and bootstrap particle filters that never
+    evaluate the transition density. Such transitions should raise a targeted
+    error when an unavailable moment or density is requested.
 
     Args:
         x (State): Current state $x \\in \\mathbb{R}^{d_x}$.

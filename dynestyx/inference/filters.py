@@ -55,6 +55,11 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
+from dynestyx.inference.observation_predictions import (
+    PredictedObservationOutputs,
+    add_observation_prediction_sites,
+    extract_continuous_filter_predictions,
+)
 from dynestyx.inference.utils.distribution_utils import (
     _categorical_log_probs_to_dists,
     _cholesky_state_sequence_to_dists,
@@ -98,10 +103,19 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        filtered_result: ConditionedResult | None = None,
+        smoothed_result: ConditionedResult | None = None,
         **kwargs,
     ) -> FunctionOfTime:
+        if filtered_result is not None or smoothed_result is not None:
+            raise ValueError(
+                "Filter cannot condition an already conditioned result. Use only "
+                "one Filter or Smoother for a dsx.condition/dsx.sample operation."
+            )
+
         filtered_dists = None
         self.marginal_loglik = self.filtered_states = self._filter_config_used = None
+        self.predicted_observations = None
         if not (obs_times is None or obs_values is None):
             filtered_dists = self._add_log_factors(
                 name,
@@ -114,22 +128,21 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
                 **kwargs,
             )
 
-        # Filter consumes obs_times and obs_values, so they are passed forward as None.
-        # fwd() lets handlers above (e.g. Simulator) use filtered_dists for rollout.
+        result = self._build_infer_result(obs_times, filtered_dists)
+
+        # Observation inputs remain available to outer consumers such as Evaluation.
         forwarded_result = fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
-            obs_times=None,
-            obs_values=None,
+            obs_times=obs_times,
+            obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
-            filtered_times=obs_times,
-            filtered_dists=filtered_dists,
+            filtered_result=(result if filtered_dists is not None else None),
             **kwargs,
         )
 
-        result = self._build_infer_result(name, filtered_dists)
         forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
         result._register_numpyro_sites = chain_numpyro_site_registrations(
             result._register_numpyro_sites,
@@ -158,7 +171,9 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
 
     @abstractmethod
     def _build_infer_result(
-        self, name: str, filtered_dists: list | None
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        filtered_dists: list | None,
     ) -> ConditionedResult: ...
 
 
@@ -217,6 +232,9 @@ class Filter(BaseLogFactorAdder):
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
         - What gets recorded to the trace (means/covariances, particles/weights,
         etc.) depends on `filter_config.record_*` and the backend implementation.
+        - Supported one-step-ahead predictive-observation outputs are included
+        in `ConditionedResult` by default. The
+        `record_predicted_observations_*` fields control NumPyro trace sites.
 
     Attributes:
         filter_config: Selects the filtering algorithm and its hyperparameters.
@@ -230,6 +248,9 @@ class Filter(BaseLogFactorAdder):
     )
     filtered_states: object = dataclasses.field(default=None, repr=False, init=False)
     _filter_config_used: BaseFilterConfig | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
+    predicted_observations: PredictedObservationOutputs | None = dataclasses.field(
         default=None, repr=False, init=False
     )
 
@@ -276,7 +297,6 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 mode="filter",
             )
-
         # Resolve PRNG key: use explicit seed from config, fall back to numpyro
         # context (inside a seeded model), or None (deterministic filters don't need one).
         if config.crn_seed is not None:
@@ -327,6 +347,14 @@ class Filter(BaseLogFactorAdder):
                 ctrl_values=ctrl_values,
                 **kwargs,
             )
+            predictions = extract_continuous_filter_predictions(
+                states,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                ctrl_values=ctrl_values,
+            )
+            self.predicted_observations = predictions
         elif isinstance(config, HMMConfigs):
             loglik, log_filt_seq, filtered_dists = _filter_hmm(
                 name,
@@ -368,12 +396,15 @@ class Filter(BaseLogFactorAdder):
         return filtered_dists
 
     def _build_infer_result(
-        self, name: str, filtered_dists: list | None
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        filtered_dists: list | None,
     ) -> ConditionedResult:
-        """Construct ConditionedResult with a deferred numpyro registration callback."""
+        """Construct a ConditionedResult with deferred NumPyro registration."""
         marginal_loglik = self.marginal_loglik
         states = self.filtered_states
         config = self._filter_config_used
+        predictions = self.predicted_observations
         _is_batched = (
             isinstance(marginal_loglik, jax.Array) and marginal_loglik.ndim > 0
         )
@@ -394,11 +425,18 @@ class Filter(BaseLogFactorAdder):
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             else:
                 register_filter_sites(site_name, marginal_loglik, states, config)
+            add_observation_prediction_sites(
+                site_name,
+                filter_config=config,
+                predictions=predictions,
+            )
 
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
+            times=times,
             states=states,
             dists=filtered_dists,
+            predicted_observations=predictions,
             _register_numpyro_sites=_register,
         )
 
@@ -635,6 +673,17 @@ class Filter(BaseLogFactorAdder):
         self.marginal_loglik = marginal_logliks
         self.filtered_states = states
         self._filter_config_used = config
+
+        if output_kind == "continuous":
+            predictions = extract_continuous_filter_predictions(
+                states,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                ctrl_values=ctrl_values,
+                plate_shapes=plate_shapes,
+            )
+            self.predicted_observations = predictions
 
         if output_kind == "continuous":
             particle_mode = isinstance(config, ContinuousTimeDPFConfig)

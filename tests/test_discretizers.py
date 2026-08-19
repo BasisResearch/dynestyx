@@ -10,8 +10,8 @@ from numpyro.infer import Predictive
 import dynestyx as dsx
 from dynestyx.discretizers import (
     Discretizer,
-    EulerMaruyamaGaussianStateEvolution,
-    euler_maruyama,
+    EulerMaruyamaConfig,
+    _discretize_state_evolution,
 )
 from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
@@ -19,9 +19,10 @@ from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiagonalDiffusion,
     DiracIdentityObservation,
+    DiscreteTimeStateEvolution,
     DynamicalModel,
     FullDiffusion,
-    GaussianStateEvolution,
+    LinearGaussianStateEvolution,
     ScalarDiffusion,
 )
 from dynestyx.models.observations import LinearGaussianObservation
@@ -94,18 +95,19 @@ def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
     return dynamics.state_evolution
 
 
-def test_euler_maruyama_returns_gaussian_state_evolution_with_callable_cov():
+def test_euler_maruyama_returns_gaussian_transition():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = euler_maruyama(cte)
-    assert isinstance(evo, GaussianStateEvolution)
-    assert isinstance(evo, EulerMaruyamaGaussianStateEvolution)
+    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
+    transition = evo(jnp.zeros(1), None, jnp.array(0.0), jnp.array(1.0))
+
+    assert isinstance(evo, DiscreteTimeStateEvolution)
     assert evo.cte is cte
-    assert callable(evo.cov)
+    assert isinstance(transition, dist.MultivariateNormal)
 
 
 def test_euler_maruyama_matches_manual_mean_and_variance():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = euler_maruyama(cte)
+    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
     x = jnp.array([0.4])
     t0 = jnp.array(0.0)
     t1 = jnp.array(2.0)
@@ -117,7 +119,7 @@ def test_euler_maruyama_matches_manual_mean_and_variance():
 
 def test_euler_maruyama_batched_time_covariance_shape():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = euler_maruyama(cte)
+    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
     x = jnp.array([[0.0], [1.0], [2.0]])  # (3, 1) = (T, state_dim)
     t_now = jnp.array([0.0, 1.0, 2.0])
     t_next = jnp.array([0.5, 1.5, 2.5])
@@ -127,9 +129,9 @@ def test_euler_maruyama_batched_time_covariance_shape():
     assert jnp.allclose(d.covariance_matrix[:, 0, 0], jnp.array([0.5, 0.5, 0.5]))
 
 
-def test_euler_maruyama_loc_cov_single_pass_consistent_with_gaussian_state_evolution():
+def test_euler_maruyama_loc_cov_single_pass_consistent_with_transition():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = euler_maruyama(cte)
+    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
     x = jnp.array([0.3])
     t0 = jnp.array(1.0)
     t1 = jnp.array(3.0)
@@ -196,8 +198,8 @@ def test_dirac_identity_observation_preserves_scalar_event_shape():
     assert obs.event_shape == ()
 
 
-def test_discretized_gaussian_state_evolution_ekf_cuthbert_smoke():
-    """Callable cov + cuthbert EKF should run without cd_dynamax."""
+def test_discretized_gaussian_transition_ekf_cuthbert_smoke():
+    """Configured Gaussian transitions should run with the cuthbert EKF."""
     obs_times = jnp.arange(4.0)
     obs_values = jnp.zeros((4, 1))
 
@@ -221,3 +223,19 @@ def test_discretized_gaussian_state_evolution_ekf_cuthbert_smoke():
                 model()
 
     assert "f_marginal_loglik" in tr
+
+
+def test_automatic_routing():
+    affine = dsx.LTI_continuous(
+        A=jnp.array([[-0.7]]),
+        L=jnp.array([[0.4]]),
+        H=jnp.ones((1, 1)),
+        R=jnp.eye(1),
+    )
+    assert isinstance(
+        _discretize_state_evolution(affine.state_evolution),
+        LinearGaussianStateEvolution,
+    )
+    nonlinear = _discretize_state_evolution(_ctse_1d_zero_drift_unit_diffusion())
+    transition = nonlinear(jnp.zeros(1), None, jnp.array(0.0), jnp.array(1.0))
+    assert isinstance(transition, dist.MultivariateNormal)

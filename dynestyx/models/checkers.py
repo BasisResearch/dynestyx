@@ -175,6 +175,16 @@ def _validate_discrete_state_evolution_output_shape(
     """Validate a discrete-time state evolution against the inferred state dimension."""
     if getattr(state_evolution, "diffusion", None) is not None:
         raise ValueError("diffusion can only be set for continuous-time models.")
+    if getattr(
+        state_evolution,
+        "_dynestyx_discretizer_preserves_state_shape",
+        False,
+    ):
+        # DynamicalModel normally infers this shape by evaluating a synthetic
+        # unit-interval transition. Discretizer's private transitions preserve
+        # the input event shape by construction, while evaluating them here
+        # could run a costly numerical ODE/SDE solve solely for validation.
+        return
     t_now = t_probe
     t_next = t_probe + 1.0
     transition_dist = state_evolution(x=x_probe, u=u_probe, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]

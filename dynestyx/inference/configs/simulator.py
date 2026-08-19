@@ -82,7 +82,7 @@ class SDESimulatorConfig:
 
     !! Note: The choice of solver can imply convergence to different paths
        for the same model. For example, the default `diffrax.Heun()` converges
-       to the Stratonovich SDE, while `diffrax.EulerMaruyama()` converges to the Ito SDE.
+       to the Stratonovich SDE, while `diffrax.Euler()` converges to the Itô SDE.
        This likely doesn't matter for most models, but can cause issues with state-dependent diffusions.
 
     Attributes:

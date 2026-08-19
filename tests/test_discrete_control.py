@@ -16,7 +16,11 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_mean,
 )
 from dynestyx.control.mppi import MPPI
-from dynestyx.discretizers import Discretizer, euler_maruyama
+from dynestyx.discretizers import (
+    Discretizer,
+    EulerMaruyamaConfig,
+    _discretize_state_evolution,
+)
 from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
@@ -267,9 +271,10 @@ def test_compute_cuthbert_initial_observation_update_ignores_u():
 
 
 def _euler_maruyama_dynamics():
-    # euler_maruyama() requires an already-resolved StochasticContinuousTimeStateEvolution
-    # (with bm_dim metadata filled in), which only happens inside DynamicalModel.__init__ --
-    # matching exactly what Discretizer._sample_ds does internally.
+    # Euler-Maruyama discretization requires an already-resolved
+    # StochasticContinuousTimeStateEvolution (with bm_dim metadata filled in), which
+    # only happens inside DynamicalModel.__init__ -- matching exactly what
+    # Discretizer._sample_ds does internally.
     cte = ContinuousTimeStateEvolution(
         drift=lambda x, u, t: u,
         diffusion=FullDiffusion(0.2 * jnp.eye(1)),
@@ -289,7 +294,10 @@ def _euler_maruyama_dynamics():
     )
     return DynamicalModel(
         initial_condition=continuous_dynamics.initial_condition,
-        state_evolution=euler_maruyama(continuous_dynamics.state_evolution),
+        state_evolution=_discretize_state_evolution(
+            continuous_dynamics.state_evolution,
+            EulerMaruyamaConfig(),
+        ),
         observation_model=continuous_dynamics.observation_model,
         control_dim=continuous_dynamics.control_dim,
     )
@@ -694,7 +702,7 @@ def test_discretizer_wrapped_sde_runs_end_to_end():
 
     def model():
         with sim:
-            with Discretizer(discretize=euler_maruyama):
+            with Discretizer(EulerMaruyamaConfig()):
                 return dsx.sample("f", dynamics, predict_times=predict_times)
 
     tr = _run_trace(model)
@@ -735,7 +743,7 @@ def test_discretizer_wrapped_nonlinear_2d_diverges_uncontrolled_stabilizes_contr
 
         def model():
             with sim:
-                with Discretizer(discretize=euler_maruyama):
+                with Discretizer(EulerMaruyamaConfig()):
                     return dsx.sample("f", dynamics, predict_times=predict_times)
 
         return _run_trace(model, rng_seed=0)

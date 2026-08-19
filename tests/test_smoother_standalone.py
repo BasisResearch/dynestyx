@@ -44,7 +44,7 @@ def _make_dirac_ode_dynamics():
 
 
 def test_infer_smoother_returns_infer_result():
-    """dsx.condition with Smoother returns an ConditionedResult."""
+    """dsx.condition under Smoother returns a ConditionedResult."""
     obs_times, obs_values = _make_data()
     dynamics = _make_lti_dynamics(0.5)
 
@@ -62,6 +62,22 @@ def test_infer_smoother_returns_infer_result():
     assert jnp.isfinite(result.marginal_loglik)
     assert result.states is not None
     assert result.dists is not None
+    assert jnp.array_equal(result.times, obs_times)
+
+
+def test_smoother_rejects_already_conditioned_result():
+    obs_times, obs_values = _make_data()
+    dynamics = _make_lti_dynamics(0.5)
+
+    with pytest.raises(ValueError, match="already conditioned result"):
+        with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+            with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+                dsx.condition(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
 
 
 def test_plated_condition_returns_backend_smoother_states():
@@ -138,7 +154,7 @@ def test_infer_smoother_does_not_register_numpyro_sites():
 
 
 def test_condition_smoother_no_observations():
-    """dsx.condition with Smoother and no obs returns ConditionedResult with marginal_loglik=None."""
+    """Smoother without observations returns an empty ConditionedResult."""
     dynamics = _make_lti_dynamics(0.5)
     obs_times, obs_values = _make_data()
 
