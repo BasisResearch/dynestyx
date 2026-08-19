@@ -299,7 +299,7 @@ class ContinuousTimeStateEvolution(eqx.Module):
          + L(x_t, u_t, t) \\, dW_t
     $$
 
-    where $f$ is the drift, $V$ is an optional potential, and $\\sigma$ is the diffusion
+    where $f$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
     coefficient. The sign $s$ is $-1$ when `use_negative_gradient` is True (e.g., for
     Langevin dynamics) and $+1$ otherwise.
 
