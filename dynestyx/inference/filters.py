@@ -58,7 +58,7 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.observation_predictions import (
     PredictedObservationOutputs,
     add_observation_prediction_sites,
-    extract_continuous_filter_predictions,
+    extract_filter_predictions,
 )
 from dynestyx.inference.utils.distribution_utils import (
     _categorical_log_probs_to_dists,
@@ -347,14 +347,6 @@ class Filter(BaseLogFactorAdder):
                 ctrl_values=ctrl_values,
                 **kwargs,
             )
-            predictions = extract_continuous_filter_predictions(
-                states,
-                dynamics=dynamics,
-                filter_config=config,
-                obs_times=obs_times,
-                ctrl_values=ctrl_values,
-            )
-            self.predicted_observations = predictions
         elif isinstance(config, HMMConfigs):
             loglik, log_filt_seq, filtered_dists = _filter_hmm(
                 name,
@@ -388,6 +380,14 @@ class Filter(BaseLogFactorAdder):
                 f"Invalid filter config: {type(config).__name__}. "
                 f"Valid config types: {valid}"
             )
+
+        self.predicted_observations = extract_filter_predictions(
+            states,
+            dynamics=dynamics,
+            filter_config=config,
+            obs_times=obs_times,
+            ctrl_values=ctrl_values,
+        )
 
         self.marginal_loglik = marginal_loglik
         self.filtered_states = states
@@ -674,16 +674,14 @@ class Filter(BaseLogFactorAdder):
         self.filtered_states = states
         self._filter_config_used = config
 
-        if output_kind == "continuous":
-            predictions = extract_continuous_filter_predictions(
-                states,
-                dynamics=dynamics,
-                filter_config=config,
-                obs_times=obs_times,
-                ctrl_values=ctrl_values,
-                plate_shapes=plate_shapes,
-            )
-            self.predicted_observations = predictions
+        self.predicted_observations = extract_filter_predictions(
+            states,
+            dynamics=dynamics,
+            filter_config=config,
+            obs_times=obs_times,
+            ctrl_values=ctrl_values,
+            plate_shapes=plate_shapes,
+        )
 
         if output_kind == "continuous":
             particle_mode = isinstance(config, ContinuousTimeDPFConfig)

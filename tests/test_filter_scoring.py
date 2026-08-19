@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -22,6 +23,7 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
+    EnKFConfig,
     KFConfig,
 )
 from dynestyx.inference.filters import Filter
@@ -30,7 +32,7 @@ from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
 )
 from dynestyx.inference.observation_predictions import (
     _observation_noise_covariance_sequence,
-    extract_continuous_filter_predictions,
+    extract_filter_predictions,
 )
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.simulation import SDESimulator
@@ -51,7 +53,7 @@ def evaluate_continuous_filter_output(
     scoring_config=None,
     plate_shapes=(),
 ):
-    predictions = extract_continuous_filter_predictions(
+    predictions = extract_filter_predictions(
         posterior,
         dynamics=dynamics,
         filter_config=filter_config,
@@ -124,6 +126,32 @@ def _make_observations():
             ctrl_values=ctrl_values,
         )
     return obs_times, samples["f_observations"][0, 0], ctrl_times, ctrl_values
+
+
+def _make_cuthbert_enkf_scoring_problem():
+    obs_times = jnp.array([0.0, 0.4, 0.9, 1.5])
+    obs_values = jnp.array([0.2, -0.1, 0.35, 0.0])
+    ctrl_times = obs_times
+    ctrl_values = jnp.array([0.0, 0.3, -0.2, 0.4])
+    dynamics = dsx.DynamicalModel(
+        control_dim=1,
+        initial_condition=dist.MultivariateNormal(
+            loc=jnp.array([0.1, -0.2]),
+            covariance_matrix=jnp.array([[0.6, 0.1], [0.1, 0.4]]),
+        ),
+        state_evolution=dsx.LinearGaussianStateEvolution(
+            A=jnp.array([[0.85, 0.1], [-0.05, 0.9]]),
+            cov=0.08 * jnp.eye(2),
+            B=jnp.array([[0.2], [-0.1]]),
+        ),
+        observation_model=LinearGaussianObservation(
+            H=lambda t: jnp.array([[1.0 + 0.15 * t, -0.25]]),
+            D=lambda t: jnp.array([[0.4 + 0.1 * t]]),
+            bias=lambda t: jnp.array([0.05 * t]),
+            R=lambda t: jnp.array([[0.3 + 0.04 * t]]),
+        ),
+    )
+    return dynamics, obs_times, obs_values, ctrl_times, ctrl_values
 
 
 def test_observation_noise_covariance_sequence_uses_constant_structured_R():
@@ -1076,5 +1104,295 @@ def test_plate_batched_scoring_broadcasts_shared_observations():
     assert result.evaluation_result.observation_scores["gaussian_log_prob"].shape == (
         plate_size,
         obs_times.shape[0],
+        1,
+    )
+
+
+def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
+    dynamics, obs_times, obs_values, ctrl_times, ctrl_values = (
+        _make_cuthbert_enkf_scoring_problem()
+    )
+    n_particles = 24
+    filter_config = EnKFConfig(
+        n_particles=n_particles,
+        crn_seed=jr.PRNGKey(47),
+    )
+    scoring_config = ObservationScoringConfig(
+        rules=(
+            GaussianLogProbScore(),
+            DawidSebastianiScore(),
+            ObservationWiseCRPSScore(),
+            EnergyScore(beta=1.0),
+        ),
+        sample_seed=11,
+    )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(48)):
+        with Evaluation(observation_scoring_config=scoring_config):
+            with Filter(filter_config=filter_config):
+                result = dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
+
+    predictions = result.predicted_observations
+    assert predictions is not None
+    assert predictions.ensemble is not None
+    assert predictions.mean is not None
+    assert predictions.cov is not None
+    assert predictions.obs_cov is not None
+    assert predictions.noise_cov is not None
+    assert predictions.obs_ensemble is None
+    assert predictions.ensemble.shape == (len(obs_times), n_particles, 1)
+    assert predictions.mean.shape == (len(obs_times), 1)
+    assert predictions.cov.shape == (len(obs_times), 1, 1)
+
+    state_forecasts = result.states.predicted_ensemble
+    model_inputs = result.states.model_inputs
+    expected_ensemble = jax.vmap(
+        lambda ensemble_t, control_t, time_t: jax.vmap(
+            lambda state: dynamics.observation_model(state, control_t, time_t).mean
+        )(ensemble_t)
+    )(state_forecasts, model_inputs.u, model_inputs.time)
+    expected_mean = jnp.mean(expected_ensemble, axis=-2)
+    deviations = expected_ensemble - expected_mean[..., None, :]
+    expected_cov = jnp.einsum(
+        "...ni,...nj->...ij",
+        deviations,
+        deviations,
+    ) / (n_particles - 1)
+    expected_noise_cov = jax.vmap(
+        lambda state, control_t, time_t: (
+            dynamics.observation_model(state, control_t, time_t).covariance_matrix
+        )
+    )(state_forecasts[:, 0], model_inputs.u, model_inputs.time)
+
+    assert jnp.array_equal(model_inputs.time, obs_times)
+    assert jnp.array_equal(
+        model_inputs.u[:, 0],
+        ctrl_values[jnp.searchsorted(ctrl_times, obs_times, side="left")],
+    )
+    assert jnp.allclose(predictions.ensemble, expected_ensemble)
+    assert jnp.allclose(predictions.mean, expected_mean)
+    assert jnp.allclose(predictions.cov, expected_cov)
+    assert jnp.allclose(predictions.noise_cov, expected_noise_cov)
+    assert jnp.allclose(predictions.obs_cov, expected_cov + expected_noise_cov)
+
+    expected_scores = {
+        rule.site_name: rule.compute(
+            obs_values=obs_values[:, None],
+            pred_mean=expected_mean,
+            pred_cov=expected_cov + expected_noise_cov,
+        )
+        for rule in scoring_config.rules
+        if not isinstance(rule, EnergyScore)
+    }
+    scores = result.evaluation_result.observation_scores
+    for score_name, expected_score in expected_scores.items():
+        assert jnp.allclose(scores[score_name], expected_score)
+        assert jnp.allclose(tr[f"f_{score_name}"]["value"], expected_score)
+    assert_tree_all_finite(scores, where="Cuthbert EnKF observation scores")
+    assert scores["gaussian_log_prob"].shape == (len(obs_times), 1)
+    assert scores["dawid_sebastiani"].shape == (len(obs_times), 1)
+    assert scores["observation_wise_crps"].shape == (len(obs_times), 1)
+    assert scores["energy_score"].shape == (len(obs_times), 1)
+
+    cumulative_loglik = result.states.log_normalizing_constant
+    per_step_loglik = jnp.diff(
+        jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
+    )
+    assert jnp.allclose(
+        scores["gaussian_log_prob"][:, 0],
+        per_step_loglik,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    assert jnp.allclose(
+        jnp.sum(scores["gaussian_log_prob"]),
+        result.marginal_loglik,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    assert "f_predicted_observations_mean" in tr
+    assert "f_predicted_observations_cov" in tr
+    assert "f_predicted_observations_ensemble" in tr
+
+
+def test_cuthbert_enkf_energy_auto_samples_seeded_observation_noise():
+    dynamics, obs_times, obs_values, ctrl_times, ctrl_values = (
+        _make_cuthbert_enkf_scoring_problem()
+    )
+    sample_seed = 13
+    auto_config = ObservationScoringConfig(
+        rules=(EnergyScore(beta=1.0),),
+        sample_seed=sample_seed,
+    )
+    with Evaluation(observation_scoring_config=auto_config):
+        with Filter(
+            filter_config=EnKFConfig(
+                n_particles=16,
+                crn_seed=jr.PRNGKey(51),
+            )
+        ):
+            result = dsx.condition(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
+
+    predictions = result.predicted_observations
+    assert predictions is not None
+    assert predictions.ensemble is not None
+    assert predictions.noise_cov is not None
+    assert predictions.obs_ensemble is None
+    n_members = predictions.ensemble.shape[-2]
+    sampled_noise = dist.MultivariateNormal(
+        loc=jnp.zeros_like(predictions.ensemble[..., 0, :]),
+        covariance_matrix=predictions.noise_cov,
+    ).sample(jr.PRNGKey(sample_seed), sample_shape=(n_members,))
+    noisy_ensemble = predictions.ensemble + jnp.moveaxis(sampled_noise, 0, -2)
+    expected_score = EnergyScore(beta=1.0).compute(
+        obs_values=obs_values[:, None],
+        pred_ensemble=noisy_ensemble,
+    )
+    auto_score = result.evaluation_result.observation_scores["energy_score"]
+    assert jnp.allclose(auto_score, expected_score)
+
+    latent_noise_score = compute_observation_scores(
+        predicted_observations=predictions,
+        obs_values=obs_values,
+        observation_dim=1,
+        scoring_config=ObservationScoringConfig(
+            rules=(EnergyScore(beta=1.0),),
+            sample_source="latent_ensemble_plus_noise",
+            sample_seed=sample_seed,
+        ),
+    )["energy_score"]
+    assert jnp.allclose(auto_score, latent_noise_score)
+
+    with pytest.raises(
+        NotImplementedError,
+        match="predicted_observations.obs_ensemble",
+    ):
+        compute_observation_scores(
+            predicted_observations=predictions,
+            obs_values=obs_values,
+            observation_dim=1,
+            scoring_config=ObservationScoringConfig(
+                rules=(EnergyScore(beta=1.0),),
+                sample_source="backend_ensemble",
+            ),
+        )
+
+
+def test_cuthbert_enkf_scoring_explains_disabled_prediction_collection():
+    dynamics, obs_times, obs_values, ctrl_times, ctrl_values = (
+        _make_cuthbert_enkf_scoring_problem()
+    )
+    with pytest.raises(ValueError, match="include_predicted_observations=True"):
+        with Evaluation(
+            observation_scoring_config=ObservationScoringConfig(
+                rules=(GaussianLogProbScore(),)
+            )
+        ):
+            with Filter(
+                filter_config=EnKFConfig(
+                    n_particles=8,
+                    crn_seed=jr.PRNGKey(53),
+                    include_predicted_observations=False,
+                )
+            ):
+                dsx.condition(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                    ctrl_times=ctrl_times,
+                    ctrl_values=ctrl_values,
+                )
+
+
+def test_cuthbert_enkf_plate_batched_scores_preserve_member_and_time_axes():
+    dynamics, obs_times, obs_values, ctrl_times, ctrl_values = (
+        _make_cuthbert_enkf_scoring_problem()
+    )
+    plate_size = 2
+    n_particles = 12
+    plate_obs_values = jnp.stack([obs_values, obs_values + 0.1])
+
+    def plate_model():
+        with dsx.plate("trajectories", plate_size):
+            return dsx.sample(
+                "f",
+                dynamics,
+                obs_times=obs_times,
+                obs_values=plate_obs_values,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(58)):
+        with Evaluation(
+            observation_scoring_config=ObservationScoringConfig(
+                rules=(GaussianLogProbScore(), ObservationWiseCRPSScore())
+            )
+        ):
+            with Filter(
+                filter_config=EnKFConfig(
+                    n_particles=n_particles,
+                    crn_seed=jr.PRNGKey(59),
+                )
+            ):
+                result = plate_model()
+
+    predictions = result.predicted_observations
+    scores = result.evaluation_result.observation_scores
+    assert predictions is not None
+    assert predictions.ensemble.shape == (
+        plate_size,
+        len(obs_times),
+        n_particles,
+        1,
+    )
+    assert predictions.mean.shape == (plate_size, len(obs_times), 1)
+    assert predictions.cov.shape == (plate_size, len(obs_times), 1, 1)
+    assert scores["gaussian_log_prob"].shape == (plate_size, len(obs_times), 1)
+    assert scores["observation_wise_crps"].shape == (
+        plate_size,
+        len(obs_times),
+        1,
+    )
+    assert_tree_all_finite(scores, where="plate-batched Cuthbert EnKF scores")
+
+    cumulative_loglik = result.states.log_normalizing_constant
+    per_step_loglik = jnp.diff(
+        jnp.concatenate(
+            [jnp.zeros_like(cumulative_loglik[..., :1]), cumulative_loglik],
+            axis=-1,
+        ),
+        axis=-1,
+    )
+    assert jnp.allclose(
+        scores["gaussian_log_prob"][..., 0],
+        per_step_loglik,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    assert jnp.allclose(
+        jnp.sum(scores["gaussian_log_prob"], axis=(-2, -1)),
+        result.marginal_loglik,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    assert tr["f_gaussian_log_prob"]["value"].shape == (
+        plate_size,
+        len(obs_times),
         1,
     )
