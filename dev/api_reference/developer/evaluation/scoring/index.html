@@ -1914,6 +1914,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../../deep_dives/observation_scoring_with_cuthbert_enkf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observation scoring with an ODE-flow Cuthbert EnKF
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
@@ -2067,10 +2095,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_11" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_12" >
         
           
-          <label class="md-nav__link" for="__nav_3_4_11" id="__nav_3_4_11_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_4_12" id="__nav_3_4_12_label" tabindex="0">
             
   
   
@@ -2088,8 +2116,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_4_11">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5054,7 +5082,9 @@
 
 <h1 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h1>
 <p>Proper scoring rules let us evaluate predictive observation distributions w.r.t. data in ways beyond marginal likelihood.</p>
-<p><code>dynestyx.evaluation.scoring</code> defines the score objects themselves: <code>BaseObservationScore</code>, <code>GaussianLogProbScore</code>, <code>DawidSebastianiScore</code>, <code>ObservationWiseCRPSScore</code>, and <code>EnergyScore</code>. These scores currently operate on the one-step-ahead predictive observation distributions produced by the continuous-time CD-Dynamax Gaussian filters (<code>ContinuousTimeKFConfig</code>, <code>ContinuousTimeEKFConfig</code>, <code>ContinuousTimeUKFConfig</code>, and <code>ContinuousTimeEnKFConfig</code>). <code>ObservationScoringConfig</code> is documented on the companion <a href="../../inference/configs/scoring_configs/">Scoring Configs</a> page.</p>
+<p><code>dynestyx.evaluation.scoring</code> defines the score objects themselves: <code>BaseObservationScore</code>, <code>GaussianLogProbScore</code>, <code>DawidSebastianiScore</code>, <code>ObservationWiseCRPSScore</code>, and <code>EnergyScore</code>. These scores consume canonical one-step-ahead predictive observation distributions produced by supported filters: the continuous-time CD-Dynamax Gaussian filters (<code>ContinuousTimeKFConfig</code>, <code>ContinuousTimeEKFConfig</code>, <code>ContinuousTimeUKFConfig</code>, and <code>ContinuousTimeEnKFConfig</code>) and the discrete-time Cuthbert <code>EnKFConfig</code>.</p>
+<p>For the Cuthbert EnKF, prediction collection retains the incoming forecast ensemble, removes Cuthbert's leading dummy state, and projects each time-aligned state ensemble through the observation mean function. The resulting <code>PredictedObservationOutputs</code> carries the projected ensemble, its mean and sample covariance, the observation-noise covariance, and the total predictive observation covariance. Cuthbert does not provide an observation-noise-perturbed ensemble, so <code>sample_source="auto"</code> uses the projected latent ensemble plus reproducibly sampled observation noise for ensemble scores. The aligned prediction at index zero is the inflated pre-update initial-prior forecast for the first observation, with no ODE transition; downstream code must not shift the sequence again.</p>
+<p><code>ObservationScoringConfig</code> is documented on the companion <a href="../../inference/configs/scoring_configs/">Scoring Configs</a> page.</p>
 
 
 <div class="doc doc-object doc-module">
