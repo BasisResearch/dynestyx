@@ -5124,13 +5124,13 @@
 <h2 id="dynamical-systems-and-dynestyx">Dynamical Systems and <code>dynestyx</code><a class="headerlink" href="#dynamical-systems-and-dynestyx" title="Permanent link">&para;</a></h2>
 <p>For the purposes of <code>dynestyx</code>, a dynamical system is a generative model depending on time. These generally come in the form of <em>state space models</em> (SSMs), where some unobserved state <span class="arithmatex">\(x_t \in \mathbb{R}^{d_x}\)</span> evolves over time<sup id="fnref:1"><a class="footnote-ref" href="#fn:1">1</a></sup>, with occasional observations <span class="arithmatex">\(y_t \in \mathbb{R}^{d_y}\)</span>. Dynestyx allows the process that evolves <span class="arithmatex">\(x_t\)</span>, as well as the process that generates observations <span class="arithmatex">\(y_t\)</span>, to both be extremely general, and, in particular, allows for <span class="arithmatex">\(x_t\)</span> to be specified as a continuous-time or discrete-time process. That is, <span class="arithmatex">\(x_t\)</span> may be specified by a <em>stochastic differential equation</em> (SDE)<sup id="fnref:2"><a class="footnote-ref" href="#fn:2">2</a></sup>,</p>
 <div class="arithmatex">\[
-    dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{g_\theta(x, t) \, \mathrm{d}\beta_t}_\text{diffusion},
+    dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{L_\theta(x, t) \, \mathrm{d}W_t}_\text{diffusion},
 \]</div>
 <p>or as a discrete-time stochastic process,</p>
 <div class="arithmatex">\[
     x_t \sim \underbrace{p_\theta(x_t \,|\, x_{t-1})}_{\text{transition density}}.
 \]</div>
-<p>In either case, the dynamics are specified with a parameter <span class="arithmatex">\(\theta\)</span>, as well as the parameters of the Brownian motion <span class="arithmatex">\(\beta_t\)</span> and the initial state distrbution <span class="arithmatex">\(p(x_0)\)</span>. Various names for the process <span class="arithmatex">\(x_t \mapsto x_{t+1}\)</span> are used, including <em>transition model</em>, <em>dynamics</em>, <em>state transition</em>, and <em>transition kernel</em>, but we will collectively call this our <em>state evolution</em>.</p>
+<p>In either case, the dynamics are specified with a parameter <span class="arithmatex">\(\theta\)</span>, as well as the parameters of the Brownian motion <span class="arithmatex">\(W_t\)</span> and the initial state distrbution <span class="arithmatex">\(p(x_0)\)</span>. Various names for the process <span class="arithmatex">\(x_t \mapsto x_{t+1}\)</span> are used, including <em>transition model</em>, <em>dynamics</em>, <em>state transition</em>, and <em>transition kernel</em>, but we will collectively call this our <em>state evolution</em>.</p>
 <p>We also assume that observations are also generated probabilistically -- depending only on the state <span class="arithmatex">\(x_t\)</span> -- via some process</p>
 <div class="arithmatex">\[
     y_t \,|\, x_t \sim p_\varphi(y_t \,|\, x_t).

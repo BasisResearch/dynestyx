@@ -4961,7 +4961,7 @@
 
 
         <p>Scalar potential energy for gradient-based drift</p>
-<div class="arithmatex">\[dx_t = \mu(x_t, u_t, t)dt -\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
+<div class="arithmatex">\[dx_t = f(x_t, u_t, t)dt \pm\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
 <p>A potential <span class="arithmatex">\(V(x, u, t)\)</span> maps state, control, and time to a scalar. Its
 gradient contributes to the drift via <span class="arithmatex">\(\pm \nabla_x V(x, u, t)\)</span>, enabling
 Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> when

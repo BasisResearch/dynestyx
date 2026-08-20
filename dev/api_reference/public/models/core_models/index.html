@@ -5228,10 +5228,10 @@ allows batched initial-condition parameters such as
         <p>Continuous-time state evolution via stochastic differential equations (SDEs).</p>
 <p>The state evolves according to</p>
 <div class="arithmatex">\[
-dx_t = \bigl[ \mu(x_t, u_t, t) + s \, \nabla_x V(x_t, u_t, t) \bigr] \, dt
+dx_t = \bigl[ f(x_t, u_t, t) + s \, \nabla_x V(x_t, u_t, t) \bigr] \, dt
      + L(x_t, u_t, t) \, dW_t
 \]</div>
-<p>where <span class="arithmatex">\(\mu\)</span> is the drift, <span class="arithmatex">\(V\)</span> is an optional potential, and <span class="arithmatex">\(L\)</span> is the diffusion
+<p>where <span class="arithmatex">\(f\)</span> is the drift, <span class="arithmatex">\(V\)</span> is an optional potential, and <span class="arithmatex">\(L\)</span> is the diffusion
 coefficient. The sign <span class="arithmatex">\(s\)</span> is <span class="arithmatex">\(-1\)</span> when <code>use_negative_gradient</code> is True (e.g., for
 Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
 
@@ -5253,7 +5253,7 @@ Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Drift vector field <span class="arithmatex">\(\mu(x, u, t)\)</span>.
+                <p>Drift vector field <span class="arithmatex">\(f(x, u, t)\)</span>.
 Defaults to zero if None.
 At least one of <code>drift</code> or <code>potential</code> must be non-None.</p>
               </div>
@@ -5648,11 +5648,11 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
 
         <p>Drift vector field for continuous-time state evolution.</p>
 <p>Mathematically, the drift is a mapping
-<span class="arithmatex">\(\mu: \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}
-\to \mathbb{R}^{d_x}\)</span>, i.e., <span class="arithmatex">\((x, u, t) \mapsto \mu(x, u, t)\)</span>.
+<span class="arithmatex">\(f: \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}
+\to \mathbb{R}^{d_x}\)</span>, i.e., <span class="arithmatex">\((x, u, t) \mapsto f(x, u, t)\)</span>.
 In the SDE formulation used by <code>ContinuousTimeStateEvolution</code>,
-<span class="arithmatex">\(dx_t = \mu(x_t, u_t, t) \, dt + \sigma(x_t, u_t, t) \, dW_t\)</span>, this
-mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
+<span class="arithmatex">\(dx_t = f(x_t, u_t, t) \, dt + L(x_t, u_t, t) \, dW_t\)</span>, this
+mapping forms the <span class="arithmatex">\(f\)</span> term.</p>
 <p>Implementations should be compatible with JAX transformations (e.g., <code>jax.jit</code>,
 <code>jax.vmap</code>, and <code>jax.grad</code> when differentiable).</p>
 
@@ -5734,7 +5734,7 @@ mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Drift vector <span class="arithmatex">\(\mu(x, u, t) \in \mathbb{R}^{d_x}\)</span>.</p>
+                <p>Drift vector <span class="arithmatex">\(f(x, u, t) \in \mathbb{R}^{d_x}\)</span>.</p>
               </div>
             </td>
           </tr>
@@ -5798,7 +5798,7 @@ or <code>lambda x, u, t: - x + u</code></p>
 
 
         <p>Scalar potential energy for gradient-based drift</p>
-<div class="arithmatex">\[dx_t = \mu(x_t, u_t, t)dt -\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
+<div class="arithmatex">\[dx_t = f(x_t, u_t, t)dt \pm\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
 <p>A potential <span class="arithmatex">\(V(x, u, t)\)</span> maps state, control, and time to a scalar. Its
 gradient contributes to the drift via <span class="arithmatex">\(\pm \nabla_x V(x, u, t)\)</span>, enabling
 Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> when

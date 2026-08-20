@@ -4962,14 +4962,14 @@
 
         <p>Generate trajectories from stochastic continuous-time dynamics.</p>
 <p>For an initial-condition distribution <span class="arithmatex">\(p(x_0)\)</span>, drift <span class="arithmatex">\(f\)</span>, diffusion
-coefficient <span class="arithmatex">\(g\)</span>, and observation model <span class="arithmatex">\(p(y\mid x,u,t)\)</span>,
+coefficient <span class="arithmatex">\(L\)</span>, and observation model <span class="arithmatex">\(p(y\mid x,u,t)\)</span>,
 <code>SDESimulator</code> draws <code>n_simulations</code> independent paths satisfying</p>
 <div class="arithmatex">\[
 \begin{aligned}
 x_0^{(m)} &amp;\sim p(x_0), \\
 dx_t^{(m)}
   &amp;= f(x_t^{(m)},u_t,t)\,dt
-   + g(x_t^{(m)},u_t,t)\,dW_t^{(m)}, \\
+   + L(x_t^{(m)},u_t,t)\,dW_t^{(m)}, \\
 y_k^{(m)}
   &amp;\sim p(y_k\mid x_k^{(m)},u_k,t_k).
 \end{aligned}

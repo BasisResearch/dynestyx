@@ -5072,10 +5072,10 @@
 
 
 <h1 id="drift">Drift<a class="headerlink" href="#drift" title="Permanent link">&para;</a></h1>
-<p><code>Drift</code> objects define the deterministic term <span class="arithmatex">\(\mu\)</span> in a continuous-time state evolution
+<p><code>Drift</code> objects define the deterministic term <span class="arithmatex">\(f\)</span> in a continuous-time state evolution
 $$
 \begin{aligned}
-dx_t &amp;= \mu(x_t, u_t, t)\,dt + L(x_t, u_t, t)\,dW_t,
+dx_t &amp;= f(x_t, u_t, t)\,dt + L(x_t, u_t, t)\,dW_t,
 \end{aligned}
 $$
 where the stochastic term <span class="arithmatex">\(W_t\)</span> may be absent, yileding an ODE.</p>
@@ -5095,11 +5095,11 @@ where the stochastic term <span class="arithmatex">\(W_t\)</span> may be absent,
 
         <p>Drift vector field for continuous-time state evolution.</p>
 <p>Mathematically, the drift is a mapping
-<span class="arithmatex">\(\mu: \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}
-\to \mathbb{R}^{d_x}\)</span>, i.e., <span class="arithmatex">\((x, u, t) \mapsto \mu(x, u, t)\)</span>.
+<span class="arithmatex">\(f: \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}
+\to \mathbb{R}^{d_x}\)</span>, i.e., <span class="arithmatex">\((x, u, t) \mapsto f(x, u, t)\)</span>.
 In the SDE formulation used by <code>ContinuousTimeStateEvolution</code>,
-<span class="arithmatex">\(dx_t = \mu(x_t, u_t, t) \, dt + \sigma(x_t, u_t, t) \, dW_t\)</span>, this
-mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
+<span class="arithmatex">\(dx_t = f(x_t, u_t, t) \, dt + L(x_t, u_t, t) \, dW_t\)</span>, this
+mapping forms the <span class="arithmatex">\(f\)</span> term.</p>
 <p>Implementations should be compatible with JAX transformations (e.g., <code>jax.jit</code>,
 <code>jax.vmap</code>, and <code>jax.grad</code> when differentiable).</p>
 
@@ -5181,7 +5181,7 @@ mapping forms the <span class="arithmatex">\(\mu\)</span> term.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Drift vector <span class="arithmatex">\(\mu(x, u, t) \in \mathbb{R}^{d_x}\)</span>.</p>
+                <p>Drift vector <span class="arithmatex">\(f(x, u, t) \in \mathbb{R}^{d_x}\)</span>.</p>
               </div>
             </td>
           </tr>
@@ -5240,7 +5240,7 @@ or <code>lambda x, u, t: - x + u</code></p>
 
 
         <p>Scalar potential energy for gradient-based drift</p>
-<div class="arithmatex">\[dx_t = \mu(x_t, u_t, t)dt -\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
+<div class="arithmatex">\[dx_t = f(x_t, u_t, t)dt \pm\nabla V(x_t, u_t, t)dt + L(x_t, u_t, t)dW_t.\]</div>
 <p>A potential <span class="arithmatex">\(V(x, u, t)\)</span> maps state, control, and time to a scalar. Its
 gradient contributes to the drift via <span class="arithmatex">\(\pm \nabla_x V(x, u, t)\)</span>, enabling
 Langevin-type dynamics. It is used in <code>ContinuousTimeStateEvolution</code> when
@@ -5388,7 +5388,7 @@ or <code>lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2</code></p>
 <p>where <span class="arithmatex">\(A \in \mathbb{R}^{d_x \times d_x}\)</span>, <span class="arithmatex">\(B \in \mathbb{R}^{d_x \times d_u}\)</span>
 (optional), and <span class="arithmatex">\(b \in \mathbb{R}^{d_x}\)</span> (optional). The time argument <span class="arithmatex">\(t\)</span>
 is accepted for compatibility with the <code>Drift</code> protocol but is not used.</p>
-<p>This is commonly used as the drift term <span class="arithmatex">\(\mu(x_t, u_t, t)\)</span> inside
+<p>This is commonly used as the drift term <span class="arithmatex">\(f(x_t, u_t, t)\)</span> inside
 <code>ContinuousTimeStateEvolution</code>, and is a building block for LTI models such as
 <code>LTI_continuous</code>.</p>
 

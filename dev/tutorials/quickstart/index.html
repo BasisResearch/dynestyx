@@ -5804,7 +5804,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p>We will place a uniform prior on $\rho$,
 $$\rho \sim U(0.0, 5.0),$$
 and specify the SDE as
-$$dx_t = \underbrace{\begin{bmatrix} -1.0 &amp; 0.0 \\ \rho &amp; -1.0 \end{bmatrix}}_{A} x_t \, \mathrm{d}t + d\beta_t,$$
+$$dx_t = \underbrace{\begin{bmatrix} -1.0 &amp; 0.0 \\ \rho &amp; -1.0 \end{bmatrix}}_{A} x_t \, \mathrm{d}t + dW_t,$$
 with unit covariance in the diffusion. Observations $y_t$ will be Gaussian-corrupted versions of $x_2$,</p>
 <p>$$y_{t_k} = \underbrace{\begin{bmatrix} 0.0 \\ 1.0 \end{bmatrix}}_{H} x_{t_k} + \varepsilon_{t_k}; \qquad \varepsilon_{t} \sim \mathcal{N}(0.0, 1.0).$$</p>
 <p>We will specify an initial condition $p(x_0) = \mathcal{N}(0.0, I)$.</p>

@@ -5167,10 +5167,10 @@ classes:</p>
         <p>Continuous-time state evolution via stochastic differential equations (SDEs).</p>
 <p>The state evolves according to</p>
 <div class="arithmatex">\[
-dx_t = \bigl[ \mu(x_t, u_t, t) + s \, \nabla_x V(x_t, u_t, t) \bigr] \, dt
+dx_t = \bigl[ f(x_t, u_t, t) + s \, \nabla_x V(x_t, u_t, t) \bigr] \, dt
      + L(x_t, u_t, t) \, dW_t
 \]</div>
-<p>where <span class="arithmatex">\(\mu\)</span> is the drift, <span class="arithmatex">\(V\)</span> is an optional potential, and <span class="arithmatex">\(L\)</span> is the diffusion
+<p>where <span class="arithmatex">\(f\)</span> is the drift, <span class="arithmatex">\(V\)</span> is an optional potential, and <span class="arithmatex">\(L\)</span> is the diffusion
 coefficient. The sign <span class="arithmatex">\(s\)</span> is <span class="arithmatex">\(-1\)</span> when <code>use_negative_gradient</code> is True (e.g., for
 Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
 
@@ -5192,7 +5192,7 @@ Langevin dynamics) and <span class="arithmatex">\(+1\)</span> otherwise.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Drift vector field <span class="arithmatex">\(\mu(x, u, t)\)</span>.
+                <p>Drift vector field <span class="arithmatex">\(f(x, u, t)\)</span>.
 Defaults to zero if None.
 At least one of <code>drift</code> or <code>potential</code> must be non-None.</p>
               </div>
