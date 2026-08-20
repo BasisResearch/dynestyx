@@ -75,7 +75,11 @@ dev = [
     "nbconvert>=7",
     "seaborn>=0.13.2",
     "imageio>=2.37.2",
-    "optax>=0.2.0"
+    "optax>=0.2.0",
+    "exponax>=0.2.0",
+]
+pdes = [
+  "exponax>=0.2.0",
 ]
 
 [tool.ruff.lint]
