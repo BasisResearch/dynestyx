@@ -525,6 +525,49 @@ def test_record_filtered_states_mean_gating(filter_config, expect_present):
     assert ("f_filtered_states_mean" in tr) is expect_present
 
 
+def test_use_true_state_and_filter_config_conflict_raises():
+    policy = _LinearPolicy(K=jnp.array([[0.5]]))
+    with pytest.raises(ValueError, match="use_true_state"):
+        DiscreteControlLoopSimulator(
+            control_policy=policy,
+            filter_config=EKFConfig(),
+            use_true_state=True,
+        )
+
+
+def test_use_true_state_runs_without_filtering():
+    """use_true_state=True skips FilterUpdate entirely: control_policy sees
+    the true state, and there is no filtered_states_mean to report."""
+    dynamics = _lti_1d()
+    policy = _LinearPolicy(K=jnp.array([[0.5]]))
+    sim = DiscreteControlLoopSimulator(control_policy=policy, use_true_state=True)
+    predict_times = jnp.arange(0.0, 8.0)
+
+    def model():
+        with sim:
+            return dsx.sample("f", dynamics, predict_times=predict_times)
+
+    tr = _run_trace(model)
+    assert_trace_sites_exist_and_field_all_finite(
+        tr,
+        "f_times",
+        "f_states",
+        "f_observations",
+        "f_controls",
+        where="use_true_state test",
+    )
+    assert "f_filtered_states_mean" not in tr
+    T = len(predict_times)
+    assert tr["f_states"]["value"].shape == (1, T, 1)
+    assert tr["f_observations"]["value"].shape == (1, T, 1)
+    assert tr["f_controls"]["value"].shape == (1, T - 1, 1)
+
+    # Controls are u_k = -K x_k exactly, since the policy sees the true state.
+    states = tr["f_states"]["value"][0, :-1, :]
+    controls = tr["f_controls"]["value"][0]
+    assert jnp.allclose(controls, -0.5 * states, atol=1e-5)
+
+
 def test_stateless_policy_runs_without_crashing_and_omits_policy_states():
     """Regression test: a stateless policy (no initial_policy_state given,
     s_0=None) previously crashed (jnp.expand_dims(None, axis=0)) when

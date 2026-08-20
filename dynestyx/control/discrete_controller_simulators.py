@@ -140,6 +140,10 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     supported; see
     [Issue #318](https://github.com/BasisResearch/dynestyx/issues/318).
 
+    Set `use_true_state=True` to bypass filtering entirely and let
+    `control_policy` see the true state $x_k$ instead of a filtered belief
+    $\hat x_{k|k}$; see the `use_true_state` attribute below.
+
     Attributes:
         control_policy: Control policy $\pi$; see `PolicyCallable`. Its initial
             state $s_0$ is exactly `simulate`'s `initial_policy_state` argument
@@ -153,6 +157,16 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
             as they do for `Filter` (see `dynestyx.utils._should_record_field`).
+            Must be `None` when `use_true_state=True` -- passing both raises
+            `ValueError`.
+        use_true_state: When `True`, skips filtering entirely: `y_0`/`y_{k+1}`
+            are still simulated and recorded as `observations`, but
+            `control_policy` observes the true state $x_k$ directly (wrapped
+            as a degenerate `numpyro.distributions.Delta` so it still
+            satisfies `PolicyCallable`'s `Distribution` signature), and
+            `filtered_states_mean` is not recorded (there is nothing filtered
+            to report -- see `states` instead). Defaults to `False`, which
+            preserves the existing filtered-belief loop.
         n_simulations: Currently only `1` is supported.
     """
 
@@ -161,11 +175,19 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         *,
         control_policy: PolicyCallable,
         filter_config: BaseFilterConfig | None = None,
+        use_true_state: bool = False,
         n_simulations: int = 1,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
+        if use_true_state and filter_config is not None:
+            raise ValueError(
+                "filter_config must be None when use_true_state=True -- "
+                "true-state mode skips filtering entirely, so there is no "
+                "filter to configure."
+            )
         self.control_policy = control_policy
         self.filter_config = filter_config
+        self.use_true_state = use_true_state
 
     def _validate_plate_support(self) -> None:
         raise NotImplementedError(
@@ -231,64 +253,78 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         if T < 1:
             raise ValueError("times must contain at least one timepoint")
 
-        filter_config = (
-            self.filter_config
-            if self.filter_config is not None
-            else _default_filter_config(dynamics)
-        )
-        if filter_config.filter_source != "cuthbert":
-            # TODO: lift this restriction once cd-dynamax filter sources support
-            # online one-step updates -- tracked in
-            # https://github.com/BasisResearch/dynestyx/pull/314.
-            raise ValueError(
-                "DiscreteControlLoopSimulator requires filter_source='cuthbert' "
-                "because online one-step updates are not available for "
-                f"filter_source={filter_config.filter_source!r}."
+        filter_config = None
+        if not self.use_true_state:
+            filter_config = (
+                self.filter_config
+                if self.filter_config is not None
+                else _default_filter_config(dynamics)
             )
+            if filter_config.filter_source != "cuthbert":
+                # TODO: lift this restriction once cd-dynamax filter sources support
+                # online one-step updates -- tracked in
+                # https://github.com/BasisResearch/dynestyx/pull/314.
+                raise ValueError(
+                    "DiscreteControlLoopSimulator requires filter_source='cuthbert' "
+                    "because online one-step updates are not available for "
+                    f"filter_source={filter_config.filter_source!r}."
+                )
         rollout_key, initial_state_key, initial_observation_key, default_filter_key = (
             jr.split(rng_key, 4)
-        )
-        online_filter_key = (
-            filter_config.crn_seed
-            if filter_config.crn_seed is not None
-            else default_filter_key
-        )
-        online_filter_key, initial_filter_update_key = jr.split(online_filter_key)
-        filter_obj, _ = build_cuthbert_filter(
-            dynamics, filter_config, key=online_filter_key, want_parallel=False
         )
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
         y_0 = dynamics.observation_model(x_0, None, times[0]).sample(
             initial_observation_key
         )
-        # This first filter update conditions the initial-state prior on y_0;
-        # it does not perform a state transition. t_prev is therefore a dummy
-        # value, but it must be earlier than t_0 because some filter backends
-        # still evaluate the unused transition. Reusing the first interval's
-        # width avoids zero-duration transition covariances and NaN gradients.
-        dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
-        x_hat_0 = compute_cuthbert_filter_update(
-            dynamics,
-            filter_obj=filter_obj,
-            prev_state=None,
-            key=initial_filter_update_key,
-            y=y_0,
-            u=None,
-            t=times[0],
-            t_prev=times[0] - dt0,
-        )
+
+        if filter_config is not None:
+            online_filter_key = (
+                filter_config.crn_seed
+                if filter_config.crn_seed is not None
+                else default_filter_key
+            )
+            online_filter_key, initial_filter_update_key = jr.split(online_filter_key)
+            filter_obj, _ = build_cuthbert_filter(
+                dynamics, filter_config, key=online_filter_key, want_parallel=False
+            )
+            # This first filter update conditions the initial-state prior on y_0;
+            # it does not perform a state transition. t_prev is therefore a dummy
+            # value, but it must be earlier than t_0 because some filter backends
+            # still evaluate the unused transition. Reusing the first interval's
+            # width avoids zero-duration transition covariances and NaN gradients.
+            dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
+            x_hat_0 = compute_cuthbert_filter_update(
+                dynamics,
+                filter_obj=filter_obj,
+                prev_state=None,
+                key=initial_filter_update_key,
+                y=y_0,
+                u=None,
+                t=times[0],
+                t_prev=times[0] - dt0,
+            )
+
+            def _policy_dist(belief: Any) -> Distribution:
+                return filter_state_dist(belief)
+        else:
+            filter_obj = None
+            online_filter_key = default_filter_key
+            x_hat_0 = x_0
+
+            def _policy_dist(belief: Any) -> Distribution:
+                return dist.Delta(belief, event_dim=1)
+
         s_0 = initial_policy_state
 
         def _step(carry, t_idx):
             x_prev, x_hat_prev, s_prev, rollout_key, online_filter_key = carry
             rollout_key, transition_key, observation_key = jr.split(rollout_key, 3)
-            online_filter_key, filter_update_key = jr.split(online_filter_key)
             t_now = times[t_idx]
             t_next = times[t_idx + 1]
 
             u_k, s_next = self.control_policy(
-                filter_state_dist(x_hat_prev), t_now, t_next, s_prev
+                _policy_dist(x_hat_prev), t_now, t_next, s_prev
             )
             if isinstance(u_k, Distribution):
                 raise ValueError(
@@ -309,16 +345,20 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             obs_dist = dynamics.observation_model(x_next, u_k, t_next)
             y_next = obs_dist.sample(observation_key)
 
-            x_hat_next = compute_cuthbert_filter_update(
-                dynamics,
-                filter_obj=filter_obj,
-                prev_state=x_hat_prev,
-                key=filter_update_key,
-                y=y_next,
-                u=u_k,
-                t=t_next,
-                t_prev=t_now,
-            )
+            if filter_obj is not None:
+                online_filter_key, filter_update_key = jr.split(online_filter_key)
+                x_hat_next = compute_cuthbert_filter_update(
+                    dynamics,
+                    filter_obj=filter_obj,
+                    prev_state=x_hat_prev,
+                    key=filter_update_key,
+                    y=y_next,
+                    u=u_k,
+                    t=t_next,
+                    t_prev=t_now,
+                )
+            else:
+                x_hat_next = x_next
 
             new_carry = (
                 x_next,
@@ -336,24 +376,25 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         states = jnp.concatenate([jnp.expand_dims(x_0, axis=0), xs], axis=0)
         observations = jnp.concatenate([jnp.expand_dims(y_0, axis=0), ys], axis=0)
 
-        mean_shape = filter_state_mean(x_hat_0).shape
-        record_mean = _should_record_field(
-            filter_config.record_filtered_states_mean,
-            (T, *mean_shape),
-            filter_config.record_max_elems,
-        )
         filtered_states_mean = None
-        if record_mean:
-            filtered_states_mean_vals = jnp.concatenate(
-                [
-                    jnp.expand_dims(filter_state_mean(x_hat_0), axis=0),
-                    filter_state_mean(x_hats),
-                ],
-                axis=0,
+        if filter_config is not None:
+            mean_shape = filter_state_mean(x_hat_0).shape
+            record_mean = _should_record_field(
+                filter_config.record_filtered_states_mean,
+                (T, *mean_shape),
+                filter_config.record_max_elems,
             )
-            filtered_states_mean = _ensure_trailing_dim(
-                jnp.expand_dims(filtered_states_mean_vals, axis=0)
-            )
+            if record_mean:
+                filtered_states_mean_vals = jnp.concatenate(
+                    [
+                        jnp.expand_dims(filter_state_mean(x_hat_0), axis=0),
+                        filter_state_mean(x_hats),
+                    ],
+                    axis=0,
+                )
+                filtered_states_mean = _ensure_trailing_dim(
+                    jnp.expand_dims(filtered_states_mean_vals, axis=0)
+                )
 
         policy_states = None
         if s_0 is not None:

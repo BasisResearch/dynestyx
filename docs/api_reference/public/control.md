@@ -29,6 +29,25 @@ filter update is implemented with Cuthbert and supports `KFConfig`, `EKFConfig`,
 explicitly. Controlled simulation requires `filter_source="cuthbert"` and
 rejects configurations that request another backend.
 
+Passing `use_true_state=True` skips `FilterUpdate` entirely -- the policy
+observes the true state $x_k$ instead of a filtered belief $\hat x_{k\mid k}$:
+
+\[
+\begin{aligned}
+x_0 &\sim p(x_0), \\
+y_0 \mid x_0 &\sim p(y_0 \mid x_0, t_0), \\
+(u_k, s_{k+1}) &= \pi(x_k, t_k, t_{k+1}, s_k), \\
+x_{k+1} \mid x_k,u_k &\sim p(x_{k+1}\mid x_k,u_k,t_k,t_{k+1}), \\
+y_{k+1} \mid x_{k+1},u_k &\sim p(y_{k+1}\mid x_{k+1},u_k,t_{k+1}).
+\end{aligned}
+\]
+
+`y_0`/`y_{k+1}` are still simulated and recorded as `observations`, but they
+are never fed into a filter. `x_k` reaches `control_policy` wrapped as a
+degenerate `numpyro.distributions.Delta`, so it still satisfies
+`PolicyCallable`'s `Distribution` signature. `filter_config` must be left
+unset (`None`) when `use_true_state=True`; passing both raises `ValueError`.
+
 ## Simulator and policy protocol
 
 ::: dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator
