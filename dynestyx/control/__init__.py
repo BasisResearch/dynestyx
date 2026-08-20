@@ -7,14 +7,25 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_dist,
     filter_state_mean,
 )
-from dynestyx.control.mppi import MPPI, MPPILossFn
+from dynestyx.control.mppi import (
+    MPPI,
+    AR1Noise,
+    ColoredNoise,
+    MPPILossFn,
+    NoiseConfig,
+    WhiteNoise,
+)
 
 __all__ = [
+    "AR1Noise",
+    "ColoredNoise",
     "ControlledSimulatedResult",
     "DiscreteControlLoopSimulator",
     "MPPI",
     "MPPILossFn",
+    "NoiseConfig",
     "PolicyCallable",
+    "WhiteNoise",
     "filter_state_dist",
     "filter_state_mean",
 ]
