@@ -304,7 +304,7 @@ class ContinuousTimeStateEvolution(eqx.Module):
     Langevin dynamics) and $+1$ otherwise.
 
     Attributes:
-        drift (Drift | None): Drift vector field $\\mu(x, u, t)$.
+        drift (Drift | None): Drift vector field $f(x, u, t)$.
             Defaults to zero if None.
             At least one of `drift` or `potential` must be non-None.
         potential (Potential | None): Scalar potential $V(x, u, t)$ whose gradient is added to the drift.

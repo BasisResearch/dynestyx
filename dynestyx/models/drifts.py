@@ -17,7 +17,7 @@ class Drift(Protocol):
     \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto f(x, u, t)$.
     In the SDE formulation used by `ContinuousTimeStateEvolution`,
     $dx_t = f(x_t, u_t, t) \\, dt + L(x_t, u_t, t) \\, dW_t$, this
-    mapping forms the $\\mu$ term.
+    mapping forms the $f$ term.
 
     Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
     `jax.vmap`, and `jax.grad` when differentiable).
@@ -101,7 +101,7 @@ class AffineDrift(eqx.Module):
     (optional), and $b \\in \\mathbb{R}^{d_x}$ (optional). The time argument $t$
     is accepted for compatibility with the `Drift` protocol but is not used.
 
-    This is commonly used as the drift term $\\mu(x_t, u_t, t)$ inside
+    This is commonly used as the drift term $f(x_t, u_t, t)$ inside
     `ContinuousTimeStateEvolution`, and is a building block for LTI models such as
     `LTI_continuous`.
 
