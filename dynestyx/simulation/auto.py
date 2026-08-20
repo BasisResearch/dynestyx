@@ -211,6 +211,11 @@ class Simulator(BaseSimulator):
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
+        use_true_state: Forwarded to `DiscreteControlLoopSimulator` when
+            `control_policy` is given; ignored otherwise. When `True`,
+            `control_policy` observes the true state directly instead of a
+            filtered belief, and `filter_config` must be left `None` (see
+            `DiscreteControlLoopSimulator`'s `use_true_state` attribute).
         simulator: Concrete auto-selected simulator cached on first use.
     """
 
@@ -221,11 +226,13 @@ class Simulator(BaseSimulator):
         n_simulations: int = 1,
         control_policy: PolicyCallable | None = None,
         filter_config: BaseFilterConfig | None = None,
+        use_true_state: bool = False,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
         self.simulator_config = simulator_config
         self.control_policy = control_policy
         self.filter_config = filter_config
+        self.use_true_state = use_true_state
         self.simulator: BaseSimulator | None = None
 
     def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
@@ -246,6 +253,7 @@ class Simulator(BaseSimulator):
             self.simulator = DiscreteControlLoopSimulator(
                 control_policy=self.control_policy,
                 filter_config=self.filter_config,
+                use_true_state=self.use_true_state,
                 n_simulations=self.n_simulations,
             )
         elif isinstance(

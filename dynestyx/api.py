@@ -45,6 +45,7 @@ def simulate(
     simulator_config: SimulatorConfig | None = None,
     control_policy: PolicyCallable | None = None,
     filter_config: BaseFilterConfig | None = None,
+    use_true_state: bool = False,
     initial_policy_state: PyTree | None = None,
 ) -> SimulatedResult:
     """Simulate states and observations without registering NumPyro sites.
@@ -73,6 +74,11 @@ def simulate(
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
+        use_true_state: Forwarded to `DiscreteControlLoopSimulator` when
+            `control_policy` is given; ignored otherwise. When `True`,
+            `control_policy` observes the true state directly instead of a
+            filtered belief, and `filter_config` must be left `None` (see
+            `DiscreteControlLoopSimulator`'s `use_true_state` attribute).
         initial_policy_state: Initial policy state $s_0$, forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise. Defaults to `None` (a stateless policy) --
@@ -109,6 +115,7 @@ def simulate(
         simulator_config=simulator_config,
         control_policy=control_policy,
         filter_config=filter_config,
+        use_true_state=use_true_state,
     )
     _, simulation_key = jr.split(rng_key)
     return simulator.simulate(
