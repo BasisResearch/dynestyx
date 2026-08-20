@@ -312,9 +312,14 @@ def compute_cuthbert_filter(
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
-    store_predicted_ensemble: bool = False,
+    store_predicted_ensemble: bool | None = None,
 ) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
+
+    For an EnKF, ``store_predicted_ensemble=None`` follows
+    ``filter_config.include_predicted_observations``. Passing ``True`` or
+    ``False`` explicitly overrides that default; smoothers use the explicit
+    form when their backward pass requires forecast ensembles.
 
     Returns:
         tuple: (marginal_loglik, states). By default states are aligned to
@@ -349,6 +354,12 @@ def compute_cuthbert_filter(
         time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
         is_first_step=jnp.arange(obs_len + 1) == 1,
     )
+
+    if store_predicted_ensemble is None:
+        store_predicted_ensemble = bool(
+            isinstance(filter_config, EnKFConfig)
+            and filter_config.include_predicted_observations
+        )
 
     filter_obj, parallel = build_cuthbert_filter(
         dynamics,
