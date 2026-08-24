@@ -453,13 +453,22 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 )
             )
 
-        state_path_param_site = numpyro.sample(
-            f"{name}_state_path_params",
-            _ForwardSimulationImproperUniform(
+        proper_initial_condition_site = not exact_observations and isinstance(
+            dynamics.state_evolution,
+            DeterministicContinuousTimeStateEvolution,
+        )
+        state_path_param_dist = (
+            dynamics.initial_condition.expand((1,)).to_event(1)
+            if proper_initial_condition_site
+            else _ForwardSimulationImproperUniform(
                 state_forward_sampler,
                 event_shape=state_event_shape,
                 sample_transform=state_sample_transform,
-            ),
+            )
+        )
+        state_path_param_site = numpyro.sample(
+            f"{name}_state_path_params",
+            state_path_param_dist,
             obs=validated_state_path_params,
         )
 
@@ -548,8 +557,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             chunk_size=self.chunk_size,
             observations_are_exact_constraints=exact_observations,
         )
+        factor_log_prob = (
+            joint_log_prob - dynamics.initial_condition.log_prob(state_path[0])
+            if proper_initial_condition_site
+            else joint_log_prob
+        )
 
-        numpyro.factor(f"{name}_joint_log_prob_factor", joint_log_prob)
+        numpyro.factor(f"{name}_joint_log_prob_factor", factor_log_prob)
         numpyro.deterministic(
             f"{name}_state_path_param_times",
             state_path_param_times,
