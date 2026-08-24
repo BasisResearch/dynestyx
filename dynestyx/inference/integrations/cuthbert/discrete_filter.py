@@ -591,7 +591,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         get_dynamics=get_dynamics,  # type: ignore
         get_observations=get_observations,  # type: ignore
         n_particles=int(filter_kwargs.get("n_particles", 30)),
-        inflation=float(filter_kwargs.get("inflation", 0.0)),
+        inflation=filter_kwargs.get("inflation", jnp.array(0.0)),
         perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
         store_predicted_ensemble=bool(
             filter_kwargs.get("store_predicted_ensemble", False)

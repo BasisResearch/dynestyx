@@ -17,7 +17,7 @@ class SDESimulator(BaseSimulator):
     r"""Generate trajectories from stochastic continuous-time dynamics.
 
     For an initial-condition distribution \(p(x_0)\), drift \(f\), diffusion
-    coefficient \(g\), and observation model \(p(y\mid x,u,t)\),
+    coefficient \(L\), and observation model \(p(y\mid x,u,t)\),
     `SDESimulator` draws `n_simulations` independent paths satisfying
 
     \[
@@ -25,7 +25,7 @@ class SDESimulator(BaseSimulator):
     x_0^{(m)} &\sim p(x_0), \\
     dx_t^{(m)}
       &= f(x_t^{(m)},u_t,t)\,dt
-       + g(x_t^{(m)},u_t,t)\,dW_t^{(m)}, \\
+       + L(x_t^{(m)},u_t,t)\,dW_t^{(m)}, \\
     y_k^{(m)}
       &\sim p(y_k\mid x_k^{(m)},u_k,t_k).
     \end{aligned}
