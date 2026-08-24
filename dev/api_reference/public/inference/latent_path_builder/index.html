@@ -5264,14 +5264,14 @@ object, all plate members use its layout.</p>
 Ragged <code>LatentStateResult</code> fields are flat lists of per-member arrays. Each
 NumPyro site keeps its shape, and the rightmost plate index varies fastest.</p>
 <h2 id="implementation-details">Implementation Details<a class="headerlink" href="#implementation-details" title="Permanent link">&para;</a></h2>
-<p>To support arbitrary missingness, and for efficiency, the actual implementation of the <code>LatentPathBuilder</code> differs from the simple "unrolling" mental model. In particular, the entire <code>state_path</code> is intiialized as a <code>numpyro</code> site, via an improper uniform prior. The improper uniform prior is modifying so that calling its <code>sample</code> method (for example, as used in <code>numpyro</code> MCMC samplers by default) provides draws from the actual SSM prior. In particular:</p>
+<p>To support arbitrary missingness and improve efficiency, the implementation of <code>LatentPathBuilder</code> differs from the simple "unrolling" mental model. For deterministic ODEs, <code>f_state_path_params</code> is a proper NumPyro sample site backed by the model's initial-condition distribution. For other paths, the state path is initialized through a modified improper uniform distribution whose <code>sample</code> method draws from the state-space-model prior. In particular:</p>
 <ul>
-<li>discrete <code>state_path_params</code> are drawn from the SSM prior;</li>
-<li>ODE <code>state_path_params</code> are drawn from the initial-condition prior and then
-  solved on the requested time grid;</li>
+<li>discrete <code>state_path_params</code> are drawn from the state-space-model prior;</li>
+<li>ODE <code>state_path_params</code> are drawn from the initial-condition distribution and retain a singleton leading time axis;</li>
+<li>exact-observation parameters retain only the free state coordinates; and</li>
 <li>remaining <code>missing_obs_values</code> are drawn from the observation model given the simulated state path.</li>
 </ul>
-<p>After simulation, the model is scored according to the joint log-likelihood <span class="arithmatex">\(\log p(x, y | \theta)\)</span>, and registered as a <code>numpyro</code> site <code>f_joint_log_prob_factor</code>.</p>
+<p>After simulation, the model is scored according to the joint log density <span class="arithmatex">\(\log p(x, y | \theta)\)</span>. For deterministic ODEs, the <code>f_state_path_params</code> site contributes the initial-condition density, so <code>f_joint_log_prob_factor</code> contributes only the remaining terms. For other paths, the complete joint density is registered through <code>f_joint_log_prob_factor</code>. A transformed ODE initial condition can use NumPyro's <code>TransformReparam</code> with <code>config={"f_state_path_params": TransformReparam()}</code>.</p>
 
 
 <div class="doc doc-object doc-module">

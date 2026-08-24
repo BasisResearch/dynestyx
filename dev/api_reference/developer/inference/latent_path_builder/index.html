@@ -5394,8 +5394,7 @@ contain repeated values.</p>
 <li>If NumPyro must infer missing observation values, create the
    <code>"{name}_missing_obs_values"</code> sample site and fill those values into the
    observation array.</li>
-<li>Call <code>compute_state_path_log_prob(...)</code> and add the result to the model as
-   <code>"{name}_joint_log_prob_factor"</code>.</li>
+<li>Compute the joint-density components and register the terms not already owned by a proper NumPyro sample site as <code>"{name}_joint_log_prob_factor"</code>.</li>
 <li>Record the reconstructed path and its metadata. If future times were
    requested, pass the final state to the simulator for rollout.</li>
 </ol>
@@ -5428,7 +5427,7 @@ records a calculated value. A factor adds a log-density value to the model.</p>
 <tr>
 <td><code>f_joint_log_prob_factor</code></td>
 <td>Factor</td>
-<td>Always. This is the builder's contribution to the model density.</td>
+<td>Always. For deterministic ODEs, this contains the observation terms while the proper state-path sample site contributes the initial prior; for other models it contains the complete joint density.</td>
 </tr>
 <tr>
 <td><code>f_state_path_param_times</code></td>
@@ -5468,28 +5467,29 @@ records a calculated value. A factor adds a log-density value to the model.</p>
 <tr>
 <td><code>f_joint_log_prob</code></td>
 <td>Deterministic</td>
-<td>Always. It records the value added by <code>f_joint_log_prob_factor</code>.</td>
+<td>Always. It records the complete initial, transition, and observation joint density.</td>
 </tr>
 </tbody>
 </table>
 <h2 id="sampling-and-density">Sampling and density<a class="headerlink" href="#sampling-and-density" title="Permanent link">&para;</a></h2>
-<p>The sample sites use <code>_ForwardSimulationImproperUniform</code>. This distribution has
-a log density of zero, so it does not add a second density term to the model.
-Its <code>sample(...)</code> method still returns useful initial values:</p>
+<p>For a deterministic ODE, <code>f_state_path_params</code> uses the model's initial-condition distribution with its singleton parameter-time axis reinterpreted as an event dimension. The site therefore retains the established <code>(1, *state_event_shape)</code> value shape while contributing the initial prior directly to NumPyro. The accompanying <code>f_joint_log_prob_factor</code> contains only the observation terms, avoiding double-counting, while <code>f_joint_log_prob</code> records the complete joint density.</p>
+<p>Because wrappers such as <code>Independent</code> and <code>ExpandedDistribution</code> are understood by NumPyro's reparameterization machinery, a transformed ODE initial condition can be reparameterized without changing the Dynestyx site name:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.handlers</span><span class="w"> </span><span class="kn">import</span> <span class="n">reparam</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.infer.reparam</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformReparam</span>
+
+<span class="n">reparam_model</span> <span class="o">=</span> <span class="n">reparam</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">"f_state_path_params"</span><span class="p">:</span> <span class="n">TransformReparam</span><span class="p">()},</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Other latent-path sample sites use <code>_ForwardSimulationImproperUniform</code>. This distribution has a log density of zero, so it does not add a second density term to the model. Its <code>sample(...)</code> method still returns useful initial values:</p>
 <ul>
 <li>discrete paths are sampled by forward simulation;</li>
-<li>ODE paths start with a draw from the initial-condition distribution;</li>
-<li>for exact identity observations, the complete path is simulated and only the
-  components that correspond to missing observations are kept; and</li>
-<li>missing observation values are sampled from the observation model given the
-  reconstructed state path.</li>
+<li>for exact identity observations, the complete path is simulated and only the components that correspond to missing observations are kept; and</li>
+<li>missing observation values are sampled from the observation model given the reconstructed state path.</li>
 </ul>
-<p>The builder adds the actual joint density once through
-<code>f_joint_log_prob_factor</code>. This prevents the state and observation densities
-from being counted twice.</p>
-<p>A NumPyro <code>Predictive</code> call without posterior samples therefore draws paths
-from the model prior. When posterior samples are provided, <code>Predictive</code> uses
-their stored state-path values.</p>
+<p>For these improper sites, the builder adds the actual joint density once through <code>f_joint_log_prob_factor</code>.</p>
+<p>A NumPyro <code>Predictive</code> call without posterior samples therefore draws paths from the model prior. When posterior samples are provided, <code>Predictive</code> uses their stored state-path values.</p>
 <h2 id="missing-observations">Missing observations<a class="headerlink" href="#missing-observations" title="Permanent link">&para;</a></h2>
 <p>The <code>missing_observation_strategy</code> options have the following behavior:</p>
 <ul>
