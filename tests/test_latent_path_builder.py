@@ -10,8 +10,11 @@ import numpyro
 import numpyro.distributions as dist
 import pytest
 from jaxtyping import Array
-from numpyro.handlers import seed, trace
+from numpyro.distributions.transforms import LowerCholeskyAffine
+from numpyro.handlers import reparam, seed, trace
 from numpyro.infer import MCMC, NUTS, Predictive
+from numpyro.infer.reparam import TransformReparam
+from numpyro.infer.util import log_density
 
 import dynestyx as dsx
 from dynestyx.inference.utils.distribution_utils import (
@@ -48,6 +51,33 @@ def _make_dirac_ode_dynamics():
         initial_condition=dist.Normal(0.0, 0.7),
         state_evolution=dsx.ContinuousTimeStateEvolution(drift=lambda x, u, t: 0.0 * x),
         observation_model=dsx.DiracIdentityObservation(),
+    )
+
+
+def _transformed_ode_model(obs_times=None, obs_values=None):
+    mu = numpyro.sample("mu", dist.Normal(0.0, 1.0))
+    initial_condition = dist.TransformedDistribution(
+        dist.MultivariateNormal(jnp.zeros(2), scale_tril=jnp.eye(2)),
+        LowerCholeskyAffine(
+            loc=jnp.array([mu, -mu]),
+            scale_tril=0.2 * jnp.eye(2),
+        ),
+    )
+    dynamics = dsx.DynamicalModel(
+        control_dim=0,
+        initial_condition=initial_condition,
+        state_evolution=dsx.ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: jnp.zeros_like(x)
+        ),
+        observation_model=dsx.LinearGaussianObservation(
+            H=jnp.eye(2), R=0.1 * jnp.eye(2)
+        ),
+    )
+    dsx.sample(
+        "f",
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
     )
 
 
@@ -712,7 +742,107 @@ def test_latent_path_builder_ode_prior_site_samples_initial_condition():
 
     assert tr["f_state_path_params"]["value"].shape == (1,)
     assert jnp.array_equal(tr["f_state_path_params"]["value"], jnp.array([2.5]))
+    assert not isinstance(tr["f_state_path_params"]["fn"], dist.ImproperUniform)
+    assert tr["f_state_path_params"]["fn"].event_shape == (1,)
     assert jnp.allclose(tr["f_state_path"]["value"], 2.5)
+
+
+def test_latent_path_builder_transform_reparam_matches_manual_noncentered_model():
+    obs_times = jnp.array([0.0, 0.1])
+    obs_values = jnp.array([[0.3, -0.2], [0.3, -0.2]])
+    reparam_model = reparam(
+        _transformed_ode_model,
+        config={"f_state_path_params": TransformReparam()},
+    )
+    params = {
+        "mu": jnp.array(0.25),
+        "f_state_path_params_base": jnp.array([[0.1, -0.2]]),
+    }
+
+    with dsx.LatentPathBuilder(ode_simulator_config=dsx.ODESimulatorConfig(dt0=0.05)):
+        reparam_log_density, reparam_trace = log_density(
+            reparam_model,
+            (),
+            {"obs_times": obs_times, "obs_values": obs_values},
+            params,
+        )
+
+    def manual_noncentered_model(obs_times=None, obs_values=None):
+        mu = numpyro.sample("mu", dist.Normal(0.0, 1.0))
+        z = numpyro.sample(
+            "z",
+            dist.MultivariateNormal(jnp.zeros(2), scale_tril=jnp.eye(2)).expand((1,)),
+        )
+        initial_state = jnp.array([mu, -mu]) + 0.2 * z[0]
+        numpyro.factor(
+            "observations",
+            jnp.sum(
+                dist.MultivariateNormal(
+                    initial_state, covariance_matrix=0.1 * jnp.eye(2)
+                ).log_prob(obs_values)
+            ),
+        )
+
+    manual_log_density, _ = log_density(
+        manual_noncentered_model,
+        (),
+        {"obs_times": obs_times, "obs_values": obs_values},
+        {"mu": params["mu"], "z": params["f_state_path_params_base"]},
+    )
+
+    assert "f_state_path_params_base" in reparam_trace
+    assert reparam_trace["f_state_path_params_base"]["type"] == "sample"
+    assert reparam_trace["f_state_path_params"]["type"] == "deterministic"
+    expected_initial_state = (
+        jnp.array([params["mu"], -params["mu"]])
+        + 0.2 * params["f_state_path_params_base"][0]
+    )
+    assert jnp.allclose(
+        reparam_trace["f_state_path_params"]["value"],
+        expected_initial_state[None, :],
+    )
+    assert jnp.allclose(reparam_log_density, manual_log_density)
+
+
+def test_latent_path_builder_plated_odes_use_member_initial_condition_sites():
+    obs_times = jnp.array([0.0, 0.1])
+    obs_values = jnp.array(
+        [
+            [[0.0, 0.0], [0.0, 0.0]],
+            [[1.0, -1.0], [1.0, -1.0]],
+        ]
+    )
+
+    with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+        with dsx.LatentPathBuilder(
+            ode_simulator_config=dsx.ODESimulatorConfig(dt0=0.05)
+        ):
+            with dsx.plate("members", 2):
+                dynamics = dsx.DynamicalModel(
+                    control_dim=0,
+                    initial_condition=dist.MultivariateNormal(
+                        loc=jnp.array([[0.0, 0.0], [1.0, -1.0]]),
+                        covariance_matrix=jnp.broadcast_to(0.5 * jnp.eye(2), (2, 2, 2)),
+                    ),
+                    state_evolution=dsx.ContinuousTimeStateEvolution(
+                        drift=lambda x, u, t: jnp.zeros_like(x)
+                    ),
+                    observation_model=dsx.LinearGaussianObservation(
+                        H=jnp.eye(2), R=0.1 * jnp.eye(2)
+                    ),
+                )
+                result = dsx.sample(
+                    "f",
+                    dynamics,
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+
+    assert result.state_path_params.shape == (2, 1, 2)
+    assert result.joint_log_prob.shape == (2,)
+    for member_name in ("f_p0_state_path_params", "f_p1_state_path_params"):
+        assert tr[member_name]["value"].shape == (1, 2)
+        assert not isinstance(tr[member_name]["fn"], dist.ImproperUniform)
 
 
 def test_latent_path_builder_dirac_prior_projects_only_free_coordinates():
