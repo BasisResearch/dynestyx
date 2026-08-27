@@ -36,6 +36,7 @@ nav:
       - "Part 11b: Missing observations with LatentPathBuilder + MCMC": tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc.ipynb
       - "Part 11c: Missing observations in HMMs": tutorials/gentle_intro/11c_missing_observations_hmms.ipynb
       - "Part 12: Observation scoring with filters": tutorials/gentle_intro/12_observation_scoring_with_filters.ipynb
+      - "Part 13: Localizing the ensemble Kalman filter": tutorials/gentle_intro/13_enkf_localization.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -61,6 +62,7 @@ nav:
       - Filtering of deterministic processes: deep_dives/filtering_deterministic_processes.ipynb
       - Observation scoring with a Cuthbert EnKF: deep_dives/observation_scoring_with_cuthbert_enkf.ipynb
       - Tuning EnKF covariance inflation with scoring rules: deep_dives/l63_covariance_inflation_scoring.ipynb
+      - Learning EnKF localization with scoring rules: deep_dives/l96_localization_hyperparameter_scoring.ipynb
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
       - Universal ODEs (Lotka-Volterra): deep_dives/lv_uode.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb

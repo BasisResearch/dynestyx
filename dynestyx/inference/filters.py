@@ -21,6 +21,7 @@ from dynestyx.inference.checkers import (
 )
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
+    ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -30,11 +31,16 @@ from dynestyx.inference.configs.filter import (
     DiscreteTimeConfigs,
     EKFConfig,
     EnKFConfig,
+    EnKFLocalizationConfig,
+    EnKFLocalizationFunctions,
     HMMConfig,
     HMMConfigs,
     KFConfig,
+    ModifyCrossCovariance,
+    ModifyPredictedObservationCovariance,
     PFConfig,
     PFResamplingConfig,
+    TaperCovarianceFn,
     UKFConfig,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
@@ -822,6 +828,7 @@ def _filter_continuous_time(
 
 
 __all__ = [
+    "ConstructCholInnovationCovariance",
     "ContinuousTimeKFConfig",
     "ContinuousTimeDPFConfig",
     "ContinuousTimeEnKFConfig",
@@ -829,11 +836,16 @@ __all__ = [
     "ContinuousTimeUKFConfig",
     "EKFConfig",
     "EnKFConfig",
+    "EnKFLocalizationConfig",
+    "EnKFLocalizationFunctions",
     "Filter",
     "HMMConfig",
     "HMMConfigs",
     "KFConfig",
+    "ModifyCrossCovariance",
+    "ModifyPredictedObservationCovariance",
     "PFConfig",
     "PFResamplingConfig",
+    "TaperCovarianceFn",
     "UKFConfig",
 ]

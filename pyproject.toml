@@ -31,8 +31,9 @@ classifiers = [
 ]
 dependencies = [
     "effectful>=0.4.0",
-    "cuthbert==0.0.14",
-    "cuthbertlib==0.0.14",
+    # Temporary commit pins until the EnKF localization release is published.
+    "cuthbert @ git+https://github.com/state-space-models/cuthbert.git@7a2859f00b27f9baf1c763dd8f6812899d507c56#subdirectory=pkg/cuthbert",
+    "cuthbertlib @ git+https://github.com/state-space-models/cuthbert.git@7a2859f00b27f9baf1c763dd8f6812899d507c56#subdirectory=pkg/cuthbertlib",
     "cd-dynamax>=0.4.1",
     "matplotlib>=3.10.7",
     # numpyro<0.21.0 fails to import against jax>=0.10 (removed xla_pmap_p);

@@ -3,10 +3,12 @@
 import abc
 import dataclasses
 import math
-from typing import Literal
+from collections.abc import Callable
+from typing import Any, Literal, Protocol
 
 import jax.random as jr
-from jaxtyping import PRNGKeyArray
+from cuthbertlib.types import ScalarArrayLike
+from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
@@ -20,6 +22,145 @@ FilterSource = (
     CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource | DynestyxOnlyFilterSource
 )
 CuthbertOrCDDynamaxFilterSource = CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource
+
+TaperCovarianceFn = Callable[[Array], Array]
+
+
+class ModifyCrossCovariance(Protocol):
+    """Modify an empirical state-observation cross-covariance."""
+
+    def __call__(
+        self,
+        cross_covariance: Array,
+        model_inputs: Any,
+    ) -> Array:
+        """Return a cross-covariance with the same shape as the input."""
+        ...
+
+
+class ConstructCholInnovationCovariance(Protocol):
+    """Construct a generalized factor of an EnKF innovation covariance."""
+
+    def __call__(
+        self,
+        normalized_observation_deviations: Array,
+        chol_observation_covariance: Array,
+        model_inputs: Any,
+    ) -> Array:
+        """Return an observation-by-observation innovation factor."""
+        ...
+
+
+class ModifyPredictedObservationCovariance(Protocol):
+    """Modify an empirical covariance used for predictive scoring."""
+
+    def __call__(
+        self,
+        predicted_observation_covariance: Array,
+        model_inputs: Any,
+    ) -> Array:
+        """Return a predictive covariance with the same shape as the input."""
+        ...
+
+
+@dataclasses.dataclass
+class EnKFLocalizationConfig:
+    r"""Distance-based covariance localization for a discrete-time EnKF.
+
+    The state-observation taper modifies the empirical cross-covariance used
+    in every EnKF update. Supplying ``observation_distances`` additionally
+    localizes the empirical observation covariance in the innovation matrix
+    and in Dynestyx predictive-observation scores.
+
+    Built-in ``"gaspari_cohn"`` and ``"gaussian"`` tapers require a positive
+    scalar ``taper_scale``. A custom callable receives a distance matrix and
+    must close over any hyperparameters itself, so ``taper_scale`` must then be
+    ``None``. Custom callables may close over JAX tracers and remain
+    differentiable.
+
+    Attributes:
+        state_observation_distances: Matrix with shape
+            ``(state_dim, observation_dim)``.
+        taper_scale: Full support radius for Gaspari-Cohn or length scale for
+            the Gaussian taper. Must be ``None`` for a custom taper callable.
+        taper: Built-in taper name or a callable mapping distances to taper
+            values with the same shape.
+        observation_distances: Optional symmetric observation-by-observation
+            distance matrix with a zero diagonal. When omitted, only the
+            state-observation cross-covariance is localized.
+    """
+
+    state_observation_distances: ArrayLike
+    taper_scale: ScalarArrayLike | None = None
+    taper: Literal["gaspari_cohn", "gaussian"] | TaperCovarianceFn = "gaspari_cohn"
+    observation_distances: ArrayLike | None = None
+
+    def __post_init__(self):
+        if callable(self.taper):
+            if self.taper_scale is not None:
+                raise ValueError(
+                    "EnKFLocalizationConfig with a custom taper callable requires "
+                    "taper_scale=None; close over custom hyperparameters in the callable."
+                )
+            return
+
+        if not isinstance(self.taper, str) or self.taper not in {
+            "gaspari_cohn",
+            "gaussian",
+        }:
+            raise ValueError(
+                "Unsupported EnKF localization taper "
+                f"{self.taper!r}; expected 'gaspari_cohn', 'gaussian', or a callable."
+            )
+        if self.taper_scale is None:
+            raise ValueError(
+                f"EnKFLocalizationConfig(taper={self.taper!r}) requires a positive "
+                "scalar taper_scale."
+            )
+        if getattr(self.taper_scale, "shape", ()) != ():
+            raise ValueError("EnKF localization taper_scale must be a scalar.")
+
+
+@dataclasses.dataclass
+class EnKFLocalizationFunctions:
+    """Advanced callback-based localization for a discrete-time EnKF.
+
+    The first two callbacks follow Cuthbert's high-level EnKF callback
+    signatures. The predictive covariance callback receives the raw empirical
+    observation covariance and the same per-time model inputs. An innovation
+    constructor and predictive covariance modifier must be supplied together
+    so filtering likelihoods and Dynestyx predictive scores use consistent
+    covariance localization.
+    """
+
+    modify_cross_covariance: ModifyCrossCovariance | None = None
+    construct_chol_innovation_covariance: ConstructCholInnovationCovariance | None = (
+        None
+    )
+    modify_predicted_observation_covariance: (
+        ModifyPredictedObservationCovariance | None
+    ) = None
+
+    def __post_init__(self):
+        callbacks = (
+            self.modify_cross_covariance,
+            self.construct_chol_innovation_covariance,
+            self.modify_predicted_observation_covariance,
+        )
+        if all(callback is None for callback in callbacks):
+            raise ValueError(
+                "EnKFLocalizationFunctions requires at least one localization callback."
+            )
+        for callback in callbacks:
+            if callback is not None and not callable(callback):
+                raise TypeError("EnKF localization callbacks must be callable or None.")
+        if (self.construct_chol_innovation_covariance is None) != (
+            self.modify_predicted_observation_covariance is None
+        ):
+            raise ValueError(
+                "construct_chol_innovation_covariance and "
+                "modify_predicted_observation_covariance must be supplied together."
+            )
 
 
 @dataclasses.dataclass
@@ -134,6 +275,11 @@ class EnKFConfig(BaseFilterConfig):
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
             `None` disables inflation.
+        localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
+            Optional structured covariance localization. Distance-based
+            localization provides built-in Gaussian and Gaspari-Cohn tapers or
+            accepts a custom covariance callable. Advanced users can instead
+            supply Cuthbert-compatible callbacks.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
@@ -185,7 +331,30 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
+    localization: EnKFLocalizationConfig | EnKFLocalizationFunctions | None = None
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+    def __post_init__(self):
+        if self.localization is not None and not isinstance(
+            self.localization,
+            EnKFLocalizationConfig | EnKFLocalizationFunctions,
+        ):
+            raise TypeError(
+                "EnKFConfig.localization must be EnKFLocalizationConfig, "
+                "EnKFLocalizationFunctions, or None."
+            )
+        reserved_hooks = {
+            "modify_cross_covariance",
+            "construct_chol_innovation_covariance",
+            "modify_predicted_observation_covariance",
+        }
+        conflicts = sorted(reserved_hooks.intersection(self.extra_filter_kwargs))
+        if conflicts:
+            raise ValueError(
+                "EnKF localization callback names are reserved in "
+                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
+                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
+            )
 
 
 @dataclasses.dataclass
@@ -579,6 +748,10 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
 
     Does not support missing observations (data cannot have NaNs).
 
+    Localization is not available in this continuous-time backend. To localize
+    a deterministic continuous-time model, wrap it in `Discretizer` and use
+    the Cuthbert-backed discrete `EnKFConfig`.
+
     See `EnKFConfig` for particle/ensemble tuning options and
     `ContinuousTimeConfig` for solver options.
 
@@ -598,6 +771,15 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
     """
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.localization is not None:
+            raise ValueError(
+                "ContinuousTimeEnKFConfig does not support localization. Wrap the "
+                "continuous model in Discretizer and use the Cuthbert-backed "
+                "discrete EnKFConfig instead."
+            )
 
 
 @dataclasses.dataclass
