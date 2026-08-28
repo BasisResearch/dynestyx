@@ -1,157 +1,149 @@
+"""Configuration-driven discretization of continuous-time models."""
+
 from typing import Any
 
-import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
+from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
+from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
+from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.inference.configs.discretizer import (
+    BaseDiscretizerConfig,
+    DiffraxSampleConfig,
+    DiscretizerConfig,
+    EulerMaruyamaConfig,
+    ExactAffineConfig,
+    LocalLinearizationConfig,
+    MeanTrajectoryLinearizationConfig,
+    ODEFlowConfig,
+)
 from dynestyx.models import (
+    AffineDrift,
+    DeterministicContinuousTimeStateEvolution,
+    DiscreteTimeStateEvolution,
     DynamicalModel,
-    GaussianStateEvolution,
     StochasticContinuousTimeStateEvolution,
 )
-from dynestyx.solvers import euler_maruyama_loc_cov
+from dynestyx.models.core import StateEvolutionLike
 
 
-class EulerMaruyamaGaussianStateEvolution(GaussianStateEvolution):
-    """`GaussianStateEvolution` backed by Euler-Maruyama moments."""
-
-    cte: StochasticContinuousTimeStateEvolution
-
-    def __init__(
-        self,
-        cte: StochasticContinuousTimeStateEvolution,
-        F=None,
-        cov=None,
+def _automatic_discretizer_config(
+    cte: DeterministicContinuousTimeStateEvolution
+    | StochasticContinuousTimeStateEvolution,
+) -> DiscretizerConfig:
+    if isinstance(cte, DeterministicContinuousTimeStateEvolution):
+        return ODEFlowConfig()
+    if (
+        isinstance(cte.drift, AffineDrift)
+        and cte.potential is None
+        and not callable(cte.diffusion.coefficient)
     ):
-        # Accept these for reconstruction paths, but derive both from `cte`.
-        self.cte = cte
+        return ExactAffineConfig()
+    return EulerMaruyamaConfig()
 
-        def _loc(x, u, t_now, t_next):
-            return euler_maruyama_loc_cov(cte, x, u, t_now, t_next)["loc"]
 
-        def _cov(x, u, t_now, t_next):
-            return euler_maruyama_loc_cov(cte, x, u, t_now, t_next)["cov"]
-
-        super().__init__(
-            F=_loc,
-            cov=_cov,
+def _discretize_state_evolution(
+    cte: StateEvolutionLike,
+    config: BaseDiscretizerConfig | None = None,
+) -> DiscreteTimeStateEvolution:
+    """Build the private discrete transition selected by a config."""
+    if not isinstance(
+        cte,
+        (
+            DeterministicContinuousTimeStateEvolution,
+            StochasticContinuousTimeStateEvolution,
+        ),
+    ):
+        raise TypeError(
+            "Discretizer configs require a continuous-time state "
+            f"evolution; got {type(cte).__name__}."
         )
-
-    def __call__(self, x, u, t_now, t_next):
-        """Single-pass transition step (or batched time steps)."""
-        em_result = euler_maruyama_loc_cov(self.cte, x, u, t_now, t_next)
-        return dist.MultivariateNormal(
-            loc=em_result["loc"], covariance_matrix=em_result["cov"]
+    resolved = _automatic_discretizer_config(cte) if config is None else config
+    if isinstance(cte, DeterministicContinuousTimeStateEvolution):
+        if isinstance(resolved, ODEFlowConfig):
+            return _ODEFlowStateEvolution(cte, resolved)
+        raise TypeError(
+            f"{type(resolved).__name__} requires a stochastic continuous-time "
+            "state evolution; got DeterministicContinuousTimeStateEvolution."
         )
-
-
-def euler_maruyama(
-    cte: StochasticContinuousTimeStateEvolution,
-) -> GaussianStateEvolution:
-    """Discretize continuous-time state evolution via Euler-Maruyama.
-
-    Euler-Maruyama is a first-order discrete approximation of a continuous-time
-    SDE. The result is a `GaussianStateEvolution` with mean
-    `x + drift(x,u,t)*dt` and covariance `(L@Q@L.T)*dt` (`Q = I`),
-    where `dt = t_next - t_now`. The process covariance is **time-varying**
-    (depends on `t_next - t_now`) and passed as a callable `cov`.
-
-    Args:
-        cte: `StochasticContinuousTimeStateEvolution` to discretize.
-    Returns:
-        GaussianStateEvolution: Discrete-time Gaussian transition with the
-        same Euler–Maruyama semantics as before this refactor.
-
-    Note:
-        Each transition uses one Euler-Maruyama step with
-        `dt = t_next - t_now`.
-
-    ??? note "Algorithm Reference"
-        The Euler Maruyama is a first order discretization.
-        The resulting discrete-time state evolution is approximated as
-
-        x_{t+1} ~ N(x_t + drift * delta_t, (L@Q@L.T)*delta_t)
-
-        where:
-            x_t is the current state
-            drift is the drift function
-            L is the diffusion coefficient
-            Q is the diffusion covariance
-            delta_t is the time step between timepoints (t_next - t_now)
-
-        This is the first-order Ito-Taylor approximation.
-
-        References:
-            - This is the first-order Ito-Taylor approximation, discussed in Chapter 9.2 of: Särkkä, S., & Solin, A. (2019).
-                Applied Stochastic Differential Equations. Cambridge University Press.
-                [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
-    """
-
-    return EulerMaruyamaGaussianStateEvolution(cte)
+    if isinstance(resolved, ODEFlowConfig):
+        raise TypeError(
+            "ODEFlowConfig requires a deterministic continuous-time state "
+            "evolution; got StochasticContinuousTimeStateEvolution."
+        )
+    if isinstance(resolved, ExactAffineConfig):
+        return _ExactAffineStateEvolution(
+            cte,
+            covariance_jitter=resolved.covariance_jitter,
+        )
+    if isinstance(resolved, DiffraxSampleConfig):
+        return _DiffraxSampleStateEvolution(cte, resolved)
+    if isinstance(
+        resolved,
+        (
+            EulerMaruyamaConfig,
+            LocalLinearizationConfig,
+            MeanTrajectoryLinearizationConfig,
+        ),
+    ):
+        if isinstance(resolved, LocalLinearizationConfig) and callable(
+            cte.diffusion.coefficient
+        ):
+            raise TypeError(
+                "LocalLinearizationConfig requires structurally constant "
+                "additive diffusion."
+            )
+        return _ConfiguredGaussianStateEvolution(cte, resolved)
+    raise TypeError(
+        "discretizer_config must be a concrete BaseDiscretizerConfig; "
+        f"got {type(resolved).__name__}."
+    )
 
 
 class Discretizer(ObjectInterpretation, HandlesSelf):
-    """
-    Performs discretization of a continuous-time state evolution, converting it to a discrete-time state evolution.
+    r"""Performs discretization of a continuous-time state evolution, converting it to a discrete-time state evolution.
 
-    A `Discretizer` object should be used as a context manager around a call to a model with a `dsx.sample(...)`
-    statement to discretize a continuous-time state evolution to a discrete-time state evolution. The `Discretizer`
-    should be at a lower (i.e. inner) level in the current context stack than any inference (e.g., `Filter` or `Simulator`)
-    objects.
+    A `Discretizer` interpretation should be used inside an inference or simulation context. The outside inference/simulation
+    context may then use the resulting `DiscreteTimeStateEvolution`:
 
-    ??? example "Using a Euler Maruyama Discretizer"
-        ```python
-        import dynestyx as dsx
-        from dynestyx.discretizers import Discretizer, euler_maruyama
-        from dynestyx.inference.filters import Filter, EKFConfig
-        from dynestyx.models import (
-            ContinuousTimeStateEvolution,
-            DiscreteTimeStateEvolution,
-            DynamicalModel,
-            FullDiffusion,
-        )
+    ```python
+    from dynestyx.discretizers import (
+        Discretizer,
+        EnKFConfig,
+        Filter,
+        MeanTrajectoryLinearizationConfig,
+    )
+    with Filter(EnKFConfig()):
+        with Discretizer(MeanTrajectoryLinearizationConfig()):
+            model(...)
+    ```
 
-        def model_with_ctse(obs_times=None, obs_values=None):
-            dynamics = DynamicalModel(
-                control_dim=0,
-                initial_condition=dist.MultivariateNormal(
-                    loc=jnp.zeros(state_dim),
-                    covariance_matrix=jnp.eye(state_dim),
-                ),
-                state_evolution=ContinuousTimeStateEvolution(
-                    drift=lambda x, u, t: x,
-                    diffusion=FullDiffusion(
-                        lambda x, u, t: jnp.eye(state_dim, bm_dim)
-                    ),
-                ),
-                observation_model=lambda x, u, t: dist.MultivariateNormal(
-                    x,
-                    0.1**2 * jnp.eye(observation_dim),
-                ),
-            )
-            return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
-
-        def discretized_data_conditioned_model():
-            # We use a discrete-time filter now
-            with Filter(filter_config=EKFConfig()):
-                with Discretizer(discretize=euler_maruyama):
-                    return model_with_ctse(obs_times=obs_times, obs_values=obs_values)
-        ```
-
-    ??? note "Algorithm Reference"
-        For an overview of discretization methods for SDEs, see Chapter 9 of: Särkkä, S., & Solin, A. (2019).
-        Applied Stochastic Differential Equations. Cambridge University Press.
-        [Available Online](https://users.aalto.fi/~asolin/sde-book/sde-book.pdf).
+    When no config is provided, ODE models use their numerical flow, SDE models
+    with an affine drift use an exact Gaussian discretization, and other SDE
+    models use Euler--Maruyama.
 
     Attributes:
-        discretize: A callable that converts a continuous-time state evolution to a discrete-time state evolution. Defaults to euler_maruyama.
+        discretizer_config: Explicit discretization config, or `None` for
+            automatic routing.
     """
 
-    def __init__(self, discretize=euler_maruyama):
+    def __init__(
+        self,
+        discretizer_config: BaseDiscretizerConfig | None = None,
+    ):
         super().__init__()
-        self.discretize = discretize
+        if discretizer_config is not None and not isinstance(
+            discretizer_config, BaseDiscretizerConfig
+        ):
+            raise TypeError(
+                "discretizer_config must be a BaseDiscretizerConfig or None, "
+                f"got {type(discretizer_config).__name__}."
+            )
+        self.discretizer_config = discretizer_config
 
     @implements(_condition_intp)
     def _sample_ds(
@@ -170,11 +162,19 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         | None = None,
         **kwargs,
     ) -> Any:
-        if isinstance(dynamics.state_evolution, StochasticContinuousTimeStateEvolution):
-            discrete_evolution = self.discretize(dynamics.state_evolution)
+        if isinstance(
+            dynamics.state_evolution,
+            (
+                DeterministicContinuousTimeStateEvolution,
+                StochasticContinuousTimeStateEvolution,
+            ),
+        ):
             dynamics = DynamicalModel(
                 initial_condition=dynamics.initial_condition,
-                state_evolution=discrete_evolution,
+                state_evolution=_discretize_state_evolution(
+                    dynamics.state_evolution,
+                    self.discretizer_config,
+                ),
                 observation_model=dynamics.observation_model,
                 control_model=dynamics.control_model,
                 control_dim=dynamics.control_dim,
@@ -190,3 +190,16 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
             ctrl_values=ctrl_values,
             **kwargs,
         )
+
+
+__all__ = [
+    "BaseDiscretizerConfig",
+    "DiffraxSampleConfig",
+    "Discretizer",
+    "DiscretizerConfig",
+    "EulerMaruyamaConfig",
+    "ExactAffineConfig",
+    "LocalLinearizationConfig",
+    "MeanTrajectoryLinearizationConfig",
+    "ODEFlowConfig",
+]

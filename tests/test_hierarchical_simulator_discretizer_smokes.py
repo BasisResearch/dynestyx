@@ -37,8 +37,8 @@ from dynestyx.models import (
     GaussianStateEvolution,
     LinearGaussianObservation,
 )
+from dynestyx.models.drifts import AffineDrift
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
-from dynestyx.models.state_evolution import AffineDrift
 from tests.test_utils import (
     assert_trace_sites_exist_and_field_all_finite,
     assert_tree_all_finite,

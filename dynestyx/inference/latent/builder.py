@@ -57,7 +57,7 @@ from dynestyx.observation_missingness import (
 )
 from dynestyx.simulation.discrete import _sample_discrete_state_path
 from dynestyx.simulation.utils import _sample_observation_path
-from dynestyx.types import LatentStateResult
+from dynestyx.types import ConditionedResult, LatentStateResult
 from dynestyx.utils import _build_control_path_eval
 
 _MissingObservationMetadataCache = dict[
@@ -453,13 +453,22 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 )
             )
 
-        state_path_param_site = numpyro.sample(
-            f"{name}_state_path_params",
-            _ForwardSimulationImproperUniform(
+        proper_initial_condition_site = not exact_observations and isinstance(
+            dynamics.state_evolution,
+            DeterministicContinuousTimeStateEvolution,
+        )
+        state_path_param_dist = (
+            dynamics.initial_condition.expand((1,)).to_event(1)
+            if proper_initial_condition_site
+            else _ForwardSimulationImproperUniform(
                 state_forward_sampler,
                 event_shape=state_event_shape,
                 sample_transform=state_sample_transform,
-            ),
+            )
+        )
+        state_path_param_site = numpyro.sample(
+            f"{name}_state_path_params",
+            state_path_param_dist,
             obs=validated_state_path_params,
         )
 
@@ -548,8 +557,13 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             chunk_size=self.chunk_size,
             observations_are_exact_constraints=exact_observations,
         )
+        factor_log_prob = (
+            joint_log_prob - dynamics.initial_condition.log_prob(state_path[0])
+            if proper_initial_condition_site
+            else joint_log_prob
+        )
 
-        numpyro.factor(f"{name}_joint_log_prob_factor", joint_log_prob)
+        numpyro.factor(f"{name}_joint_log_prob_factor", factor_log_prob)
         numpyro.deterministic(
             f"{name}_state_path_param_times",
             state_path_param_times,
@@ -773,18 +787,24 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
                 "not implemented yet."
             ),
         )
-        filtered_times = None
-        filtered_dists = None
-        posterior_rollout_final_only = False
-        smoothed_times = result.state_path_times
-        smoothed_dists = result.state_dists
-        if predict_times is not None and smoothed_dists:
+        smoothed_result = (
+            None
+            if result.state_dists is None
+            else ConditionedResult(
+                times=result.state_path_times,
+                dists=result.state_dists,
+            )
+        )
+        posterior_rollout_final_only = predict_times is not None and bool(
+            result.state_dists
+        )
+        if posterior_rollout_final_only:
             assert result.state_path_times is not None
-            filtered_times = _final_times_for_rollout(result.state_path_times)
-            filtered_dists = [smoothed_dists[-1]]
-            posterior_rollout_final_only = True
-            smoothed_times = None
-            smoothed_dists = None
+            assert result.state_dists is not None
+            smoothed_result = ConditionedResult(
+                times=_final_times_for_rollout(result.state_path_times),
+                dists=[result.state_dists[-1]],
+            )
 
         forwarded_result = fwd(
             name,
@@ -795,10 +815,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             predict_times=predict_times,
-            filtered_times=filtered_times,
-            filtered_dists=filtered_dists,
-            smoothed_times=smoothed_times,
-            smoothed_dists=smoothed_dists,
+            filtered_result=None,
+            smoothed_result=smoothed_result,
             _posterior_rollout_final_only=posterior_rollout_final_only,
             **kwargs,
         )

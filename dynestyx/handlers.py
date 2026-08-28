@@ -187,8 +187,9 @@ def condition(
 ):
     """Run inference on a dynamical model without registering numpyro sites.
 
-    This is the numpyro-free entry point. When a Filter or Smoother handler
-    is active, returns a ConditionedResult dataclass with marginal_loglik, states, etc.
+    This is the NumPyro-free entry point. An active ``Filter`` or ``Smoother``
+    returns a ``ConditionedResult`` carrying the inference times, marginal log
+    likelihood, backend states, and per-time distributions.
 
     Parameters:
         name: Name of the inference site.

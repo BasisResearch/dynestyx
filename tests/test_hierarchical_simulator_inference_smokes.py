@@ -19,7 +19,7 @@ from dynestyx.models import (
     GaussianStateEvolution,
     LinearGaussianObservation,
 )
-from dynestyx.models.state_evolution import AffineDrift
+from dynestyx.models.drifts import AffineDrift
 
 # ---------------------------------------------------------------------------
 # Discrete-time nonlinear model (reused from hierarchical simulator smokes)

@@ -8,7 +8,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array
-from jaxtyping import Real, Shaped
+from jaxtyping import Real
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
@@ -21,10 +21,12 @@ from dynestyx.models.checkers import (
     _validate_continuous_state_evolution,
     _validate_continuous_time_flag,
     _validate_discrete_state_evolution_output_shape,
+    _validate_imex_potential_conflict,
     _validate_observation_dim,
     _validate_state_dim,
 )
 from dynestyx.models.diffusions import Diffusion
+from dynestyx.models.drifts import Drift, Potential
 from dynestyx.types import as_scalar_time_array
 
 
@@ -232,6 +234,12 @@ class DynamicalModel(eqx.Module):
                 diffusion=resolved_diffusion,
             )
 
+        if self.continuous_time:
+            # Needs no shape/probe data, so unlike the checks below it must
+            # run unconditionally -- including inside dsx.plate, where those
+            # shape checks are skipped.
+            _validate_imex_potential_conflict(state_evolution)
+
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.
@@ -280,85 +288,6 @@ class DynamicalModel(eqx.Module):
         self.categorical_state = bool(inferred_categorical_state)
 
 
-class Drift(Protocol):
-    """
-    Drift vector field for continuous-time state evolution.
-
-    Mathematically, the drift is a mapping
-    $\\mu: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
-    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto \\mu(x, u, t)$.
-    In the SDE formulation used by `ContinuousTimeStateEvolution`,
-    $dx_t = \\mu(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
-    mapping forms the $\\mu$ term.
-
-    Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
-    `jax.vmap`, and `jax.grad` when differentiable).
-
-    Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
-        t (Time): Current time (scalar or array).
-
-    Returns:
-        dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
-
-    Note:
-        This is a protocol interface; implement this callable signature; do not instantiate.
-        We recommend simply using a plain Python function that matches this signature, e.g.:
-
-        ```python
-        def drift(x, u, t):
-            return - x + u
-        ```
-        or `lambda x, u, t: - x + u`
-    """
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
-        raise NotImplementedError()
-
-
-class Potential(Protocol):
-    """
-    Scalar potential energy for gradient-based drift.
-
-    A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
-    gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling
-    Langevin-type dynamics. It is used in `ContinuousTimeStateEvolution` when
-    `potential` is set; the sign is controlled by `use_negative_gradient`.
-
-    Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
-        t (Time): Current time.
-
-    Returns:
-        jax.Array: Scalar potential value $V(x, u, t) \\in \\mathbb{R}$.
-
-    Note:
-        This is a protocol interface; implement this callable signature; do not instantiate.
-        We recommend simply using a plain Python function that matches this signature, e.g.:
-
-        ```python
-        def potential(x, u, t):
-            return x[0]**2 + x[1]**2 + x[2]**2
-        ```
-        or `lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2`
-    """
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Shaped[Array, ""]:
-        raise NotImplementedError()
-
-
 class ContinuousTimeStateEvolution(eqx.Module):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
@@ -366,16 +295,16 @@ class ContinuousTimeStateEvolution(eqx.Module):
     The state evolves according to
 
     $$
-    dx_t = \\bigl[ \\mu(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
+    dx_t = \\bigl[ f(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
          + L(x_t, u_t, t) \\, dW_t
     $$
 
-    where $\\mu$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
+    where $f$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
     coefficient. The sign $s$ is $-1$ when `use_negative_gradient` is True (e.g., for
     Langevin dynamics) and $+1$ otherwise.
 
     Attributes:
-        drift (Drift | None): Drift vector field $\\mu(x, u, t)$.
+        drift (Drift | None): Drift vector field $f(x, u, t)$.
             Defaults to zero if None.
             At least one of `drift` or `potential` must be non-None.
         potential (Potential | None): Scalar potential $V(x, u, t)$ whose gradient is added to the drift.
@@ -386,6 +315,11 @@ class ContinuousTimeStateEvolution(eqx.Module):
         diffusion (Diffusion | None): Diffusion coefficient object.
             Use `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion` to define
             the stochastic part of the SDE. Pass `None` for deterministic dynamics.
+
+    Note:
+        For IMEX (implicit-explicit) diffrax solvers (e.g. `diffrax.KenCarp3/4/5`,
+        `diffrax.Sil3`), pass an `ImExDrift` instance as `drift` instead of a
+        plain callable; see `dynestyx.models.drifts.ImExDrift`.
     """
 
     drift: Drift | None = None
@@ -496,7 +430,11 @@ class DiscreteTimeStateEvolution(eqx.Module):
     $$
 
     Implementations must return a NumPyro-compatible distribution (e.g.,
-    `numpyro.distributions.Distribution`) that can be sampled and evaluated.
+    `numpyro.distributions.Distribution`). Most transitions provide sampling,
+    moments, and `log_prob`; explicitly sample-only transitions are also valid
+    for simulators, ensemble filters, and bootstrap particle filters that never
+    evaluate the transition density. Such transitions should raise a targeted
+    error when an unavailable moment or density is requested.
 
     Args:
         x (State): Current state $x \\in \\mathbb{R}^{d_x}$.

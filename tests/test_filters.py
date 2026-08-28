@@ -231,6 +231,123 @@ def test_compute_cuthbert_filter_can_return_raw_cuthbert_states():
     )
 
 
+def test_cuthbert_enkf_prediction_storage_follows_collection_and_explicit_override():
+    obs_times, obs_values = _make_discrete_lti_data()
+    dynamics = _make_discrete_lti_dynamics()
+    key = jr.PRNGKey(17)
+
+    def run_filter(
+        filter_config: EnKFConfig,
+        *,
+        store_predicted_ensemble: bool | None = None,
+    ):
+        return compute_cuthbert_filter(
+            dynamics,
+            filter_config,
+            key,
+            obs_times=obs_times,
+            obs_values=obs_values,
+            store_predicted_ensemble=store_predicted_ensemble,
+        )
+
+    loglik_disabled, states_disabled = run_filter(
+        EnKFConfig(
+            n_particles=16,
+            include_predicted_observations=False,
+        ),
+    )
+    loglik_enabled, states_enabled = run_filter(
+        EnKFConfig(
+            n_particles=16,
+            include_predicted_observations=True,
+        ),
+    )
+    loglik_forced_disabled, states_forced_disabled = run_filter(
+        EnKFConfig(
+            n_particles=16,
+            include_predicted_observations=True,
+        ),
+        store_predicted_ensemble=False,
+    )
+    loglik_forced_enabled, states_forced_enabled = run_filter(
+        EnKFConfig(
+            n_particles=16,
+            include_predicted_observations=False,
+        ),
+        store_predicted_ensemble=True,
+    )
+
+    assert states_disabled.predicted_ensemble is None
+    assert states_forced_disabled.predicted_ensemble is None
+    assert states_enabled.predicted_ensemble.shape == (
+        len(obs_times),
+        16,
+        dynamics.state_dim,
+    )
+    assert states_forced_enabled.predicted_ensemble.shape == (
+        len(obs_times),
+        16,
+        dynamics.state_dim,
+    )
+
+    for loglik in (
+        loglik_enabled,
+        loglik_forced_disabled,
+        loglik_forced_enabled,
+    ):
+        assert jnp.array_equal(loglik, loglik_disabled)
+    for states in (
+        states_enabled,
+        states_forced_disabled,
+        states_forced_enabled,
+    ):
+        assert jnp.array_equal(states.ensemble, states_disabled.ensemble)
+
+
+def test_cuthbert_enkf_predicted_ensemble_drops_only_the_leading_dummy_step():
+    obs_times, obs_values = _make_discrete_lti_data()
+    dynamics = _make_discrete_lti_dynamics()
+    filter_config = EnKFConfig(
+        n_particles=16,
+        include_predicted_observations=False,
+    )
+
+    def run_filter(*, align_to_observations: bool = True):
+        return compute_cuthbert_filter(
+            dynamics,
+            filter_config,
+            jr.PRNGKey(23),
+            obs_times=obs_times,
+            obs_values=obs_values,
+            store_predicted_ensemble=True,
+            align_to_observations=align_to_observations,
+        )
+
+    _, aligned = run_filter()
+    _, raw = run_filter(align_to_observations=False)
+
+    assert aligned.predicted_ensemble.shape == (
+        len(obs_times),
+        filter_config.n_particles,
+        dynamics.state_dim,
+    )
+    assert raw.predicted_ensemble.shape == (
+        len(obs_times) + 1,
+        filter_config.n_particles,
+        dynamics.state_dim,
+    )
+    assert jnp.array_equal(
+        aligned.predicted_ensemble,
+        raw.predicted_ensemble[1:],
+    )
+    assert jnp.array_equal(aligned.model_inputs.time, obs_times)
+    assert jnp.array_equal(aligned.model_inputs.y, obs_values)
+    assert not jnp.allclose(
+        aligned.predicted_ensemble[0],
+        aligned.ensemble[0],
+    )
+
+
 @pytest.mark.parametrize(
     "filter_config",
     [

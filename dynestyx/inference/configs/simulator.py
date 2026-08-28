@@ -20,7 +20,15 @@ class ODESimulatorConfig:
         solver (diffrax.AbstractSolver): Diffrax solver used for integration.
             Defaults to `diffrax.Tsit5()`. See Diffrax's
             [solver guide](https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/)
-            when selecting an alternative.
+            when selecting an alternative. IMEX solvers (e.g. `diffrax.KenCarp3/4/5`,
+            `diffrax.Sil3`) are supported, but require the state evolution's
+            `drift` to be an `ImExDrift` instance (see
+            `dynestyx.models.drifts.ImExDrift`), splitting the vector
+            field into `explicit_term`/`implicit_term`; conversely, using a
+            plain (non-`ImExDrift`) `drift` with an IMEX solver raises an
+            error. Using an `ImExDrift` with a non-IMEX solver is allowed
+            (both terms are summed) but emits a warning, since the split
+            goes unused.
         adjoint (diffrax.AbstractAdjoint): Strategy used to differentiate
             through the solve. Defaults to
             `diffrax.RecursiveCheckpointAdjoint()`.
@@ -33,6 +41,9 @@ class ODESimulatorConfig:
             this is the fixed integration step. Defaults to `1e-3`.
         max_steps (int): Maximum number of integration steps permitted by
             `diffrax.diffeqsolve`. Defaults to `100_000`.
+        throw (bool): Whether Diffrax raises when a solve fails. Set this to
+            `False` when inference should reject invalid parameter proposals
+            instead of aborting the complete run. Defaults to `True`.
 
     Properties:
         diffeqsolve_settings (dict[str, Any]): Normalized keyword arguments passed
@@ -49,6 +60,7 @@ class ODESimulatorConfig:
     )
     dt0: float | int | Real[Array, ""] = 1e-3
     max_steps: int = 100_000
+    throw: bool = True
 
     @property
     def diffeqsolve_settings(self) -> dict[str, Any]:
@@ -59,6 +71,7 @@ class ODESimulatorConfig:
             "adjoint": self.adjoint,
             "dt0": as_scalar_time_array(self.dt0, name="dt0"),
             "max_steps": self.max_steps,
+            "throw": self.throw,
         }
 
 
@@ -69,7 +82,7 @@ class SDESimulatorConfig:
 
     !! Note: The choice of solver can imply convergence to different paths
        for the same model. For example, the default `diffrax.Heun()` converges
-       to the Stratonovich SDE, while `diffrax.EulerMaruyama()` converges to the Ito SDE.
+       to the Stratonovich SDE, while `diffrax.Euler()` converges to the Itô SDE.
        This likely doesn't matter for most models, but can cause issues with state-dependent diffusions.
 
     Attributes:

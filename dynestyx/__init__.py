@@ -5,7 +5,8 @@ from importlib.metadata import version
 __version__ = version("dynestyx")
 
 from dynestyx.api import log_prob, simulate
-from dynestyx.discretizers import Discretizer, euler_maruyama
+from dynestyx.discretizers import Discretizer
+from dynestyx.evaluation import Evaluation, ObservationScoringConfig
 from dynestyx.handlers import condition, plate, sample
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
@@ -27,6 +28,7 @@ from dynestyx.models import (
     FullDiffusion,
     GaussianObservation,
     GaussianStateEvolution,
+    ImExDrift,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
     LinearGaussianParams,
@@ -47,7 +49,7 @@ from dynestyx.simulation import (
     SDESimulator,
     Simulator,
 )
-from dynestyx.types import ConditionedResult, SimulatedResult
+from dynestyx.types import ConditionedResult, EvaluationResult, SimulatedResult
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -62,6 +64,7 @@ __all__ = [
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
     "AffineDrift",
+    "ImExDrift",
     "LTI_continuous",
     "LTI_discrete",
     "LinearGaussianParams",
@@ -70,12 +73,15 @@ __all__ = [
     "Discretizer",
     "ObservationModel",
     "Filter",
+    "Evaluation",
     "LatentPathBuilder",
     "MissingObservationMetadata",
     "Smoother",
     "flatten_draws",
     "condition",
     "ConditionedResult",
+    "EvaluationResult",
+    "ObservationScoringConfig",
     "SimulatedResult",
     "log_prob",
     "plate",
@@ -93,5 +99,4 @@ __all__ = [
     "ODESimulator",
     "SDESimulator",
     "Simulator",
-    "euler_maruyama",
 ]

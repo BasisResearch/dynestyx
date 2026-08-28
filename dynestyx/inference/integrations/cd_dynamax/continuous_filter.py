@@ -26,6 +26,9 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.observation_predictions import (
+    wants_observation_prediction_diagnostics,
+)
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
@@ -47,6 +50,7 @@ def _config_to_cd_dynamax_filter_kwargs(
     obs_times: Real[Array, "obs_time 1"],
     ctrl_values: Real[Array, "ctrl_time control_dim"],
     key: PRNGKeyArray | None,
+    output_fields: list[str] | None,
 ) -> dict[str, Any]:
     """Build the filter_kwargs dict passed to cd_dynamax_model.filter()."""
 
@@ -71,13 +75,12 @@ def _config_to_cd_dynamax_filter_kwargs(
         "diffeqsolve_kwargs": config.diffeqsolve_kwargs,
         "extra_filter_kwargs": config.extra_filter_kwargs,
         "warn": config.warn,
+        "output_fields": output_fields,
     }
     if isinstance(config, ContinuousTimeEnKFConfig):
         base["filter_type"] = "EnKF"
         base["enkf_N_particles"] = config.n_particles
-        base["enkf_inflation_delta"] = (
-            config.inflation_delta if config.inflation_delta is not None else 0.0
-        )
+        base["enkf_inflation_delta"] = config.inflation_delta
         base["extra_filter_kwargs"] = {
             "perturb_measurements": config.perturb_measurements
             if config.perturb_measurements is not None
@@ -112,12 +115,42 @@ def _config_to_cd_dynamax_filter_kwargs(
     return base
 
 
+def _continuous_filter_output_fields(
+    filter_config: ContinuousTimeFilterConfig,
+) -> list[str] | None:
+    """Select the CD-Dynamax posterior fields required for this run."""
+    if isinstance(filter_config, ContinuousTimeDPFConfig):
+        return None
+
+    output_fields = [
+        "marginal_loglik",
+        "filtered_means",
+        "filtered_covariances",
+    ]
+    if not wants_observation_prediction_diagnostics(filter_config):
+        return output_fields
+
+    output_fields.extend(
+        [
+            "y_pred_mean",
+            "y_pred_cov",
+            "y_obs_pred_mean",
+            "y_obs_pred_cov",
+        ]
+    )
+    if isinstance(filter_config, ContinuousTimeEnKFConfig):
+        output_fields.extend(["y_ens_pred", "y_obs_ens_pred"])
+    return output_fields
+
+
 def _run_linear_kf(
     dynamics: DynamicalModel,
     obs_times: Real[Array, "obs_time 1"],
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_values: Real[Array, "ctrl_time control_dim"],
     filter_config: ContinuousTimeKFConfig,
+    *,
+    output_fields: list[str] | None,
 ) -> PosteriorGSSMFiltered:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
@@ -131,6 +164,7 @@ def _run_linear_kf(
         emissions=obs_values,
         t_emissions=obs_times,
         inputs=ctrl_values,
+        output_fields=output_fields,
         warn=filter_config.warn,
     )
     return filtered
@@ -157,10 +191,16 @@ def compute_continuous_filter(
         if ctrl_values is not None
         else jnp.zeros((obs_times_arr.shape[0], control_dim))
     )
+    output_fields = _continuous_filter_output_fields(filter_config)
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
         filtered = _run_linear_kf(
-            dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
+            dynamics,
+            obs_times_arr,
+            obs_values,
+            ctrl_vals,
+            filter_config,
+            output_fields=output_fields,
         )
     else:
         if isinstance(
@@ -187,7 +227,13 @@ def compute_continuous_filter(
 
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
         filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+            filter_config,
+            params,
+            obs_values,
+            obs_times_arr,
+            ctrl_vals,
+            key,
+            output_fields,
         )
 
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore

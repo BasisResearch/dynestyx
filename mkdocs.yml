@@ -35,6 +35,7 @@ nav:
       - "Part 11a: Missing observations with Filters and Smoothers": tutorials/gentle_intro/11_missing_observations.ipynb
       - "Part 11b: Missing observations with LatentPathBuilder + MCMC": tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc.ipynb
       - "Part 11c: Missing observations in HMMs": tutorials/gentle_intro/11c_missing_observations_hmms.ipynb
+      - "Part 12: Observation scoring with filters": tutorials/gentle_intro/12_observation_scoring_with_filters.ipynb
   - Examples and Deep Dives:
     - tutorials.md
     - Examples:
@@ -56,6 +57,10 @@ nav:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
       - Associative Cuthbert KF scaling: deep_dives/discrete_time_kf_associative_scaling.ipynb
       - Comparing MCMC algorithms with MCMCInference: deep_dives/mcmc_inference_algorithm_comparison.ipynb
+      - Comparing SDE discretization methods on Lorenz–63: deep_dives/sde_discretization_comparison.ipynb
+      - Filtering of deterministic processes: deep_dives/filtering_deterministic_processes.ipynb
+      - Observation scoring with a Cuthbert EnKF: deep_dives/observation_scoring_with_cuthbert_enkf.ipynb
+      - Tuning EnKF covariance inflation with scoring rules: deep_dives/l63_covariance_inflation_scoring.ipynb
       - Sparse system identification: deep_dives/fhn_sparse_id.ipynb
       - Universal ODEs (Lotka-Volterra): deep_dives/lv_uode.ipynb
       - Discrete time LTI profile likelihood: deep_dives/discrete_time_lti_profile_likelihood.ipynb
@@ -72,11 +77,10 @@ nav:
         - Core Models:
           - DynamicalModel: api_reference/public/models/core/dynamical_model.md
           - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
-          - Diffusion: api_reference/public/models/core/diffusion.md
           - DiscreteTimeStateEvolution: api_reference/public/models/core/discrete_time_state_evolution.md
           - ObservationModel: api_reference/public/models/core/observation_model.md
-          - Drift: api_reference/public/models/core/drift.md
-          - Potential: api_reference/public/models/core/potential.md
+          - Drifts: api_reference/public/models/core/drifts.md
+          - Diffusions: api_reference/public/models/core/diffusions.md
         - Specialized Models:
           - LinearGaussianObservation: api_reference/public/models/specialized/linear_gaussian_observation.md
           - GaussianObservation: api_reference/public/models/specialized/gaussian_observation.md
@@ -95,6 +99,7 @@ nav:
         - MCMCConfigs: api_reference/public/inference/configs/mcmc_configs.md
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
+        - Discretizer Configurations: api_reference/public/inference/configs/discretizer_configs.md
       - Handlers:
         - Sample, Simulate, and Plate: api_reference/public/handlers.md
       - Simulators:
@@ -107,8 +112,11 @@ nav:
           - Simulator Configurations: api_reference/public/simulators/simulator_configs.md
       - Closed-loop Control: api_reference/public/control.md
       - Result Types: api_reference/public/result_types.md
-      - Diagnostics:
-        - Plotting Utilities: api_reference/public/diagnostics/plotting_utils.md
+      - Evaluation:
+        - Evaluation: api_reference/public/evaluation/handlers.md
+        - ScoringConfigs: api_reference/public/inference/configs/scoring_configs.md
+        - Scoring: api_reference/public/evaluation/scoring.md
+        - Plotting Utilities: api_reference/public/evaluation/plotting_utils.md
     - Developer API:
       - Overview: api_reference/developer/index.md
       - Models:
@@ -133,8 +141,11 @@ nav:
       - Handlers: api_reference/developer/handlers.md
       - Utils: api_reference/developer/utils.md
       - Result Types: api_reference/developer/result_types.md
-      - Diagnostics:
-        - Plotting Utilities: api_reference/developer/diagnostics/plotting_utils.md
+      - Evaluation:
+        - Evaluation: api_reference/developer/evaluation/handlers.md
+        - ScoringConfigs: api_reference/developer/inference/configs/scoring_configs.md
+        - Scoring: api_reference/developer/evaluation/scoring.md
+        - Plotting Utilities: api_reference/developer/evaluation/plotting_utils.md
   - FAQ: faq.md
 
 theme:

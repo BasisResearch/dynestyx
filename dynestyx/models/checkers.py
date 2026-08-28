@@ -10,6 +10,8 @@ import numpyro.primitives
 from jax import Array
 from jaxtyping import Real
 
+from dynestyx.models.drifts import ImExDrift
+
 
 def _unwrap_base_distribution(distribution: Any) -> Any:
     """Peel common NumPyro wrapper distributions to inspect the base distribution.
@@ -103,6 +105,25 @@ def _make_probe_state(
     return jnp.zeros((state_dim,))
 
 
+def _validate_imex_potential_conflict(state_evolution: Any) -> None:
+    """Forbid combining `potential` with an `ImExDrift` `drift`.
+
+    Unlike the shape checks in `_validate_continuous_state_evolution`, this
+    needs no probe values and is equally valid for batched (plated)
+    parameters, so it must run unconditionally -- including inside
+    `dsx.plate`, where shape validation is otherwise skipped.
+    """
+    drift = state_evolution.drift
+    if isinstance(drift, ImExDrift) and state_evolution.potential is not None:
+        raise ValueError(
+            "ContinuousTimeStateEvolution cannot combine `potential` "
+            "with an ImExDrift `drift`: potential's gradient term has "
+            "no explicit/implicit split. Fold the potential gradient "
+            "into `explicit_term` or `implicit_term` of the ImExDrift "
+            "instance instead."
+        )
+
+
 def _validate_continuous_state_evolution(
     state_evolution: Any,
     state_dim: int,
@@ -110,7 +131,30 @@ def _validate_continuous_state_evolution(
     u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
     t_probe: Real[Array, ""],
 ) -> None:
-    """Validate the drift shape of a continuous-time state evolution."""
+    """Validate the drift shape of a continuous-time state evolution.
+
+    When `drift` is an `ImExDrift`, shapes are checked via `make_imex_tuple`
+    (validating both the explicit and implicit parts directly) rather than
+    `total_drift`.
+    """
+    drift = state_evolution.drift
+
+    if isinstance(drift, ImExDrift):
+        explicit_shape, implicit_shape = jax.eval_shape(
+            lambda: drift.make_imex_tuple(x_probe, u_probe, t_probe)
+        )
+        if explicit_shape.shape != (state_dim,):
+            raise ValueError(
+                "ImExDrift explicit_term shape is inconsistent with "
+                f"state_dim. Expected {(state_dim,)}, got {explicit_shape.shape}."
+            )
+        if implicit_shape.shape != (state_dim,):
+            raise ValueError(
+                "ImExDrift implicit_term shape is inconsistent with "
+                f"state_dim. Expected {(state_dim,)}, got {implicit_shape.shape}."
+            )
+        return
+
     drift_shape = jax.eval_shape(
         lambda: state_evolution.total_drift(x_probe, u_probe, t_probe)
     ).shape
@@ -131,6 +175,16 @@ def _validate_discrete_state_evolution_output_shape(
     """Validate a discrete-time state evolution against the inferred state dimension."""
     if getattr(state_evolution, "diffusion", None) is not None:
         raise ValueError("diffusion can only be set for continuous-time models.")
+    if getattr(
+        state_evolution,
+        "_dynestyx_discretizer_preserves_state_shape",
+        False,
+    ):
+        # DynamicalModel normally infers this shape by evaluating a synthetic
+        # unit-interval transition. Discretizer's private transitions preserve
+        # the input event shape by construction, while evaluating them here
+        # could run a costly numerical ODE/SDE solve solely for validation.
+        return
     t_now = t_probe
     t_next = t_probe + 1.0
     transition_dist = state_evolution(x=x_probe, u=u_probe, t_now=t_now, t_next=t_next)  # type: ignore[misc,call-arg]
