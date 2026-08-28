@@ -2,7 +2,6 @@
 
 from typing import cast
 
-import arviz as az
 import equinox as eqx
 import jax.nn as jnn
 import jax.numpy as jnp
@@ -18,6 +17,7 @@ from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import DynamicalModel, GaussianStateEvolution
 from dynestyx.models.observations import LinearGaussianObservation
+from tests.arviz_utils import save_posterior_plot
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
@@ -197,19 +197,19 @@ def test_hierarchical_nonlinear_two_level_ekf_science(num_samples: int):
     if SAVE_FIG and output_dir is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(mu_post, hdi_prob=0.95, ref_val=float(mu_true))
-        plt.savefig(output_dir / "posterior_mu_raw.png", dpi=150, bbox_inches="tight")
-        plt.close()
+        save_posterior_plot(
+            mu_post,
+            name="mu_raw",
+            output_path=output_dir / "posterior_mu_raw.png",
+            ref_val=float(mu_true),
+        )
 
-        az.plot_posterior(
-            sigma_group_post, hdi_prob=0.95, ref_val=float(sigma_group_true)
+        save_posterior_plot(
+            sigma_group_post,
+            name="sigma_group",
+            output_path=output_dir / "posterior_sigma_group.png",
+            ref_val=float(sigma_group_true),
         )
-        plt.savefig(
-            output_dir / "posterior_sigma_group.png",
-            dpi=150,
-            bbox_inches="tight",
-        )
-        plt.close()
 
         fig, ax = plt.subplots(figsize=(8, 4))
         group_idx = jnp.arange(n_groups)
