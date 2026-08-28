@@ -39,7 +39,7 @@ dependencies = [
     # keep this floor aligned with the jax floor below.
     "numpyro>=0.21.0",
     "pytest>=9.0.1",
-    "arviz>=0.18.0,<1.0.0",
+    "arviz>=1.3",
     "blackjax>=1.6",
     "pytkdocs-tweaks>=0.0.8",
     "mkdocstrings[python]>=1.0.1",
