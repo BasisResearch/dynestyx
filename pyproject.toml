@@ -33,7 +33,7 @@ dependencies = [
     "effectful>=0.4.0",
     "cuthbert==0.0.14",
     "cuthbertlib==0.0.14",
-    "cd-dynamax>=0.4.0",
+    "cd-dynamax>=0.4.1",
     "matplotlib>=3.10.7",
     # numpyro<0.21.0 fails to import against jax>=0.10 (removed xla_pmap_p);
     # keep this floor aligned with the jax floor below.

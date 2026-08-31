@@ -146,16 +146,16 @@ For plate members with different layouts, use one builder for all traced calls.
 Ragged `LatentStateResult` fields are flat lists of per-member arrays. Each
 NumPyro site keeps its shape, and the rightmost plate index varies fastest.
 
-## Implementation Details 
+## Implementation Details
 
-To support arbitrary missingness, and for efficiency, the actual implementation of the `LatentPathBuilder` differs from the simple "unrolling" mental model. In particular, the entire `state_path` is intiialized as a `numpyro` site, via an improper uniform prior. The improper uniform prior is modifying so that calling its `sample` method (for example, as used in `numpyro` MCMC samplers by default) provides draws from the actual SSM prior. In particular:
+To support arbitrary missingness and improve efficiency, the implementation of `LatentPathBuilder` differs from the simple "unrolling" mental model. For deterministic ODEs, `f_state_path_params` is a proper NumPyro sample site backed by the model's initial-condition distribution. For other paths, the state path is initialized through a modified improper uniform distribution whose `sample` method draws from the state-space-model prior. In particular:
 
-- discrete `state_path_params` are drawn from the SSM prior;
-- ODE `state_path_params` are drawn from the initial-condition prior and then
-  solved on the requested time grid;
+- discrete `state_path_params` are drawn from the state-space-model prior;
+- ODE `state_path_params` are drawn from the initial-condition distribution and retain a singleton leading time axis;
+- exact-observation parameters retain only the free state coordinates; and
 - remaining `missing_obs_values` are drawn from the observation model given the simulated state path.
 
-After simulation, the model is scored according to the joint log-likelihood $\log p(x, y | \theta)$, and registered as a `numpyro` site `f_joint_log_prob_factor`.
+After simulation, the model is scored according to the joint log density $\log p(x, y | \theta)$. For deterministic ODEs, the `f_state_path_params` site contributes the initial-condition density, so `f_joint_log_prob_factor` contributes only the remaining terms. For other paths, the complete joint density is registered through `f_joint_log_prob_factor`. A transformed ODE initial condition can use NumPyro's `TransformReparam` with `config={"f_state_path_params": TransformReparam()}`.
 
 ::: dynestyx.inference.latent.builder
     options:
