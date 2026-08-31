@@ -53,8 +53,7 @@ def _sample_discrete_state_path_from_initial_state(
     | Real[Array, " ctrl_time"]
     | None,
 ) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
-    """Sample one canonical discrete state path from a fixed initial state.
-    """
+    """Sample one canonical discrete state path from a fixed initial state."""
     if len(times) == 1:
         return jnp.expand_dims(initial_state, axis=0)
 
