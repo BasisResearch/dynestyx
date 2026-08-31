@@ -4,6 +4,7 @@ import dataclasses
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Int, Real
 
@@ -175,6 +176,24 @@ class SimulatedResult:
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )
+
+
+# Registered so a whole ``SimulatedResult`` can cross ``jax.vmap``/``jax.jit``
+# boundaries. ``_register_numpyro_sites`` is dropped rather than made static:
+# in layered paths it is a closure over traced arrays, which would silently
+# escape the trace if carried as pytree metadata. It is only meaningful in
+# NumPyro (``dsx.sample``) mode, which never crosses these boundaries, and is
+# restored to its ``None`` default on unflattening.
+jax.tree_util.register_dataclass(
+    SimulatedResult,
+    data_fields=[
+        f.name
+        for f in dataclasses.fields(SimulatedResult)
+        if f.name != "_register_numpyro_sites"
+    ],
+    meta_fields=[],
+    drop_fields=["_register_numpyro_sites"],
+)
 
 
 def as_scalar_time_array(
