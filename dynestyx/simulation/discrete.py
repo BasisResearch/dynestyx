@@ -54,17 +54,6 @@ def _sample_discrete_state_path_from_initial_state(
     | None,
 ) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
     """Sample one canonical discrete state path from a fixed initial state.
-
-    Always returns x_0..x_{T-1} (length T, matching `times`) -- x_0 is
-    included regardless of `dynamics.observation_control_alignment`; only
-    observation sampling (see `_simulate_forward_from_initial_state`) differs
-    by convention.
-
-    ctrl_values has its own length ("ctrl_time"), decoupled from `times`: it
-    is len(times) for same_time (one entry per transition plus one unused by
-    any transition, reserved for the final same_time observation) or
-    len(times) - 1 for previous_transition (exactly one entry per
-    transition).
     """
     if len(times) == 1:
         return jnp.expand_dims(initial_state, axis=0)
@@ -125,45 +114,9 @@ class DiscreteTimeSimulator(BaseSimulator):
     `n_simulations` independent paths. The observation/control pairing
     depends on `dynamics.observation_control_alignment`:
 
-    For `"same_time"` (default):
+    For `"same_time"` (default): y_{k} is paired with u_{k} and x_{k} (including k=0). States, times, observations, and controls are all of length \(T\).
+    For `"previous_transition"`: y_{k+1} is paired with u_{k} and x_{k+1} (y_0 is never sampled). States and times are of length \(T\), but observations and controls are of length \(T-1\).
 
-    \[
-    x_0^{(m)} \sim p_0(x_0), \qquad
-    x_{k+1}^{(m)}
-      \sim p\!\left(x_{k+1}\mid x_k^{(m)},u_k,t_k,t_{k+1}\right),
-    \qquad
-    y_k^{(m)} \sim p(y_k\mid x_k^{(m)},u_k,t_k).
-    \]
-
-    The first state in the returned path is the initial-condition draw at
-    `predict_times[0]`; the simulator then makes one transition draw for each
-    adjacent pair of prediction times and samples one observation conditional
-    on every realized state, including \(y_0\) (paired with \(u_0\)).
-
-    For `"previous_transition"`:
-
-    \[
-    x_0^{(m)} \sim p_0(x_0), \qquad
-    x_{k+1}^{(m)} \sim p\!\left(x_{k+1}\mid x_k^{(m)},u_k,t_k,t_{k+1}\right),
-    \qquad
-    y_{k+1}^{(m)} \sim p(y_{k+1}\mid x_{k+1}^{(m)},u_k,t_{k+1}).
-    \]
-
-    Here \(y_0\) is never sampled -- there's no control that produced it --
-    but \(x_0\) is still part of the returned result, exactly like
-    `"same_time"`: `SimulatedResult.x_0` is populated and `.states` has length
-    \(T\) (matching `.times`/`predict_times`, \(x_0,\ldots,x_{T-1}\)).
-    `.observations` and `.controls`, however, are one shorter -- length
-    \(T-1\): \(y_1,\ldots,y_{T-1}\) and \(u_0,\ldots,u_{T-2}\) (aligned to
-    `predict_times[:-1]`, not the full `predict_times`). So `.states` is
-    intentionally one longer than `.observations`/`.controls`:
-    `states[k+1]` pairs with `observations[k]`/`controls[k]`, not
-    `states[k]`. This matches
-    [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]'s
-    closed-loop convention. Only discrete-time models generated through the
-    plain `Simulator`/`DiscreteTimeSimulator`/`dsx.simulate` path honor this
-    convention today -- see
-    [issue #312](https://github.com/BasisResearch/dynestyx/issues/312).
 
     See
     [DiscreteTimeStateEvolution][dynestyx.models.core.DiscreteTimeStateEvolution]
