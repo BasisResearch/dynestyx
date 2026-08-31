@@ -416,18 +416,26 @@ def test_discrete_simulator_previous_transition_aligns_ctrl_values_shorter_by_on
 
     states = jnp.asarray(result.states)
     observations = jnp.asarray(result.observations)
+    controls = jnp.asarray(result.controls)
     times = jnp.asarray(result.times)
 
-    assert result.x_0 is None
-    assert times.shape == (1, 3)
-    assert jnp.allclose(times[0], predict_times[1:])
-    assert states.shape == (1, 3, 1)
-    assert observations.shape == (1, 3, 1)
-    # x_1=1, x_2=3, x_3=6 (cumulative sum of controls, x_0=0)
-    expected_states = jnp.array([[[1.0], [3.0], [6.0]]])
+    # x_0 is populated and states/times include it (length 4), like same_time.
+    assert result.x_0 is not None
+    assert jnp.array_equal(jnp.asarray(result.x_0), jnp.array([[0.0]]))
+    assert times.shape == (1, 4)
+    assert jnp.allclose(times[0], predict_times)
+    assert states.shape == (1, 4, 1)
+    # x_0=0, x_1=1, x_2=3, x_3=6 (cumulative sum of controls)
+    expected_states = jnp.array([[[0.0], [1.0], [3.0], [6.0]]])
     assert jnp.array_equal(states, expected_states)
+    # observations/controls are one shorter -- y_0 is never sampled.
+    assert observations.shape == (1, 3, 1)
+    assert controls.shape == (1, 3, 1)
+    assert jnp.array_equal(controls[0], ctrl_values)
     # y_{k+1} = x_{k+1} + 100 * u_k
-    expected_observations = expected_states + 100.0 * jnp.array([[[1.0], [2.0], [3.0]]])
+    expected_observations = expected_states[:, 1:, :] + 100.0 * jnp.array(
+        [[[1.0], [2.0], [3.0]]]
+    )
     assert jnp.array_equal(observations, expected_observations)
 
 
@@ -463,23 +471,28 @@ def test_dsx_simulate_previous_transition_end_to_end():
         ctrl_values=ctrl_values,
     )
 
-    assert result.x_0 is None
-    assert jnp.asarray(result.times).shape == (1, 3)
-    assert jnp.asarray(result.states).shape == (1, 3, 1)
+    assert result.x_0 is not None
+    assert jnp.asarray(result.times).shape == (1, 4)
+    assert jnp.asarray(result.states).shape == (1, 4, 1)
     assert jnp.asarray(result.observations).shape == (1, 3, 1)
+    assert jnp.asarray(result.controls).shape == (1, 3, 1)
 
 
 def test_discrete_simulator_previous_transition_zero_length_predict_times_edge_case():
+    """With a single prediction time, there are zero transitions/controls, so
+    observations/controls are empty -- but x_0/states/times are still the
+    (length-1) seed, same as same_time."""
     result = dsx.simulate(
         _make_previous_transition_dynamics(),
         rng_key=jr.PRNGKey(0),
         predict_times=jnp.arange(1.0),
     )
 
-    assert result.x_0 is None
-    assert jnp.asarray(result.times).shape == (1, 0)
-    assert jnp.asarray(result.states).shape == (1, 0, 1)
+    assert result.x_0 is not None
+    assert jnp.asarray(result.times).shape == (1, 1)
+    assert jnp.asarray(result.states).shape == (1, 1, 1)
     assert jnp.asarray(result.observations).shape == (1, 0, 1)
+    assert result.controls is None  # no ctrl_values supplied
 
 
 def test_discrete_simulator_previous_transition_rejects_obs_times():
@@ -517,5 +530,73 @@ def test_previous_transition_observation_uses_previous_step_control_not_same_ind
     observations = jnp.asarray(result.observations)
     # observation_model reveals x + 100*u, so subtracting the realized state
     # recovers exactly which (scaled) control each observation used.
-    revealed_control = (observations - states) / 100.0
+    # states includes x_0 (one longer than observations), so observations[k]
+    # pairs with states[k+1], not states[k].
+    revealed_control = (observations - states[:, 1:, :]) / 100.0
     assert jnp.array_equal(revealed_control[0], ctrl_values)
+
+
+def test_discrete_simulator_previous_transition_states_include_x0():
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_times = predict_times[:-1]
+    ctrl_values = jnp.array([[1.0], [2.0], [3.0]])
+
+    result = dsx.DiscreteTimeSimulator().simulate(
+        _make_previous_transition_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
+    states = jnp.asarray(result.states)
+    observations = jnp.asarray(result.observations)
+    assert jnp.array_equal(states[:, 0, :], jnp.asarray(result.x_0))
+    assert states.shape[1] == observations.shape[1] + 1
+
+
+def test_discrete_simulator_returns_controls_same_time():
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_values = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+
+    result = dsx.DiscreteTimeSimulator().simulate(
+        _make_controlled_deterministic_discrete_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=predict_times,
+        ctrl_values=ctrl_values,
+    )
+
+    assert result.controls is not None
+    assert jnp.asarray(result.controls).shape == (1, 4, 1)
+    assert jnp.array_equal(jnp.asarray(result.controls)[0], ctrl_values)
+
+
+def test_discrete_simulator_returns_controls_previous_transition():
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_times = predict_times[:-1]
+    ctrl_values = jnp.array([[1.0], [2.0], [3.0]])
+
+    result = dsx.DiscreteTimeSimulator().simulate(
+        _make_previous_transition_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+
+    assert result.controls is not None
+    assert jnp.asarray(result.controls).shape == (1, 3, 1)
+    assert jnp.array_equal(jnp.asarray(result.controls)[0], ctrl_values)
+
+
+def test_discrete_simulator_controls_none_when_uncontrolled():
+    predict_times = jnp.arange(4.0)
+
+    result = dsx.simulate(
+        _make_discrete_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+    )
+
+    assert result.controls is None

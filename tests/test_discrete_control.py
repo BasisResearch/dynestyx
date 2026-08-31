@@ -943,13 +943,15 @@ def test_dsx_simulate_with_control_policy_rejects_simulator_config():
 
 def test_dsx_simulate_without_control_policy_unchanged():
     """No control_policy given -> falls back to today's type-based routing,
-    returning a plain SimulatedResult (no controls field at all), not a
-    ControlledSimulatedResult."""
+    returning a plain SimulatedResult, not a ControlledSimulatedResult. (The
+    plain SimulatedResult does carry its own `controls` field now (#312
+    follow-up), but it's None here since no ctrl_values were supplied.)"""
     dynamics = _lti_1d()
     predict_times = jnp.arange(0.0, 5.0)
 
     result = dsx.simulate(dynamics, rng_key=jr.PRNGKey(0), predict_times=predict_times)
-    assert not hasattr(result, "controls")
+    assert not isinstance(result, ControlledSimulatedResult)
+    assert result.controls is None
 
 
 def test_initial_policy_state_threads_through_dsx_simulate():
