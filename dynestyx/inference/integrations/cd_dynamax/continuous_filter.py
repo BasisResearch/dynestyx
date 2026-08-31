@@ -80,9 +80,7 @@ def _config_to_cd_dynamax_filter_kwargs(
     if isinstance(config, ContinuousTimeEnKFConfig):
         base["filter_type"] = "EnKF"
         base["enkf_N_particles"] = config.n_particles
-        base["enkf_inflation_delta"] = (
-            config.inflation_delta if config.inflation_delta is not None else 0.0
-        )
+        base["enkf_inflation_delta"] = config.inflation_delta
         base["extra_filter_kwargs"] = {
             "perturb_measurements": config.perturb_measurements
             if config.perturb_measurements is not None

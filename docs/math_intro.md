@@ -9,7 +9,7 @@ If you want to jump directly into code, take a look at the [Quick Example](tutor
 For the purposes of `dynestyx`, a dynamical system is a generative model depending on time. These generally come in the form of *state space models* (SSMs), where some unobserved state \(x_t \in \mathbb{R}^{d_x}\) evolves over time[^1], with occasional observations \(y_t \in \mathbb{R}^{d_y}\). Dynestyx allows the process that evolves \(x_t\), as well as the process that generates observations \(y_t\), to both be extremely general, and, in particular, allows for \(x_t\) to be specified as a continuous-time or discrete-time process. That is, \(x_t\) may be specified by a *stochastic differential equation* (SDE)[^2],
 
 $$
-    dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{g_\theta(x, t) \, \mathrm{d}\beta_t}_\text{diffusion},
+    dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{L_\theta(x, t) \, \mathrm{d}W_t}_\text{diffusion},
 $$
 
 or as a discrete-time stochastic process,
@@ -18,7 +18,7 @@ $$
     x_t \sim \underbrace{p_\theta(x_t \,|\, x_{t-1})}_{\text{transition density}}.
 $$
 
-In either case, the dynamics are specified with a parameter $\theta$, as well as the parameters of the Brownian motion $\beta_t$ and the initial state distrbution $p(x_0)$. Various names for the process $x_t \mapsto x_{t+1}$ are used, including *transition model*, *dynamics*, *state transition*, and *transition kernel*, but we will collectively call this our *state evolution*.
+In either case, the dynamics are specified with a parameter $\theta$, as well as the parameters of the Brownian motion $W_t$ and the initial state distrbution $p(x_0)$. Various names for the process $x_t \mapsto x_{t+1}$ are used, including *transition model*, *dynamics*, *state transition*, and *transition kernel*, but we will collectively call this our *state evolution*.
 
 We also assume that observations are also generated probabilistically -- depending only on the state \(x_t\) -- via some process
 
