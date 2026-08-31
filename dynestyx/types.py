@@ -144,17 +144,29 @@ class SimulatedResult(eqx.Module):
     ``predicted_times``, ``predicted_states``, and
     ``predicted_observations``.
 
+    ``controls`` carries the (aligned) control values used to produce this
+    result, when the model was controlled -- ``None`` otherwise. It is
+    populated by ``DiscreteTimeSimulator`` for both
+    ``observation_control_alignment`` conventions; ODE/SDE simulators leave it
+    ``None`` for now.
+
     For a discrete-time model with
     ``dynamics.observation_control_alignment="previous_transition"``, ``x_0``
-    is ``None`` -- the seed state is not part of the rollout output -- and
-    ``times``, ``states``, and ``observations`` are all exactly the length of
-    the ``ctrl_values`` the caller supplied (one shorter than
-    ``predict_times``, since :math:`y_0` is never sampled under this
-    convention). ``x``, ``y``, ``u``, and ``t`` are therefore all the same
-    shape, with no :math:`t_0`/:math:`x_0` remnant anywhere in the result. See
+    is populated and ``states`` includes it (length :math:`T`, matching
+    ``times``), exactly like ``"same_time"``. ``observations`` and
+    ``controls``, however, are one shorter (length :math:`T-1`:
+    :math:`y_1,\\dots,y_{T-1}` and :math:`u_0,\\dots,u_{T-2}`), since
+    :math:`y_0` is never sampled under this convention -- there is no control
+    that produced it. So ``states`` is intentionally one longer than
+    ``observations``/``controls``: ``states[k+1]`` pairs with
+    ``observations[k]``/``controls[k]``, not ``states[k]``. See
     [DiscreteTimeSimulator][dynestyx.simulation.discrete.DiscreteTimeSimulator].
     """
 
+    # observations/controls use their own axis names ("obs_time"/"ctrl_time")
+    # rather than sharing "time" with times/states: under
+    # observation_control_alignment="previous_transition" they are one
+    # shorter than times/states, so jaxtyping must not enforce equal length.
     times: Real[Array, "*plate n_simulations time"] | None = None
     x_0: (
         Real[Array, "*plate n_simulations state_dim"]
@@ -167,8 +179,13 @@ class SimulatedResult(eqx.Module):
         | None
     ) = None
     observations: (
-        Real[Array, "*plate n_simulations time observation_dim"]
-        | Real[Array, "*plate n_simulations time"]
+        Real[Array, "*plate n_simulations obs_time observation_dim"]
+        | Real[Array, "*plate n_simulations obs_time"]
+        | None
+    ) = None
+    controls: (
+        Real[Array, "*plate n_simulations ctrl_time control_dim"]
+        | Real[Array, "*plate n_simulations ctrl_time"]
         | None
     ) = None
     predicted_times: Real[Array, "*plate n_simulations predict_time"] | None = None
