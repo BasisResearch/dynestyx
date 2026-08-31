@@ -1110,3 +1110,62 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     )
     assert jnp.all(jnp.isfinite(u0))
     assert jnp.all(jnp.isfinite(next_nominal))
+
+
+def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
+    """MPPI plans under "previous_transition" (#312), so every rollout array
+    handed to loss_fn has length `horizon` and shares one index: states[k] is
+    x_{k+1}, observations[k] is y_{k+1}, controls[k] is u_k -- the control
+    that produced that state. x_0 is excluded from states (no control
+    produced it) and carried separately. The observation model here leaks
+    100*u into the mean so the pairing can be read straight off the output.
+    """
+    horizon = 3
+
+    def transition(x, u, t_now, t_next):
+        del t_now, t_next
+        u = jnp.zeros_like(x) if u is None else u
+        return dist.Delta(x + u).to_event(1)
+
+    def observation(x, u, t):
+        del t
+        u = jnp.zeros_like(x) if u is None else u
+        return dist.Delta(x + 100.0 * u).to_event(1)
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.Delta(jnp.zeros(1)).to_event(1),
+        state_evolution=transition,
+        observation_model=observation,
+        control_dim=1,
+    )
+    mppi = MPPI(
+        dynamics=dynamics,
+        loss_fn=lambda result: jnp.sum(result.states**2),
+        horizon=horizon,
+        n_samples=1,
+        noise_std=jnp.array(0.0),  # candidate == nominal, so u is exactly known
+    )
+
+    nominal = jnp.array([[1.0], [2.0], [3.0]])
+    _, _, result = mppi.plan_step(
+        dist.Delta(jnp.zeros(1)).to_event(1),
+        jnp.array(0.0),
+        (nominal, jr.PRNGKey(0)),
+    )
+
+    # Plain SimulatedResult now carries the controls; no ControlledSimulatedResult.
+    assert result.times is not None
+    assert result.states is not None
+    assert result.observations is not None
+    assert result.controls is not None
+    assert result.x_0 is not None
+    for arr in (result.times, result.states, result.observations, result.controls):
+        assert arr.shape[1] == horizon
+
+    states, observations = result.states[0], result.observations[0]
+    controls = result.controls[0]
+    # x_0 = 0 is excluded: states start at x_1 = u_0 = 1.
+    assert jnp.allclose(states, jnp.array([[1.0], [3.0], [6.0]]))
+    assert jnp.allclose(result.x_0[0], jnp.zeros(1))
+    # Each observation reveals the control that produced its state: u_k, not u_{k+1}.
+    assert jnp.allclose((observations - states) / 100.0, controls)
