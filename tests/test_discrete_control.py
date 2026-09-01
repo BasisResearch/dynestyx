@@ -1159,13 +1159,41 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     assert result.observations is not None
     assert result.controls is not None
     assert result.x_0 is not None
+    # (n_samples, n_simulations, horizon, ...) -- n_simulations defaults to 1.
     for arr in (result.times, result.states, result.observations, result.controls):
-        assert arr.shape[1] == horizon
+        assert arr.shape[:3] == (1, 1, horizon)
 
-    states, observations = result.states[0], result.observations[0]
-    controls = result.controls[0]
+    states, observations = result.states[0, 0], result.observations[0, 0]
+    controls = result.controls[0, 0]
     # x_0 = 0 is excluded: states start at x_1 = u_0 = 1.
     assert jnp.allclose(states, jnp.array([[1.0], [3.0], [6.0]]))
-    assert jnp.allclose(result.x_0[0], jnp.zeros(1))
+    assert jnp.allclose(result.x_0[0, 0], jnp.zeros(1))
     # Each observation reveals the control that produced its state: u_k, not u_{k+1}.
     assert jnp.allclose((observations - states) / 100.0, controls)
+
+
+def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
+    """n_simulations>1 runs several rollouts per candidate, so plan_step's
+    batch is (n_samples, n_simulations, horizon, ...). The candidate's control
+    sequence is shared across its draws; only the sampled dynamics differ."""
+    n_samples, n_simulations, horizon = 5, 4, 3
+    dynamics = _lti_1d(A=1.05, B=1.0, Q=0.25)
+    mppi = MPPI(
+        dynamics=dynamics,
+        loss_fn=lambda result: jnp.mean(jnp.sum(result.states**2, axis=(-2, -1))),
+        horizon=horizon,
+        n_samples=n_samples,
+        n_simulations=n_simulations,
+    )
+
+    _, _, result = mppi.plan_step(
+        dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1)),
+        jnp.array(0.0),
+        mppi.initial_state(),
+    )
+
+    assert result.states is not None
+    assert result.controls is not None
+    assert result.states.shape[:3] == (n_samples, n_simulations, horizon)
+    assert result.controls.shape[:3] == (n_samples, n_simulations, horizon)
+
