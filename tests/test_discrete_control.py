@@ -1196,4 +1196,3 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
     assert result.controls is not None
     assert result.states.shape[:3] == (n_samples, n_simulations, horizon)
     assert result.controls.shape[:3] == (n_samples, n_simulations, horizon)
-
