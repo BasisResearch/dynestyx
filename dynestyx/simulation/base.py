@@ -32,6 +32,7 @@ from dynestyx.simulation.utils import (
 )
 from dynestyx.types import (
     ConditionedResult,
+    EvaluationResult,
     SimulatedResult,
     chain_numpyro_site_registrations,
 )
@@ -504,13 +505,19 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         downstream_register = getattr(
             downstream_result, "_register_numpyro_sites", None
         )
+        combined_register = chain_numpyro_site_registrations(
+            _register_self,
+            results._register_numpyro_sites,
+            downstream_register,
+        )
+        if isinstance(downstream_result, EvaluationResult):
+            return dataclasses.replace(
+                downstream_result,
+                _register_numpyro_sites=combined_register,
+            )
         return dataclasses.replace(
             results,
-            _register_numpyro_sites=chain_numpyro_site_registrations(
-                _register_self,
-                results._register_numpyro_sites,
-                downstream_register,
-            ),
+            _register_numpyro_sites=combined_register,
         )
 
     def simulate(

@@ -78,7 +78,10 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
             scoring_config=self.observation_scoring_config,
             plate_shapes=plate_shapes,
         )
-        filtered_result.evaluation_result = evaluation_result
+        filtered_result = dataclasses.replace(
+            filtered_result,
+            evaluation_result=evaluation_result,
+        )
 
         forwarded_result = fwd(
             name,
@@ -95,9 +98,12 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
             evaluation_result=evaluation_result,
             **kwargs,
         )
-        evaluation_result._register_numpyro_sites = chain_numpyro_site_registrations(
-            evaluation_result._register_numpyro_sites,
-            getattr(forwarded_result, "_register_numpyro_sites", None),
+        evaluation_result = dataclasses.replace(
+            evaluation_result,
+            _register_numpyro_sites=chain_numpyro_site_registrations(
+                evaluation_result._register_numpyro_sites,
+                getattr(forwarded_result, "_register_numpyro_sites", None),
+            ),
         )
         return evaluation_result
 

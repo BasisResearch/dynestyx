@@ -1,6 +1,5 @@
 """Shared typing helpers for dynamical systems."""
 
-import dataclasses
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
@@ -17,8 +16,7 @@ class FunctionOfTime(Protocol):
         raise NotImplementedError()
 
 
-@dataclasses.dataclass
-class EvaluationResult:
+class EvaluationResult(eqx.Module):
     """Outputs computed by an evaluation handler.
 
     Evaluation handlers attach this object to the ``ConditionedResult`` they
@@ -26,16 +24,13 @@ class EvaluationResult:
     side-effect free while ``dsx.sample`` can register the same outputs later.
     """
 
-    observation_scores: dict[str, Real[Array, "..."]] = dataclasses.field(
-        default_factory=dict
-    )
-    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
-        default=None, repr=False
+    observation_scores: dict[str, Real[Array, "..."]] = eqx.field(default_factory=dict)
+    _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
+        default=None, repr=False, static=True
     )
 
 
-@dataclasses.dataclass
-class ConditionedResult:
+class ConditionedResult(eqx.Module):
     """Common base for results from the NumPyro-free conditioning primitive.
 
     ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
@@ -55,8 +50,8 @@ class ConditionedResult:
     dists: list | None = None
     predicted_observations: object = None
     evaluation_result: EvaluationResult | None = None
-    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
-        default=None, repr=False
+    _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
+        default=None, repr=False, static=True
     )
 
     def __call__(
@@ -68,8 +63,7 @@ class ConditionedResult:
         )
 
 
-@dataclasses.dataclass
-class LatentStateResult:
+class LatentStateResult(eqx.Module):
     """Result of latent-state construction / scoring without NumPyro side effects.
 
     Let ``z = state_path_params`` denote the free variables used to

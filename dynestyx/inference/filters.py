@@ -77,6 +77,7 @@ from dynestyx.inference.utils.plate_utils import (
 from dynestyx.models import DynamicalModel
 from dynestyx.types import (
     ConditionedResult,
+    EvaluationResult,
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
@@ -144,9 +145,17 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         )
 
         forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
-        result._register_numpyro_sites = chain_numpyro_site_registrations(
-            result._register_numpyro_sites,
-            forwarded_register,
+        if isinstance(forwarded_result, EvaluationResult):
+            result = dataclasses.replace(
+                result,
+                evaluation_result=forwarded_result,
+            )
+        result = dataclasses.replace(
+            result,
+            _register_numpyro_sites=chain_numpyro_site_registrations(
+                result._register_numpyro_sites,
+                forwarded_register,
+            ),
         )
 
         return result
