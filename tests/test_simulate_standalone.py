@@ -1,5 +1,6 @@
 """Tests for the pure-JAX dsx.simulate entry point."""
 
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
@@ -117,6 +118,41 @@ def test_simulate_discrete_returns_simulated_result():
     assert jnp.allclose(times[0], predict_times)
     assert jnp.all(jnp.isfinite(states))
     assert jnp.all(jnp.isfinite(observations))
+
+
+def test_simulate_vmaps_over_batched_controls():
+    dynamics = _make_controlled_deterministic_discrete_dynamics()
+    predict_times = jnp.arange(4.0)
+    control_batch = jnp.array(
+        [
+            [[1.0], [1.0], [1.0], [1.0]],
+            [[2.0], [2.0], [2.0], [2.0]],
+        ]
+    )
+
+    result = jax.vmap(
+        lambda ctrl_values: dsx.simulate(
+            dynamics,
+            rng_key=jr.PRNGKey(0),
+            ctrl_times=predict_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+            n_simulations=2,
+        )
+    )(control_batch)
+
+    assert isinstance(result, dsx.SimulatedResult)
+    assert result.states is not None
+    assert result.states.shape == (2, 2, 4, 1)
+    expected_states = jnp.array(
+        [
+            [[[0.0], [1.0], [2.0], [3.0]]],
+            [[[0.0], [2.0], [4.0], [6.0]]],
+        ]
+    )
+    assert jnp.array_equal(
+        result.states, jnp.broadcast_to(expected_states, (2, 2, 4, 1))
+    )
 
 
 def test_simulate_callable_discrete_transition_auto_routes_to_discrete():

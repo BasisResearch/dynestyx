@@ -1,6 +1,5 @@
 """Closed-loop simulation for controlled discrete-time dynamical models."""
 
-import dataclasses
 from typing import Any, Protocol, runtime_checkable
 
 import jax
@@ -102,7 +101,6 @@ class PolicyCallable(Protocol):
         raise NotImplementedError()
 
 
-@dataclasses.dataclass
 class ControlledSimulatedResult(SimulatedResult):
     """`SimulatedResult` extended with the control loop's extra outputs.
 
