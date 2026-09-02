@@ -4,6 +4,7 @@ import dataclasses
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+import equinox as eqx
 import jax.numpy as jnp
 from jaxtyping import Array, Int, Real
 
@@ -130,8 +131,7 @@ class LatentStateResult:
     state_dists: list | None = None
 
 
-@dataclasses.dataclass
-class SimulatedResult:
+class SimulatedResult(eqx.Module):
     """Result of simulation without eager NumPyro side effects.
 
     This result therefore stores the realized state path ``x`` and observation path ``y``
@@ -172,8 +172,8 @@ class SimulatedResult:
         | Real[Array, "*plate n_simulations predict_time"]
         | None
     ) = None
-    _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
-        default=None, repr=False
+    _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
+        default=None, repr=False, static=True
     )
 
 
