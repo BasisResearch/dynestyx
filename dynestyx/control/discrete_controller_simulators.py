@@ -17,6 +17,10 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     compute_cuthbert_filter_update,
 )
 from dynestyx.inference.integrations.utils import WeightedParticles
+from dynestyx.inference.utils.distribution_utils import (
+    _check_if_ensemble_low_rank,
+    _ensemble_sequence_to_low_rank_gaussian_dists,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
@@ -45,14 +49,27 @@ def filter_state_mean(state: Any) -> Real[Array, "..."]:
 def filter_state_dist(state: Any) -> Distribution:
     """Full-belief NumPyro distribution for a cuthbert filter state, any family.
 
-    Kalman-family states (`KFConfig`, `EKFConfig`, `EnKFConfig`) expose
-    `.mean`/`.chol_cov`, giving an exact `MultivariateNormal`. `PFConfig`
-    states have no such property -- their belief is a weighted particle
-    cloud (`.particles`, `.log_weights`), represented via `WeightedParticles`
-    (dynestyx's own `Distribution`; NumPyro has no built-in equivalent).
-    Unlike `filter_state_mean`, this does not broadcast over a leading
-    time/batch axis -- call it once per (unbatched) state.
+    Kalman-family states (`KFConfig`, `EKFConfig`) expose `.mean`/`.chol_cov`
+    with a square Cholesky factor, giving an exact `MultivariateNormal`.
+    `PFConfig` states have no such property -- their belief is a weighted
+    particle cloud (`.particles`, `.log_weights`), represented via
+    `WeightedParticles` (dynestyx's own `Distribution`; NumPyro has no built-in
+    equivalent). Unlike `filter_state_mean`, this does not broadcast over a
+    leading time/batch axis -- call it once per (unbatched) state.
+
+    Ensemble states (`EnKFConfig`) have covariances that are at most rank `n_particles - 1`. 
+    When that is below `state_dim`, we use a `LowRankMultivariateNormal` built
+    from the ensemble factor. 
+    Otherwise the exact `MultivariateNormal` is kept.
+
+    A singular belief has the exact ensemble mean and covariance, but no density -- its `log_prob` is `nan`. 
+    Raise `n_particles` above `state_dim`, or set `EnKFConfig.filtered_covariance_jitter` on the
+    inference path, if you need one.
     """
+    if hasattr(state, "ensemble") and _check_if_ensemble_low_rank(state.ensemble):
+        return _ensemble_sequence_to_low_rank_gaussian_dists(state.ensemble[None, ...])[
+            0
+        ]
     if hasattr(state, "chol_cov"):
         return dist.MultivariateNormal(state.mean, scale_tril=state.chol_cov)
     if hasattr(state, "particles") and hasattr(state, "log_weights"):
@@ -70,7 +87,9 @@ class PolicyCallable(Protocol):
     $$u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)$$
 
     `x_hat` is a NumPyro `Distribution` -- `MultivariateNormal` for
-    `KFConfig`/`EKFConfig`/`EnKFConfig`, `WeightedParticles` for `PFConfig`
+    `KFConfig`/`EKFConfig`, `WeightedParticles` for `PFConfig`, and for
+    `EnKFConfig` either of `MultivariateNormal` or, once the ensemble is rank
+    deficient (`n_particles - 1 < state_dim`), `LowRankMultivariateNormal`
     (see `filter_state_dist`); use `x_hat.mean` for a
     family-agnostic point estimate, or the distribution itself for
     uncertainty-aware planning. `t_now`/`t_next` are the current and next

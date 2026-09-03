@@ -120,6 +120,76 @@ def _gaussian_sequence_to_dists(
     ]
 
 
+def _check_if_ensemble_low_rank(
+    ensemble: Real[Array, "... n_particles state_dim"],
+) -> bool:
+    r"""Whether the ensemble sample covariance is rank deficient.
+
+    $P = X'X'^{\top}$ has rank at most $N-1$, so it is
+    singular exactly when ``n_particles - 1 < state_dim``.
+    Used to determine whether to use a low-rank representation of the covariance
+    or to expand it to a dense matrix for `MultivariateNormal`.
+    """
+    n_particles, state_dim = ensemble.shape[-2], ensemble.shape[-1]
+    return n_particles - 1 < state_dim
+
+
+def _ensemble_sequence_to_low_rank_gaussian_dists(
+    ensemble: Real[Array, "*plate time n_particles state_dim"],
+    *,
+    covariance_jitter: float = 0.0,
+    plate_shapes: tuple[int, ...] = (),
+) -> list[dist.Distribution]:
+    r"""Convert an ensemble to per-time Gaussians with low-rank covariance representation.
+
+    The ensemble sample covariance is a low-rank object:
+    $$
+    P_t = \frac{1}{N-1}\sum_{i}\left(x_t^{(i)}-\bar x_t\right)
+                              \left(x_t^{(i)}-\bar x_t\right)^{\top}
+        = X'_t X_t'^{\top},
+    \qquad \operatorname{rank} P_t \le N-1,
+    $$
+
+    The low-rank representation is a $(\text{state\_dim}, N)$ factor $X'_t$
+    (not expanded into a dense $(\text{state\_dim}, \text{state\_dim})$ matrix).
+
+    ``covariance_jitter`` is the $\epsilon$ of $P_t + \epsilon I$.
+    Default of ``0.0``, the distributions have the exact covariance, but no Lebesgue density.
+
+    Note:
+        `LowRankMultivariateNormal.log_prob` will yield ``nan`` unless a positive
+        `covariance_jitter` is provided. Hence only use this for genuinely rank deficient matrices;
+        otherwise see `_cholesky_state_sequence_to_dists`.
+
+    Args:
+        ensemble: Ensemble states, ``(*plate, time, n_particles, state_dim)``.
+        covariance_jitter: Nonnegative $\epsilon$ added to the covariance as
+            $\epsilon I$.
+        plate_shapes: Leading plate dimensions, as elsewhere in this module.
+
+    Returns:
+        One `numpyro.distributions.LowRankMultivariateNormal` per time index.
+    """
+    n_particles = ensemble.shape[-2]
+    state_dim = ensemble.shape[-1]
+    mean = jnp.mean(ensemble, axis=-2)
+    # (..., time, state_dim, n_particles): the factor X', not the product X' X'^T.
+    cov_factor = jnp.swapaxes(ensemble - mean[..., None, :], -1, -2) / jnp.sqrt(
+        jnp.asarray(n_particles - 1, dtype=ensemble.dtype)
+    )
+    cov_diag = jnp.full((state_dim,), covariance_jitter, dtype=ensemble.dtype)
+
+    t_len = _time_len_from_array(mean, plate_shapes)
+    return [
+        dist.LowRankMultivariateNormal(
+            _slice_time_axis(mean, t, plate_shapes),
+            _slice_time_axis(cov_factor, t, plate_shapes),
+            cov_diag,
+        )
+        for t in range(t_len)
+    ]
+
+
 def _particle_sequence_to_dists(
     particles: Real[Array, "*plate time n_particles state_dim"]
     | Real[Array, "*plate time n_particles"],
@@ -174,8 +244,20 @@ def _cholesky_state_sequence_to_dists(
     *,
     particle_mode: bool,
     plate_shapes: tuple[int, ...] = (),
+    covariance_jitter: float = 0.0,
 ) -> list[dist.Distribution]:
-    """Convert cuthbert state objects to per-time distributions."""
+    r"""Convert cuthbert state objects to per-time distributions.
+
+    Three state families are handled, dispatched structurally:
+
+    - particle states (`.particles`, `.log_weights`) become `WeightedParticles`;
+    - ensemble states (`.ensemble`, i.e. `EnKFState` and `EnRTSState`) become low-rank Gaussians,
+    when the ensemble is rank-deficient (``n_particles - 1 < state_dim``);
+    - everything else becomes a dense `MultivariateNormal`.
+
+    ``covariance_jitter`` is applied in both Gaussian branches; see
+    `_ensemble_sequence_to_low_rank_gaussian_dists`.
+    """
     if particle_mode:
         return _particle_sequence_to_dists(
             states.particles,
@@ -183,9 +265,21 @@ def _cholesky_state_sequence_to_dists(
             plate_shapes=plate_shapes,
         )
 
+    if hasattr(states, "ensemble") and _check_if_ensemble_low_rank(states.ensemble):
+        return _ensemble_sequence_to_low_rank_gaussian_dists(
+            states.ensemble,
+            covariance_jitter=covariance_jitter,
+            plate_shapes=plate_shapes,
+        )
+
+    covariances = covariance_from_cholesky(states.chol_cov)
+    if covariance_jitter:
+        covariances = covariances + covariance_jitter * jnp.eye(
+            covariances.shape[-1], dtype=covariances.dtype
+        )
     return _gaussian_sequence_to_dists(
         states.mean,
-        covariance_from_cholesky(states.chol_cov),
+        covariances,
         plate_shapes=plate_shapes,
     )
 

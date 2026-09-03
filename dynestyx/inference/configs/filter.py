@@ -22,6 +22,17 @@ FilterSource = (
 CuthbertOrCDDynamaxFilterSource = CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource
 
 
+def _validate_filtered_covariance_jitter(filtered_covariance_jitter: float) -> None:
+    if (
+        not math.isfinite(filtered_covariance_jitter)
+        or filtered_covariance_jitter < 0.0
+    ):
+        raise ValueError(
+            "filtered_covariance_jitter must be a finite, nonnegative float, "
+            f"got {filtered_covariance_jitter!r}."
+        )
+
+
 @dataclasses.dataclass
 class BaseFilterConfig(abc.ABC):
     r"""Shared configuration options inherited by all filter configs.
@@ -134,6 +145,11 @@ class EnKFConfig(BaseFilterConfig):
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
             `None` disables inflation.
+        filtered_covariance_jitter (float): Nonnegative \(\epsilon\) added to the
+            reported filtered-state covariance as \(\epsilon I\). Defaults to `0.0`.
+            When the filtered covariance is singular (i.e., when the ensemble size is smaller than the state dimension),
+            this jitter ensures that the resulting distribution has a well-defined density.
+            It never affects the filter recursion or the marginal likelihood.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
@@ -185,7 +201,11 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
+    filtered_covariance_jitter: float = 0.0
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+    def __post_init__(self) -> None:
+        _validate_filtered_covariance_jitter(self.filtered_covariance_jitter)
 
 
 @dataclasses.dataclass

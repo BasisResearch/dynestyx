@@ -669,6 +669,41 @@ def test_cuthbert_enkf_sparse_h_matches_dense_h():
     assert jnp.allclose(means_dense, means_sparse)
 
 
+def test_cuthbert_enkf_filtered_dists_are_low_rank_and_samplable():
+    """EnKF filtered distributions keep the ensemble factor and stay samplable.
+
+    The ensemble covariance has rank at most `n_particles - 1`, so expanding it into
+    a dense `MultivariateNormal` gives a singular matrix whose eager Cholesky is
+    `nan` -- which silently propagated into posterior rollout, since the rollout
+    grafts these distributions in as the forecast initial condition and samples
+    them. `n_particles=3` against a 3-state model puts us in that rank-deficient
+    regime on purpose.
+    """
+    dynamics = _sparse_h_test_dynamics(jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = jnp.asarray(ground_truth.observations)[0]
+
+    n_particles = 3
+    with Filter(
+        filter_config=EnKFConfig(n_particles=n_particles, crn_seed=jr.PRNGKey(42))
+    ):
+        result = dsx.condition(
+            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+        )
+
+    ensemble = result.states.ensemble
+    assert len(result.dists) == len(obs_times)
+    for t, d in enumerate(result.dists):
+        assert isinstance(d, dist.LowRankMultivariateNormal)
+        assert d.event_shape == (dynamics.state_dim,)
+        assert d.cov_factor.shape == (dynamics.state_dim, n_particles)
+        assert jnp.allclose(d.mean, ensemble[t].mean(axis=0), atol=1e-5)
+        assert jnp.isfinite(d.sample(jr.PRNGKey(t))).all()
+
+
 def test_kf_raises_on_sparse_observation_matrix_cuthbert():
     """KF's cuthbert backend does not support a sparse H: cuthbert's Kalman internals
     cannot handle it (vmap's sparse tracing breaks inside a jnp.block call), so dynestyx
