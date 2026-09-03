@@ -2,12 +2,12 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS
 
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.fixtures import data_conditioned_discrete_time_l63_filter  # noqa: F401
 from tests.test_utils import get_output_dir
 
@@ -66,17 +66,16 @@ def test_mcmc_inference(data_conditioned_discrete_time_l63_filter, num_samples):
     assert not jnp.isinf(posterior_rho).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        az.plot_posterior(
-            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+        save_posterior_plot(
+            posterior_rho,
+            name="rho",
+            output_path=OUTPUT_DIR / "posterior_rho.png",
+            ref_val=true_params["rho"].item(),
         )
-        plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
-        plt.close()
 
     assert jnp.abs(posterior_rho.mean() - true_params["rho"]) < 5.0
 
-    hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_rho)
     assert hdi_min <= true_params["rho"] <= hdi_max, (
         f"True rho {true_params['rho']} not in HDI {hdi_min}, {hdi_max}"
     )

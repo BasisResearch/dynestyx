@@ -2,13 +2,13 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS
 
 from dynestyx.evaluation.plotting_utils import plot_hmm_states_and_observations
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.fixtures import data_conditioned_hmm  # noqa: F401
 from tests.test_utils import get_output_dir
 
@@ -47,17 +47,16 @@ def test_mcmc_inference(data_conditioned_hmm, num_samples):  # noqa: F811
     assert not jnp.isinf(posterior_sigma).any()
 
     if SAVE_FIG and OUTPUT_DIR is not None:
-        import matplotlib.pyplot as plt
-
-        az.plot_posterior(posterior_sigma, hdi_prob=0.95, ref_val=true_params["sigma"])
-        plt.savefig(OUTPUT_DIR / "posterior_sigma.png", dpi=150, bbox_inches="tight")
-        plt.close()
+        save_posterior_plot(
+            posterior_sigma,
+            name="sigma",
+            output_path=OUTPUT_DIR / "posterior_sigma.png",
+            ref_val=true_params["sigma"],
+        )
 
     assert jnp.abs(posterior_sigma.mean() - true_params["sigma"]) < 2.0
 
-    hdi_data = az.hdi(posterior_sigma, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_sigma)
     assert hdi_min <= true_params["sigma"] <= hdi_max, (
         f"True sigma {true_params['sigma']} not in HDI {hdi_min}, {hdi_max}"
     )
