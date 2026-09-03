@@ -57,12 +57,12 @@ def filter_state_dist(state: Any) -> Distribution:
     equivalent). Unlike `filter_state_mean`, this does not broadcast over a
     leading time/batch axis -- call it once per (unbatched) state.
 
-    Ensemble states (`EnKFConfig`) have covariances that are at most rank `n_particles - 1`. 
+    Ensemble states (`EnKFConfig`) have covariances that are at most rank `n_particles - 1`.
     When that is below `state_dim`, we use a `LowRankMultivariateNormal` built
-    from the ensemble factor. 
+    from the ensemble factor.
     Otherwise the exact `MultivariateNormal` is kept.
 
-    A singular belief has the exact ensemble mean and covariance, but no density -- its `log_prob` is `nan`. 
+    A singular belief has the exact ensemble mean and covariance, but no density -- its `log_prob` is `nan`.
     Raise `n_particles` above `state_dim`, or set `EnKFConfig.filtered_covariance_jitter` on the
     inference path, if you need one.
     """
