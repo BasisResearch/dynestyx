@@ -2,7 +2,6 @@
 
 import os
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
@@ -11,6 +10,7 @@ from numpyro.infer import MCMC, NUTS, BarkerMH, Predictive
 from dynestyx import DiscreteTimeSimulator
 from dynestyx.inference.configs.smoother import KFSmootherConfig, PFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.models import discrete_time_lti_simplified_model
 from tests.test_utils import get_output_dir
 
@@ -120,9 +120,12 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
     if SAVE_FIG and output_dir is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(posterior_alpha, hdi_prob=0.95, ref_val=true_alpha)
-        plt.savefig(output_dir / "posterior_alpha.png", dpi=150, bbox_inches="tight")
-        plt.close()
+        save_posterior_plot(
+            posterior_alpha,
+            name="alpha",
+            output_path=output_dir / "posterior_alpha.png",
+            ref_val=true_alpha,
+        )
 
     post_pred = Predictive(
         data_conditioned_model,
@@ -168,9 +171,7 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
     assert jnp.abs(posterior_alpha.mean() - true_alpha) < alpha_tol
     assert float(rmse_x0) < rmse_tol
 
-    hdi_data = az.hdi(posterior_alpha, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_alpha)
     assert hdi_min <= true_alpha <= hdi_max, (
         f"True alpha {true_alpha} not in HDI {hdi_min}, {hdi_max}"
     )
