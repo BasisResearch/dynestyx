@@ -23,6 +23,10 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
+    _default_covariance_jitter,
+)
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
@@ -667,6 +671,83 @@ def test_cuthbert_enkf_sparse_h_matches_dense_h():
     means_dense = jnp.stack([d.mean for d in result_dense.dists])
     means_sparse = jnp.stack([d.mean for d in result_sparse.dists])
     assert jnp.allclose(means_dense, means_sparse)
+
+
+def test_ensemble_jitter_is_off_by_default_and_enabled_only_by_config():
+    """Only `EnKFConfig` carries a jitter; every other cuthbert filter reads 0.0.
+
+    This is the exact expression the four conversion call sites use. The
+    `getattr` fallback is load-bearing: `KFConfig`/`EKFConfig`/`PFConfig` do not
+    declare the field at all, and they are exact filters whose reported
+    covariance is compared against analytic solutions, so they must not inherit
+    a perturbation from the shared code path.
+    """
+
+    def jitter_of(filter_config):
+        return getattr(filter_config, "recorded_filtered_states_cov_jitter", 0.0)
+
+    for filter_config in (
+        KFConfig(filter_source="cuthbert"),
+        EKFConfig(filter_source="cuthbert"),
+        PFConfig(n_particles=16, filter_source="cuthbert"),
+    ):
+        assert jitter_of(filter_config) == 0.0
+
+    # EnKF opts in by default, resolving "auto" to a precision-dependent value.
+    assert jitter_of(EnKFConfig()) == _default_covariance_jitter()
+
+    # ... and an explicit value is passed through untouched, including zero.
+    assert jitter_of(EnKFConfig(recorded_filtered_states_cov_jitter=0.0)) == 0.0
+    assert jitter_of(EnKFConfig(recorded_filtered_states_cov_jitter=3.14)) == 3.14
+
+
+def test_cuthbert_enkf_filtered_dists_are_low_rank_and_samplable():
+    """EnKF filtered distributions keep the ensemble factor and stay samplable.
+
+    The ensemble covariance has rank at most `n_particles - 1`, so expanding it into
+    a dense `MultivariateNormal` gives a singular matrix whose eager Cholesky is
+    `nan` -- which silently propagated into posterior rollout, since the rollout
+    grafts these distributions in as the forecast initial condition and samples
+    them. `n_particles=3` against a 3-state model puts us in that rank-deficient
+    regime on purpose.
+    """
+    dynamics = _sparse_h_test_dynamics(jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
+    obs_times = jnp.arange(6.0)
+    ground_truth = dsx.simulate(
+        dynamics, rng_key=jr.PRNGKey(0), predict_times=obs_times, n_simulations=1
+    )
+    obs_values = jnp.asarray(ground_truth.observations)[0]
+
+    n_particles = 3
+    with Filter(
+        filter_config=EnKFConfig(n_particles=n_particles, crn_seed=jr.PRNGKey(42))
+    ):
+        result = dsx.condition(
+            "f", dynamics, obs_times=obs_times, obs_values=obs_values
+        )
+
+    ensemble = result.states.ensemble
+    assert len(result.dists) == len(obs_times)
+    for t, d in enumerate(result.dists):
+        assert isinstance(d, dist.LowRankMultivariateNormal)
+        assert d.event_shape == (dynamics.state_dim,)
+        assert d.cov_factor.shape == (dynamics.state_dim, n_particles)
+        assert jnp.allclose(d.mean, ensemble[t].mean(axis=0), atol=1e-5)
+        assert jnp.isfinite(d.sample(jr.PRNGKey(t))).all()
+
+    # Rebuilt exactly as `run_discrete_filter` does it: with the config's own
+    # jitter the belief is no longer singular, so it has a usable density.
+    filter_config = EnKFConfig(n_particles=n_particles, crn_seed=jr.PRNGKey(42))
+    with_jitter = _cholesky_state_sequence_to_dists(
+        result.states,
+        particle_mode=isinstance(filter_config, PFConfig),
+        covariance_jitter=getattr(
+            filter_config, "recorded_filtered_states_cov_jitter", 0.0
+        ),
+    )
+    for d in with_jitter:
+        assert isinstance(d, dist.LowRankMultivariateNormal)
+        assert jnp.isfinite(d.log_prob(d.mean))
 
 
 def test_kf_raises_on_sparse_observation_matrix_cuthbert():

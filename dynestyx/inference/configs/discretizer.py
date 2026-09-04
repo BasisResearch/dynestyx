@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-import math
 
 import diffrax as dfx
 
@@ -12,21 +11,15 @@ from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
 )
+from dynestyx.utils import _validate_nonnegative_float
 
 
 def _validate_covariance_jitter(covariance_jitter: float) -> None:
-    if not math.isfinite(covariance_jitter) or covariance_jitter < 0.0:
-        raise ValueError(
-            "covariance_jitter must be a finite, nonnegative float, "
-            f"got {covariance_jitter!r}."
-        )
+    _validate_nonnegative_float("covariance_jitter", covariance_jitter)
 
 
 def _validate_jitter_scale(jitter_scale: float) -> None:
-    if not math.isfinite(jitter_scale) or jitter_scale < 0.0:
-        raise ValueError(
-            f"jitter_scale must be a finite, nonnegative float, got {jitter_scale!r}."
-        )
+    _validate_nonnegative_float("jitter_scale", jitter_scale)
 
 
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:
