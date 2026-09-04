@@ -19,6 +19,10 @@ from dynestyx.inference.utils.plate_utils import (
 
 MissingPolicy = Literal["raise", "empty"]
 
+# Sentinel for "pick a small value appropriate to the working precision",
+# following the `"auto"` convention used elsewhere in the package.
+CovarianceJitter = float | Literal["auto"]
+
 
 class _ForwardSimulationImproperUniform(dist.ImproperUniform):
     """An improper distribution sampled by dynamical forward simulation.
@@ -120,6 +124,26 @@ def _gaussian_sequence_to_dists(
     ]
 
 
+_DEFAULT_COV_JITTER_F32 = 1e-5
+_DEFAULT_COV_JITTER_F64 = 1e-12
+
+
+def _default_covariance_jitter() -> float:
+    r"""Default jitter for covariance regularization.
+    Chosen depending on the precision of the current JAX default float type.
+    Values were chosen empirically to give no failures at around
+    unit variance. States of much larger magnitude may still need a bigger value.
+
+    Resolved at call time rather than at import, since `jax_enable_x64` may be
+    toggled after a config is constructed.
+    """
+    return (
+        _DEFAULT_COV_JITTER_F64
+        if jnp.zeros(()).dtype == jnp.float64
+        else _DEFAULT_COV_JITTER_F32
+    )
+
+
 def _check_if_ensemble_low_rank(
     ensemble: Real[Array, "... n_particles state_dim"],
 ) -> bool:
@@ -153,8 +177,9 @@ def _ensemble_sequence_to_low_rank_gaussian_dists(
     The low-rank representation is a $(\text{state\_dim}, N)$ factor $X'_t$
     (not expanded into a dense $(\text{state\_dim}, \text{state\_dim})$ matrix).
 
-    ``covariance_jitter`` is the $\epsilon$ of $P_t + \epsilon I$.
-    Default of ``0.0``, the distributions have the exact covariance, but no Lebesgue density.
+    ``covariance_jitter`` is the $\epsilon$ of $P_t + \epsilon I$. At the default of
+    ``0.0`` the distributions carry the exact covariance but have no Lebesgue
+    density, so ``log_prob`` is ``nan``.
 
     Note:
         `LowRankMultivariateNormal.log_prob` will yield ``nan`` unless a positive
@@ -255,8 +280,8 @@ def _cholesky_state_sequence_to_dists(
     when the ensemble is rank-deficient (``n_particles - 1 < state_dim``);
     - everything else becomes a dense `MultivariateNormal`.
 
-    ``covariance_jitter`` is applied in both Gaussian branches; see
-    `_ensemble_sequence_to_low_rank_gaussian_dists`.
+    ``covariance_jitter`` is applied in both Gaussian branches. It defaults to
+    ``0.0`` -- the exact, unregularised covariance.
     """
     if particle_mode:
         return _particle_sequence_to_dists(

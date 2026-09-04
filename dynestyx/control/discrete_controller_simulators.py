@@ -1,25 +1,23 @@
 """Closed-loop simulation for controlled discrete-time dynamical models."""
 
+from types import SimpleNamespace
 from typing import Any, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import numpyro.distributions as dist
 from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
 from numpyro.distributions import Distribution
 
-from dynestyx.inference.configs.filter import BaseFilterConfig
+from dynestyx.inference.configs.filter import BaseFilterConfig, PFConfig
 from dynestyx.inference.filters import _default_filter_config
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
-from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.inference.utils.distribution_utils import (
-    _check_if_ensemble_low_rank,
-    _ensemble_sequence_to_low_rank_gaussian_dists,
+    _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import BaseSimulator
@@ -46,38 +44,49 @@ def filter_state_mean(state: Any) -> Real[Array, "..."]:
     raise TypeError(f"Cannot summarize filter state of type {type(state).__name__}")
 
 
-def filter_state_dist(state: Any) -> Distribution:
-    """Full-belief NumPyro distribution for a cuthbert filter state, any family.
+def filter_state_dist(state: Any, filter_config: BaseFilterConfig) -> Distribution:
+    """Full-belief NumPyro distribution for a filter state.
 
-    Kalman-family states (`KFConfig`, `EKFConfig`) expose `.mean`/`.chol_cov`
-    with a square Cholesky factor, giving an exact `MultivariateNormal`.
-    `PFConfig` states have no such property -- their belief is a weighted
-    particle cloud (`.particles`, `.log_weights`), represented via
-    `WeightedParticles` (dynestyx's own `Distribution`; NumPyro has no built-in
-    equivalent). Unlike `filter_state_mean`, this does not broadcast over a
-    leading time/batch axis -- call it once per (unbatched) state.
+    Only `filter_source="cuthbert"` is supported today, matching
+    `DiscreteControlLoopSimulator`'s own restriction. Converts the filter state to a NumPyro `Distribution`
+    in the same way that `ConditionedResult.dists` does for the recorded filtered states.
 
-    Ensemble states (`EnKFConfig`) have covariances that are at most rank `n_particles - 1`.
-    When that is below `state_dim`, we use a `LowRankMultivariateNormal` built
-    from the ensemble factor.
-    Otherwise the exact `MultivariateNormal` is kept.
+    The shared conversion is time-indexed, so the state is given a leading axis of
+    length one and the single distribution unwrapped.
 
-    A singular belief has the exact ensemble mean and covariance, but no density -- its `log_prob` is `nan`.
-    Raise `n_particles` above `state_dim`, or set `EnKFConfig.filtered_covariance_jitter` on the
-    inference path, if you need one.
+    Args:
+        state: A single, unbatched filter state produced by `filter_config`.
+        filter_config: The config that produced `state`. Selects the backend and
+            carries `recorded_filtered_states_cov_jitter` for ensemble states.
+
+    Returns:
+        The belief as a NumPyro `Distribution`.
+
+    Raises:
+        ValueError: If `filter_config.filter_source` is not `"cuthbert"`.
     """
-    if hasattr(state, "ensemble") and _check_if_ensemble_low_rank(state.ensemble):
-        return _ensemble_sequence_to_low_rank_gaussian_dists(state.ensemble[None, ...])[
-            0
-        ]
-    if hasattr(state, "chol_cov"):
-        return dist.MultivariateNormal(state.mean, scale_tril=state.chol_cov)
-    if hasattr(state, "particles") and hasattr(state, "log_weights"):
-        log_weights = jax.nn.log_softmax(state.log_weights, axis=-1)
-        return WeightedParticles(state.particles, log_weights)
-    raise TypeError(
-        f"Cannot build a distribution for filter state of type {type(state).__name__}"
-    )
+
+    if filter_config.filter_source == "cuthbert":
+        # Give the time-indexed conversion a leading axis of one
+        with_time_axis = SimpleNamespace(
+            **{
+                name: jnp.asarray(getattr(state, name))[None]
+                for name in ("ensemble", "mean", "chol_cov", "particles", "log_weights")
+                if hasattr(state, name)
+            }
+        )
+        return _cholesky_state_sequence_to_dists(
+            with_time_axis,
+            particle_mode=isinstance(filter_config, PFConfig),
+            covariance_jitter=getattr(
+                filter_config, "recorded_filtered_states_cov_jitter", 0.0
+            ),
+        )[0]
+    else:
+        raise ValueError(
+            "filter_state_dist currently only supports filter_source='cuthbert' only, got "
+            f"{filter_config.filter_source!r}."
+        )
 
 
 @runtime_checkable
@@ -305,7 +314,10 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             t_next = times[t_idx + 1]
 
             u_k, s_next = self.control_policy(
-                filter_state_dist(x_hat_prev), t_now, t_next, s_prev
+                filter_state_dist(x_hat_prev, filter_config),
+                t_now,
+                t_next,
+                s_prev,
             )
             if isinstance(u_k, Distribution):
                 raise ValueError(

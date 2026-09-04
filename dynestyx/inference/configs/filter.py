@@ -8,6 +8,10 @@ from typing import Literal
 import jax.random as jr
 from jaxtyping import PRNGKeyArray
 
+from dynestyx.inference.utils.distribution_utils import (
+    CovarianceJitter,
+    _default_covariance_jitter,
+)
 from dynestyx.utils import _validate_nonnegative_float
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
@@ -136,11 +140,17 @@ class EnKFConfig(BaseFilterConfig):
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
             `None` disables inflation.
-        filtered_covariance_jitter (float): Nonnegative \(\epsilon\) added to the
-            reported filtered-state covariance as \(\epsilon I\). Defaults to `0.0`.
-            When the filtered covariance is singular (i.e., when the ensemble size is smaller than the state dimension),
-            this jitter ensures that the resulting distribution has a well-defined density.
-            It never affects the filter recursion or the marginal likelihood.
+        recorded_filtered_states_cov_jitter (float | Literal["auto"]): Nonnegative \(\epsilon\) added to
+            the **recorded** filtered-state covariance as \(\epsilon I\).
+            This only affects the covariance when converted to a `MultivariateNormal` or `LowRankMultivariateNormal`
+            distribution (notably those returned in `ConditionedResult.dists`); it never
+            enters the EnKF update, the filter recursion, or the marginal
+            likelihood.
+            When `n_particles - 1 < state_dim`, the ensemble covariance is singular,
+            this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonethelss).
+            `"auto"` (default) selects a small precision-dependent value
+            (`1e-5` in float32, `1e-12` in float64). Will work for variance around 1, but may need a bigger value
+            for larger magnitudes. Pass `0.0` for the exact, unregularised covariance.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
@@ -192,12 +202,16 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
-    filtered_covariance_jitter: float = 0.0
+    recorded_filtered_states_cov_jitter: CovarianceJitter = "auto"
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def __post_init__(self) -> None:
+        if self.recorded_filtered_states_cov_jitter == "auto":
+            self.recorded_filtered_states_cov_jitter = _default_covariance_jitter()
+        # Check that the jitter is nonnegative float
         _validate_nonnegative_float(
-            "filtered_covariance_jitter", self.filtered_covariance_jitter
+            "recorded_filtered_states_cov_jitter",
+            self.recorded_filtered_states_cov_jitter,
         )
 
 

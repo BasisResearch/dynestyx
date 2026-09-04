@@ -582,7 +582,9 @@ class Smoother(BaseSmootherLogFactorAdder):
                 states,
                 particle_mode=isinstance(config, PFSmootherConfig),
                 plate_shapes=plate_shapes,
-                covariance_jitter=getattr(config, "filtered_covariance_jitter", 0.0),
+                covariance_jitter=getattr(
+                    config, "recorded_filtered_states_cov_jitter", 0.0
+                ),
             )
 
         raise ValueError(f"Unsupported batched output kind: {output_kind}")
