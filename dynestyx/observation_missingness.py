@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
 from typing import Literal
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax.scipy as jsp
 import numpy as np
@@ -27,8 +27,7 @@ ObservationDistributionMode = Literal["masked", "multivariate_normal", "independ
 MissingObservationStrategy = Literal["auto", "marginalize", "augment", "error"]
 
 
-@dataclasses.dataclass
-class MissingObservationMetadata:
+class MissingObservationMetadata(eqx.Module):
     """Describe the missing entries in one observation array.
 
     Flattened indices list missing entries by time and then by component.
@@ -54,10 +53,10 @@ class MissingObservationMetadata:
     missing_obs_times: Real[Array, " n_missing_obs"]
     missing_obs_coordinate_indices: Int[Array, " n_missing_obs"] | None
     missing_flat_indices: Int[Array, " n_missing_obs"]
-    observation_shape: tuple[int, ...]
-    has_missing: bool
-    has_partial_missing: bool
-    has_fully_missing_rows: bool
+    observation_shape: tuple[int, ...] = eqx.field(static=True)
+    has_missing: bool = eqx.field(static=True)
+    has_partial_missing: bool = eqx.field(static=True)
+    has_fully_missing_rows: bool = eqx.field(static=True)
 
 
 def _concrete_observation_mask(

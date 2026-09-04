@@ -6,9 +6,9 @@ small Dynestyx-level representation used by downstream handlers.
 
 from __future__ import annotations
 
-import dataclasses
 from typing import Any
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -39,8 +39,7 @@ type SupportedObservationPredictionConfig = (
 )
 
 
-@dataclasses.dataclass(frozen=True)
-class PredictedObservationOutputs:
+class PredictedObservationOutputs(eqx.Module):
     """Canonical predicted-observation outputs for Dynestyx filters."""
 
     mean: Float[Array, "*plate time observation_dim"] | None = None
