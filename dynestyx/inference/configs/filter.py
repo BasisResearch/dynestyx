@@ -8,6 +8,8 @@ from typing import Literal
 import jax.random as jr
 from jaxtyping import PRNGKeyArray
 
+from dynestyx.utils import _validate_nonnegative_float
+
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
@@ -20,17 +22,6 @@ FilterSource = (
     CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource | DynestyxOnlyFilterSource
 )
 CuthbertOrCDDynamaxFilterSource = CuthbertOnlyFilterSource | CDDynamaxOnlyFilterSource
-
-
-def _validate_filtered_covariance_jitter(filtered_covariance_jitter: float) -> None:
-    if (
-        not math.isfinite(filtered_covariance_jitter)
-        or filtered_covariance_jitter < 0.0
-    ):
-        raise ValueError(
-            "filtered_covariance_jitter must be a finite, nonnegative float, "
-            f"got {filtered_covariance_jitter!r}."
-        )
 
 
 @dataclasses.dataclass
@@ -205,7 +196,9 @@ class EnKFConfig(BaseFilterConfig):
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def __post_init__(self) -> None:
-        _validate_filtered_covariance_jitter(self.filtered_covariance_jitter)
+        _validate_nonnegative_float(
+            "filtered_covariance_jitter", self.filtered_covariance_jitter
+        )
 
 
 @dataclasses.dataclass
