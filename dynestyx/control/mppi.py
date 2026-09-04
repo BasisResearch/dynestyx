@@ -21,13 +21,13 @@ from jaxtyping import PRNGKeyArray, Real
 from numpyro.distributions import Distribution
 
 import dynestyx as dsx
-from dynestyx.control.discrete_controller_simulators import ControlledSimulatedResult
 from dynestyx.models import DynamicalModel
+from dynestyx.types import SimulatedResult
 
-# (result: ControlledSimulatedResult) -> scalar, called once per sampled rollout
+# (result: SimulatedResult) -> scalar, called once per sampled rollout
 # (vmapped across all n_samples candidates) on that candidate's full rollout result.
 # See MPPI.loss_fn for the full shape contract.
-type MPPILossFn = Callable[[ControlledSimulatedResult], Real[Array, ""]]
+type MPPILossFn = Callable[[SimulatedResult], Real[Array, ""]]
 
 
 class MPPI(eqx.Module):
@@ -49,23 +49,28 @@ class MPPI(eqx.Module):
     step (receding horizon); the remainder becomes next step's nominal
     sequence, shifted left by one with the last entry repeated.
 
+    Each rollout is run under the `"previous_transition"` observation/
+    control convention, so a candidate's $u_k$ influences $x_{k+1}$ and
+    $y_{k+1}$. `dynamics` is copied (via `equinox.tree_at`) rather than modified, so the caller's
+    model keeps whatever `observation_control_alignment` it was built with.
+    See [Issue #312](https://github.com/BasisResearch/dynestyx/issues/312).
+
     Attributes:
         dynamics: a `DynamicalModel` (the same model used for the real simulation
             or some approximate). Each candidate rollout is computed by calling `dsx.simulate`.
             If `dynamics` holds trainable parameters you're also
             fitting via the outer simulation, they remain in the differentiable
             pytree so gradients through planning are tracked too.
-        loss_fn: `MPPILossFn`, i.e. `(result: ControlledSimulatedResult) -> scalar`,
+        loss_fn: `MPPILossFn`, i.e. `(result: SimulatedResult) -> scalar`,
             called once per sample (vmapped) on that candidate's full rollout. Every
-            field carries a leading `n_simulations=1` axis -- e.g.
-            `result.states.shape == (1, horizon + 1, state_dim)` -- matching how
-            `dsx.simulate` never drops that axis, even for one trajectory;
-            `jnp.sum(result.states**2)`-style reductions don't need to care, but
-            explicit indexing does (`result.controls[0, 0]` is the whole first control
-            vector, not a scalar). `times`/`states`/`observations` have length
-            `horizon + 1` (including the starting state) and `controls` has length
-            `horizon`, matching `ControlledSimulatedResult`'s own
-            `control_time = time - 1` convention.
+            field carries a leading `n_simulations` axis -- e.g.
+            `result.states.shape == (n_simulations, horizon, state_dim)`, so
+            `(1, horizon, state_dim)` by default. `times`/`states`/`observations`/`controls` all
+            have length `horizon` and are index-aligned: at index `k`,
+            `states[k]` is $x_{k+1}$, `observations[k]` is $y_{k+1}$, and
+            `controls[k]` is $u_k$ -- the control that produced that state. The
+            starting state $x_0$ is not in `states` (no control produced it); it
+            is available separately as `result.x_0`, shape `(1, state_dim)`.
         horizon: Planning horizon length `H` -- the number of internal
             one-step `dynamics` calls per rollout. Defaults to `10`.
         noise_std: Standard deviation of the Gaussian perturbations added to
@@ -73,6 +78,8 @@ class MPPI(eqx.Module):
             to `1.0`.
         n_samples: Number of sampled control sequences per call. Defaults to
             `20`.
+        n_simulations: Number of independent rollouts drawn per candidate
+            control sequence, forwarded to `dsx.simulate`. Defaults to `1`.
         dt: Fixed planning step size. Defaults to `1.0`.
         temperature: MPPI's $\\lambda$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
@@ -95,6 +102,7 @@ class MPPI(eqx.Module):
         default_factory=lambda: jnp.array(1.0)
     )
     n_samples: int = eqx.field(static=True, default=20)
+    n_simulations: int = eqx.field(static=True, default=1)
     dt: float = eqx.field(static=True, default=1.0)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
@@ -118,31 +126,23 @@ class MPPI(eqx.Module):
         u_seq: Real[Array, "horizon control_dim"],
         key: PRNGKeyArray,
         t_now: Real[Array, ""],
-    ) -> tuple[
-        Real[Array, ""],
-        Real[Array, "horizon+1 state_dim"],
-        Real[Array, "horizon+1 observation_dim"],
-    ]:
+    ) -> tuple[Real[Array, ""], SimulatedResult]:
         """Roll out one candidate control sequence by calling `dsx.simulate`
         on a copy of `dynamics` pinned to start at `x0`, then score it with
-        `loss_fn`. Returns `(loss, states, observations)` -- plain arrays
-        only, since `ControlledSimulatedResult` isn't JAX-pytree-registered
-        and so can never itself cross a `vmap` boundary; it's built and fully
-        consumed here, inside the per-candidate function that gets vmapped."""
+        `loss_fn`.
+
+        Returns `(loss, result)`."""
         times = t_now + jnp.arange(self.horizon + 1) * self.dt  # (horizon+1,)
 
+        # Pin the rollout to start at x0, and plan under the  "previous_transition"
+        # convention so y_{k+1} is paired with u_k (the
+        # control that produced x_{k+1}) rather than with u_k at the same
+        # index.
         pinned_dynamics = eqx.tree_at(
-            lambda m: m.initial_condition,
+            lambda m: (m.initial_condition, m.observation_control_alignment),
             self.dynamics,
-            dist.Delta(x0, event_dim=1),
+            (dist.Delta(x0, event_dim=1), "previous_transition"),
         )
-        # dsx.simulate's same-index convention pairs ctrl_values[t] with both
-        # the transition from t and the observation at t, so it needs
-        # horizon+1 entries; u_seq only has horizon (one per transition).
-        # Pad with a repeat of the last control, used only to drive the final
-        # (never-transitioned-from) observation -- purely internal plumbing,
-        # never seen by loss_fn (which gets the real, unpadded u_seq below).
-        ctrl_padded = jnp.concatenate([u_seq, u_seq[-1:]], axis=0)
 
         # Relies on dsx.simulate's internals (Simulator/DiscreteTimeSimulator)
         # staying plain JAX array ops with no data-dependent Python branching,
@@ -151,27 +151,26 @@ class MPPI(eqx.Module):
             pinned_dynamics,
             rng_key=key,
             predict_times=times,
-            ctrl_times=times,
-            ctrl_values=ctrl_padded,
+            ctrl_times=times[:-1],
+            ctrl_values=u_seq,
+            n_simulations=self.n_simulations,
         )
+        assert res.times is not None
         assert res.states is not None
-        assert res.observations is not None
-        states = res.states[0]  # squeezed, for plan_step's own batching below
-        observations = res.observations[0]
-
-        # ControlledSimulatedResult's fields all require a leading
-        # n_simulations axis (matching how dsx.simulate never drops it, even
-        # for one trajectory) -- so loss_fn sees the same n_simulations=1
-        # shape a real single dsx.simulate() call would produce, not a
-        # squeezed one.
-        result = ControlledSimulatedResult(
-            times=times[None],
-            x_0=x0[None],
-            states=states[None],
-            observations=observations[None],
-            controls=u_seq[None],
+        # Under previous_transition, dsx.simulate returns times/states of
+        # length horizon+1 (t_0..t_H, x_0..x_H) but observations/controls of
+        # length horizon. Drop t_0/x_0 so loss_fn sees four index-aligned
+        # length-horizon arrays: states[k]=x_{k+1}, observations[k]=y_{k+1},
+        # controls[k]=u_k. Everything else is passed through from `res`
+        # unchanged, so each field keeps its leading n_simulations axis.
+        result = SimulatedResult(
+            times=res.times[:, 1:],
+            x_0=res.x_0,
+            states=res.states[:, 1:],  # drop x_0
+            observations=res.observations,
+            controls=res.controls,
         )
-        return self.loss_fn(result), states, observations
+        return self.loss_fn(result), result
 
     def plan_step(
         self,
@@ -181,20 +180,19 @@ class MPPI(eqx.Module):
     ) -> tuple[
         Real[Array, " control_dim"],
         tuple[Real[Array, "horizon control_dim"], PRNGKeyArray],
-        ControlledSimulatedResult,
+        SimulatedResult,
     ]:
         """Do MPPI's full planning step and also return the batch of every
-        candidate rollout considered (`n_samples`-wide `ControlledSimulatedResult`)
+        candidate rollout considered (`n_samples`-wide `SimulatedResult`).
         -- useful for debugging/plotting what MPPI weighed, or diagnosing a
-        `loss_fn`. `__call__` (used by `DiscreteControlLoopSimulator`) is a
+        `loss_fn`.
+
+        `__call__` (used by `DiscreteControlLoopSimulator`) is a
         thin wrapper around this that drops the rollout batch, since
         `PolicyCallable`'s return signature can't carry a third value.
 
-        Note: the returned result's leading axis indexes *candidates*, not
-        independent draws from the true generative process -- it's not a
-        real simulated trajectory. `filtered_states_mean`/`policy_states`/
-        `predicted_*` are always `None` (not meaningful for a planning
-        rollout).
+        Every field is shaped `(n_samples, n_simulations, horizon, ...)`.
+        `predicted_*` are always `None` (not meaningful for a planning rollout).
         """
         x0 = x_hat.mean
         nominal, key = s
@@ -210,11 +208,11 @@ class MPPI(eqx.Module):
         rollout_keys = jr.split(rollout_key, self.n_samples)
 
         if self.batched:
-            losses, states_batch, obs_batch = jax.vmap(
+            losses, rollouts = jax.vmap(
                 self._rollout_and_score_one, in_axes=(None, 0, 0, None)
             )(x0, control_candidates, rollout_keys, t_now)
         else:
-            losses, states_batch, obs_batch = jax.lax.map(
+            losses, rollouts = jax.lax.map(
                 lambda args: self._rollout_and_score_one(x0, args[0], args[1], t_now),
                 (control_candidates, rollout_keys),
             )
@@ -229,15 +227,7 @@ class MPPI(eqx.Module):
         u0 = weighted_seq[0]
         next_nominal = jnp.concatenate([weighted_seq[1:], weighted_seq[-1:]], axis=0)
 
-        times = t_now + jnp.arange(self.horizon + 1) * self.dt
-        result = ControlledSimulatedResult(
-            times=jnp.broadcast_to(times, (self.n_samples, self.horizon + 1)),
-            x_0=jnp.broadcast_to(x0, (self.n_samples,) + x0.shape),
-            states=states_batch,
-            observations=obs_batch,
-            controls=control_candidates,
-        )
-        return u0, (next_nominal, key), result
+        return u0, (next_nominal, key), rollouts
 
     def __call__(
         self,
