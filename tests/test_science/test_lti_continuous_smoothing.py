@@ -2,7 +2,6 @@
 
 import os
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
@@ -11,6 +10,7 @@ from numpyro.infer import MCMC, NUTS, Predictive
 from dynestyx import Simulator
 from dynestyx.inference.configs.smoother import ContinuousTimeKFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.models import continuous_time_lti_simplified_model
 from tests.test_utils import get_output_dir
 
@@ -100,9 +100,12 @@ def test_continuous_lti_smoother_mcmc_science(num_samples: int):
     if SAVE_FIG and output_dir is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(posterior_rho, hdi_prob=0.95, ref_val=true_rho)
-        plt.savefig(output_dir / "posterior_rho.png", dpi=150, bbox_inches="tight")
-        plt.close()
+        save_posterior_plot(
+            posterior_rho,
+            name="rho",
+            output_path=output_dir / "posterior_rho.png",
+            ref_val=true_rho,
+        )
 
     post_pred = Predictive(
         data_conditioned_model,
@@ -145,9 +148,7 @@ def test_continuous_lti_smoother_mcmc_science(num_samples: int):
     assert jnp.abs(posterior_rho.mean() - true_rho) < 2.0
     assert float(rmse_x1) < 2.0
 
-    hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_rho)
     assert hdi_min <= true_rho <= hdi_max, (
         f"True rho {true_rho} not in HDI {hdi_min}, {hdi_max}"
     )

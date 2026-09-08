@@ -2,12 +2,12 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS
 
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.fixtures import data_conditioned_stochastic_volatility  # noqa: F401
 from tests.test_utils import get_output_dir
 
@@ -56,17 +56,16 @@ def test_mcmc_inference(data_conditioned_stochastic_volatility, num_samples):  #
     if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(
-            posterior_phi, hdi_prob=0.95, ref_val=true_params["phi"].item()
+        save_posterior_plot(
+            posterior_phi,
+            name="phi",
+            output_path=OUTPUT_DIR / "posterior_phi.png",
+            ref_val=true_params["phi"].item(),
         )
-        plt.savefig(OUTPUT_DIR / "posterior_phi.png", dpi=150, bbox_inches="tight")
-        plt.close()
 
     assert jnp.abs(posterior_phi.mean() - true_params["phi"]) < 0.3
 
-    hdi_data = az.hdi(posterior_phi, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_phi)
     assert hdi_min <= true_params["phi"] <= hdi_max, (
         f"True phi {true_params['phi']} not in HDI {hdi_min}, {hdi_max}"
     )

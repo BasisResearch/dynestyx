@@ -1,11 +1,11 @@
 """Science tests for LTI_continuous: exact KF and DPF."""
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.fixtures import (
     data_conditioned_continuous_time_lti_simplified_science,  # noqa: F401
 )
@@ -89,20 +89,19 @@ def test_mcmc_inference(
     if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(
-            posterior_rho, hdi_prob=0.95, ref_val=true_params["rho"].item()
+        save_posterior_plot(
+            posterior_rho,
+            name="rho",
+            output_path=OUTPUT_DIR / "posterior_rho.png",
+            ref_val=true_params["rho"].item(),
         )
-        plt.savefig(OUTPUT_DIR / "posterior_rho.png", dpi=150, bbox_inches="tight")
-        plt.close()
 
     true_rho = true_params["rho"]
     # KF is exact; DPF has more variance
     tol = 2.0 if filter_type == "kf" else 2.5
     assert jnp.abs(posterior_rho.mean() - true_rho) < tol
 
-    hdi_data = az.hdi(posterior_rho, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_rho)
     assert hdi_min <= true_rho <= hdi_max, (
         f"True rho {true_rho} not in HDI {hdi_min}, {hdi_max}"
     )
