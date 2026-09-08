@@ -197,7 +197,9 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
-    recorded_filtered_states_cov_jitter: float = 1e-5 # this is good for float32, may want to reduce for float64
+    recorded_filtered_states_cov_jitter: float = (
+        1e-5  # this is good for float32, may want to reduce for float64
+    )
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def __post_init__(self) -> None:
