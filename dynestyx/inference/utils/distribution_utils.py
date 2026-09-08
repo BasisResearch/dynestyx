@@ -19,10 +19,6 @@ from dynestyx.inference.utils.plate_utils import (
 
 MissingPolicy = Literal["raise", "empty"]
 
-# Sentinel for "pick a small value appropriate to the working precision",
-# following the `"auto"` convention used elsewhere in the package.
-CovarianceJitter = float | Literal["auto"]
-
 
 class _ForwardSimulationImproperUniform(dist.ImproperUniform):
     """An improper distribution sampled by dynamical forward simulation.
@@ -122,26 +118,6 @@ def _gaussian_sequence_to_dists(
         )
         for t in range(t_len)
     ]
-
-
-_DEFAULT_COV_JITTER_F32 = 1e-5
-_DEFAULT_COV_JITTER_F64 = 1e-12
-
-
-def _default_covariance_jitter() -> float:
-    r"""Default jitter for covariance regularization.
-    Chosen depending on the precision of the current JAX default float type.
-    Values were chosen empirically to give no failures at around
-    unit variance. States of much larger magnitude may still need a bigger value.
-
-    Resolved at call time rather than at import, since `jax_enable_x64` may be
-    toggled after a config is constructed.
-    """
-    return (
-        _DEFAULT_COV_JITTER_F64
-        if jnp.zeros(()).dtype == jnp.float64
-        else _DEFAULT_COV_JITTER_F32
-    )
 
 
 def _check_if_ensemble_low_rank(

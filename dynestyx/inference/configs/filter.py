@@ -8,10 +8,6 @@ from typing import Literal
 import jax.random as jr
 from jaxtyping import PRNGKeyArray
 
-from dynestyx.inference.utils.distribution_utils import (
-    CovarianceJitter,
-    _default_covariance_jitter,
-)
 from dynestyx.utils import _validate_nonnegative_float
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
@@ -140,7 +136,7 @@ class EnKFConfig(BaseFilterConfig):
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
             `None` disables inflation.
-        recorded_filtered_states_cov_jitter (float | Literal["auto"]): Nonnegative \(\epsilon\) added to
+        recorded_filtered_states_cov_jitter (float): Nonnegative \(\epsilon\) added to
             the **recorded** filtered-state covariance as \(\epsilon I\).
             This only affects the covariance when converted to a `MultivariateNormal` or `LowRankMultivariateNormal`
             distribution (notably those returned in `ConditionedResult.dists`); it never
@@ -148,9 +144,8 @@ class EnKFConfig(BaseFilterConfig):
             likelihood.
             When `n_particles - 1 < state_dim`, the ensemble covariance is singular,
             this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonethelss).
-            `"auto"` (default) selects a small precision-dependent value
-            (`1e-5` in float32, `1e-12` in float64). Will work for variance around 1, but may need a bigger value
-            for larger magnitudes. Pass `0.0` for the exact, unregularised covariance.
+            Defaults to `1e-5`. Will work for variance around 1, but may need a bigger value
+            for larger magnitudes and may want to reduce when using float64. Pass `0.0` for the exact, unregularised covariance.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
@@ -202,12 +197,10 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
-    recorded_filtered_states_cov_jitter: CovarianceJitter = "auto"
+    recorded_filtered_states_cov_jitter: float = 1e-5 # this is good for float32, may want to reduce for float64
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def __post_init__(self) -> None:
-        if self.recorded_filtered_states_cov_jitter == "auto":
-            self.recorded_filtered_states_cov_jitter = _default_covariance_jitter()
         # Check that the jitter is nonnegative float
         _validate_nonnegative_float(
             "recorded_filtered_states_cov_jitter",

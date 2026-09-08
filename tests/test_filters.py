@@ -25,7 +25,6 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 )
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
-    _default_covariance_jitter,
 )
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
@@ -694,7 +693,7 @@ def test_ensemble_jitter_is_off_by_default_and_enabled_only_by_config():
         assert jitter_of(filter_config) == 0.0
 
     # EnKF opts in by default, resolving "auto" to a precision-dependent value.
-    assert jitter_of(EnKFConfig()) == _default_covariance_jitter()
+    assert jitter_of(EnKFConfig()) == 1e-5
 
     # ... and an explicit value is passed through untouched, including zero.
     assert jitter_of(EnKFConfig(recorded_filtered_states_cov_jitter=0.0)) == 0.0
