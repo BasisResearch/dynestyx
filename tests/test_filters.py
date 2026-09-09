@@ -23,9 +23,6 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete_filter,
 )
-from dynestyx.inference.utils.distribution_utils import (
-    _cholesky_state_sequence_to_dists,
-)
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
@@ -733,19 +730,6 @@ def test_cuthbert_enkf_filtered_dists_are_low_rank_and_samplable():
         assert d.cov_factor.shape == (dynamics.state_dim, n_particles)
         assert jnp.allclose(d.mean, ensemble[t].mean(axis=0), atol=1e-5)
         assert jnp.isfinite(d.sample(jr.PRNGKey(t))).all()
-
-    # Rebuilt exactly as `run_discrete_filter` does it: with the config's own
-    # jitter the belief is no longer singular, so it has a usable density.
-    filter_config = EnKFConfig(n_particles=n_particles, crn_seed=jr.PRNGKey(42))
-    with_jitter = _cholesky_state_sequence_to_dists(
-        result.states,
-        particle_mode=isinstance(filter_config, PFConfig),
-        covariance_jitter=getattr(
-            filter_config, "recorded_filtered_states_cov_jitter", 0.0
-        ),
-    )
-    for d in with_jitter:
-        assert isinstance(d, dist.LowRankMultivariateNormal)
         assert jnp.isfinite(d.log_prob(d.mean))
 
 

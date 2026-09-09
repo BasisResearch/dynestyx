@@ -143,7 +143,7 @@ class EnKFConfig(BaseFilterConfig):
             enters the EnKF update, the filter recursion, or the marginal
             likelihood.
             When `n_particles - 1 < state_dim`, the ensemble covariance is singular,
-            this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonethelss).
+            this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonetheless).
             Defaults to `1e-5`. Will work for variance around 1, but may need a bigger value
             for larger magnitudes and may want to reduce when using float64. Pass `0.0` for the exact, unregularised covariance.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.

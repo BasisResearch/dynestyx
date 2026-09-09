@@ -14,14 +14,6 @@ from dynestyx.inference.configs.simulator import (
 from dynestyx.utils import _validate_nonnegative_float
 
 
-def _validate_covariance_jitter(covariance_jitter: float) -> None:
-    _validate_nonnegative_float("covariance_jitter", covariance_jitter)
-
-
-def _validate_jitter_scale(jitter_scale: float) -> None:
-    _validate_nonnegative_float("jitter_scale", jitter_scale)
-
-
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:
     return SDESimulatorConfig(source="diffrax", solver=dfx.Euler())
 
@@ -69,7 +61,7 @@ class ODEFlowConfig(BaseDiscretizerConfig):
     jitter_scale: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_jitter_scale(self.jitter_scale)
+        _validate_nonnegative_float("jitter_scale", self.jitter_scale)
 
 
 @dataclasses.dataclass
@@ -126,7 +118,7 @@ class EulerMaruyamaConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
@@ -201,7 +193,7 @@ class ExactAffineConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
@@ -267,7 +259,7 @@ class LocalLinearizationConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
@@ -343,7 +335,7 @@ class MeanTrajectoryLinearizationConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
