@@ -436,6 +436,9 @@ def run_discrete_filter(
     filtered_dists = _cholesky_state_sequence_to_dists(
         states,
         particle_mode=isinstance(filter_config, PFConfig),
+        covariance_jitter=getattr(
+            filter_config, "recorded_filtered_states_cov_jitter", 0.0
+        ),
     )
     return marginal_loglik, states, filtered_dists
 

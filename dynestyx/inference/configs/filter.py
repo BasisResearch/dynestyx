@@ -8,6 +8,8 @@ from typing import Literal
 import jax.random as jr
 from jaxtyping import PRNGKeyArray
 
+from dynestyx.utils import _validate_nonnegative_float
+
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
@@ -134,6 +136,16 @@ class EnKFConfig(BaseFilterConfig):
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
             `None` disables inflation.
+        recorded_filtered_states_cov_jitter (float): Nonnegative \(\epsilon\) added to
+            the **recorded** filtered-state covariance as \(\epsilon I\).
+            This only affects the covariance when converted to a `MultivariateNormal` or `LowRankMultivariateNormal`
+            distribution (notably those returned in `ConditionedResult.dists`); it never
+            enters the EnKF update, the filter recursion, or the marginal
+            likelihood.
+            When `n_particles - 1 < state_dim`, the ensemble covariance is singular,
+            this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonetheless).
+            Defaults to `1e-5`. Will work for variance around 1, but may need a bigger value
+            for larger magnitudes and may want to reduce when using float64. Pass `0.0` for the exact, unregularised covariance.
         filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
     ??? note "Algorithm Reference"
@@ -185,7 +197,17 @@ class EnKFConfig(BaseFilterConfig):
     )
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
+    recorded_filtered_states_cov_jitter: float = (
+        1e-5  # this is good for float32, may want to reduce for float64
+    )
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+    def __post_init__(self) -> None:
+        # Check that the jitter is nonnegative float
+        _validate_nonnegative_float(
+            "recorded_filtered_states_cov_jitter",
+            self.recorded_filtered_states_cov_jitter,
+        )
 
 
 @dataclasses.dataclass

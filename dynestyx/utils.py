@@ -294,6 +294,24 @@ def _should_record_field(
     return math.prod(shape) <= max_elems
 
 
+def _validate_nonnegative_float(name: str, value: float) -> None:
+    """Validate a nonnegative, finite float-valued config field.
+
+    Shared by the jitter fields on the discretizer and filter configs, which
+    all have the same admissible range. ``name`` is the field's own name, so
+    the error message points at the attribute the user actually set.
+
+    Args:
+        name: Name of the field being validated, as it appears on the config.
+        value: Value to validate.
+
+    Raises:
+        ValueError: If ``value`` is not finite or is negative.
+    """
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError(f"{name} must be a finite, nonnegative float, got {value!r}.")
+
+
 def _validate_control_dim(
     dynamics: DynamicalModel,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]

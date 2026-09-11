@@ -21,7 +21,13 @@ from dynestyx.discretizers import (
     EulerMaruyamaConfig,
     _discretize_state_evolution,
 )
-from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
+from dynestyx.inference.configs.filter import (
+    EKFConfig,
+    EnKFConfig,
+    KFConfig,
+    PFConfig,
+    UKFConfig,
+)
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
     compute_cuthbert_filter,
@@ -135,7 +141,7 @@ def test_filter_state_dist_gaussian_when_chol_cov_present():
         mean = jnp.array([1.0, 2.0])
         chol_cov = jnp.array([[1.0, 0.0], [0.5, 1.0]])
 
-    result = filter_state_dist(_KFLikeState())
+    result = filter_state_dist(_KFLikeState(), KFConfig(filter_source="cuthbert"))
     assert isinstance(result, dist.MultivariateNormal)
     assert jnp.allclose(result.mean, _KFLikeState.mean)
     assert jnp.allclose(result.scale_tril, _KFLikeState.chol_cov)
@@ -146,7 +152,7 @@ def test_filter_state_dist_weighted_particles_when_particles_present():
         particles = jnp.array([[0.0], [2.0], [4.0]])  # 3 particles, state_dim=1
         log_weights = jnp.log(jnp.array([0.25, 0.25, 0.5]))
 
-    result = filter_state_dist(_PFLikeState())
+    result = filter_state_dist(_PFLikeState(), PFConfig(n_particles=3))
     assert isinstance(result, WeightedParticles)
     assert jnp.allclose(result.particles, _PFLikeState.particles)
     assert jnp.allclose(
@@ -154,19 +160,23 @@ def test_filter_state_dist_weighted_particles_when_particles_present():
     )
 
 
-@pytest.mark.parametrize(
-    ("fn", "match"),
-    [
-        (filter_state_mean, "Cannot summarize filter state"),
-        (filter_state_dist, "Cannot build a distribution"),
-    ],
-)
-def test_unsupported_filter_state_type_raises(fn, match):
+def test_unsupported_filter_state_type_raises():
     class _Neither:
         pass
 
-    with pytest.raises(TypeError, match=match):
-        fn(_Neither())
+    with pytest.raises(TypeError, match="Cannot summarize filter state"):
+        filter_state_mean(_Neither())
+
+
+def test_filter_state_dist_rejects_non_cuthbert_backend():
+    """`filter_state_dist` dispatches on the backend, not on the state's shape.
+
+    Only cuthbert states carry a Cholesky factor; cd-dynamax reports dense
+    covariances, so it needs its own branch rather than being duck-typed into
+    this one.
+    """
+    with pytest.raises(ValueError, match="filter_source='cuthbert' only"):
+        filter_state_dist(object(), UKFConfig())
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +389,7 @@ def test_filter_state_dist_matches_family_and_agrees_with_mean(
         t=_OBS_TIMES[0],
         t_prev=_OBS_TIMES[0] - 1.0,
     )
-    result = filter_state_dist(state)
+    result = filter_state_dist(state, filter_config)
     assert isinstance(result, expected_dist_type)
 
     if isinstance(result, WeightedParticles):
