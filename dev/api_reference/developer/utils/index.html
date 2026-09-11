@@ -4957,6 +4957,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.utils._validate_nonnegative_float" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _validate_nonnegative_float
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.utils._validate_site_sorting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5773,6 +5784,97 @@ returns the anchor unchanged rather than introducing a JAX runtime callback.</p>
             <td>
               <div class="doc-md-description">
                 <p>If controls are partially provided or no time grid is provided.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.utils._validate_nonnegative_float" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_validate_nonnegative_float</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.utils._validate_nonnegative_float" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validate a nonnegative, finite float-valued config field.</p>
+<p>Shared by the jitter fields on the discretizer and filter configs, which
+all have the same admissible range. <code>name</code> is the field's own name, so
+the error message points at the attribute the user actually set.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the field being validated, as it appears on the config.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>value</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Value to validate.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>value</code> is not finite or is negative.</p>
               </div>
             </td>
           </tr>

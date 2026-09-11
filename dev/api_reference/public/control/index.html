@@ -5371,7 +5371,9 @@ as they do for <code>Filter</code> (see <code>dynestyx.utils._should_record_fiel
         <p>Structural protocol for a control policy <span class="arithmatex">\(\pi\)</span>.</p>
 <div class="arithmatex">\[u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)\]</div>
 <p><code>x_hat</code> is a NumPyro <code>Distribution</code> -- <code>MultivariateNormal</code> for
-<code>KFConfig</code>/<code>EKFConfig</code>/<code>EnKFConfig</code>, <code>WeightedParticles</code> for <code>PFConfig</code>
+<code>KFConfig</code>/<code>EKFConfig</code>, <code>WeightedParticles</code> for <code>PFConfig</code>, and for
+<code>EnKFConfig</code> either of <code>MultivariateNormal</code> or, once the ensemble is rank
+deficient (<code>n_particles - 1 &lt; state_dim</code>), <code>LowRankMultivariateNormal</code>
 (see <code>filter_state_dist</code>); use <code>x_hat.mean</code> for a
 family-agnostic point estimate, or the distribution itself for
 uncertainty-aware planning. <code>t_now</code>/<code>t_next</code> are the current and next
@@ -5502,21 +5504,118 @@ works on both a single belief and a whole scanned-out sequence of them.</p>
 
 
 <h2 id="dynestyx.control.discrete_controller_simulators.filter_state_dist" class="doc doc-heading">
-            <code class=" language-python"><span class="n">dynestyx</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">discrete_controller_simulators</span><span class="o">.</span><span class="n">filter_state_dist</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span></code>
+            <code class=" language-python"><span class="n">dynestyx</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">discrete_controller_simulators</span><span class="o">.</span><span class="n">filter_state_dist</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">filter_config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span></code>
 
 <a href="#dynestyx.control.discrete_controller_simulators.filter_state_dist" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
 
-        <p>Full-belief NumPyro distribution for a cuthbert filter state, any family.</p>
-<p>Kalman-family states (<code>KFConfig</code>, <code>EKFConfig</code>, <code>EnKFConfig</code>) expose
-<code>.mean</code>/<code>.chol_cov</code>, giving an exact <code>MultivariateNormal</code>. <code>PFConfig</code>
-states have no such property -- their belief is a weighted particle
-cloud (<code>.particles</code>, <code>.log_weights</code>), represented via <code>WeightedParticles</code>
-(dynestyx's own <code>Distribution</code>; NumPyro has no built-in equivalent).
-Unlike <code>filter_state_mean</code>, this does not broadcast over a leading
-time/batch axis -- call it once per (unbatched) state.</p>
+        <p>Full-belief NumPyro distribution for a filter state.</p>
+<p>Only <code>filter_source="cuthbert"</code> is supported today, matching
+<code>DiscreteControlLoopSimulator</code>'s own restriction. Converts the filter state to a NumPyro <code>Distribution</code>
+in the same way that <code>ConditionedResult.dists</code> does for the recorded filtered states.</p>
+<p>The shared conversion is time-indexed, so the state is given a leading axis of
+length one and the single distribution unwrapped.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>state</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A single, unbatched filter state produced by <code>filter_config</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>filter_config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.filter.BaseFilterConfig)" href="../../developer/inference/configs/filter_configs/#dynestyx.inference.configs.filter.BaseFilterConfig">BaseFilterConfig</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The config that produced <code>state</code>. Selects the backend and
+carries <code>recorded_filtered_states_cov_jitter</code> for ensemble states.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpyro.distributions.Distribution">Distribution</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The belief as a NumPyro <code>Distribution</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>filter_config.filter_source</code> is not <code>"cuthbert"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>

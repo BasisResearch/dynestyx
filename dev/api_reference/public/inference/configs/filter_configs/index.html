@@ -6315,6 +6315,26 @@ square-root variant. <code>None</code> defers to the backend default.</p>
             </td>
           </tr>
           <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.EnKFConfig.recorded_filtered_states_cov_jitter">recorded_filtered_states_cov_jitter</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nonnegative <span class="arithmatex">\(\epsilon\)</span> added to
+the <strong>recorded</strong> filtered-state covariance as <span class="arithmatex">\(\epsilon I\)</span>.
+This only affects the covariance when converted to a <code>MultivariateNormal</code> or <code>LowRankMultivariateNormal</code>
+distribution (notably those returned in <code>ConditionedResult.dists</code>); it never
+enters the EnKF update, the filter recursion, or the marginal
+likelihood.
+When <code>n_particles - 1 &lt; state_dim</code>, the ensemble covariance is singular,
+this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonetheless).
+Defaults to <code>1e-5</code>. Will work for variance around 1, but may need a bigger value
+for larger magnitudes and may want to reduce when using float64. Pass <code>0.0</code> for the exact, unregularised covariance.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
             <td><code><span title="dynestyx.inference.configs.filter.EnKFConfig.filter_source">filter_source</span></code></td>
             <td>
                   <code><span title="dynestyx.inference.configs.filter.FilterSource">FilterSource</span></code>
