@@ -13,7 +13,7 @@ from dynestyx.inference.configs.filter import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.observation_missingness import (
-    masked_observation_log_prob,
+    _masked_observation_log_prob,
     prepare_observation_views,
     probe_observation_distribution_contract,
     summarize_observation_mask,
@@ -85,7 +85,7 @@ def hmm_log_emission_probs_masked(
 
     def lp(x):
         obs_dist = dynamics.observation_model(x=x, u=u, t=t)
-        return masked_observation_log_prob(
+        return _masked_observation_log_prob(
             obs_dist,
             y=y,
             obs_mask=obs_mask,

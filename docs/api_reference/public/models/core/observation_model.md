@@ -5,6 +5,26 @@
       show_root_heading: false
       show_root_toc_entry: false
 
+## masked_observation_log_prob
+
+Score the observed marginal of a distribution returned by an observation model:
+
+```python
+import dynestyx as dsx
+
+observation_dist = dynamics.observation_model(state, control, time)
+log_likelihood = dsx.masked_observation_log_prob(
+    observation_dist, y=observation, obs_mask=observed
+)
+```
+
+This also works with plain callable observation models.
+
+::: dynestyx.observation_missingness.masked_observation_log_prob
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+
 ## Example
 
 ??? example "Negative Binomial observation model"

@@ -13,3 +13,4 @@
       members:
         - Drift
         - Potential
+        - linearize_drift

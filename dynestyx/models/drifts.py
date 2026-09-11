@@ -3,6 +3,7 @@
 from typing import Protocol
 
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 from jax import Array
 from jaxtyping import Float, Real, Shaped
@@ -128,6 +129,35 @@ class AffineDrift(eqx.Module):
         if self.b is not None:
             out = out + self.b
         return out
+
+
+def linearize_drift(
+    drift: Drift,
+    *,
+    x: Real[Array, " state_dim"],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: float | int | Real[Array, ""],
+) -> AffineDrift:
+    """Linearize a drift in state at fixed control and time.
+
+    Returns `AffineDrift(A=J, b=drift(x, u, t) - J @ x)`, where `J` is the
+    state Jacobian at the supplied reference. Control is incorporated into
+    `A` and `b`, so `B=None`.
+
+    Args:
+        drift: Drift callable. Use `state_evolution.total_drift` to include
+            any potential-gradient contribution.
+        x: Reference state.
+        u: Fixed control, or `None` for an uncontrolled drift.
+        t: Fixed time.
+
+    Returns:
+        AffineDrift: Local affine drift conditional on the supplied control
+            and time.
+    """
+    value = drift(x, u, t)
+    jacobian = jax.jacfwd(lambda state: drift(state, u, t))(x)
+    return AffineDrift(A=jacobian, b=value - jacobian @ x)
 
 
 class ImExDrift(eqx.Module):
