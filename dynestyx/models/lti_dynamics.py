@@ -50,8 +50,9 @@ def LTI_discrete(
         R (jax.Array): Observation-noise covariance with shape
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the transition model
-            with shape $(d_x, d_u)$. If None, no control term is used and
-            `control_dim` is set to 0.
+            with shape $(d_x, d_u)$. If None, no transition control term is used.
+            `control_dim` is inferred from B, or from D when B is None, and
+            defaults to 0 when both are None.
         b (jax.Array | None): Optional additive transition bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -67,7 +68,7 @@ def LTI_discrete(
         DynamicalModel: A discrete-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else 0
+    control_dim = B.shape[-1] if B is not None else D.shape[-1] if D is not None else 0
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
@@ -137,8 +138,9 @@ def LTI_continuous(
         R (jax.Array): Observation-noise covariance with shape
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the drift with shape
-            $(d_x, d_u)$. If None, no control term is used and `control_dim` is
-            set to 0.
+            $(d_x, d_u)$. If None, no drift control term is used.
+            `control_dim` is inferred from B, or from D when B is None, and
+            defaults to 0 when both are None.
         b (jax.Array | None): Optional additive drift bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -154,7 +156,7 @@ def LTI_continuous(
         DynamicalModel: A continuous-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else 0
+    control_dim = B.shape[-1] if B is not None else D.shape[-1] if D is not None else 0
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
