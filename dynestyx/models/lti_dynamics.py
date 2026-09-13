@@ -51,8 +51,6 @@ def LTI_discrete(
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the transition model
             with shape $(d_x, d_u)$. If None, no transition control term is used.
-            `control_dim` is inferred from B, or from D when B is None, and
-            defaults to 0 when both are None.
         b (jax.Array | None): Optional additive transition bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -63,6 +61,10 @@ def LTI_discrete(
             shape $(d_x,)$. Defaults to zeros.
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
+
+    Notes:
+        `control_dim` is inferred from B, or from D when B is None, and
+        defaults to 0 when both are None.
 
     Returns:
         DynamicalModel: A discrete-time LTI state-space model.
@@ -139,8 +141,6 @@ def LTI_continuous(
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the drift with shape
             $(d_x, d_u)$. If None, no drift control term is used.
-            `control_dim` is inferred from B, or from D when B is None, and
-            defaults to 0 when both are None.
         b (jax.Array | None): Optional additive drift bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -151,6 +151,10 @@ def LTI_continuous(
             shape $(d_x,)$. Defaults to zeros.
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
+
+    Notes:
+        `control_dim` is inferred from B, or from D when B is None, and
+        defaults to 0 when both are None.
 
     Returns:
         DynamicalModel: A continuous-time LTI state-space model.
