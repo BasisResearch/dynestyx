@@ -12,6 +12,17 @@ from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.models.state_evolution import LinearGaussianStateEvolution
 
 
+def _infer_control_dim(B: Array | None, D: Array | None) -> int:
+    if B is None:
+        return D.shape[-1] if D is not None else 0
+    control_dim = B.shape[-1]
+    if D is not None and D.shape[-1] != control_dim:
+        raise ValueError(
+            f"B and D must share the control dimension; got B.shape={B.shape}, D.shape={D.shape}"
+        )
+    return control_dim
+
+
 def LTI_discrete(
     A: Float[Array, "*a_plate state_dim state_dim"],
     Q: Float[Array, "*q_plate state_dim state_dim"],
@@ -70,7 +81,7 @@ def LTI_discrete(
         DynamicalModel: A discrete-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else D.shape[-1] if D is not None else 0
+    control_dim = _infer_control_dim(B, D)
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
@@ -160,7 +171,7 @@ def LTI_continuous(
         DynamicalModel: A continuous-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else D.shape[-1] if D is not None else 0
+    control_dim = _infer_control_dim(B, D)
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
