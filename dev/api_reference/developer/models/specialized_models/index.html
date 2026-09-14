@@ -6442,8 +6442,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
             <td>
               <div class="doc-md-description">
                 <p>Optional control matrix in the drift with shape
-<span class="arithmatex">\((d_x, d_u)\)</span>. If None, no control term is used and <code>control_dim</code> is
-set to 0.</p>
+<span class="arithmatex">\((d_x, d_u)\)</span>. If None, no drift control term is used.</p>
               </div>
             </td>
             <td>
@@ -6538,6 +6537,12 @@ with shape <span class="arithmatex">\((d_x, d_x)\)</span>. Defaults to identity.
       </tbody>
     </table>
 
+
+<details class="notes" open>
+  <summary>Notes</summary>
+  <p><code>control_dim</code> is inferred from B, or from D when B is None, and
+defaults to 0 when both are None.</p>
+</details>
 
     <p><span class="doc-section-title">Returns:</span></p>
     <table>
@@ -6679,8 +6684,7 @@ y_{t_k} &amp;\sim \mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
             <td>
               <div class="doc-md-description">
                 <p>Optional control matrix in the transition model
-with shape <span class="arithmatex">\((d_x, d_u)\)</span>. If None, no control term is used and
-<code>control_dim</code> is set to 0.</p>
+with shape <span class="arithmatex">\((d_x, d_u)\)</span>. If None, no transition control term is used.</p>
               </div>
             </td>
             <td>
@@ -6775,6 +6779,12 @@ with shape <span class="arithmatex">\((d_x, d_x)\)</span>. Defaults to identity.
       </tbody>
     </table>
 
+
+<details class="notes" open>
+  <summary>Notes</summary>
+  <p><code>control_dim</code> is inferred from B, or from D when B is None, and
+defaults to 0 when both are None.</p>
+</details>
 
     <p><span class="doc-section-title">Returns:</span></p>
     <table>
