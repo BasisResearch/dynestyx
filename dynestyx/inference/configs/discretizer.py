@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-import math
 
 import diffrax as dfx
 
@@ -12,21 +11,7 @@ from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
 )
-
-
-def _validate_covariance_jitter(covariance_jitter: float) -> None:
-    if not math.isfinite(covariance_jitter) or covariance_jitter < 0.0:
-        raise ValueError(
-            "covariance_jitter must be a finite, nonnegative float, "
-            f"got {covariance_jitter!r}."
-        )
-
-
-def _validate_jitter_scale(jitter_scale: float) -> None:
-    if not math.isfinite(jitter_scale) or jitter_scale < 0.0:
-        raise ValueError(
-            f"jitter_scale must be a finite, nonnegative float, got {jitter_scale!r}."
-        )
+from dynestyx.utils import _validate_nonnegative_float
 
 
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:
@@ -76,7 +61,7 @@ class ODEFlowConfig(BaseDiscretizerConfig):
     jitter_scale: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_jitter_scale(self.jitter_scale)
+        _validate_nonnegative_float("jitter_scale", self.jitter_scale)
 
 
 @dataclasses.dataclass
@@ -133,7 +118,7 @@ class EulerMaruyamaConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
@@ -208,7 +193,7 @@ class ExactAffineConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
@@ -274,7 +259,7 @@ class LocalLinearizationConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass
@@ -350,7 +335,7 @@ class MeanTrajectoryLinearizationConfig(BaseDiscretizerConfig):
     covariance_jitter: float = 0.0
 
     def __post_init__(self) -> None:
-        _validate_covariance_jitter(self.covariance_jitter)
+        _validate_nonnegative_float("covariance_jitter", self.covariance_jitter)
 
 
 @dataclasses.dataclass

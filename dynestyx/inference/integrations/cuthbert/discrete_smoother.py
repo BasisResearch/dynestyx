@@ -289,6 +289,9 @@ def run_discrete_smoother(
     smoothed_dists = _cholesky_state_sequence_to_dists(
         states,
         particle_mode=isinstance(smoother_config, PFSmootherConfig),
+        covariance_jitter=getattr(
+            smoother_config, "recorded_filtered_states_cov_jitter", 0.0
+        ),
     )
     return marginal_loglik, states, smoothed_dists
 
