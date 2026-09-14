@@ -12,6 +12,17 @@ from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.models.state_evolution import LinearGaussianStateEvolution
 
 
+def _infer_control_dim(B: Array | None, D: Array | None) -> int:
+    if B is None:
+        return D.shape[-1] if D is not None else 0
+    control_dim = B.shape[-1]
+    if D is not None and D.shape[-1] != control_dim:
+        raise ValueError(
+            f"B and D must share the control dimension; got B.shape={B.shape}, D.shape={D.shape}"
+        )
+    return control_dim
+
+
 def LTI_discrete(
     A: Float[Array, "*a_plate state_dim state_dim"],
     Q: Float[Array, "*q_plate state_dim state_dim"],
@@ -50,8 +61,7 @@ def LTI_discrete(
         R (jax.Array): Observation-noise covariance with shape
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the transition model
-            with shape $(d_x, d_u)$. If None, no control term is used and
-            `control_dim` is set to 0.
+            with shape $(d_x, d_u)$. If None, no transition control term is used.
         b (jax.Array | None): Optional additive transition bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -63,11 +73,15 @@ def LTI_discrete(
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
 
+    Notes:
+        `control_dim` is inferred from B, or from D when B is None, and
+        defaults to 0 when both are None.
+
     Returns:
         DynamicalModel: A discrete-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else 0
+    control_dim = _infer_control_dim(B, D)
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
@@ -137,8 +151,7 @@ def LTI_continuous(
         R (jax.Array): Observation-noise covariance with shape
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the drift with shape
-            $(d_x, d_u)$. If None, no control term is used and `control_dim` is
-            set to 0.
+            $(d_x, d_u)$. If None, no drift control term is used.
         b (jax.Array | None): Optional additive drift bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -150,11 +163,15 @@ def LTI_continuous(
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
 
+    Notes:
+        `control_dim` is inferred from B, or from D when B is None, and
+        defaults to 0 when both are None.
+
     Returns:
         DynamicalModel: A continuous-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else 0
+    control_dim = _infer_control_dim(B, D)
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
