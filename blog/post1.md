@@ -19,9 +19,11 @@ The result is dozens of brittle echo-chambers in which comparing methods within 
 
 A great example I came across recently is this paper[^fish-telemetry] which uses `patter`[^patter], a Julia-based package for Particle Filtering that is specifically focused on ecological monitoring via acoustic telemetry data; it makes some specific modeling choices that are highly relevant to the setting, but the algorithm itself (while written nicely) is quite standard (and, in fact, does not take advantage of recent advances in SOTA PFs). With the right tooling in place, one might view this repository similarly to one with a custom implementation of linear regression specially designed for measurements of the microbiome. To be clear, I think this work is great---I really like that paper! But what happens as state-of-the-art filtering improves? Is it really the responsibility of ecological scientists to stay up to date on the latest and greatest in Particle Filtering? I hope not! If only there were a general tool maintained and updated by a collective community of methodological and applied researchers that ensures cutting-edge, generalist support for the most commonly used algorithms and practices in dynamical systems modeling and inference?!
 
-## This is why we built Dynestyx.
+## This is why we built Dynestyx[^dynestyx-preprint].
 
 We introduce `dynestyx`, a probabilistic programming library that treats dynamical systems as first-class objects. `dynestyx` builds on top of `numpyro` to provide a clean, unified interface for Bayesian state-space models, providing a one-stop-shop for parameter inference and state inference.
+
+[GitHub](https://github.com/BasisResearch/dynestyx) · [Docs](https://basisresearch.github.io/dynestyx/stable/) · [Preprint](https://arxiv.org/abs/2606.16985)
 
 Our goal in building `dynestyx` is two-fold, serving both practitioners and theoreticians. On the side of application, `dynestyx` provides an approachable interface for model-building, remaining expressive over model choices and providing a variety of state-of-the-art inference methods. On the side of methodology, `dynestyx` offers a natural integration surface to implement, test, and apply new algorithmic approaches in real-world problems. This is reminiscent of `stan`[^2], which has spurred both applied work in Bayesian statistics and methodological work in Monte Carlo and variational inference.
 
@@ -53,10 +55,10 @@ Given the mathematical description of a state-space model, it is straightforward
 
 |                 | stochastic                                                                                                                | deterministic                                                                                        |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| continuous-time | $\mathrm{d}x_t = f(x_t, u_t, t)\,\mathrm{d}t + g(x_t, u_t, t)\,\mathrm{d}W_t$<br><br>`ContinuousTimeStateEvolution(f, g)` | $\mathrm{d}x_t = f(x_t, u_t, t)\,\mathrm{d}t$<br><br>`ContinuousTimeStateEvolution(f)`               |
+| continuous-time | $\mathrm{d}x_t = f(x_t, u_t, t) \, \mathrm{d}t + g(x_t, u_t, t) \, \mathrm{d}W_t$<br><br>`ContinuousTimeStateEvolution(f, g)` | $\mathrm{d}x_t = f(x_t, u_t, t) \, \mathrm{d}t$<br><br>`ContinuousTimeStateEvolution(f)`               |
 | discrete-time   | $x_t \sim p(x_t \mid x_{t-1}, u_{t-1}, t-1, t;\,\theta)$<br><br>`DiscreteTimeStateEvolution(p)`                           | $x_t = f(x_{t-1}, u_{t-1}, t-1, t;\,\theta)$<br><br>`DiscreteTimeStateEvolution(DiracTransition(f))` |
 
-Let's see Dynestyx in action!
+## Let's see Dynestyx in action!
 
 [Gallery]
 
@@ -64,13 +66,13 @@ Let's see Dynestyx in action!
 
 
 
-### Wait, can't uncle AI just code this stuff up for me automagically whenever we need it?
+**Wait, can't uncle AI just code this stuff up for me automagically whenever we need it?**
 
 - Yes, but will you ever really trust it? When you vibe-code, would you rather see a matrix factorization done with LAPACK / scipy or in 50 lines of new never-before-used AI-code? Our vision for interacting with AI-based coding is to continue the work of consolidating and verifying computational tools, and "cacheing" them---it is wasteful, uninterpretable, and error-prone to re-create such programs from scratch every time we embark on a new project.
 
 
 
-### Wait, isn't diversity good and monolith bad?
+**Wait, isn't diversity good and monolith bad?**
 
 - Yes, but Dynestyx is not a monolith! It does adhere to a general underpinning mathematical/statistical framework, but we believe that this offers valuable shared ground that will enable easy comparisons, swappability, and composability across methods and domains. If a problem does not fit within the framework, it is the job of the existing community to wrestle with this challenge and either find a way to expand its framework or simply support (compassionately) from afar. Dynestyx
 
@@ -81,3 +83,5 @@ Let's see Dynestyx in action!
 [^fish-telemetry]: Futia, M. H., Binder, T. R., Henderson, M. J., & Marsden, J. E. (2024). [Modeling regional occupancy of fishes using acoustic telemetry: A model comparison framework applied to lake trout](https://www.usgs.gov/publications/modeling-regional-occupancy-fishes-using-acoustic-telemetry-a-model-comparison). *Animal Biotelemetry*. [https://doi.org/10.1186/s40317-024-00380-3](https://doi.org/10.1186/s40317-024-00380-3).
 
 [^patter]: Lavender, E., Scheidegger, A., Albert, C., Biber, S. W., Illian, J., Thorburn, J., Smout, S., & Moor, H. (2025). [patter: Particle algorithms for animal tracking in R and Julia](https://doi.org/10.1111/2041-210X.70029). *Methods in Ecology and Evolution*, 16, 1609–1616.
+
+[^dynestyx-preprint]: [Dynestyx preprint](https://arxiv.org/abs/2606.16985).
