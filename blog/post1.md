@@ -7,7 +7,7 @@ One of our primary goals at Basis is to identify and address unmet computational
 3. How does the system work / what are its rules? (*system identification*)
 4. What will happen if I intervene on the system (*counterfactual inference*)?
 
-Good answers to these questions are paired with quantified uncertainty—that is, how sure are we about the answer? The best answers also address the meta-question: how reliable is the assessment of uncertainty? For those of us following forecasts of early COVID outbreaks, you may remember that forecasts from each team/organization came with "error bars"; and those error bars often did not even overlap when looking across teams[^covid-forecasts]—clearly something was wrong!
+Good answers to these questions are paired with quantified uncertainty—that is, how sure are we about the answer? The best answers also address the meta-question: how reliable is the assessment of uncertainty? During the second wave of COVID-19 in Germany and Poland in late 2020, different forecasting teams often produced 95% prediction intervals with little or no overlap. Most models’ intervals also contained the eventual outcomes less often than their stated coverage levels would suggest—evidence that they underestimated forecast uncertainty.[^covid-forecasts]
 
 Countless fields rely on high-quality answers to these questions, from epidemiology to robotics engineering, and from atmospheric sciences to biomedical device engineering. Supporting these applied needs is a large and robust community of methodological researchers in fields that include applied mathematics, statistics, computer science, and engineering.
 
