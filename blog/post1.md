@@ -63,6 +63,9 @@ Given the mathematical description of a state-space model, it is straightforward
 ## Let's see Dynestyx in action!
 
 [Gallery]
+This should contain a gallery where each image is a pretty picture that comes from an example notebook (which we link to) that uses Dynestyx in a particular way (e.g., dealing with missing data, SINDy, learning NNs, tracking, solving PDEs, etc.). It would be awesome if each caption also comes with a drop-down clickable thing that lets you see the short relevant snippet of Dynestyx code that is being run.
+
+Swappability means more possibilities than ever before. In Table 1 of our recent preprint, we find that implementing a collection of standard algorithms created a combinatorial space that included novel (i.e., not found in the literature despite search efforts) methods that outperformed existing methods substantially on many of our internal benchmarks (keep an eye out for an upcoming pre-print on this).
 
 ## Common questions
 
