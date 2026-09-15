@@ -110,11 +110,31 @@ class DiscreteTimeSimulator(BaseSimulator):
     r"""Generate trajectories from a discrete-time dynamical model.
 
     For prediction times \(t_0,\ldots,t_{T-1}\), this simulator draws
-    `n_simulations` independent paths. The observation/control pairing
-    depends on `dynamics.observation_control_alignment`:
+    `n_simulations` independent paths according to:
 
-    For `"same_time"` (default): y_{k} is paired with u_{k} and x_{k} (including k=0). States, times, observations, and controls are all of length \(T\).
-    For `"previous_transition"`: y_{k+1} is paired with u_{k} and x_{k+1} (y_0 is never sampled). States and times are of length \(T\), but observations and controls are of length \(T-1\).
+    \[
+    x_0^{(m)} \sim p_0(x_0), \qquad
+    x_{k+1}^{(m)}
+      \sim p\!\left(x_{k+1}\mid x_k^{(m)},u_k,t_k,t_{k+1}\right),
+    \]
+
+    The observation distribution depends on `dynamics.observation_control_alignment`:
+
+    For `"same_time"` (default): \(y_k\) is paired with \(u_k\) and \(x_k\) (including \(k=0\)):
+
+    \[
+    y_k^{(m)} \sim p(y_k\mid x_k^{(m)},u_k,t_k).
+    \]
+
+    States, times, observations, and controls are all of length \(T\).
+
+    For `"previous_transition"`: \(y_{k+1}\) is paired with \(u_k\) and \(x_{k+1}\) (\(y_0\) is never sampled).
+
+    \[
+    y_{k+1}^{(m)} \sim p(y_{k+1}\mid x_{k+1}^{(m)},u_k,t_{k+1}).
+    \]
+
+    States and times are of length \(T\), but observations and controls are of length \(T-1\).
 
 
     See
@@ -262,11 +282,8 @@ class DiscreteTimeSimulator(BaseSimulator):
     ) -> SimulatedResult:
         """Run pure forward simulation for a discrete-time model.
 
-        ctrl_values has its own length ("ctrl_time"), decoupled from `times`
-        (always the full predict_times grid): len(times) for same_time or
-        len(times) - 1 for previous_transition. States always include x_0
-        (length matches `times`) for both conventions; only observations (and
-        the returned controls) are one shorter for previous_transition.
+        ctrl_values has its own length ("ctrl_time"): len(times) for same_time or
+        len(times) - 1 for previous_transition.
         """
         n_sim = initial_state.shape[0]
         sim_keys = jr.split(rng_key, n_sim)
@@ -286,9 +303,7 @@ class DiscreteTimeSimulator(BaseSimulator):
                 times=times,
                 ctrl_values=ctrl_values,
             )
-            # For previous_transition, drop x_0/t_0 before sampling
-            # observations -- y_0 is never sampled under that convention.
-            # Otherwise (same_time) this is a no-op.
+            # For previous_transition, drop x_0/t_0 before sampling observations (y_0 is never sampled).
             obs_states, obs_times = (
                 (states, times)
                 if include_initial_condition
