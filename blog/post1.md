@@ -7,7 +7,7 @@ Here at Basis, one of our favorite things is to identify and address unmet compu
 3. How does the system work / what are its rules? (*system identification*)
 4. What will happen if I intervene on the system (*counterfactual inference*)?
 
-Good answers to these questions are paired with quantified uncertainty—that is, how sure are we about the answer? The best answers also address the meta-question: how reliable is the assessment of uncertainty? For those of us following forecasts of early COVID outbreaks, you may remember that forecasts from each team/organization came with "error bars"; and those error bars often did not even overlap when looking across teams—clearly something was wrong!
+Good answers to these questions are paired with quantified uncertainty—that is, how sure are we about the answer? The best answers also address the meta-question: how reliable is the assessment of uncertainty? For those of us following forecasts of early COVID outbreaks, you may remember that forecasts from each team/organization came with "error bars"; and those error bars often did not even overlap when looking across teams[^covid-forecasts]—clearly something was wrong!
 
 Countless fields rely on high-quality answers to these questions, from epidemiology to robotics engineering, and from atmospheric sciences to biomedical device engineering. Supporting these applied needs is a large and robust community of methodological researchers in fields that include applied mathematics, statistics, computer science, and engineering.
 
@@ -87,3 +87,5 @@ Given the mathematical description of a state-space model, it is straightforward
 [^patter]: Lavender, E., Scheidegger, A., Albert, C., Biber, S. W., Illian, J., Thorburn, J., Smout, S., & Moor, H. (2025). [patter: Particle algorithms for animal tracking in R and Julia](https://doi.org/10.1111/2041-210X.70029). *Methods in Ecology and Evolution*, 16, 1609–1616.
 
 [^dynestyx-preprint]: Waxman, D., Batenkov, D., Feser, J., Zane, A., Bingham, E., Marzouk, Y., & Levine, M. E. (2026). [Dynestyx: A Probabilistic Programming Library for Dynamical Systems](https://arxiv.org/abs/2606.16985). arXiv preprint arXiv:2606.16985.
+
+[^covid-forecasts]: Bracher, J., et al. (2021). [A pre-registered short-term forecasting study of COVID-19 in Germany and Poland during the second wave](https://doi.org/10.1038/s41467-021-25207-0). *Nature Communications*, 12, 5173. See Figures 2–3 (October–December 2020).
