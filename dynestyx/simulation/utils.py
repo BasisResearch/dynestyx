@@ -115,12 +115,6 @@ def _sample_observation_path(
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     obs_keys = jr.split(rng_key, len(times))
 
-    # Map directly over states/times/obs_keys rather than indexing by a
-    # scanned integer inside the mapped body: jax.vmap traces its body once
-    # regardless of batch size, so indexing into a genuinely zero-length
-    # array (e.g. a previous_transition observation path sliced down from a
-    # single-timepoint prediction grid) would raise immediately. Mapping over
-    # the arrays directly lets vmap's own batching handle the zero-size case.
     def _sample_at(x_t, t, key):
         obs_dist = dynamics.observation_model(x=x_t, u=ctrl(t), t=t)
         return obs_dist.sample(key)

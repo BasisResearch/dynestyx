@@ -106,13 +106,12 @@ class DynamicalModel(eqx.Module):
             Gets set automatically from the concrete type of `state_evolution`.
         observation_control_alignment ("same_time" | "previous_transition"): Convention for how
             observations pair with controls in discrete time. `"same_time"` (default) pairs
-            $y_k$ with $u_k$, matching today's `dsx.simulate` behavior. `"previous_transition"`
-            pairs $y_{k+1}$ with $u_k$ (the control that produced $x_{k+1}$), matching
-            `DiscreteControlLoopSimulator`'s closed-loop convention; under this convention
+            $y_k$ with $u_k$. `"previous_transition"`
+            pairs $y_{k+1}$ with $u_k$ (the control that produced $x_{k+1}$); under this convention
             $y_0$ is never sampled. Only `"same_time"` is honored outside the plain
             `Simulator`/`DiscreteTimeSimulator`/`dsx.simulate` generation path (not yet by
             Filter/Smoother/`LatentPathBuilder` posterior rollout, `DiscreteControlLoopSimulator`,
-            or `mppi.py` -- see [issue #312](https://github.com/BasisResearch/dynestyx/issues/312)).
+            or `mppi.py`).
 
     Note:
         - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
