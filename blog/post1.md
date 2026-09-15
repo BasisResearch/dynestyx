@@ -70,8 +70,291 @@ Given the mathematical description of a state-space model, it is straightforward
 
 ## Let's see Dynestyx in action!
 
-[Gallery]
-This should contain a gallery where each image is a pretty picture that comes from an example notebook (which we link to) that uses Dynestyx in a particular way (e.g., dealing with missing data, SINDy, learning NNs, tracking, solving PDEs, etc.). It would be awesome if each caption also comes with a drop-down clickable thing that lets you see the short relevant snippet of Dynestyx code that is being run.
+### Missing observations in hidden Markov models
+
+![Hidden-state probabilities and categorical sensor observations, including missing measurements](figures/tutorials/gentle_intro/11c_missing_observations_hmms/figure-06_cell-010_output-04.png)
+
+Infer hidden states from two categorical sensors even when individual measurements or entire stretches of observations are missing. [Explore the notebook](../docs/tutorials/gentle_intro/11c_missing_observations_hmms.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+posterior_cat, A_post_mean_cat, filtered_cat = infer_hmm(
+    independent_cat_hmm,
+    OBS_TIMES,
+    obs_missing_cat,
+    fit_key=FIT_KEY_CAT,
+    recon_key=RECON_KEY_CAT,
+)
+```
+
+</details>
+
+### Learning parameters and trajectories with missing data
+
+<table>
+  <tr><td><img src="figures/tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc/figure-03_cell-008_output-01.png" alt="Posterior distributions for alpha from latent-path MCMC and Kalman smoothing" width="900"></td></tr>
+  <tr><td><img src="figures/tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc/figure-04_cell-008_output-03.png" alt="Paired latent-state reconstructions with uncertainty across a missing-data interval" width="900"></td></tr>
+</table>
+
+Compare posterior distributions for the dynamics parameter alpha and reconstructed trajectories using latent-path MCMC and a Kalman smoother. The trajectory bands widen across the missing-data interval. [Explore the notebook](../docs/tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+def conditioned_latent_path(obs_times=None, obs_values=None):
+    with dsx.LatentPathBuilder():
+        ar1_model(obs_times=obs_times, obs_values=obs_values)
+
+
+def conditioned_smoother(obs_times=None, obs_values=None):
+    with Smoother(
+        smoother_config=KFSmootherConfig(
+            filter_source="cuthbert",
+            record_smoothed_states_mean=True,
+            record_smoothed_states_cov_diag=True,
+        )
+    ):
+        ar1_model(obs_times=obs_times, obs_values=obs_values)
+```
+
+</details>
+
+### Smoothing the past, simulating the future
+
+![Smoothed continuous-time states followed by future simulations and 90 percent rollout intervals](figures/tutorials/gentle_intro/10_continuous_smoothing/figure-05_cell-023_output-01.png)
+
+Combine a continuous-time smoother with a simulator to reconstruct partially observed states and generate future trajectories with 90% rollout intervals. [Explore the notebook](../docs/tutorials/gentle_intro/10_continuous_smoothing.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+future_times = jnp.linspace(obs_times[-1], obs_times[-1] + 1.5, 31)
+
+forecast_predictive = Predictive(
+    continuous_lti_model,
+    params={"rho": rho_post_mean},
+    num_samples=1,
+    exclude_deterministic=False,
+)
+
+n_rollout = 40
+
+with Simulator(n_simulations=n_rollout):
+    with Smoother(
+        smoother_config=ContinuousTimeKFSmootherConfig(
+            record_smoothed_states_mean=True,
+            record_smoothed_states_cov_diag=True,
+        )
+    ):
+        forecast = forecast_predictive(
+            jr.PRNGKey(3),
+            obs_times=obs_times,
+            obs_values=obs_values,
+            predict_times=future_times,
+        )
+```
+
+</details>
+
+### Learning across related trajectories
+
+<table>
+  <tr><td><img src="figures/tutorials/gentle_intro/08_hierarchical_inference/figure-03_cell-013_output-01.png" alt="Eight simulated trajectories with different equilibrium and initial-condition means" width="900"></td></tr>
+  <tr><td><img src="figures/tutorials/gentle_intro/08_hierarchical_inference/figure-04_cell-018_output-01.png" alt="Posterior distributions of trajectory-specific equilibrium and initial-condition means" width="900"></td></tr>
+</table>
+
+Fit a hierarchical Ornstein–Uhlenbeck model to multiple trajectories. The paired plots show the simulated paths and posterior distributions for each trajectory’s equilibrium and initial-condition means. [Explore the notebook](../docs/tutorials/gentle_intro/08_hierarchical_inference.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+def conditioned_hierarchical_ou_model():
+    with Filter(ContinuousTimeKFConfig(warn=False)):
+        return hierarchical_ou_model(
+            N_trajectories=N_trajectories,
+            obs_times=obs_times,
+            obs_values=obs_values,
+        )
+
+
+mcmc = MCMC(NUTS(conditioned_hierarchical_ou_model), num_warmup=100, num_samples=100)
+mcmc.run(jr.PRNGKey(2))
+posterior = mcmc.get_samples()
+```
+
+</details>
+
+### Forecasting a partially observed chaotic system
+
+![Lorenz–63 state estimates and future rollout intervals with only the first component observed](figures/tutorials/gentle_intro/06_continuous_time/figure-03_cell-015_output-02.png)
+
+Observe only the first Lorenz–63 component, estimate all three states with an ensemble Kalman filter, and simulate future trajectories with uncertainty. [Explore the notebook](../docs/tutorials/gentle_intro/06_continuous_time.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+rho_post_mean = jnp.mean(posterior["rho"])
+n_sim = 30
+num_samples = 2  # Change this to 1 or >1 to test both cases
+
+predictive = Predictive(
+    l63_model,
+    params={"rho": jnp.array(rho_post_mean)},
+    num_samples=num_samples,
+    exclude_deterministic=False,
+)
+with SDESimulator(
+    simulator_config=dsx.SDESimulatorConfig(source="em_scan"),
+    n_simulations=n_sim,
+):
+    with Filter(filter_config=ContinuousTimeEnKFConfig(n_particles=50, record_filtered_states_mean=True, record_filtered_states_cov_diag=True)):
+        samples = predictive(
+            jr.PRNGKey(99),
+            obs_times=times_train_full,
+            obs_values=observations_train,
+            predict_times=times_test_full,
+        )
+```
+
+</details>
+
+### Learning a controller
+
+![Initial and optimized feedback-control trajectories, state norms, and control inputs](figures/tutorials/control/control_optimization/figure-02_cell-016_output-01.png)
+
+Differentiate through controlled dynamics to optimize a linear feedback policy. The learned controller brings the two-dimensional state toward zero more quickly than the initial policy in this rollout. [Explore the notebook](../docs/tutorials/control/control_optimization.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+predict_times_short = jnp.arange(0.0, 5.0)
+
+def rollout_final_state_norm(K: float, key):
+    policy = LinearPolicy(K=K)
+    res=  dsx.simulate(
+        dynamics,
+        rng_key=key,
+        predict_times=predict_times_short,
+        control_policy=policy,
+        filter_config=KFConfig(filter_source="cuthbert", record_filtered_states_mean=True),
+    )
+    return jnp.linalg.norm(res.states[0, -1]) # final state norm
+```
+
+</details>
+
+### Learning unknown interactions with a universal ODE
+
+<table>
+  <tr><td><img src="figures/deep_dives/lv_uode/figure-03_cell-023_output-01.png" alt="True and inferred predator–prey interaction coefficients" width="900"></td></tr>
+  <tr><td><img src="figures/deep_dives/lv_uode/figure-04_cell-024_output-01.png" alt="True and inferred process and observation noise" width="900"></td></tr>
+  <tr><td><img src="figures/deep_dives/lv_uode/figure-05_cell-026_output-02.png" alt="Filtered prey and predator trajectories using inferred parameters" width="900"></td></tr>
+</table>
+
+Keep the known predator–prey growth and decay terms, and learn the unknown interactions with a sparse polynomial model. Compare recovered coefficients, noise estimates, and filtered trajectories. [Explore the notebook](../docs/deep_dives/lv_uode.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+def drift(x):
+    known = lv_known_drift(x)               # (alpha*x, -delta*y)
+    phi   = interaction_library(x)          # (N_TERMS,)
+    unknown = Theta @ phi                   # (state_dim,)
+    return known + unknown
+```
+
+</details>
+
+### Tuning covariance inflation with proper scoring rules
+
+<table>
+  <tr><td><img src="figures/deep_dives/l63_covariance_inflation_scoring/figure-02_cell-011_output-02.png" alt="Predictive scoring-rule profiles across covariance inflation settings" width="900"></td></tr>
+  <tr><td><img src="figures/deep_dives/l63_covariance_inflation_scoring/figure-04_cell-018_output-02.png" alt="Lorenz–63 state recovery with optimized and default covariance inflation" width="900"></td></tr>
+</table>
+
+Use predictive scoring rules to tune ensemble Kalman filter covariance inflation, then compare state recovery under optimized and default inflation settings. [Explore the notebook](../docs/deep_dives/l63_covariance_inflation_scoring.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+def mean_score_vector(inflation_delta):
+    filter_config = make_enkf_config(inflation_delta)
+    with Evaluation(observation_scoring_config=scoring_config):
+        with Filter(filter_config=filter_config):
+            with Discretizer(
+                discretizer_config=ODEFlowConfig(ODESimulatorConfig(dt0 = FILTER_DT0))
+            ):
+                result = dsx.condition(
+                    "f",
+                    l63_dynamics(),
+                    obs_times=obs_times,
+                    obs_values=obs_values,
+                )
+    score_arrays = result.evaluation_result.observation_scores
+    return jnp.stack([
+        jnp.mean(score_arrays[site_name])
+        for site_name, _, _ in METRIC_SPECS
+    ])
+```
+
+</details>
+
+### Discovering FitzHugh–Nagumo dynamics with Bayesian SINDy
+
+<table>
+  <tr><td><img src="figures/deep_dives/fhn_sparse_id/figure-04_cell-026_output-01.png" alt="True and inferred sparse FitzHugh–Nagumo drift coefficients" width="900"></td></tr>
+  <tr><td><img src="figures/deep_dives/fhn_sparse_id/figure-05_cell-027_output-01.png" alt="True and inferred diffusion and observation noise scales" width="900"></td></tr>
+  <tr><td><img src="figures/deep_dives/fhn_sparse_id/figure-06_cell-028_output-02.png" alt="FitzHugh–Nagumo phase-space reconstruction with filtered uncertainty ellipses" width="900"></td></tr>
+</table>
+
+Learn sparse polynomial drift coefficients and noise scales from noisy observations. The phase-space reconstruction shows the resulting filtered dynamics and uncertainty. [Explore the notebook](../docs/deep_dives/fhn_sparse_id.ipynb).
+
+<details>
+<summary>Show code excerpt</summary>
+
+Excerpt from the linked notebook; imports, data, and supporting definitions are provided there.
+
+```python
+Theta = numpyro.sample(
+    "Theta",
+    dist.Laplace(0.0, 0.1).expand([state_dim, N_TERMS]).to_event(2),
+)
+
+sigma_x = numpyro.sample("sigma_x", dist.HalfNormal(0.1))
+
+sigma_y = numpyro.sample("sigma_y", dist.HalfNormal(0.5))
+
+def drift(x, u, t):
+    phi = monomials(x)   # phi(x) in R^{N_TERMS}
+    return Theta @ phi   # R^{state_dim}
+```
+
+</details>
 
 Swappability means more possibilities than ever before. In Table 1 of our recent preprint, we find that implementing a collection of standard algorithms created a combinatorial space that included novel (i.e., not found in the literature despite search efforts) methods that outperformed existing methods substantially on many of our internal benchmarks (keep an eye out for an upcoming pre-print on this).
 
