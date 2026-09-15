@@ -51,12 +51,10 @@ where $W_t$ is a $d_b$-dimensional Brownian motion, $f : \mathbb{R}^{d_x} \times
 
 Given the mathematical description of a state-space model, it is straightforward to translate to a `dynestyx` model! The key abstraction in `dynestyx` is a `DynamicalModel`, which takes as input exactly the data we specified above: an initial condition (`initial_condition`), a state evolution (`state_evolution`), and an observation model (`observation_model`):
 
-
-|                 | stochastic                                                              | deterministic                                                       |
-| --------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| continuous-time | $dx_t = f(x, t) dt + g(x, t) dB_t$ `ContinuousTimeStateEvolution(f, g)` | $dx_t = f(x, t) dt$ `ContinuousTimeStateEvolution(f)`               |
-| discrete-time   | $x_t \sim p(x_t \mid x_{t-1})$ `DiscreteTimeStateEvolution(p)`          | $x_t = f(x_{t-1})$ `DiscreteTimeStateEvolution(DiracTransition(f))` |
-
+|                 | stochastic                                                                                                                | deterministic                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| continuous-time | $\mathrm{d}x_t = f(x_t, u_t, t)\,\mathrm{d}t + g(x_t, u_t, t)\,\mathrm{d}W_t$<br><br>`ContinuousTimeStateEvolution(f, g)` | $\mathrm{d}x_t = f(x_t, u_t, t)\,\mathrm{d}t$<br><br>`ContinuousTimeStateEvolution(f)`               |
+| discrete-time   | $x_t \sim p(x_t \mid x_{t-1}, u_{t-1}, t-1, t;\,\theta)$<br><br>`DiscreteTimeStateEvolution(p)`                           | $x_t = f(x_{t-1}, u_{t-1}, t-1, t;\,\theta)$<br><br>`DiscreteTimeStateEvolution(DiracTransition(f))` |
 
 Let's see Dynestyx in action!
 
