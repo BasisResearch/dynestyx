@@ -84,4 +84,4 @@ Given the mathematical description of a state-space model, it is straightforward
 
 [^patter]: Lavender, E., Scheidegger, A., Albert, C., Biber, S. W., Illian, J., Thorburn, J., Smout, S., & Moor, H. (2025). [patter: Particle algorithms for animal tracking in R and Julia](https://doi.org/10.1111/2041-210X.70029). *Methods in Ecology and Evolution*, 16, 1609–1616.
 
-[^dynestyx-preprint]: [Dynestyx preprint](https://arxiv.org/abs/2606.16985).
+[^dynestyx-preprint]: Waxman, D., Batenkov, D., Feser, J., Zane, A., Bingham, E., Marzouk, Y., & Levine, M. E. (2026). [Dynestyx: A Probabilistic Programming Library for Dynamical Systems](https://arxiv.org/abs/2606.16985). arXiv preprint arXiv:2606.16985.
