@@ -54,7 +54,7 @@ where $W_t$ is a $d_b$-dimensional Brownian motion, $`f \colon \mathbb{R}^{d_x} 
 In either case, an observation model connects the latent state to the data we measure at observation times $t_k$:
 
 $$
-y_k \sim p(y_k \mid x_{t_k}, u_{t_k}, t_k;\,\theta).
+y_k \sim p(y_k \mid x_{t_k}, u_{t_k}, t_k; \ \theta).
 $$
 
 Here, $y_k$ is the observed data, and the observation model describes how those measurements depend on the latent state, including measurement noise. The observation times may be irregularly spaced.
@@ -65,8 +65,8 @@ Given the mathematical description of a state-space model, it is straightforward
 
 |                 | stochastic                                                                                                                | deterministic                                                                                        |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| continuous-time | $\mathrm{d}x_t = f(x_t, u_t, t) \, \mathrm{d}t + g(x_t, u_t, t) \, \mathrm{d}W_t$<br><br>`ContinuousTimeStateEvolution(f, g)` | $\mathrm{d}x_t = f(x_t, u_t, t) \, \mathrm{d}t$<br><br>`ContinuousTimeStateEvolution(f)`               |
-| discrete-time   | $x_t \sim p(x_t \mid x_{t-1}, u_{t-1}, t-1, t;\,\theta)$<br><br>`DiscreteTimeStateEvolution(p)`                           | $x_t = f(x_{t-1}, u_{t-1}, t-1, t;\,\theta)$<br><br>`DiscreteTimeStateEvolution(DiracTransition(f))` |
+| continuous-time | $\mathrm{d}x_t = f(x_t, u_t, t)   \mathrm{d}t + g(x_t, u_t, t)   \mathrm{d}W_t$<br><br>`ContinuousTimeStateEvolution(f, g)` | $\mathrm{d}x_t = f(x_t, u_t, t)   \mathrm{d}t$<br><br>`ContinuousTimeStateEvolution(f)`               |
+| discrete-time   | $x_t \sim p(x_t \mid x_{t-1}, u_{t-1}, t-1, t;\ \theta)$<br><br>`DiscreteTimeStateEvolution(p)`                           | $x_t = f(x_{t-1}, u_{t-1}, t-1, t;\ \theta)$<br><br>`DiscreteTimeStateEvolution(DiracTransition(f))` |
 
 ## Let's see Dynestyx in action!
 
