@@ -11,11 +11,11 @@ Good answers to these questions are paired with quantified uncertainty—that is
 
 Countless fields rely on high-quality answers to these questions, from epidemiology to robotics engineering, and from atmospheric sciences to biomedical device engineering. Supporting these applied needs is a large and robust community of methodological researchers in fields that include applied mathematics, statistics, computer science, and engineering.
 
-However, the interactions within and between these applied and methodological fields alike leaves much to be desired; in particular, a suite of reliable, efficient, and general purpose tools that can serve the majority of evolving needs across these fields.
+However, the interactions within and between these applied and methodological fields alike leave much to be desired; in particular, a suite of reliable, efficient, and general purpose tools that can serve the majority of evolving needs across these fields.
 
 ## Our assessment.
 
-There is a critical lack of reliable, efficient, and general purpose tools that can serve the majority of evolving needs across these fields. It is common for a methodological research group to maintain a python package that deploys their latest or most used algorithms. However, there are hundreds of these that live in isolation (each with their own scope), creating frustrating incompatibilities in software, mathematical underpinnings, and data particularities. In applied domains, it is common for a field to quickly converge on a specific tool with a (sometimes modest) success history. It is also common for individual groups to re-implement generic toolings in a field-specific lens.
+There is a critical lack of reliable, efficient, and general purpose tools that can serve the majority of evolving needs across these fields. It is common for a methodological research group to maintain a Python package that deploys their latest or most used algorithms. However, there are hundreds of these that live in isolation (each with their own scope), creating frustrating incompatibilities in software, mathematical underpinnings, and data particularities. In applied domains, it is common for a field to quickly converge on a specific tool with a (sometimes modest) success history. It is also common for individual groups to re-implement generic toolings in a field-specific lens.
 
 The result is dozens of brittle echo-chambers in which comparing methods within a given problem is unnecessarily difficult and where methodologists are needlessly disconnected from challenges specific to particular applied domains.
 
@@ -27,7 +27,7 @@ We introduce `dynestyx`, a probabilistic programming library that treats dynamic
 
 [GitHub](https://github.com/BasisResearch/dynestyx) · [Docs](https://basisresearch.github.io/dynestyx/stable/) · [Preprint](https://arxiv.org/abs/2606.16985)
 
-Our goal in building `dynestyx` is two-fold, serving both practitioners and theoreticians. On the side of application, `dynestyx` provides an approachable interface for model-building, remaining expressive over model choices and providing a variety of state-of-the-art inference methods. On the side of methodology, `dynestyx` offers a natural integration surface to implement, test, and apply new algorithmic approaches in real-world problems. This is reminiscent of `stan`[^2], which has spurred both applied work in Bayesian statistics and methodological work in Monte Carlo and variational inference.
+Our goal in building `dynestyx` is two-fold, serving both practitioners and theoreticians. On the side of application, `dynestyx` provides an approachable interface for model-building, remaining expressive over model choices and providing a variety of state-of-the-art inference methods. On the side of methodology, `dynestyx` offers a natural integration surface to implement, test, and apply new algorithmic approaches in real-world problems. This is reminiscent of `stan`[^stan], which has spurred both applied work in Bayesian statistics and methodological work in Monte Carlo and variational inference.
 
 ## A unified interface
 
@@ -37,7 +37,7 @@ Core to `dynestyx` is its unified interface for a state-space model (SSM, define
 
 A state-space model concerns the evolution of a *latent state* $x_t \in\mathbb{R}^{d_x}$, beginning with a possibly uncertain initial condition:
 $$x_0 \sim \pi_0$$
-The subsequent evolution may be deterministic or stochastic, occur continuously or discretely in time, and may have explicit dependent on time $t \in \mathbb{R}^+$ or a sequence of external control inputs $u_t \in \mathbb{R}^{d_u}$. Let's consider the stochastic case for now, since it's more general. In discrete-time, our state then evolves according to a Markov chain with some *rules* $\theta$ :
+The subsequent evolution may be deterministic or stochastic, occur continuously or discretely in time, and may have explicit dependence on time $t \in \mathbb{R}^+$ or a sequence of external control inputs $u_t \in \mathbb{R}^{d_u}$. Let's consider the stochastic case for now, since it's more general. In discrete-time, our state then evolves according to a Markov chain with some *rules* $\theta$ :
 
 $$
 x_t \sim p(x_t | x_{t-1}, u_{t-1}, t-1, t; \ \theta).
@@ -67,23 +67,30 @@ This should contain a gallery where each image is a pretty picture that comes fr
 
 Swappability means more possibilities than ever before. In Table 1 of our recent preprint, we find that implementing a collection of standard algorithms created a combinatorial space that included novel (i.e., not found in the literature despite search efforts) methods that outperformed existing methods substantially on many of our internal benchmarks (keep an eye out for an upcoming pre-print on this).
 
+## What's up next?
+
+1. Support applied scientists in using dynestyx in their workflows
+2. Bring in methodologists to better disseminate their ever-evolving cutting edge work
+3. Create a prescriptive and iterative workflow of best practices for how practitioners should go about answering questions around forecasting, system identification, and inference, following in the footsteps of the Bayesian Workflow[^bayesian-workflow]
+
+
 ## Common questions
 
 
 
 **Wait, can't uncle AI just code this stuff up for me automagically whenever we need it?**
 
-- Yes, but will you ever really trust it? When you vibe-code, would you rather see a matrix factorization done with LAPACK / scipy or in 50 lines of new never-before-used AI-code? Our vision for interacting with AI-based coding is to continue the work of consolidating and verifying computational tools, and "cacheing" them---it is wasteful, uninterpretable, and error-prone to re-create such programs from scratch every time we embark on a new project.
+- Yes, but will you ever really trust it? When you vibe-code, would you rather see a matrix factorization done with LAPACK / scipy or in 50 lines of new never-before-used AI-code? Our vision for interacting with AI-based coding is to continue the work of consolidating and verifying computational tools, and "caching" them---it is wasteful, uninterpretable, and error-prone to re-create such programs from scratch every time we embark on a new project.
 
 
 
 **Wait, isn't diversity good and monolith bad?**
 
-- Yes, but Dynestyx is not a monolith! It does adhere to a general underpinning mathematical/statistical framework, but we believe that this offers valuable shared ground that will enable easy comparisons, swappability, and composability across methods and domains. If a problem does not fit within the framework, it is the job of the existing community to wrestle with this challenge and either find a way to expand its framework or simply support (compassionately) from afar. Dynestyx
+- Yes, but Dynestyx is not a monolith! It does adhere to a general underpinning mathematical/statistical framework, but we believe that this offers valuable shared ground that will enable easy comparisons, swappability, and composability across methods and domains. If a problem does not fit within the framework, it is the job of the existing community to wrestle with this challenge and either find a way to expand its framework or simply support (compassionately) from afar.
 
-[^1]: Gelman, A., Vehtari, A., Simpson, D., Margossian, C. C., Carpenter, B., Yao, Y., ... & Modrák, M. (2020). Bayesian workflow. arXiv preprint arXiv:2011.01808.
+[^bayesian-workflow]: Gelman, A., Vehtari, A., Simpson, D., Margossian, C. C., Carpenter, B., Yao, Y., ... & Modrák, M. (2020). Bayesian workflow. arXiv preprint arXiv:2011.01808.
 
-[^2]: Carpenter, B., Gelman, A., Hoffman, M. D., Lee, D., Goodrich, B., Betancourt, M., ... & Riddell, A. (2017). Stan: A probabilistic programming language. Journal of Statistical Software, 76, 1-32.
+[^stan]: Carpenter, B., Gelman, A., Hoffman, M. D., Lee, D., Goodrich, B., Betancourt, M., ... & Riddell, A. (2017). Stan: A probabilistic programming language. Journal of Statistical Software, 76, 1-32.
 
 [^fish-telemetry]: Futia, M. H., Binder, T. R., Henderson, M. J., & Marsden, J. E. (2024). [Modeling regional occupancy of fishes using acoustic telemetry: A model comparison framework applied to lake trout](https://www.usgs.gov/publications/modeling-regional-occupancy-fishes-using-acoustic-telemetry-a-model-comparison). *Animal Biotelemetry*. [https://doi.org/10.1186/s40317-024-00380-3](https://doi.org/10.1186/s40317-024-00380-3).
 
