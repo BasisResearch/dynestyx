@@ -45,19 +45,7 @@ $$
 \mathrm{d}x_t = f(x_t, u_t, t)  \mathrm{d}t + g(x_t, u_t, t)  \mathrm{d}W_t,
 $$
 
-where $W_t$ is a $d_b$-dimensional Brownian motion,
-
-$$
-f : \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}_{+} \to \mathbb{R}^{d_x}
-$$
-
-is the drift function (governing deterministic dynamics), and
-
-$$
-g : \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}_{+} \to \mathbb{R}^{d_x \times d_b}
-$$
-
-is the diffusion function (governing the coupling to the stochastic part of the evolution).
+where $W_t$ is a $d_b$-dimensional Brownian motion, $f : \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}_{+} \to \mathbb{R}^{d_x}$ is the drift function (governing deterministic dynamics), and $g : \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}_{+} \to \mathbb{R}^{d_x \times d_b}$ is the diffusion function (governing the coupling to the stochastic part of the evolution).
 
 ### Mathematics to Code
 
