@@ -20,10 +20,17 @@ from dynestyx.models.diffusions import (
 from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
+    DiagonalGaussianObservation,
     DiracIdentityObservation,
     GaussianObservation,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
+)
+from dynestyx.models.spatial import (
+    FieldLayout,
+    SpatialStateEvolution,
+    field_observation,
+    spatial_dynamics,
 )
 from dynestyx.models.state_evolution import (
     GaussianStateEvolution,
@@ -35,12 +42,14 @@ __all__ = [
     "ContinuousTimeStateEvolution",
     "DeterministicContinuousTimeStateEvolution",
     "AffineDrift",
+    "DiagonalGaussianObservation",
     "DiracIdentityObservation",
     "Diffusion",
     "DiscreteTimeStateEvolution",
     "DiagonalDiffusion",
     "DynamicalModel",
     "Drift",
+    "FieldLayout",
     "FullDiffusion",
     "GaussianObservation",
     "GaussianStateEvolution",
@@ -50,8 +59,11 @@ __all__ = [
     "LinearGaussianParams",
     "LinearGaussianStateEvolution",
     "ObservationModel",
+    "SpatialStateEvolution",
     "StochasticContinuousTimeStateEvolution",
     "LTI_continuous",
     "LTI_discrete",
     "ScalarDiffusion",
+    "field_observation",
+    "spatial_dynamics",
 ]

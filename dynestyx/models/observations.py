@@ -9,6 +9,7 @@ from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
 from dynestyx.models.core import ObservationModel
+from dynestyx.utils import _raise_now_or_error_if
 
 
 class LinearGaussianObservationParams(NamedTuple):
@@ -250,3 +251,86 @@ class DiracIdentityObservation(ObservationModel):
         # or plate axes are preserved.
         event_dim = 0 if jnp.ndim(x) == 0 else 1
         return dist.Delta(x, event_dim=event_dim)
+
+
+class DiagonalGaussianObservation(ObservationModel):
+    """
+    Gaussian observation model with diagonal (white) noise.
+
+    Observations are modeled as
+
+    $$
+    y_t \\sim \\mathcal{N}(h(x_t, u_t, t), \\operatorname{diag}(\\sigma^2)),
+    $$
+
+    where $h$ defaults to the identity, i.e. the state is observed directly.
+
+    This is the counterpart of
+    [GaussianObservation][dynestyx.models.observations.GaussianObservation] for
+    high-dimensional observations: the noise is held as a vector of standard
+    deviations rather than a dense $(d_y, d_y)$ covariance, so memory is
+    $O(d_y)$ instead of $O(d_y^2)$. On a $128^3$ field the dense form would be
+    tens of terabytes.
+
+    Attributes:
+        scale (jax.Array): Observation noise standard deviation. Either a scalar
+            (the same $\\sigma$ everywhere) or a vector of length $d_y$.
+        h (Callable | None): Optional measurement function $(x, u, t) \\mapsto$ mean
+            observation. `None` means the identity, and then $d_y = d_x$.
+
+    Note:
+        The returned distribution is a `Normal(...).to_event(1)`, so it is
+        *diagonal by construction*: it has no `covariance_matrix`. Backends that
+        read a dense covariance off the observation model (the Kalman filters)
+        are not applicable; the ensemble and particle filters, the simulators
+        and `log_prob` all are.
+    """
+
+    scale: Float[Array, "..."]
+    h: (
+        Callable[
+            [
+                Real[Array, " state_dim"] | Real[Array, ""],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                Real[Array, ""],
+            ],
+            Real[Array, " observation_dim"] | Real[Array, ""],
+        ]
+        | None
+    )
+
+    def __init__(
+        self,
+        scale: Float[Array, "..."] | float,
+        h: Callable[
+            [
+                Real[Array, " state_dim"] | Real[Array, ""],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                Real[Array, ""],
+            ],
+            Real[Array, " observation_dim"] | Real[Array, ""],
+        ]
+        | None = None,
+    ):
+        """
+        Args:
+            scale (jax.Array | float): Standard deviation of the observation noise, as a
+                scalar or a vector of length $d_y$. Must be strictly positive.
+            h (Callable | None): Optional measurement function mapping $(x, u, t)$ to the
+                mean observation. Defaults to the identity.
+        """
+        scale_array = jnp.asarray(scale)
+        _raise_now_or_error_if(
+            scale_array,
+            jnp.any(scale_array <= 0),
+            "Observation noise scale must be strictly positive.",
+        )
+        self.scale = scale_array
+        self.h = h
+
+    def __call__(self, x, u, t):
+        loc = x if self.h is None else self.h(x, u, t)
+        # Scalar states are scalar events; otherwise only the trailing axis is the
+        # event axis, so leading batch or plate axes survive.
+        event_dim = 0 if jnp.ndim(loc) == 0 else 1
+        return dist.Normal(loc, self.scale).to_event(event_dim)
