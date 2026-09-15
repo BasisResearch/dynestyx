@@ -51,6 +51,14 @@ $$
 
 where $W_t$ is a $d_b$-dimensional Brownian motion, $`f \colon \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}^{+} \to \mathbb{R}^{d_x}`$ is the drift function (governing deterministic dynamics), and $`g \colon \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}^{+} \to \mathbb{R}^{d_x \times d_b}`$ is the diffusion coefficient function (governing the coupling to the stochastic part of the evolution).
 
+In either case, an observation model connects the latent state to the data we measure at observation times $t_k$:
+
+$$
+y_k \sim p(y_k \mid x_{t_k}, u_{t_k}, t_k;\,\theta).
+$$
+
+Here, $y_k$ is the observed data, and the observation model describes how those measurements depend on the latent state, including measurement noise. The observation times may be irregularly spaced.
+
 ### Mathematics to Code
 
 Given the mathematical description of a state-space model, it is straightforward to translate to a `dynestyx` model! The key abstraction in `dynestyx` is a `DynamicalModel`, which takes as input exactly the data we specified above: an initial condition (`initial_condition`), a state evolution (`state_evolution`), and an observation model (`observation_model`):
