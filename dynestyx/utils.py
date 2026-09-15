@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
-from jax import Array, lax
+from jax import Array
 from jaxtyping import Real, Shaped
 
 from dynestyx.models import Diffusion, DynamicalModel
@@ -399,7 +399,7 @@ def _validate_controls(
     if observation_control_alignment == "previous_transition":
         # obs_times is None here -- already rejected above otherwise.
         assert predict_times is not None
-        total_obs_pred_times = predict_times[:-1]
+        total_obs_pred_times = predict_times[..., :-1]
     elif obs_times is None:
         total_obs_pred_times = predict_times
     elif predict_times is None:
@@ -412,17 +412,24 @@ def _validate_controls(
             return  # ConcretizationTypeError etc. when arrays are traced
     assert total_obs_pred_times is not None
 
-    # Use trace-safe check: same length and sorted arrays match.
-    # (Avoid jnp.setxor1d/jnp.unique which have data-dependent output shapes and fail under JIT.)
-    len_mismatch = ctrl_times.shape[0] != total_obs_pred_times.shape[0]
-    values_mismatch = lax.cond(
-        len_mismatch,
-        lambda: jnp.array(True),
-        lambda: ~jnp.allclose(jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)),
+    # Check that the number of control times matches the number of observation/prediction times.
+    ctrl_time_count = ctrl_times.shape[-1]
+    expected_time_count = total_obs_pred_times.shape[-1]
+    if ctrl_time_count != expected_time_count:
+        raise ValueError(
+            "Control times must match the required observation/prediction time "
+            f"grid; expected {expected_time_count} time points but got "
+            f"{ctrl_time_count}."
+        )
+
+    # Avoid jnp.setxor1d/jnp.unique because their data-dependent output shapes
+    # fail under JIT. Leading plate axes broadcast when one grid is shared.
+    values_mismatch = ~jnp.allclose(
+        jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)
     )
     _ = eqx.error_if(
         ctrl_times,
-        jnp.logical_or(len_mismatch, values_mismatch),
+        values_mismatch,
         "Control times and the union of obs_times and predict_times must be the same.",
     )
 

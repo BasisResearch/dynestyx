@@ -100,6 +100,40 @@ def _nested_plate_discrete_lti_model(
             )
 
 
+def _plate_previous_transition_model(
+    *,
+    predict_times,
+    ctrl_times,
+    ctrl_values,
+    M=2,
+):
+    state_dim = 2
+    Q = 0.1 * jnp.eye(state_dim)
+    H = jnp.array([[1.0, 0.0]])
+    R = jnp.array([[0.25]])
+    B = jnp.ones((state_dim, 1))
+
+    with dsx.plate("trajectories", M):
+        alpha = numpyro.sample("alpha", dist.Uniform(0.1, 0.8))
+        A_base = jnp.array([[0.0, 0.1], [0.1, 0.8]])
+        A = jnp.repeat(A_base[None], M, axis=0).at[:, 0, 0].set(alpha)
+        base = LTI_discrete(A=A, Q=Q, H=H, R=R, B=B)
+        dynamics = DynamicalModel(
+            initial_condition=base.initial_condition,
+            state_evolution=base.state_evolution,
+            observation_model=base.observation_model,
+            control_dim=base.control_dim,
+            observation_control_alignment="previous_transition",
+        )
+        dsx.sample(
+            "f",
+            dynamics,
+            ctrl_times=ctrl_times,
+            ctrl_values=ctrl_values,
+            predict_times=predict_times,
+        )
+
+
 def _plate_continuous_sde_model(
     obs_times=None,
     obs_values=None,
@@ -273,6 +307,25 @@ def test_plate_forward_discrete_ode_sde_shapes(source):
     assert tr["f_times"]["value"].shape == (2, 1, len(t))
     assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
     assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
+
+
+def test_plate_previous_transition_slices_the_time_axis():
+    predict_times = jnp.array([[0.0, 1.0, 2.0, 3.0], [0.0, 2.0, 4.0, 6.0]])
+    ctrl_times = predict_times[..., :-1]
+    ctrl_values = jnp.ones((*ctrl_times.shape, 1))
+
+    with DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
+            _plate_previous_transition_model(
+                predict_times=predict_times,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+            )
+
+    assert tr["f_times"]["value"].shape == (2, 1, 4)
+    assert tr["f_states"]["value"].shape == (2, 1, 4, 2)
+    assert tr["f_observations"]["value"].shape == (2, 1, 3, 1)
+    assert tr["f_controls"]["value"].shape == (2, 1, 3, 1)
 
 
 def test_plate_conditioning_discrete_single_and_nested():

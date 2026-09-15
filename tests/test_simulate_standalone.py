@@ -483,7 +483,10 @@ def test_discrete_simulator_previous_transition_rejects_ctrl_times_matching_full
     predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
     ctrl_values = jnp.array([[1.0], [2.0], [3.0], [4.0]])
 
-    with pytest.raises(Exception):
+    with pytest.raises(
+        ValueError,
+        match="expected 3 time points but got 4",
+    ):
         dsx.simulate(
             _make_previous_transition_dynamics(),
             rng_key=jr.PRNGKey(0),
