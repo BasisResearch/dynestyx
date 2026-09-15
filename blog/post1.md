@@ -1,6 +1,6 @@
 # Introducing Dynestyx, a probabilistic programming library for dynamical systems
 
-Here at Basis, one of our favorite things is to identify and address unmet computational needs that permeate across sectors of science and engineering. It allows us to play a uniquely catalyzing role in research that most institutions are unable to incentivize. Roughly one year ago, we set out on one such mission, with a laser focus on improving how applied and methodological researchers/scientists/engineers work with data and models from time-evolving (dynamical) systems to answer key questions like:
+One of our primary goals at Basis is to identify and address unmet computational needs that permeate across sectors of science and engineering. It allows us to play a uniquely catalyzing role in research that most institutions are unable to incentivize. Roughly one year ago, we set out on one such mission, with a laser focus on improving how applied and methodological researchers/scientists/engineers work with data and models from time-evolving (dynamical) systems to answer key questions like:
 
 1. What will happen next in this system? (*forecasting*)
 2. Where has the system been? (*inference*, generically, or *smoothing* in certain sub-communities)
