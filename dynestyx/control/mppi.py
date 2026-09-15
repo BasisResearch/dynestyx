@@ -62,10 +62,10 @@ class MPPI(eqx.Module):
             `dsx.simulate` never drops that axis, even for one trajectory;
             `jnp.sum(result.states**2)`-style reductions don't need to care, but
             explicit indexing does (`result.controls[0, 0]` is the whole first control
-            vector, not a scalar). `times`/`states`/`observations` have length
-            `horizon + 1` (including the starting state) and `controls` has length
-            `horizon`, matching `ControlledSimulatedResult`'s own
-            `control_time = time - 1` convention.
+            vector, not a scalar). For these open-loop planning rollouts,
+            `times`/`states`/`observations` have length `horizon + 1` (including
+            the starting state) and `controls` has length `horizon`. A real
+            closed-loop result instead omits the uncontrolled initial observation.
         horizon: Planning horizon length `H` -- the number of internal
             one-step `dynamics` calls per rollout. Defaults to `10`.
         noise_std: Standard deviation of the Gaussian perturbations added to
@@ -161,9 +161,8 @@ class MPPI(eqx.Module):
 
         # ControlledSimulatedResult's fields all require a leading
         # n_simulations axis (matching how dsx.simulate never drops it, even
-        # for one trajectory) -- so loss_fn sees the same n_simulations=1
-        # shape a real single dsx.simulate() call would produce, not a
-        # squeezed one.
+        # for one trajectory), so loss_fn sees an n_simulations=1 axis rather
+        # than a squeezed result.
         result = ControlledSimulatedResult(
             times=times[None],
             x_0=x0[None],

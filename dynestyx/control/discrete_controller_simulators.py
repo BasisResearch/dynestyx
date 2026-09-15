@@ -13,6 +13,7 @@ from numpyro.distributions import Distribution
 from dynestyx.inference.configs.filter import BaseFilterConfig, PFConfig
 from dynestyx.inference.filters import _default_filter_config
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+    CuthbertInputs,
     build_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
@@ -93,9 +94,12 @@ def filter_state_dist(state: Any, filter_config: BaseFilterConfig) -> Distributi
 class PolicyCallable(Protocol):
     r"""Structural protocol for a control policy $\pi$.
 
-    $$u_k, s_{k+1} = \pi(\hat x_{k|k}, t_k, t_{k+1}, s_k)$$
+    $$u_k, s_{k+1} = \pi(\hat p_k, t_k, t_{k+1}, s_k)$$
 
-    `x_hat` is a NumPyro `Distribution` -- `MultivariateNormal` for
+    `x_hat` represents the current belief $\hat p_k$. On the first policy
+    call it is the model's initial-state distribution $p_0$; after each
+    generated observation it is the corresponding filtered distribution.
+    It is a NumPyro `Distribution` -- `MultivariateNormal` for
     `KFConfig`/`EKFConfig`, `WeightedParticles` for `PFConfig`, and for
     `EnKFConfig` either of `MultivariateNormal` or, once the ensemble is rank
     deficient (`n_particles - 1 < state_dim`), `LowRankMultivariateNormal`
@@ -138,6 +142,11 @@ class ControlledSimulatedResult(SimulatedResult):
     skips `None` values) -- so the existing recording-gating logic just
     means passing `None` for a field instead of conditionally omitting a
     dict key, as the old (pre-refactor) version of this class did.
+
+    Closed-loop simulation always uses the previous-transition convention:
+    `times`, `states`, and (when requested) `filtered_states_mean` have length
+    $T$, while `observations`, `controls`, and `policy_states` have length
+    $T-1$. No initial observation $y_0$ is generated.
     """
 
     # control_time = time - 1 (no control is chosen after the final state).
@@ -151,19 +160,33 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
     Unlike `DiscreteTimeSimulator`, which requires the entire control
     trajectory as a pre-supplied `ctrl_values` array, `DiscreteControlLoopSimulator`
-    computes each $u_k$ online from the filtered belief $\hat x_{k|k}$ via
-    `control_policy`. See the closed-loop control API page for the full loop
-    equations and the control-index convention used by
-    `dynamics.observation_model`.
+    computes each $u_k$ online from the current belief $\hat p_k$ via
+    `control_policy`:
 
-    The online loop uses $u_k$ for both the transition into $x_{k+1}$ and the
-    observation $y_{k+1}$. This control-observation alignment is temporary;
-    [Issue #312](https://github.com/BasisResearch/dynestyx/issues/312) tracks
-    aligning it with the regular simulator convention and requiring controlled
-    `DynamicalModel` observation models to follow that convention. The one-step
-    filter update currently uses Cuthbert and supports `KFConfig`, `EKFConfig`,
-    `EnKFConfig`, and `PFConfig`. Plated controlled simulation is not yet
-    supported; see
+    $$
+    x_0 \sim p_0, \qquad \hat p_0 = p_0,
+    $$
+
+    followed for $k=0,\ldots,T-2$ by
+
+    $$
+    \begin{aligned}
+    (u_k,s_{k+1}) &= \pi(\hat p_k,t_k,t_{k+1},s_k), \\
+    x_{k+1} &\sim p(x_{k+1}\mid x_k,u_k,t_k,t_{k+1}), \\
+    y_{k+1} &\sim p(y_{k+1}\mid x_{k+1},u_k,t_{k+1}), \\
+    \hat p_{k+1} &= \operatorname{FilterUpdate}(\hat p_k,u_k,y_{k+1}).
+    \end{aligned}
+    $$
+
+    Closed-loop simulation therefore always uses the previous-transition
+    convention, independently of `dynamics.observation_control_alignment`.
+    It never generates $y_0$: states and times have length $T$, while
+    observations and controls have length $T-1$. This avoids requiring an
+    undefined pre-initial control for a control-dependent observation model.
+
+    The one-step filter update currently uses Cuthbert and supports `KFConfig`,
+    `EKFConfig`, `EnKFConfig`, and `PFConfig`. Plated controlled simulation is
+    not yet supported; see
     [Issue #318](https://github.com/BasisResearch/dynestyx/issues/318).
 
     Attributes:
@@ -224,7 +247,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             **kwargs: Additional shared simulator-handler metadata, ignored here.
 
         Returns:
-            States, observations, controls, filter means, and policy states.
+            States and beliefs on all `predict_times`, plus observations,
+            controls, and policy states for the subsequent $T-1$ transitions.
 
         Raises:
             ValueError: If inputs are incompatible with online discrete control.
@@ -271,38 +295,33 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 "because online one-step updates are not available for "
                 f"filter_source={filter_config.filter_source!r}."
             )
-        rollout_key, initial_state_key, initial_observation_key, default_filter_key = (
-            jr.split(rng_key, 4)
-        )
+        rollout_key, initial_state_key, default_filter_key = jr.split(rng_key, 3)
         online_filter_key = (
             filter_config.crn_seed
             if filter_config.crn_seed is not None
             else default_filter_key
         )
-        online_filter_key, initial_filter_update_key = jr.split(online_filter_key)
+        online_filter_key, initial_filter_state_key = jr.split(online_filter_key)
         filter_obj, _ = build_cuthbert_filter(
             dynamics, filter_config, key=online_filter_key, want_parallel=False
         )
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
-        y_0 = dynamics.observation_model(x_0, None, times[0]).sample(
-            initial_observation_key
+        initial_dtype = jnp.result_type(jnp.asarray(x_0), times)
+        zero_control = jnp.zeros((dynamics.control_dim,), dtype=initial_dtype)
+        initial_filter_inputs = CuthbertInputs(
+            y=jnp.zeros((dynamics.observation_dim,), dtype=initial_dtype),
+            u=zero_control,
+            u_prev=zero_control,
+            time=times[0],
+            time_prev=times[0],
+            is_first_step=jnp.asarray(False),
         )
-        # This first filter update conditions the initial-state prior on y_0;
-        # it does not perform a state transition. t_prev is therefore a dummy
-        # value, but it must be earlier than t_0 because some filter backends
-        # still evaluate the unused transition. Reusing the first interval's
-        # width avoids zero-duration transition covariances and NaN gradients.
-        dt0 = times[1] - times[0] if T > 1 else jnp.asarray(1.0, dtype=times.dtype)
-        x_hat_0 = compute_cuthbert_filter_update(
-            dynamics,
-            filter_obj=filter_obj,
-            prev_state=None,
-            key=initial_filter_update_key,
-            y=y_0,
-            u=None,
-            t=times[0],
-            t_prev=times[0] - dt0,
+        # The first policy acts on the model prior. There is deliberately no
+        # synthetic y_0: the first observation follows the transition driven by
+        # u_0, exactly like every subsequent closed-loop observation.
+        x_hat_0 = filter_obj.init_prepare(
+            initial_filter_inputs, key=initial_filter_state_key
         )
         s_0 = initial_policy_state
 
@@ -363,7 +382,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         _, (xs, x_hats, ys, ss, us) = jax.lax.scan(_step, init_carry, jnp.arange(T - 1))
 
         states = jnp.concatenate([jnp.expand_dims(x_0, axis=0), xs], axis=0)
-        observations = jnp.concatenate([jnp.expand_dims(y_0, axis=0), ys], axis=0)
+        observations = ys
 
         mean_shape = filter_state_mean(x_hat_0).shape
         record_mean = _should_record_field(
