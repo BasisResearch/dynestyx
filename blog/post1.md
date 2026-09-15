@@ -31,23 +31,25 @@ Core to `dynestyx` is its unified interface for a state-space model (SSM, define
 
 ### Mathematical description of an SSM
 
-A state-space model concerns the evolution of a *latent state* $x_t \in\mathbb{R}^{d_x}$. This evolution may be deterministic or stochastic, and continuous-time or discrete-time. Let's consider the stochastic case for now, since it's more general. In discrete-time, our state then evolves according to a Markov chain:
+A state-space model concerns the evolution of a *latent state* $x_t \in\mathbb{R}^{d_x}$, beginning with a possibly uncertain initial condition:
+$$x_0 \sim \pi_0$$
+The subsequent evolution may be deterministic or stochastic, occur continuously or discretely in time, and may have explicit dependent on time $t \in \mathbb{R}^+$ or a sequence of external control inputs $u_t \in \mathbb{R}^{d_u}$. Let's consider the stochastic case for now, since it's more general. In discrete-time, our state then evolves according to a Markov chain with some *rules* $\theta$ :
 
 $$
-x_t \sim p(x_t | x_{t-1}).
+x_t \sim p(x_t | x_{t-1}, u_{t-1}, t-1, t; \ \theta).
 $$
 
 In continuous time, we instead have a stochastic differential equation (SDE):
 
 $$
-\mathrm{d}x_t = f(x, t)  \mathrm{d}t + g(x, t)  \mathrm{d}\beta_t,
+\mathrm{d}x_t = f(x_t, u_t, t)  \mathrm{d}t + g(x_t, u_t, t)  \mathrm{d}W_t,
 $$
 
-where $\beta_t$ is a rank-${d_\beta}$ Brownian motion, $f \colon \mathbb{R}^{d_x} \times \mathbb{R}*+ \to \mathbb{R}*{d_x}$ is known as the drift function, and $g \colon \mathbb{R}^{d_x} \times \mathbb{R}*+ \to \mathbb{R}^{d_x} \times \mathbb{R}^{d*\beta}$ is known as the diffusion function.
+where $W_t$ is a $d_b$-dimensional Brownian motion, $f : \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}_+ \to \mathbb{R}^{d_x}$ is the drift function (governing deterministic dynamics), and $g : \mathbb{R}^{d_x} \times \mathbb{R}^{d_u} \times \mathbb{R}_+ \to \mathbb{R}^{d_x \times d_b}$ is the diffusion function (governing the coupling to the stochastic part of the evolution).
 
 ### Mathematics to Code
 
-Given the mathematical description of a state-space model, it is straightforward to translate to a `dynestyx` model! The key abstraction in `dynestyx` is a `DynamicalModel`, which takes as input exactly the data we specified above: an initial condition (`initial_condition`), a state evolution (`state_evolution`), an observation model (`observation_model`)
+Given the mathematical description of a state-space model, it is straightforward to translate to a `dynestyx` model! The key abstraction in `dynestyx` is a `DynamicalModel`, which takes as input exactly the data we specified above: an initial condition (`initial_condition`), a state evolution (`state_evolution`), and an observation model (`observation_model`):
 
 
 |                 | stochastic                                                              | deterministic                                                       |
