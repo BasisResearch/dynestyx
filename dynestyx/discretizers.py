@@ -46,11 +46,14 @@ def _automatic_discretizer_config(
     return EulerMaruyamaConfig()
 
 
-def _discretize_state_evolution(
+def discretize_state_evolution(
     cte: StateEvolutionLike,
     config: BaseDiscretizerConfig | None = None,
 ) -> DiscreteTimeStateEvolution:
-    """Build the private discrete transition selected by a config."""
+    """Discretize a continuous state evolution.
+
+    Uses the same transition discretization as `discretize_dynamics`.
+    """
     if not isinstance(
         cte,
         (
@@ -101,6 +104,51 @@ def _discretize_state_evolution(
     raise TypeError(
         "discretizer_config must be a concrete BaseDiscretizerConfig; "
         f"got {type(resolved).__name__}."
+    )
+
+
+def discretize_dynamics(
+    dynamics: DynamicalModel,
+    discretizer_config: BaseDiscretizerConfig | None = None,
+) -> DynamicalModel:
+    """Build a discrete-time model from continuous-time dynamics.
+
+    Preserves the initial condition, observation model, control metadata, and
+    initial time. The state evolution uses the transition selected by
+    `discretizer_config`.
+
+    When no config is provided, deterministic ODEs use their numerical flow,
+    affine SDEs with constant diffusion and no potential use an exact Gaussian
+    transition, and other SDEs use Euler--Maruyama.
+
+    Args:
+        dynamics: Continuous-time model to discretize.
+        discretizer_config: Explicit discretization config, or `None` for
+            automatic routing.
+
+    Returns:
+        DynamicalModel: A discrete-time model with the selected interval
+            transition.
+
+    Raises:
+        TypeError: If `dynamics` is already discrete-time or the config is not
+            compatible with its continuous state evolution.
+    """
+    if not dynamics.continuous_time:
+        raise TypeError(
+            "discretize_dynamics requires a continuous-time DynamicalModel; "
+            "got a discrete-time model."
+        )
+    return DynamicalModel(
+        initial_condition=dynamics.initial_condition,
+        state_evolution=discretize_state_evolution(
+            dynamics.state_evolution,
+            discretizer_config,
+        ),
+        observation_model=dynamics.observation_model,
+        control_model=dynamics.control_model,
+        control_dim=dynamics.control_dim,
+        t0=dynamics.t0,
     )
 
 
@@ -169,16 +217,9 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 StochasticContinuousTimeStateEvolution,
             ),
         ):
-            dynamics = DynamicalModel(
-                initial_condition=dynamics.initial_condition,
-                state_evolution=_discretize_state_evolution(
-                    dynamics.state_evolution,
-                    self.discretizer_config,
-                ),
-                observation_model=dynamics.observation_model,
-                control_model=dynamics.control_model,
-                control_dim=dynamics.control_dim,
-                t0=dynamics.t0,
+            dynamics = discretize_dynamics(
+                dynamics,
+                self.discretizer_config,
             )
         return fwd(
             name,
@@ -202,4 +243,6 @@ __all__ = [
     "LocalLinearizationConfig",
     "MeanTrajectoryLinearizationConfig",
     "ODEFlowConfig",
+    "discretize_dynamics",
+    "discretize_state_evolution",
 ]

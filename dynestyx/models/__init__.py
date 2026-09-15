@@ -17,7 +17,7 @@ from dynestyx.models.diffusions import (
     FullDiffusion,
     ScalarDiffusion,
 )
-from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift
+from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift, linearize_drift
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
@@ -54,4 +54,5 @@ __all__ = [
     "LTI_continuous",
     "LTI_discrete",
     "ScalarDiffusion",
+    "linearize_drift",
 ]
