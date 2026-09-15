@@ -2,10 +2,10 @@
 
 Here at Basis, one of our favorite things is to identify and address unmet computational needs that permeate across sectors of science and engineering. It allows us to play a uniquely catalyzing role in research that most institutions are unable to incentivize. Roughly one year ago, we set out on one such mission, with a laser focus on improving how applied and methodological researchers/scientists/engineers work with data and models from time-evolving (dynamical) systems to answer key questions like:
 
-1. What will happen next in this system? (sometimes called forecasting)
-2. Where has the system been? (sometimes generically called inference, or smoothing in certain sub-communities that are dear to my heart)
-3. How does the system work / what are its rules? (sometimes called system identification)
-4. What will happen if I intervene on the system (sometimes called counterfactual inference)?
+1. What will happen next in this system? (*forecasting*)
+2. Where has the system been? (*inference*, generically, or *smoothing* in certain sub-communities)
+3. How does the system work / what are its rules? (*system identification*)
+4. What will happen if I intervene on the system (*counterfactual inference*)?
 
 Good answers to these questions are paired with quantified uncertainty—that is, how sure are we about the answer? The best answers also address the meta-question: how reliable is the assessment of uncertainty? For those of us following forecasts of early COVID outbreaks, you may remember that forecasts from each team/organization came with "error bars"; and those error bars often did not even overlap when looking across teams—clearly something was wrong!
 
