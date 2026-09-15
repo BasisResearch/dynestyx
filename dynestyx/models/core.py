@@ -108,10 +108,9 @@ class DynamicalModel(eqx.Module):
             observations pair with controls in discrete time. `"same_time"` (default) pairs
             $y_k$ with $u_k$. `"previous_transition"`
             pairs $y_{k+1}$ with $u_k$ (the control that produced $x_{k+1}$); under this convention
-            $y_0$ is never sampled. Only `"same_time"` is honored outside the plain
-            `Simulator`/`DiscreteTimeSimulator`/`dsx.simulate` generation path (not yet by
-            Filter/Smoother/`LatentPathBuilder` posterior rollout, `DiscreteControlLoopSimulator`,
-            or `mppi.py`).
+            $y_0$ is never sampled. `DiscreteControlLoopSimulator` always uses
+            `"previous_transition"`, independently of this field. Only `"same_time"` is
+            honored by Filter/Smoother/`LatentPathBuilder` posterior rollout and `mppi.py`.
 
     Note:
         - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.

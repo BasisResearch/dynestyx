@@ -149,9 +149,13 @@ class SimulatedResult(eqx.Module):
     populated by ``DiscreteTimeSimulator``; ODE/SDE simulators leave it
     ``None`` for now.
 
-    For a discrete-time model with
-    ``dynamics.observation_control_alignment="previous_transition"``, states are of length :math:`T` (matching ``times``),
-    while ``observations`` and ``controls`` are of length :math:`T-1`. In this convention, :math:`y_0` is never sampled, since there is no control that produced it.
+    For open-loop simulation of a discrete-time model with
+    ``dynamics.observation_control_alignment="previous_transition"``, states are
+    of length :math:`T` (matching ``times``), while ``observations`` and
+    ``controls`` are of length :math:`T-1`. Closed-loop simulation always uses
+    this same shape and alignment convention, independently of the model field.
+    In both cases, :math:`y_0` is never sampled because there is no control that
+    produced it.
 
     See
     [DiscreteTimeSimulator][dynestyx.simulation.discrete.DiscreteTimeSimulator].

@@ -71,7 +71,9 @@ def simulate(
             instead of being drawn from the uncontrolled/`ctrl_values`
             transition -- `ctrl_times`/`ctrl_values` must not be passed
             together with `control_policy`, and `simulator_config` is not
-            accepted either.
+            accepted either. Closed-loop simulation always uses the
+            previous-transition convention and never generates $y_0$,
+            independently of `dynamics.observation_control_alignment`.
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
