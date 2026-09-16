@@ -26,11 +26,18 @@ where the stochastic term $W_t$ may be absent, yileding an ODE.
       show_root_heading: false
       show_root_toc_entry: false
 
+## linearize_drift
+::: dynestyx.models.drifts.linearize_drift
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+
+For local affine-Gaussian transition parameters, compose the returned drift
+with [exact affine discretization](../../discretizers/discretizer.md#local-affine-gaussian-parameters).
+
 ## ImExDrift
 ::: dynestyx.models.drifts.ImExDrift
     options:
       show_root_heading: false
       show_root_toc_entry: false
-
-
 
