@@ -517,11 +517,9 @@ def test_direct_callback_pairing_reserved_names_and_continuous_rejection():
         chol_observation_covariance,
         model_inputs,
     ):
-        del normalized_observation_deviations, model_inputs
         return chol_observation_covariance
 
     def modify_prediction(predicted_observation_covariance, model_inputs):
-        del model_inputs
         return predicted_observation_covariance
 
     with pytest.raises(ValueError, match="at least one"):
@@ -552,7 +550,6 @@ def test_direct_callback_pairing_reserved_names_and_continuous_rejection():
 
 def test_direct_callback_outputs_are_shape_and_finiteness_checked():
     def identity_prediction(predicted_observation_covariance, model_inputs):
-        del model_inputs
         return predicted_observation_covariance
 
     def identity_innovation(
@@ -560,11 +557,9 @@ def test_direct_callback_outputs_are_shape_and_finiteness_checked():
         chol_observation_covariance,
         model_inputs,
     ):
-        del normalized_observation_deviations, model_inputs
         return chol_observation_covariance
 
     def bad_cross(cross_covariance, model_inputs):
-        del cross_covariance, model_inputs
         return jnp.ones((1, 1))
 
     bad_cross_resolved = resolve_enkf_localization(
@@ -581,7 +576,6 @@ def test_direct_callback_outputs_are_shape_and_finiteness_checked():
         chol_observation_covariance,
         model_inputs,
     ):
-        del normalized_observation_deviations, chol_observation_covariance, model_inputs
         return jnp.full((2, 2), jnp.nan)
 
     bad_innovation_resolved = resolve_enkf_localization(
@@ -601,7 +595,6 @@ def test_direct_callback_outputs_are_shape_and_finiteness_checked():
         )
 
     def bad_prediction(predicted_observation_covariance, model_inputs):
-        del predicted_observation_covariance, model_inputs
         return jnp.ones((2, 1))
 
     bad_prediction_resolved = resolve_enkf_localization(

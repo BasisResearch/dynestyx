@@ -171,7 +171,6 @@ def _resolve_distance_localization(
     )
 
     def modify_cross_covariance(cross_covariance, model_inputs):
-        del model_inputs
         cross_covariance = _validate_finite_array(
             cross_covariance,
             expected_shape=(state_dim, observation_dim),
@@ -213,7 +212,6 @@ def _resolve_distance_localization(
         chol_observation_covariance,
         model_inputs,
     ):
-        del model_inputs
         return _validate_finite_array(
             construct_tapered_chol_innovation_covariance(
                 normalized_observation_deviations,
@@ -228,7 +226,6 @@ def _resolve_distance_localization(
         predicted_observation_covariance,
         model_inputs,
     ):
-        del model_inputs
         return apply_precomputed_observation_taper(
             predicted_observation_covariance,
             observation_taper,
