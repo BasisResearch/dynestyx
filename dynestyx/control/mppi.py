@@ -41,8 +41,8 @@ class MPPI(eqx.Module):
     hand-written rollout), score the resulting trajectories with `loss_fn`,
     and combine them via the standard MPPI weighting
 
-    $$w_i \\propto \\exp(-\\mathrm{loss}_i / \\lambda), \\qquad
-      u_{0:H-1} = \\sum_i w_i\\, u^{(i)}_{0:H-1}$$
+    $$w_i \propto \exp(-\mathrm{loss}_i / \lambda), \qquad
+      u_{0:H-1} = \sum_i w_i\, u^{(i)}_{0:H-1}$$
 
     i.e. a softmax over the (negated, temperature-scaled) per-sample losses.
     Only the first control of that weighted-mean sequence is applied this
@@ -74,7 +74,7 @@ class MPPI(eqx.Module):
         n_samples: Number of sampled control sequences per call. Defaults to
             `20`.
         dt: Fixed planning step size. Defaults to `1.0`.
-        temperature: MPPI's $\\lambda$; higher values flatten the weights
+        temperature: MPPI's $\lambda$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
             lowest-loss samples.
         batched: Whether the `n_samples` candidate rollouts are computed with

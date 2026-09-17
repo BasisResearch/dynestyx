@@ -3,7 +3,7 @@
 Dynestyx can interleave simulation, observation, filtering, and control for a
 single discrete-time trajectory. At each step it performs
 
-\[
+$$
 \begin{aligned}
 x_0 &\sim p(x_0), \\
 \hat p_0 &= p(x_0), \\
@@ -13,7 +13,7 @@ y_{k+1} \mid x_{k+1},u_k &\sim p(y_{k+1}\mid x_{k+1},u_k,t_{k+1}), \\
 \hat p_{k+1} &= \operatorname{FilterUpdate}
   (\hat p_k,u_k,y_{k+1},t_k,t_{k+1}).
 \end{aligned}
-\]
+$$
 
 The initial policy decision uses the model's initial-state distribution as its
 belief; no synthetic initial observation is generated. Every observation at
