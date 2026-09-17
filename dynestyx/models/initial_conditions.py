@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from numpyro.distributions import Distribution
 
-from dynestyx.models._gaussian import gaussian_distribution, normalize_covariance
+from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
 from dynestyx.models.layout import StateLayout
 
 

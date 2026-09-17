@@ -9,7 +9,7 @@ from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
-from dynestyx.models._gaussian import gaussian_distribution, normalize_covariance
+from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
 from dynestyx.models.core import ObservationModel
 from dynestyx.models.layout import StateLayout
 
