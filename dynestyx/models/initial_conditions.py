@@ -5,11 +5,11 @@ import numpyro.distributions as dist
 from numpyro.distributions import Distribution
 
 from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
-from dynestyx.models.layout import StateLayout
+from dynestyx.models.layout import Layout
 
 
 def DiracInitialCondition(
-    value, *, state_layout: StateLayout | None = None
+    value, *, state_layout: Layout | None = None
 ) -> Distribution:
     """Return an exact initial distribution, flattening with the supplied layout.
 
@@ -21,7 +21,7 @@ def DiracInitialCondition(
 
 
 def GaussianInitialCondition(
-    mean, cov, *, state_layout: StateLayout | None = None
+    mean, cov, *, state_layout: Layout | None = None
 ) -> Distribution:
     """Return a Gaussian initial distribution in flat coordinates.
 

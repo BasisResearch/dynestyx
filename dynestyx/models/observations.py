@@ -11,7 +11,7 @@ from numpyro import distributions as dist
 
 from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
 from dynestyx.models.core import ObservationModel
-from dynestyx.models.layout import StateLayout
+from dynestyx.models.layout import Layout
 
 _UNSET_COVARIANCE = object()
 
@@ -220,8 +220,8 @@ class GaussianObservation(ObservationModel):
         cov=_UNSET_COVARIANCE,
         *,
         R=_UNSET_COVARIANCE,
-        state_layout: StateLayout | None = None,
-        observation_layout: StateLayout | None = None,
+        state_layout: Layout | None = None,
+        observation_layout: Layout | None = None,
     ):
         if cov is not _UNSET_COVARIANCE and R is not _UNSET_COVARIANCE:
             raise TypeError("Provide only one of cov or R, not both.")
@@ -251,8 +251,8 @@ class DiracObservation(ObservationModel):
         self,
         h: Callable,
         *,
-        state_layout: StateLayout | None = None,
-        observation_layout: StateLayout | None = None,
+        state_layout: Layout | None = None,
+        observation_layout: Layout | None = None,
     ):
         self.h = h
         self.state_layout = state_layout
@@ -280,7 +280,7 @@ class DiracIdentityObservation(ObservationModel):
     i.e., the observation equals the latent state almost surely.
     """
 
-    def __init__(self, *, state_layout: StateLayout | None = None):
+    def __init__(self, *, state_layout: Layout | None = None):
         self.state_layout = state_layout
         self.observation_layout = state_layout
 

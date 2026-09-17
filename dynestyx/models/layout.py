@@ -10,7 +10,7 @@ import jax.numpy as jnp
 
 @jax.tree_util.register_static
 @dataclass(frozen=True)
-class StateLayout:
+class Layout:
     """Bijection between a fixed array pytree and one trailing vector axis.
 
     Construct with :meth:`from_example`. Leaves must have a common numeric
@@ -27,13 +27,13 @@ class StateLayout:
     state_dim: int
 
     @classmethod
-    def from_example(cls, example: Any) -> "StateLayout":
+    def from_example(cls, example: Any) -> "Layout":
         leaves, treedef = jax.tree_util.tree_flatten(example)
         cls._validate_leaves(leaves)
         shapes = tuple(tuple(x.shape) for x in leaves)
         sizes = tuple(prod(shape) for shape in shapes)
         if any(size == 0 for size in sizes):
-            raise ValueError("StateLayout does not support zero-sized leaves.")
+            raise ValueError("Layout does not support zero-sized leaves.")
         offsets = []
         total = 0
         for size in sizes:
@@ -44,20 +44,20 @@ class StateLayout:
     @staticmethod
     def _validate_leaves(leaves):
         if not leaves:
-            raise ValueError("StateLayout requires a nonempty pytree of arrays.")
+            raise ValueError("Layout requires a nonempty pytree of arrays.")
         for leaf in leaves:
             if not hasattr(leaf, "shape") or not hasattr(leaf, "dtype"):
-                raise TypeError("StateLayout leaves must be numeric arrays.")
+                raise TypeError("Layout leaves must be numeric arrays.")
             if not jnp.issubdtype(leaf.dtype, jnp.number):
-                raise TypeError("StateLayout leaves must have numeric dtypes.")
+                raise TypeError("Layout leaves must have numeric dtypes.")
         if any(leaf.dtype != leaves[0].dtype for leaf in leaves):
-            raise TypeError("StateLayout leaves must have the same numeric dtype.")
+            raise TypeError("Layout leaves must have the same numeric dtype.")
 
     def flatten(self, value: Any):
         """Flatten leaf event shapes, preserving identical leading batch axes."""
         leaves, treedef = jax.tree_util.tree_flatten(value)
         if treedef != self.treedef:
-            raise ValueError("Pytree structure does not match StateLayout.")
+            raise ValueError("Pytree structure does not match Layout.")
         self._validate_leaves(leaves)
         batch = None
         flat = []

@@ -16,7 +16,7 @@ from jaxtyping import Array, Float, Real
 from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
-from dynestyx.models.layout import StateLayout
+from dynestyx.models.layout import Layout
 
 
 class AffineDrift(_AffineDrift):
@@ -209,7 +209,6 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
 
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):
-
     """
     Nonlinear Gaussian discrete-time state transition.
 
@@ -221,8 +220,8 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
 
     where $F$ is a user-provided transition function and $Q$ is the
     process-noise covariance (either constant or state/time dependent).
-    
-    When a `state_layout` is provided, the transition function `F` must accept and return structured states matching the layout and the covariance must be a scalar variance or match the structured state layout; 
+
+    When a `state_layout` is provided, the transition function `F` must accept and return structured states matching the layout and the covariance must be a scalar variance or match the structured state layout;
     full covariance matrices are not supported with a layout.
     """
 
@@ -230,7 +229,7 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
     cov: Any
     _diagonal: bool | None = eqx.field(static=True)
 
-    def __init__(self, F: Callable, cov, *, state_layout: StateLayout | None = None):
+    def __init__(self, F: Callable, cov, *, state_layout: Layout | None = None):
         self.F = F
         self.state_layout = state_layout
         if callable(cov):
@@ -258,7 +257,7 @@ class DiracStateEvolution(DiscreteTimeStateEvolution):
 
     F: Callable
 
-    def __init__(self, F: Callable, *, state_layout: StateLayout | None = None):
+    def __init__(self, F: Callable, *, state_layout: Layout | None = None):
         self.F = F
         self.state_layout = state_layout
 

@@ -22,7 +22,7 @@ from dynestyx.models.initial_conditions import (
     DiracInitialCondition,
     GaussianInitialCondition,
 )
-from dynestyx.models.layout import StateLayout
+from dynestyx.models.layout import Layout
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
@@ -49,7 +49,7 @@ __all__ = [
     "DiracInitialCondition",
     "GaussianInitialCondition",
     "Drift",
-    "StateLayout",
+    "Layout",
     "DiracIdentityObservation",
     "DiracObservation",
     "DiracStateEvolution",
