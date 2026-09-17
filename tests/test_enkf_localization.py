@@ -509,6 +509,57 @@ def test_localization_configuration_validation():
         )
 
 
+@pytest.mark.parametrize(
+    "field,value,message",
+    [
+        ("taper", "unknown", "Unsupported"),
+        ("taper", jnp.ones_like, "requires taper_scale=None"),
+        ("taper_scale", None, "requires a positive scalar"),
+        ("taper_scale", [1.0], "must be a scalar"),
+    ],
+)
+def test_distance_config_is_revalidated_after_mutation(field, value, message):
+    config = EnKFLocalizationConfig(
+        state_observation_distances=jnp.zeros((3, 2)), taper_scale=1.0
+    )
+    setattr(config, field, value)
+    with pytest.raises(ValueError, match=message):
+        resolve_enkf_localization(config, state_dim=3, observation_dim=2)
+
+
+@pytest.mark.parametrize(
+    "field,value,error,message",
+    [
+        ("modify_cross_covariance", None, ValueError, "at least one"),
+        ("modify_cross_covariance", 1.0, TypeError, "must be callable"),
+        (
+            "construct_chol_innovation_covariance",
+            lambda deviations, chol, inputs: chol,
+            ValueError,
+            "supplied together",
+        ),
+    ],
+)
+def test_callback_config_is_revalidated_after_mutation(field, value, error, message):
+    config = EnKFLocalizationFunctions(
+        modify_cross_covariance=lambda cross_covariance, model_inputs: cross_covariance
+    )
+    setattr(config, field, value)
+    with pytest.raises(error, match=message):
+        resolve_enkf_localization(config, state_dim=3, observation_dim=2)
+
+
+def test_custom_observation_taper_must_be_symmetric():
+    _, _, _, cross_distances, observation_distances = _problem()
+    config = EnKFLocalizationConfig(
+        state_observation_distances=cross_distances,
+        observation_distances=observation_distances,
+        taper=lambda distances: gaussian(distances, 1.0).at[0, 1].multiply(0.5),
+    )
+    with pytest.raises(ValueError, match="observation taper must be symmetric"):
+        resolve_enkf_localization(config, state_dim=3, observation_dim=2)
+
+
 def test_direct_callback_pairing_reserved_names_and_continuous_rejection():
     _, _, _, cross_distances, _ = _problem()
 

@@ -6,6 +6,7 @@ import math
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
+import jax.numpy as jnp
 import jax.random as jr
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
@@ -98,6 +99,10 @@ class EnKFLocalizationConfig:
     observation_distances: ArrayLike | None = None
 
     def __post_init__(self):
+        self._validate()
+
+    def _validate(self):
+        """Check configuration at construction and again before resolution."""
         if callable(self.taper):
             if self.taper_scale is not None:
                 raise ValueError(
@@ -119,7 +124,7 @@ class EnKFLocalizationConfig:
                 f"EnKFLocalizationConfig(taper={self.taper!r}) requires a positive "
                 "scalar taper_scale."
             )
-        if getattr(self.taper_scale, "shape", ()) != ():
+        if jnp.asarray(self.taper_scale).shape != ():
             raise ValueError("EnKF localization taper_scale must be a scalar.")
 
 
@@ -144,6 +149,10 @@ class EnKFLocalizationFunctions:
     ) = None
 
     def __post_init__(self):
+        self._validate()
+
+    def _validate(self):
+        """Check configuration at construction and again before resolution."""
         callbacks = (
             self.modify_cross_covariance,
             self.construct_chol_innovation_covariance,
