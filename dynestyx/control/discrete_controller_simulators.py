@@ -394,6 +394,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             )
 
         return ControlledSimulatedResult(
+            state_layout=dynamics.state_layout,
+            observation_layout=dynamics.observation_layout,
             times=_tile_times(times, 1),
             x_0=jnp.expand_dims(x_0, axis=0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
@@ -401,7 +403,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
             filtered_states_mean=filtered_states_mean,
             policy_states=policy_states,
-        )
+        ).unflatten()
 
 
 __all__ = [
