@@ -277,13 +277,11 @@ class EnKFConfig(BaseFilterConfig):
             inflation_delta (float | None): Scale ensemble anomalies by
                 \(\sqrt{1 + \delta}\) before the update to prevent collapse.
                 `None` disables inflation.
-    <<<<<<< HEAD
             localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
                 Optional structured covariance localization. Distance-based
                 localization provides built-in Gaussian and Gaspari-Cohn tapers or
                 accepts a custom covariance callable. Advanced users can instead
                 supply Cuthbert-compatible callbacks.
-    =======
             recorded_filtered_states_cov_jitter (float): Nonnegative \(\epsilon\) added to
                 the **recorded** filtered-state covariance as \(\epsilon I\).
                 This only affects the covariance when converted to a `MultivariateNormal` or `LowRankMultivariateNormal`
@@ -294,7 +292,6 @@ class EnKFConfig(BaseFilterConfig):
                 this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonetheless).
                 Defaults to `1e-5`. Will work for variance around 1, but may need a bigger value
                 for larger magnitudes and may want to reduce when using float64. Pass `0.0` for the exact, unregularised covariance.
-    >>>>>>> origin/main
             filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
         ??? note "Algorithm Reference"
