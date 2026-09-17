@@ -19,7 +19,7 @@ def normalize_covariance(value, layout=None):
             value = layout.flatten(value)
         except (ValueError, TypeError) as exc:
             raise ValueError(
-                "Noise must be a scalar variance or match the output StateLayout; "
+                "Noise must be a scalar variance or match the output Layout; "
                 "full covariance matrices are not supported with a layout."
             ) from exc
     value = jnp.asarray(value)
