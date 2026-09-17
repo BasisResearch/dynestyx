@@ -10,6 +10,8 @@ import jax.random as jr
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
+from dynestyx.utils import _validate_nonnegative_float
+
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
@@ -243,86 +245,99 @@ class BaseFilterConfig(abc.ABC):
 class EnKFConfig(BaseFilterConfig):
     r"""Ensemble Kalman Filter (EnKF) for discrete-time models.
 
-    The **default filter** for discrete-time models. A good general-purpose
-    filter for nonlinear models with Gaussian observations. Works with any
-    differentiable or non-differentiable dynamics and scales well to moderate
-    state dimensions. Cheaper per-step than the particle filter, but assumes
-    observations are approximately Gaussian given the ensemble.
+        The **default filter** for discrete-time models. A good general-purpose
+        filter for nonlinear models with Gaussian observations. Works with any
+        differentiable or non-differentiable dynamics and scales well to moderate
+        state dimensions. Cheaper per-step than the particle filter, but assumes
+        observations are approximately Gaussian given the ensemble.
 
-    The observation noise covariance must be **state-independent** (it may
-    still depend on time or controls). Using a state-dependent scale with the
-    cuthbert backend raises a `ValueError`; if you need heteroscedastic noise,
-    use `PFConfig` instead.
+        The observation noise covariance must be **state-independent** (it may
+        still depend on time or controls). Using a state-dependent scale with the
+        cuthbert backend raises a `ValueError`; if you need heteroscedastic noise,
+        use `PFConfig` instead.
 
-    The primary tuning knob is `n_particles`, with more particles providing
-    more accurate results at the cost of higher compute.
-    If the ensemble collapses over long trajectories, increase
-    `inflation_delta` slightly (e.g. `0.05`–`0.2`).
+        The primary tuning knob is `n_particles`, with more particles providing
+        more accurate results at the cost of higher compute.
+        If the ensemble collapses over long trajectories, increase
+        `inflation_delta` slightly (e.g. `0.05`–`0.2`).
 
-    Supports missing observations via NaNs.
+        Supports missing observations via NaNs.
 
-    Attributes:
-        n_particles (int): Number of ensemble members. More members give a
-            better covariance estimate at higher compute cost. Defaults to
-            `30`.
-        crn_seed (PRNGKeyArray | None): Fixed PRNG key for the ensemble. Defaults
-            to `jr.PRNGKey(0)`, i.e., common random numbers are used. This
-            can reduce variance in gradient-based learning, but introduces
-            further bias.
-        perturb_measurements (bool | None): Add noise to observations before
-            the ensemble update (stochastic EnKF). Set `False` for the
-            square-root variant. `None` defers to the backend default.
-        inflation_delta (float | None): Scale ensemble anomalies by
-            \(\sqrt{1 + \delta}\) before the update to prevent collapse.
-            `None` disables inflation.
-        localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
-            Optional structured covariance localization. Distance-based
-            localization provides built-in Gaussian and Gaspari-Cohn tapers or
-            accepts a custom covariance callable. Advanced users can instead
-            supply Cuthbert-compatible callbacks.
-        filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
+        Attributes:
+            n_particles (int): Number of ensemble members. More members give a
+                better covariance estimate at higher compute cost. Defaults to
+                `30`.
+            crn_seed (PRNGKeyArray | None): Fixed PRNG key for the ensemble. Defaults
+                to `jr.PRNGKey(0)`, i.e., common random numbers are used. This
+                can reduce variance in gradient-based learning, but introduces
+                further bias.
+            perturb_measurements (bool | None): Add noise to observations before
+                the ensemble update (stochastic EnKF). Set `False` for the
+                square-root variant. `None` defers to the backend default.
+            inflation_delta (float | None): Scale ensemble anomalies by
+                \(\sqrt{1 + \delta}\) before the update to prevent collapse.
+                `None` disables inflation.
+    <<<<<<< HEAD
+            localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
+                Optional structured covariance localization. Distance-based
+                localization provides built-in Gaussian and Gaspari-Cohn tapers or
+                accepts a custom covariance callable. Advanced users can instead
+                supply Cuthbert-compatible callbacks.
+    =======
+            recorded_filtered_states_cov_jitter (float): Nonnegative \(\epsilon\) added to
+                the **recorded** filtered-state covariance as \(\epsilon I\).
+                This only affects the covariance when converted to a `MultivariateNormal` or `LowRankMultivariateNormal`
+                distribution (notably those returned in `ConditionedResult.dists`); it never
+                enters the EnKF update, the filter recursion, or the marginal
+                likelihood.
+                When `n_particles - 1 < state_dim`, the ensemble covariance is singular,
+                this regularization is necessary to give the recorded distributions a well-defined density (sampling will work nonetheless).
+                Defaults to `1e-5`. Will work for variance around 1, but may need a bigger value
+                for larger magnitudes and may want to reduce when using float64. Pass `0.0` for the exact, unregularised covariance.
+    >>>>>>> origin/main
+            filter_source (FilterSource): Backend. Defaults to `"cuthbert"`.
 
-    ??? note "Algorithm Reference"
-        The ensemble Kalman filter comprises ensemble members $x_t^{(i)}, i = 1, \ldots, N_{\text{particles}}$.
-        There are many implementation tricks in the EnKF; we describe the basic version here.
+        ??? note "Algorithm Reference"
+            The ensemble Kalman filter comprises ensemble members $x_t^{(i)}, i = 1, \ldots, N_{\text{particles}}$.
+            There are many implementation tricks in the EnKF; we describe the basic version here.
 
-        For each time step \(t\), the ensemble is propagated forward by the transition model:
+            For each time step \(t\), the ensemble is propagated forward by the transition model:
 
-        $$
-            \hat{x}_t^{(i)} = f(x_t^{(i)}, u_t, t_t) + \epsilon_t^{(i)},
-        $$
+            $$
+                \hat{x}_t^{(i)} = f(x_t^{(i)}, u_t, t_t) + \epsilon_t^{(i)},
+            $$
 
-        where \(u_t\) is the control input at time \(t\) and \(t_t\) is the time of the transition,
-        and \(\epsilon_t^{(i)} \sim \mathcal{N}(0, Q)\) is the process noise.
+            where \(u_t\) is the control input at time \(t\) and \(t_t\) is the time of the transition,
+            and \(\epsilon_t^{(i)} \sim \mathcal{N}(0, Q)\) is the process noise.
 
-        Each ensemble member is then updated using observations:
+            Each ensemble member is then updated using observations:
 
-        $$
-            x_t^{(i)} = \hat{x}_t^{(i)} + \hat{K}_t^{(i)} \left(y_t - h(x_t^{(i)}, u_t, t_t)\right),
-        $$
+            $$
+                x_t^{(i)} = \hat{x}_t^{(i)} + \hat{K}_t^{(i)} \left(y_t - h(x_t^{(i)}, u_t, t_t)\right),
+            $$
 
-        where $\hat{K}_t^{(i)}$ is the Kalman gain for the \(i\)-th ensemble member, computed as
+            where $\hat{K}_t^{(i)}$ is the Kalman gain for the \(i\)-th ensemble member, computed as
 
-        $$
-            \hat{K}_t^{(i)} = \hat{P}_t^{(i)} H^\top (H \hat{P}_t^{(i)} H^\top + R)^{-1},
-        $$
+            $$
+                \hat{K}_t^{(i)} = \hat{P}_t^{(i)} H^\top (H \hat{P}_t^{(i)} H^\top + R)^{-1},
+            $$
 
-        where $\hat{P}_t^{(i)}$ is the empirical covariance of the particles, and $R$ is the
-        covariance of the observation model.
+            where $\hat{P}_t^{(i)}$ is the empirical covariance of the particles, and $R$ is the
+            covariance of the observation model.
 
-        The resulting estimator is known to be biased for non-linear observations, but is often rather
-        robust in practice to moderate nonlinearities. It is particualrly effective for high-dimensional
-        inverse problems, where other particle methods like particle filters often struggle.
+            The resulting estimator is known to be biased for non-linear observations, but is often rather
+            robust in practice to moderate nonlinearities. It is particualrly effective for high-dimensional
+            inverse problems, where other particle methods like particle filters often struggle.
 
-        References:
+            References:
 
-            - The implementation details are due to: Sanz-Alonso, D., Stuart, A. M., & Taeb, A. (2018).
-                Inverse problems and data assimilation. [arXiv:1810.06191](https://arxiv.org/abs/1810.06191).
-            - For a classical reference to the ensemble Kalman filter, see: Evensen, G. (2003).
-                The ensemble Kalman filter: Theoretical formulation and practical implementation. Ocean Dynamics, 53(4), 343-367.
-            - The solution using automatic differentiation for nonlinear dynamics is due to: Chen, Y., Sanz-Alonso, D., & Willett, R. (2022).
-                Autodifferentiable ensemble Kalman filters. SIAM Journal on Mathematics of Data Science, 4(2), 801-833.
-                [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
+                - The implementation details are due to: Sanz-Alonso, D., Stuart, A. M., & Taeb, A. (2018).
+                    Inverse problems and data assimilation. [arXiv:1810.06191](https://arxiv.org/abs/1810.06191).
+                - For a classical reference to the ensemble Kalman filter, see: Evensen, G. (2003).
+                    The ensemble Kalman filter: Theoretical formulation and practical implementation. Ocean Dynamics, 53(4), 343-367.
+                - The solution using automatic differentiation for nonlinear dynamics is due to: Chen, Y., Sanz-Alonso, D., & Willett, R. (2022).
+                    Autodifferentiable ensemble Kalman filters. SIAM Journal on Mathematics of Data Science, 4(2), 801-833.
+                    [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
     n_particles: int = 30
@@ -332,6 +347,9 @@ class EnKFConfig(BaseFilterConfig):
     perturb_measurements: bool | None = None
     inflation_delta: float | None = None
     localization: EnKFLocalizationConfig | EnKFLocalizationFunctions | None = None
+    recorded_filtered_states_cov_jitter: float = (
+        1e-5  # this is good for float32, may want to reduce for float64
+    )
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def __post_init__(self):
@@ -355,6 +373,12 @@ class EnKFConfig(BaseFilterConfig):
                 f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
                 "EnKFLocalizationFunctions via EnKFConfig.localization instead."
             )
+
+        # Check that the jitter is nonnegative float
+        _validate_nonnegative_float(
+            "recorded_filtered_states_cov_jitter",
+            self.recorded_filtered_states_cov_jitter,
+        )
 
 
 @dataclasses.dataclass
