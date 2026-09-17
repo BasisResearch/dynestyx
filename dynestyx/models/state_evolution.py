@@ -6,14 +6,17 @@ extension to LTI factories, Neural SDEs, etc.
 
 import warnings
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
+import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
+from dynestyx.models._gaussian import gaussian_distribution, normalize_covariance
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
+from dynestyx.models.layout import StateLayout
 
 
 class AffineDrift(_AffineDrift):
@@ -206,6 +209,7 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
 
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):
+
     """
     Nonlinear Gaussian discrete-time state transition.
 
@@ -217,80 +221,50 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
 
     where $F$ is a user-provided transition function and $Q$ is the
     process-noise covariance (either constant or state/time dependent).
+    
+    When a `state_layout` is provided, the transition function `F` must accept and return structured states matching the layout and the covariance must be a scalar variance or match the structured state layout; 
+    full covariance matrices are not supported with a layout.
     """
 
-    F: Callable[
-        [
-            Real[Array, " state_dim"] | Real[Array, ""],
-            Real[Array, " control_dim"] | Real[Array, ""] | None,
-            float | int | Real[Array, ""],
-            float | int | Real[Array, ""],
-        ],
-        Real[Array, " state_dim"] | Real[Array, ""],
-    ]
-    cov: (
-        Float[Array, "*plate state_dim state_dim"]
-        | Callable[
-            [
-                Real[Array, " state_dim"] | Real[Array, ""],
-                Real[Array, " control_dim"] | Real[Array, ""] | None,
-                float | int | Real[Array, ""],
-                float | int | Real[Array, ""],
-            ],
-            Float[Array, "*plate state_dim state_dim"],
-        ]
-    )
+    F: Callable
+    cov: Any
+    _diagonal: bool | None = eqx.field(static=True)
 
-    def __init__(
-        self,
-        F: Callable[
-            [
-                Real[Array, " state_dim"] | Real[Array, ""],
-                Real[Array, " control_dim"] | Real[Array, ""] | None,
-                float | int | Real[Array, ""],
-                float | int | Real[Array, ""],
-            ],
-            Real[Array, " state_dim"] | Real[Array, ""],
-        ],
-        cov: Float[Array, "*plate state_dim state_dim"]
-        | Callable[
-            [
-                Real[Array, " state_dim"] | Real[Array, ""],
-                Real[Array, " control_dim"] | Real[Array, ""] | None,
-                float | int | Real[Array, ""],
-                float | int | Real[Array, ""],
-            ],
-            Float[Array, "*plate state_dim state_dim"],
-        ],
-    ):
-        """
-        Args:
-            F (Callable[[State, Control, Time, Time], State]): Transition
-                function mapping $(x, u, t_k, t_{k+1})$ to the conditional mean.
-            cov (jax.Array | Callable[[State, Control, Time, Time], jax.Array]):
-                Process-noise covariance with shape $(d_x, d_x)$, or a callable
-                mapping $(x, u, t_k, t_{k+1})$ to that covariance.
-        """
+    def __init__(self, F: Callable, cov, *, state_layout: StateLayout | None = None):
         self.F = F
-        self.cov = cov
+        self.state_layout = state_layout
+        if callable(cov):
+            self.cov, self._diagonal = cov, None
+        else:
+            self.cov, self._diagonal = normalize_covariance(cov, state_layout)
+
+    def mean(self, x, u, t_now, t_next):
+        """Return the flat conditional mean, adapting the user's state layout."""
+        return self._flatten_state(self.F(self._unflatten_state(x), u, t_now, t_next))
 
     def __call__(self, x, u, t_now, t_next):
-        loc = self.F(x, u, t_now, t_next)
-        if callable(self.cov):
-            cov_fn = cast(
-                Callable[
-                    [
-                        Real[Array, " state_dim"] | Real[Array, ""],
-                        Real[Array, " control_dim"] | Real[Array, ""] | None,
-                        float | int | Real[Array, ""],
-                        float | int | Real[Array, ""],
-                    ],
-                    Float[Array, "*plate state_dim state_dim"],
-                ],
-                self.cov,
+        loc = self.mean(x, u, t_now, t_next)
+        covariance, diagonal = self.cov, self._diagonal
+        if callable(covariance):
+            covariance, diagonal = normalize_covariance(
+                covariance(self._unflatten_state(x), u, t_now, t_next),
+                self.state_layout,
             )
-            cov = cov_fn(x, u, t_now, t_next)
-        else:
-            cov = self.cov
+        return gaussian_distribution(loc, covariance, diagonal)
 
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+
+class DiracStateEvolution(DiscreteTimeStateEvolution):
+    """Deterministic discrete transition."""
+
+    F: Callable
+
+    def __init__(self, F: Callable, *, state_layout: StateLayout | None = None):
+        self.F = F
+        self.state_layout = state_layout
+
+    def mean(self, x, u, t_now, t_next):
+        return self._flatten_state(self.F(self._unflatten_state(x), u, t_now, t_next))
+
+    def __call__(self, x, u, t_now, t_next):
+        loc = jnp.asarray(self.mean(x, u, t_now, t_next))
+        return dist.Delta(loc, event_dim=0 if loc.ndim == 0 else 1)

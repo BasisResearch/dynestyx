@@ -27,6 +27,7 @@ from dynestyx.models.checkers import (
 )
 from dynestyx.models.diffusions import Diffusion
 from dynestyx.models.drifts import Drift, Potential
+from dynestyx.models.layout import StateLayout
 from dynestyx.types import as_scalar_time_array
 
 
@@ -176,6 +177,17 @@ class DynamicalModel(eqx.Module):
             allow_batch_shape=_inside_plate,
         )
         _validate_state_dim(state_dim, inferred_state_dim)
+        layouts = [
+            getattr(component, "state_layout", None)
+            for component in (state_evolution, observation_model)
+        ]
+        for layout in layouts:
+            if layout is not None and layout.state_dim != inferred_state_dim:
+                raise ValueError(
+                    "StateLayout dimension must match initial_condition state dimension."
+                )
+        if all(layout is not None for layout in layouts) and layouts[0] != layouts[1]:
+            raise ValueError("Transition and observation state layouts must agree.")
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
         _validate_categorical_state(categorical_state, inferred_categorical_state)
         if control_dim is None:
@@ -282,10 +294,31 @@ class DynamicalModel(eqx.Module):
                 continuous_state_evolution,
             )
 
+        observation_layout = getattr(observation_model, "observation_layout", None)
+        if (
+            observation_layout is not None
+            and observation_layout.state_dim != inferred_obs_dim
+        ):
+            raise ValueError(
+                "Observation layout dimension must match the observation distribution."
+            )
+
         self.state_dim = int(inferred_state_dim)
         self.observation_dim = int(inferred_obs_dim)
         self.control_dim = int(control_dim)
         self.categorical_state = bool(inferred_categorical_state)
+
+    @property
+    def state_layout(self) -> StateLayout | None:
+        """Structured state metadata, when declared by either model component."""
+        return getattr(self.state_evolution, "state_layout", None) or getattr(
+            self.observation_model, "state_layout", None
+        )
+
+    @property
+    def observation_layout(self) -> StateLayout | None:
+        """Structured observation metadata, independent of the state layout."""
+        return getattr(self.observation_model, "observation_layout", None)
 
 
 class ContinuousTimeStateEvolution(eqx.Module):
@@ -441,11 +474,22 @@ class DiscreteTimeStateEvolution(eqx.Module):
         u (Control | None): Current control input or None.
         t_now (Time): Current time index $t_k$.
         t_next (Time): Next time index $t_{k+1}$ (for non-uniform sampling or continuous-time embeddings).
+        state_layout (StateLayout | None): Optional structured state metadata.
 
     Returns:
         numpyro.distributions.Distribution: Distribution over the next state $x_{t_{k+1}}$.
             In practice this should be a `numpyro.distributions.Distribution` instance.
     """
+
+    state_layout: StateLayout | None = eqx.field(
+        static=True, default=None, kw_only=True
+    )
+
+    def _unflatten_state(self, x):
+        return x if self.state_layout is None else self.state_layout.unflatten(x)
+
+    def _flatten_state(self, x):
+        return x if self.state_layout is None else self.state_layout.flatten(x)
 
     def __call__(
         self,
@@ -479,6 +523,25 @@ class ObservationModel(eqx.Module):
         log_prob(y_t, x_t, u_t, t, ...): Compute $\\log p(y_t \\mid x_t, u_t, t)$.
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
+
+    state_layout: StateLayout | None = eqx.field(
+        static=True, default=None, kw_only=True
+    )
+
+    def _unflatten_state(self, x):
+        return x if self.state_layout is None else self.state_layout.unflatten(x)
+
+    def _flatten_state(self, x):
+        return x if self.state_layout is None else self.state_layout.flatten(x)
+
+    observation_layout: StateLayout | None = eqx.field(
+        static=True, default=None, kw_only=True
+    )
+
+    def _flatten_observation(self, y):
+        return (
+            y if self.observation_layout is None else self.observation_layout.flatten(y)
+        )
 
     def __call__(
         self,
