@@ -51,7 +51,8 @@ class MPPI(eqx.Module):
 
     Attributes:
         dynamics: a `DynamicalModel` (the same model used for the real simulation
-            or some approximate). Each candidate rollout is computed by calling `dsx.simulate`.
+            or some approximate). State and observation layouts must be None.
+            Each candidate rollout is computed by calling `dsx.simulate`.
             If `dynamics` holds trainable parameters you're also
             fitting via the outer simulation, they remain in the differentiable
             pytree so gradients through planning are tracked too.
@@ -99,6 +100,15 @@ class MPPI(eqx.Module):
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
+
+    def __post_init__(self):
+        if (
+            self.dynamics.state_layout is not None
+            or self.dynamics.observation_layout is not None
+        ):
+            raise NotImplementedError(
+                "MPPI does not yet support structured state or observation layouts."
+            )
 
     def initial_state(
         self,
