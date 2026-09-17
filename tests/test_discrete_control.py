@@ -319,9 +319,10 @@ def test_compute_cuthbert_filter_update_explicit_t_prev_avoids_degeneracy():
     `t_prev` collapses to dt=0 for the first real step, producing a
     zero-covariance distribution whose NaN log-density leaks through EKF's
     Taylor-linearization gradient (via jnp.where evaluating both branches).
-    An explicit, non-degenerate dummy `t_prev` (as
-    `DiscreteControlLoopSimulator` always supplies for its initial observation
-    update) avoids this.
+    An explicit, non-degenerate dummy `t_prev` avoids this for callers that
+    perform an initial observation update. The closed-loop simulator no longer
+    performs such an update because it does not synthesize an uncontrolled
+    initial observation.
     """
     dynamics = _euler_maruyama_dynamics()
     filter_obj, _ = build_cuthbert_filter(
@@ -503,7 +504,7 @@ def test_end_to_end_shapes_and_finiteness(filter_config):
     )
     T = len(predict_times)
     assert tr["f_states"]["value"].shape == (1, T, 1)
-    assert tr["f_observations"]["value"].shape == (1, T, 1)
+    assert tr["f_observations"]["value"].shape == (1, T - 1, 1)
     assert tr["f_controls"]["value"].shape == (1, T - 1, 1)
     assert tr["f_filtered_states_mean"]["value"].shape == (1, T, 1)
 
@@ -614,13 +615,9 @@ def test_closed_loop_stabilizes_vs_uncontrolled_baseline():
     assert final_controlled < final_uncontrolled
 
 
-def test_observation_uses_previous_step_control_not_same_index():
-    """Regression test for the control-index convention: y_{k+1} must be
-    generated using u_k (the control that drove the transition into x_{k+1}),
-    never a same-index u_{k+1} -- which is causally impossible online since
-    u_{k+1} is chosen from x_hat_{k+1|k+1}, computed from y_{k+1} itself.
-    Uses an observation model whose mean depends on u so a same-index leak
-    would be directly visible in the recorded observations.
+def test_closed_loop_observations_use_transition_controls_and_omit_y0():
+    """Every returned observation pairs directly with the control that drove
+    its state transition; the closed loop never inserts an uncontrolled y_0.
     """
     control_dim = 1
 
@@ -663,10 +660,91 @@ def test_observation_uses_previous_step_control_not_same_index():
     controls = tr["f_controls"]["value"][0, :, 0]
     observations = tr["f_observations"]["value"][0, :, 0]
 
-    # No control precedes observations[0], so u=None and the D contribution is 0.
-    assert jnp.allclose(observations[0], 0.0, atol=1e-2)
-    # observations[k+1] should match controls[k] (u_k), not controls[k+1] (u_{k+1}).
-    assert jnp.allclose(observations[1:], controls, atol=1e-2)
+    assert observations.shape == controls.shape
+    assert jnp.allclose(observations, controls, atol=1e-2)
+
+
+def test_closed_loop_never_calls_observation_model_without_a_control():
+    """Closed-loop control has a fixed previous-transition convention even
+    when the model's open-loop convention is the default ``same_time``.
+    """
+
+    def observation_model(x, u, t):
+        del t
+        if u is None:
+            raise ValueError("closed-loop observations require a control")
+        return dist.MultivariateNormal(x + u, 1e-3 * jnp.eye(1))
+
+    base = _lti_1d(A=1.0, B=1.0, Q=1e-3, R=1e-3)
+    dynamics = DynamicalModel(
+        initial_condition=base.initial_condition,
+        state_evolution=base.state_evolution,
+        observation_model=observation_model,
+        control_dim=1,
+        # The closed-loop simulator intentionally ignores this open-loop choice.
+        observation_control_alignment="same_time",
+    )
+    predict_times = jnp.arange(4.0)
+
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=_simple_policy(),
+        filter_config=EKFConfig(),
+    )
+
+    assert result.states is not None
+    assert result.observations is not None
+    assert result.controls is not None
+    assert result.states.shape == (1, len(predict_times), 1)
+    assert result.observations.shape == (1, len(predict_times) - 1, 1)
+    assert result.controls.shape == result.observations.shape
+
+
+def test_first_closed_loop_policy_call_uses_initial_belief():
+    dynamics = LTI_discrete(
+        A=jnp.eye(1),
+        Q=0.1 * jnp.eye(1),
+        H=jnp.eye(1),
+        R=0.1 * jnp.eye(1),
+        B=jnp.eye(1),
+        initial_mean=jnp.array([2.0]),
+        initial_cov=0.5 * jnp.eye(1),
+    )
+
+    class _BeliefMeanPolicy:
+        def __call__(self, x_hat, t_now, t_next, s):
+            del t_now, t_next
+            return x_hat.mean, s
+
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(3.0),
+        control_policy=_BeliefMeanPolicy(),
+        filter_config=KFConfig(filter_source="cuthbert"),
+    )
+
+    assert result.controls is not None
+    assert jnp.allclose(result.controls[0, 0], dynamics.initial_condition.mean)
+
+
+def test_single_timepoint_closed_loop_returns_no_observations_or_controls():
+    result = dsx.simulate(
+        _lti_1d(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.array([0.0]),
+        control_policy=_simple_policy(),
+        filter_config=KFConfig(filter_source="cuthbert"),
+    )
+
+    assert result.states is not None
+    assert result.observations is not None
+    assert result.controls is not None
+    assert result.states.shape == (1, 1, 1)
+    assert result.observations.shape == (1, 0, 1)
+    assert result.controls.shape == (1, 0, 1)
 
 
 def test_determinism_same_seed_reproducible_different_seed_differs():
@@ -949,17 +1027,6 @@ def test_dsx_simulate_with_control_policy_rejects_simulator_config():
             control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
             simulator_config=SDESimulatorConfig(),
         )
-
-
-def test_dsx_simulate_without_control_policy_unchanged():
-    """No control_policy given -> falls back to today's type-based routing,
-    returning a plain SimulatedResult (no controls field at all), not a
-    ControlledSimulatedResult."""
-    dynamics = _lti_1d()
-    predict_times = jnp.arange(0.0, 5.0)
-
-    result = dsx.simulate(dynamics, rng_key=jr.PRNGKey(0), predict_times=predict_times)
-    assert not hasattr(result, "controls")
 
 
 def test_initial_policy_state_threads_through_dsx_simulate():

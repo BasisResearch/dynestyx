@@ -3,25 +3,25 @@
 Dynestyx can interleave simulation, observation, filtering, and control for a
 single discrete-time trajectory. At each step it performs
 
-\[
+$$
 \begin{aligned}
 x_0 &\sim p(x_0), \\
-y_0 \mid x_0 &\sim p(y_0 \mid x_0, t_0), \\
-\hat{x}_{0\mid0} &= \operatorname{FilterUpdate}(y_0, t_0), \\
-(u_k, s_{k+1}) &= \pi(\hat{x}_{k\mid k}, t_k, t_{k+1}, s_k), \\
+\hat p_0 &= p(x_0), \\
+(u_k, s_{k+1}) &= \pi(\hat p_k, t_k, t_{k+1}, s_k), \\
 x_{k+1} \mid x_k,u_k &\sim p(x_{k+1}\mid x_k,u_k,t_k,t_{k+1}), \\
 y_{k+1} \mid x_{k+1},u_k &\sim p(y_{k+1}\mid x_{k+1},u_k,t_{k+1}), \\
-\hat{x}_{k+1\mid k+1} &= \operatorname{FilterUpdate}
-  (\hat{x}_{k\mid k},u_k,y_{k+1},t_k,t_{k+1}).
+\hat p_{k+1} &= \operatorname{FilterUpdate}
+  (\hat p_k,u_k,y_{k+1},t_k,t_{k+1}).
 \end{aligned}
-\]
+$$
 
-The observation at `t[k + 1]` receives `u[k]`, the control that produced its
-state. This differs from the same-index convention used for a precomputed
-open-loop control trajectory. This is a temporary difference: [Issue
-#312](https://github.com/BasisResearch/dynestyx/issues/312) tracks aligning
-closed-loop control with the simulator convention and requiring controlled
-`DynamicalModel` observation models to follow that convention.
+The initial policy decision uses the model's initial-state distribution as its
+belief; no synthetic initial observation is generated. Every observation at
+`t[k + 1]` receives `u[k]`, the control that produced its state. Closed-loop
+simulation therefore always follows the `"previous_transition"` convention,
+independently of `dynamics.observation_control_alignment`. For `T` prediction
+times, the result contains `T` states and filtered beliefs but `T - 1`
+observations and controls.
 
 Controlled simulation currently supports one trajectory at a time. Its online
 filter update is implemented with Cuthbert and supports `KFConfig`, `EKFConfig`,

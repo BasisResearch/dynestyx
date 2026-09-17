@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
-from jax import Array, lax
+from jax import Array
 from jaxtyping import Real, Shaped
 
 from dynestyx.models import Diffusion, DynamicalModel
@@ -352,6 +352,8 @@ def _validate_controls(
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None,
+    *,
+    observation_control_alignment: str = "same_time",
 ) -> None:
     """
     Validate control inputs against model time grids.
@@ -362,10 +364,21 @@ def _validate_controls(
     - If both obs_times and predict_times are present, ctrl_times must match their union.
     - Otherwise ctrl_times must match whichever single grid is provided.
     - Matching is set-like (order-insensitive) and length-preserving.
+    - When observation_control_alignment is "previous_transition", ctrl_times must
+      instead match predict_times[:-1] (one control per transition); obs_times-based
+      conditioning is not supported yet under this convention (see issue #312).
 
     Raises:
         ValueError: If controls are partially provided or no time grid is provided.
     """
+
+    if observation_control_alignment == "previous_transition" and obs_times is not None:
+        raise ValueError(
+            "observation_control_alignment='previous_transition' does not "
+            "support obs_times-based conditioning yet (Filter/Smoother/"
+            "LatentPathBuilder posterior rollout); only predict_times-only "
+            "generation is supported. See issue #312."
+        )
 
     if ctrl_times is None:
         if ctrl_values is not None:
@@ -383,7 +396,11 @@ def _validate_controls(
     if obs_times is None and predict_times is None:
         raise ValueError("At least one of obs_times or predict_times must be provided")
 
-    if obs_times is None:
+    if observation_control_alignment == "previous_transition":
+        # obs_times is None here -- already rejected above otherwise.
+        assert predict_times is not None
+        total_obs_pred_times = predict_times[..., :-1]
+    elif obs_times is None:
         total_obs_pred_times = predict_times
     elif predict_times is None:
         total_obs_pred_times = obs_times
@@ -395,17 +412,24 @@ def _validate_controls(
             return  # ConcretizationTypeError etc. when arrays are traced
     assert total_obs_pred_times is not None
 
-    # Use trace-safe check: same length and sorted arrays match.
-    # (Avoid jnp.setxor1d/jnp.unique which have data-dependent output shapes and fail under JIT.)
-    len_mismatch = ctrl_times.shape[0] != total_obs_pred_times.shape[0]
-    values_mismatch = lax.cond(
-        len_mismatch,
-        lambda: jnp.array(True),
-        lambda: ~jnp.allclose(jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)),
+    # Check that the number of control times matches the number of observation/prediction times.
+    ctrl_time_count = ctrl_times.shape[-1]
+    expected_time_count = total_obs_pred_times.shape[-1]
+    if ctrl_time_count != expected_time_count:
+        raise ValueError(
+            "Control times must match the required observation/prediction time "
+            f"grid; expected {expected_time_count} time points but got "
+            f"{ctrl_time_count}."
+        )
+
+    # Avoid jnp.setxor1d/jnp.unique because their data-dependent output shapes
+    # fail under JIT. Leading plate axes broadcast when one grid is shared.
+    values_mismatch = ~jnp.allclose(
+        jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)
     )
     _ = eqx.error_if(
         ctrl_times,
-        jnp.logical_or(len_mismatch, values_mismatch),
+        values_mismatch,
         "Control times and the union of obs_times and predict_times must be the same.",
     )
 
