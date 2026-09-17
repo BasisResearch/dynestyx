@@ -24,7 +24,7 @@ pf = PFSmootherConfig(filter_source="cuthbert", n_particles=1_000)
 ct_kf = ContinuousTimeKFSmootherConfig()
 ```
 
-`EnRTSSmootherConfig` inherits the EnKF ensemble-size, inflation, and perturbed-observation options. `PFSmootherConfig` exposes particle-smoother options: `pf_backward_sampling_method`, `pf_mcmc_n_steps`, and `pf_n_smoother_particles`. `ContinuousTimeKFSmootherConfig` exposes `cdlgssm_smoother_type` for the CD-Dynamax continuous-discrete linear Gaussian smoother variant.
+`EnRTSSmootherConfig` inherits the EnKF ensemble-size, inflation, perturbed-observation, and localization options. Localization affects its forward EnKF; the EnRTS backward gain remains the standard unlocalized empirical gain. `PFSmootherConfig` exposes particle-smoother options: `pf_backward_sampling_method`, `pf_mcmc_n_steps`, and `pf_n_smoother_particles`. `ContinuousTimeKFSmootherConfig` exposes `cdlgssm_smoother_type` for the CD-Dynamax continuous-discrete linear Gaussian smoother variant.
 
 ::: dynestyx.inference.configs.smoother
     options:

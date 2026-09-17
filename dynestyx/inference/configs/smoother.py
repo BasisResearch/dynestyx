@@ -182,6 +182,8 @@ class EnRTSSmootherConfig(EnKFConfig, BaseSmootherConfig):
     The inherited `n_particles`, `inflation_delta`, and
     `perturb_measurements` fields configure the forward EnKF. The cuthbert
     backend retains the forecast ensemble required by the backward pass.
+    The inherited `localization` field localizes that forward EnKF only; the
+    backward EnRTS gain remains the standard, unlocalized empirical gain.
 
     Supports missing observations via NaNs.
 
@@ -192,6 +194,8 @@ class EnRTSSmootherConfig(EnKFConfig, BaseSmootherConfig):
             perturbed-observation EnKF updates.
         inflation_delta (float | None): Ensemble inflation applied during the
             forward pass.
+        localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
+            Optional localization for the forward EnKF pass only.
         filter_source (FilterSource): Backend. Always `"cuthbert"`.
 
     ??? note "Algorithm Reference"
