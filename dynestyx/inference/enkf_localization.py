@@ -5,8 +5,6 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable
 
-import equinox as eqx
-import jax
 import jax.numpy as jnp
 from cuthbertlib.ensemble_kalman.localization import (
     construct_tapered_chol_innovation_covariance,
@@ -22,6 +20,7 @@ from dynestyx.inference.configs.filter import (
     ModifyCrossCovariance,
     ModifyPredictedObservationCovariance,
 )
+from dynestyx.utils import _raise_now_or_error_if
 
 
 @dataclasses.dataclass(frozen=True)
@@ -38,21 +37,6 @@ class ResolvedEnKFLocalization:
     observation_taper: Array | None = None
 
 
-def _error_if(
-    value: Array,
-    predicate: Array,
-    message: str,
-) -> Array:
-    """Raise eagerly for concrete values and remain checkable under JAX transforms."""
-    try:
-        invalid = bool(predicate)
-    except jax.errors.TracerBoolConversionError:
-        return eqx.error_if(value, predicate, message)
-    if invalid:
-        raise ValueError(message)
-    return value
-
-
 def _validate_finite_array(
     value,
     *,
@@ -62,7 +46,7 @@ def _validate_finite_array(
     value = jnp.asarray(value)
     if value.shape != expected_shape:
         raise ValueError(f"{name} must have shape {expected_shape}; got {value.shape}.")
-    return _error_if(
+    return _raise_now_or_error_if(
         value,
         ~jnp.all(jnp.isfinite(value)),
         f"{name} must contain only finite values.",
@@ -77,18 +61,18 @@ def _validate_distances(
     symmetric_zero_diagonal: bool = False,
 ) -> Array:
     value = _validate_finite_array(value, expected_shape=expected_shape, name=name)
-    value = _error_if(
+    value = _raise_now_or_error_if(
         value,
         jnp.any(value < 0),
         f"{name} must contain only nonnegative distances.",
     )
     if symmetric_zero_diagonal:
-        value = _error_if(
+        value = _raise_now_or_error_if(
             value,
             ~jnp.allclose(value, value.T),
             f"{name} must be symmetric.",
         )
-        value = _error_if(
+        value = _raise_now_or_error_if(
             value,
             ~jnp.allclose(jnp.diag(value), 0),
             f"{name} must have a zero diagonal.",
@@ -105,7 +89,7 @@ def _validate_taper(
 ) -> Array:
     value = _validate_finite_array(value, expected_shape=expected_shape, name=name)
     if symmetric:
-        value = _error_if(
+        value = _raise_now_or_error_if(
             value,
             ~jnp.allclose(value, value.T),
             f"{name} must be symmetric.",
@@ -159,7 +143,7 @@ def _distance_taper_fn(
     scale = jnp.asarray(config.taper_scale)
     if scale.shape != ():
         raise ValueError("EnKF localization taper_scale must be a scalar.")
-    scale = _error_if(
+    scale = _raise_now_or_error_if(
         scale,
         ~jnp.isfinite(scale) | (scale <= 0),
         "EnKF localization taper_scale must be finite and strictly positive.",
@@ -217,7 +201,7 @@ def _resolve_distance_localization(
         symmetric=True,
     )
     chol_taper = jnp.linalg.cholesky(observation_taper)
-    chol_taper = _error_if(
+    chol_taper = _raise_now_or_error_if(
         chol_taper,
         ~jnp.all(jnp.isfinite(chol_taper)),
         "The observation taper must be positive definite; its Cholesky factor "
