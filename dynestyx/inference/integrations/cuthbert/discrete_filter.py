@@ -455,13 +455,15 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
             return x_prev
 
         def _evolve(key, x_prev, mi):
-            d = dynamics.state_evolution(x_prev, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
+            d = dynamics.transition_distribution(
+                x_prev, mi.u_prev, mi.time_prev, mi.time
+            )  # type: ignore
             return d.sample(key)  # type: ignore
 
         return jax.lax.cond(mi.is_first_step, _noop, _evolve, key, x_prev, mi)
 
     def log_potential(x_prev, x, mi: CuthbertInputs):
-        edist = dynamics.observation_model(x, mi.u, mi.time)
+        edist = dynamics.observation_distribution(x, mi.u, mi.time)
         return jnp.asarray(edist.log_prob(mi.y)).sum()
 
     ess_threshold = filter_kwargs.get("ess_threshold", 0.7)
@@ -512,7 +514,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     obs_model = dynamics.observation_model
     if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
         _probe_state_independent_observation_noise(
-            obs_model, state_dim=state_dim, obs_dim=obs_dim
+            dynamics.observation_distribution, state_dim=state_dim, obs_dim=obs_dim
         )
 
     def init_sample(key, mi: CuthbertInputs):
@@ -524,7 +526,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
                 return x
 
             def _evolve(key):
-                d = dynamics.state_evolution(x, mi.u_prev, mi.time_prev, mi.time)  # type: ignore
+                d = dynamics.transition_distribution(
+                    x, mi.u_prev, mi.time_prev, mi.time
+                )  # type: ignore
                 return jnp.atleast_1d(jnp.asarray(d.sample(key)))  # type: ignore
 
             return jax.lax.cond(mi.is_first_step, _noop, _evolve, key)
@@ -559,20 +563,24 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
 
             def observation_fn(x):
-                return jnp.atleast_1d(jnp.asarray(obs_model.h(x, mi.u, mi.time)))
+                return jnp.atleast_1d(
+                    jnp.asarray(dynamics.observation_mean(x, mi.u, mi.time))
+                )
 
             return observation_fn, chol_R, y
         else:
             probe_x0 = jnp.zeros((state_dim,), dtype=y.dtype)
             probe_x1 = jnp.ones((state_dim,), dtype=y.dtype)
-            probe_dist = obs_model(probe_x0, mi.u, mi.time)
+            probe_dist = dynamics.observation_distribution(probe_x0, mi.u, mi.time)
             chol_R = _extract_gaussian_chol(probe_dist, obs_dim)
             _check_state_independent_noise(
-                chol_R, obs_model(probe_x1, mi.u, mi.time), obs_dim
+                chol_R,
+                dynamics.observation_distribution(probe_x1, mi.u, mi.time),
+                obs_dim,
             )
 
             def observation_fn(x):
-                edist = obs_model(x, mi.u, mi.time)
+                edist = dynamics.observation_distribution(x, mi.u, mi.time)
                 if not (
                     isinstance(edist, dist.MultivariateNormal | dist.Normal)
                     or (
@@ -780,7 +788,7 @@ def _cuthbert_filter_taylor_kf(
     ):
         def dynamics_log_density(x_prev, x):
             normal_logp = jnp.asarray(
-                dynamics.state_evolution(
+                dynamics.transition_distribution(
                     x_prev, mi.u_prev, mi.time_prev, mi.time
                 ).log_prob(x)
             ).sum()
@@ -790,7 +798,7 @@ def _cuthbert_filter_taylor_kf(
 
         x_prev_lin = jnp.atleast_1d(jnp.asarray(state.mean))
 
-        dist_at_lin = dynamics.state_evolution(  # type: ignore
+        dist_at_lin = dynamics.transition_distribution(  # type: ignore
             x_prev_lin, mi.u_prev, mi.time_prev, mi.time
         )
         try:
@@ -809,7 +817,7 @@ def _cuthbert_filter_taylor_kf(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
     ):
         def log_potential(x):
-            edist = dynamics.observation_model(x, mi.u, mi.time)
+            edist = dynamics.observation_distribution(x, mi.u, mi.time)
             return jnp.asarray(edist.log_prob(mi.y)).sum()
 
         return log_potential, jnp.atleast_1d(jnp.asarray(state.mean))

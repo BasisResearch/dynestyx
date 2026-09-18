@@ -1,14 +1,19 @@
 """Observation model implementations."""
 
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
+import equinox as eqx
 import jax.numpy as jnp
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
+from dynestyx.distributions._gaussian import covariance_matrix, normalize_covariance
 from dynestyx.models.core import ObservationModel
+from dynestyx.models.layout import Layout
+
+_UNSET_COVARIANCE = object()
 
 
 class LinearGaussianObservationParams(NamedTuple):
@@ -101,11 +106,7 @@ class LinearGaussianObservation(ObservationModel):
             [float | int | Real[Array, ""]],
             Float[Array, "*h_plate observation_dim state_dim"],
         ],
-        R: Float[Array, "*r_plate observation_dim observation_dim"]
-        | Callable[
-            [float | int | Real[Array, ""]],
-            Float[Array, "*r_plate observation_dim observation_dim"],
-        ],
+        cov: Any = _UNSET_COVARIANCE,
         D: Float[Array, "*d_matrix_plate observation_dim control_dim"]
         | Callable[
             [float | int | Real[Array, ""]],
@@ -118,6 +119,8 @@ class LinearGaussianObservation(ObservationModel):
             Float[Array, "*bias_plate observation_dim"],
         ]
         | None = None,
+        *,
+        R: Any = _UNSET_COVARIANCE,
     ):
         """
         Args:
@@ -127,17 +130,25 @@ class LinearGaussianObservation(ObservationModel):
                 (EKF works but likely gives no efficiency gain, warns) and for
                 `KFConfig(filter_source="cd_dynamax")`; raises for
                 `KFConfig(filter_source="cuthbert")`, which cannot support a sparse `H`.
-            R (jax.Array | Callable): Observation noise covariance with shape
+            cov (jax.Array | Callable): Observation noise covariance with shape
                 $(d_y, d_y)$, or a callable `(t,)` returning it.
+            R (jax.Array | Callable): Legacy alias for cov. Providing both
+                raises TypeError.
             D (jax.Array | Callable | None): Optional control matrix with
                 shape $(d_y, d_u)$, or a callable `(t,)` returning it. If
                 None, no control contribution is used.
             bias (jax.Array | Callable | None): Optional additive bias with
                 shape $(d_y,)$, or a callable `(t,)` returning it.
         """
+        if cov is not _UNSET_COVARIANCE and R is not _UNSET_COVARIANCE:
+            raise TypeError("Provide only one of cov or R, not both.")
+        if cov is _UNSET_COVARIANCE:
+            if R is _UNSET_COVARIANCE:
+                raise TypeError("LinearGaussianObservation requires cov (or legacy R).")
+            cov = R
         self.H = H
         self.D = D
-        self.R = R
+        self.R = cov
         self.bias = bias
 
     @property
@@ -191,44 +202,93 @@ class GaussianObservation(ObservationModel):
     $$
 
     where $h$ is a user-provided measurement function and $R$ is the
-    observation noise covariance.
+    observation noise covariance, supplied as ``cov``. The legacy keyword
+    ``R`` is also accepted; supplying both raises an error.
+
+    When an ``observation_layout`` is provided, ``cov`` must be a scalar variance
+    or a matching structure of pointwise variances (independent Gaussians).
+    Full covariance inputs are not supported with a layout. Accepted variances
+    are expanded to dense covariance matrices internally.
     """
 
-    h: Callable[
-        [
-            Real[Array, " state_dim"] | Real[Array, ""],
-            Real[Array, " control_dim"] | Real[Array, ""] | None,
-            Real[Array, ""],
-        ],
-        Real[Array, " observation_dim"] | Real[Array, ""],
-    ]
-    R: Float[Array, "*plate observation_dim observation_dim"]
+    h: Callable
+    R: Array
+    _diagonal: bool = eqx.field(static=True, default=False)
 
     def __init__(
         self,
-        h: Callable[
-            [
-                Real[Array, " state_dim"] | Real[Array, ""],
-                Real[Array, " control_dim"] | Real[Array, ""] | None,
-                Real[Array, ""],
-            ],
-            Real[Array, " observation_dim"] | Real[Array, ""],
-        ],
-        R: Float[Array, "*plate observation_dim observation_dim"],
+        h: Callable,
+        cov: Any = _UNSET_COVARIANCE,
+        *,
+        R: Any = _UNSET_COVARIANCE,
+        state_layout: Layout | None = None,
+        observation_layout: Layout | None = None,
     ):
-        """
-        Args:
-            h (Callable[[State, Control, Time], jax.Array]): Measurement
-                function mapping $(x, u, t)$ to the mean observation.
-            R (jax.Array): Observation noise covariance with shape
-                $(d_y, d_y)$.
-        """
+        if cov is not _UNSET_COVARIANCE and R is not _UNSET_COVARIANCE:
+            raise TypeError("Provide only one of cov or R, not both.")
+        if cov is _UNSET_COVARIANCE:
+            if R is _UNSET_COVARIANCE:
+                raise TypeError("GaussianObservation requires cov (or legacy R).")
+            cov = R
         self.h = h
-        self.R = R
+        self.state_layout = state_layout
+        self.observation_layout = observation_layout
+        covariance, diagonal = normalize_covariance(cov, observation_layout)
+        # A scalar needs the output width, which may only be known when the
+        # observation is attached to a DynamicalModel.
+        dimension = (
+            observation_layout.state_dim
+            if observation_layout is not None
+            else (covariance.shape[-1] if covariance.ndim else None)
+        )
+        self.R = (
+            covariance_matrix(covariance, diagonal, dimension)
+            if dimension is not None
+            else covariance
+        )
+
+    def resolve_covariance(self, observation_dim):
+        """Return a copy with scalar observation variance expanded to dense R."""
+        if jnp.ndim(self.R) == 0:
+            return eqx.tree_at(
+                lambda model: model.R,
+                self,
+                covariance_matrix(self.R, True, observation_dim),
+            )
+        return self
+
+    def mean(self, x, u, t):
+        """Return the flat conditional observation mean."""
+        return self._flatten_observation(self.h(x, u, t))
 
     def __call__(self, x, u, t):
-        loc = self.h(x, u, t)
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
+        loc = jnp.atleast_1d(self.mean(x, u, t))
+        covariance = covariance_matrix(self.R, jnp.ndim(self.R) == 0, loc.shape[-1])
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=covariance)
+
+
+class DiracObservation(ObservationModel):
+    """Exact observations through an optionally structured observation operator."""
+
+    h: Callable
+
+    def __init__(
+        self,
+        h: Callable,
+        *,
+        state_layout: Layout | None = None,
+        observation_layout: Layout | None = None,
+    ):
+        self.h = h
+        self.state_layout = state_layout
+        self.observation_layout = observation_layout
+
+    def mean(self, x, u, t):
+        return self._flatten_observation(self.h(x, u, t))
+
+    def __call__(self, x, u, t):
+        loc = jnp.asarray(self.mean(x, u, t))
+        return dist.Delta(loc, event_dim=0 if loc.ndim == 0 else 1)
 
 
 class DiracIdentityObservation(ObservationModel):
@@ -241,10 +301,16 @@ class DiracIdentityObservation(ObservationModel):
     y_t \\sim \\delta(x_t),
     $$
 
+
     i.e., the observation equals the latent state almost surely.
     """
 
+    def __init__(self, *, state_layout: Layout | None = None):
+        self.state_layout = state_layout
+        self.observation_layout = state_layout
+
     def __call__(self, x, u, t):
+        x = self._flatten_state(x)
         # Treat scalar latent states as scalar events, and otherwise use only
         # the trailing state axis as the event dimension so any leading batch
         # or plate axes are preserved.

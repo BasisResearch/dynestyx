@@ -560,7 +560,7 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             # Discrete-time setting for EKF/UKF: ignore absolute time and pass dummy times.
             t_now = jnp.array(0.0, dtype=x.dtype)
             t_next = jnp.array(0.0, dtype=x.dtype)
-            return evo.F(x, u, t_now, t_next)
+            return dynamics.transition_mean(x, u, t_now, t_next)
 
     # ----- Emission function -----
     if isinstance(obs, LinearGaussianObservation):
@@ -592,7 +592,7 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         # GaussianObservation: y_t ~ N(h(x_t, u_t, t), R) with arbitrary h.
         def emission_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
             _t = jnp.array(0.0, dtype=x.dtype)
-            return obs.h(x, u, _t)  # warning: time is ignored
+            return dynamics.observation_mean(x, u, _t)  # warning: time is ignored
 
     return ParamsNLGSSM(
         initial_mean=initial_mean,

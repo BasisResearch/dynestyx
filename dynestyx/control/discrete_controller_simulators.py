@@ -285,7 +285,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
-        y_0 = dynamics.observation_model(x_0, None, times[0]).sample(
+        y_0 = dynamics.observation_distribution(x_0, None, times[0]).sample(
             initial_observation_key
         )
         # This first filter update conditions the initial-state prior on y_0;
@@ -332,10 +332,10 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                     f"{expected_control_shape}; got {u_k.shape}."
                 )
 
-            trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
+            trans_dist = dynamics.transition_distribution(x_prev, u_k, t_now, t_next)
             x_next = trans_dist.sample(transition_key)
 
-            obs_dist = dynamics.observation_model(x_next, u_k, t_next)
+            obs_dist = dynamics.observation_distribution(x_next, u_k, t_next)
             y_next = obs_dist.sample(observation_key)
 
             x_hat_next = compute_cuthbert_filter_update(
@@ -394,6 +394,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             )
 
         return ControlledSimulatedResult(
+            state_layout=dynamics.state_layout,
+            observation_layout=dynamics.observation_layout,
             times=_tile_times(times, 1),
             x_0=jnp.expand_dims(x_0, axis=0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
@@ -401,7 +403,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
             filtered_states_mean=filtered_states_mean,
             policy_states=policy_states,
-        )
+        ).unflatten()
 
 
 __all__ = [

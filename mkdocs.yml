@@ -79,6 +79,7 @@ nav:
           - ContinuousTimeStateEvolution: api_reference/public/models/core/continuous_time_state_evolution.md
           - DiscreteTimeStateEvolution: api_reference/public/models/core/discrete_time_state_evolution.md
           - ObservationModel: api_reference/public/models/core/observation_model.md
+          - State layout: api_reference/public/models/core/state_layout.md
           - Drifts: api_reference/public/models/core/drifts.md
           - Diffusions: api_reference/public/models/core/diffusions.md
         - Specialized Models:

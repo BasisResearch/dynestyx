@@ -13,3 +13,9 @@
       members:
         - Drift
         - Potential
+
+::: dynestyx.models.initial_conditions
+    options:
+      members:
+        - DiracInitialCondition
+        - GaussianInitialCondition

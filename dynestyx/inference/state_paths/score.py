@@ -196,7 +196,7 @@ def compute_state_path_log_prob(
                 x_prev = state_path[i]
                 x_next = state_path[i + 1]
                 u_prev = _get_val_or_None(state_ctrl_values, i)
-                transition_dist = dynamics.state_evolution(
+                transition_dist = dynamics.transition_distribution(
                     x=x_prev,
                     u=u_prev,
                     t_now=state_path_times[i],

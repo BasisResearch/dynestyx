@@ -55,7 +55,7 @@ def _sample_discrete_state_path_from_initial_state(
     if len(times) == 1:
         return jnp.expand_dims(initial_state, axis=0)
 
-    state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+    state_transition = cast(DiscreteStateTransition, dynamics.transition_distribution)
 
     def _step(carry, t_idx):
         x_prev, key_curr = carry
@@ -286,11 +286,13 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
         return SimulatedResult(
+            state_layout=dynamics.state_layout,
+            observation_layout=dynamics.observation_layout,
             times=_tile_times(times, n_sim),
             x_0=initial_state,
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
-        )
+        ).unflatten()
 
     def simulate(
         self,

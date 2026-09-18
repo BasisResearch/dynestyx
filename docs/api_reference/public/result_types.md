@@ -7,3 +7,5 @@ The standalone and handler-based APIs return dataclasses.
 ::: dynestyx.types.EvaluationResult
 
 ::: dynestyx.types.SimulatedResult
+
+::: dynestyx.types.LatentStateResult

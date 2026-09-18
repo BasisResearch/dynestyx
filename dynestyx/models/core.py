@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import copy
 from typing import Any, Protocol, cast, runtime_checkable
 
 import equinox as eqx
@@ -27,6 +28,7 @@ from dynestyx.models.checkers import (
 )
 from dynestyx.models.diffusions import Diffusion
 from dynestyx.models.drifts import Drift, Potential
+from dynestyx.models.layout import Layout
 from dynestyx.types import as_scalar_time_array
 
 
@@ -88,6 +90,12 @@ class DynamicalModel(eqx.Module):
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
             Pass a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
             [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
+        state_layout (Layout | None): Layout for callable state inputs and state results. Defaults
+            to None; not inferred from the transition or observation model.
+        control_layout (Layout | None): Layout for callable control inputs.
+            Infers control_dim when provided; external control arrays remain flat.
+        observation_layout (Layout | None): Layout for observation results and
+            helper output flattening. Custom callables return flat-event distributions.
         state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
             Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
             transitions. A callable is also accepted (e.g., `lambda x, u, t_now, t_next: ...`), but class-based
@@ -127,6 +135,11 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     categorical_state: bool
     continuous_time: bool
+    state_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
+    control_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
+    observation_layout: Layout | None = eqx.field(
+        static=True, default=None, kw_only=True
+    )
 
     def __init__(
         self,
@@ -141,12 +154,41 @@ class DynamicalModel(eqx.Module):
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
         continuous_time: bool | None = None,
+        state_layout: Layout | None = None,
+        control_layout: Layout | None = None,
+        observation_layout: Layout | None = None,
     ):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
         )
         _validate_continuous_time_flag(continuous_time, inferred_continuous_time)
         self.continuous_time = inferred_continuous_time
+        self.state_layout = state_layout
+        self.control_layout = control_layout
+        self.observation_layout = observation_layout
+        # Layouts are static Equinox metadata, not replaceable pytree leaves.
+        # Bind missing helper output layouts on shallow copies; arrays are shared
+        # and the caller's original components remain untouched.
+        if (
+            isinstance(state_evolution, DiscreteTimeStateEvolution)
+            and state_layout is not None
+            and state_evolution.state_layout is None
+        ):
+            state_evolution = copy(state_evolution)
+            object.__setattr__(state_evolution, "state_layout", state_layout)
+        if isinstance(observation_model, ObservationModel):
+            updates = {
+                name: layout
+                for name, layout in (
+                    ("state_layout", state_layout),
+                    ("observation_layout", observation_layout),
+                )
+                if layout is not None and getattr(observation_model, name) is None
+            }
+            if updates:
+                observation_model = copy(observation_model)
+                for name, layout in updates.items():
+                    object.__setattr__(observation_model, name, layout)
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
@@ -176,9 +218,27 @@ class DynamicalModel(eqx.Module):
             allow_batch_shape=_inside_plate,
         )
         _validate_state_dim(state_dim, inferred_state_dim)
+        layouts = [
+            getattr(component, "state_layout", None)
+            for component in (state_evolution, observation_model)
+        ]
+        layouts = [layout for layout in [state_layout, *layouts] if layout is not None]
+        for layout in layouts:
+            if layout is not None and layout.state_dim != inferred_state_dim:
+                raise ValueError(
+                    "Layout dimension must match initial_condition state dimension."
+                )
+        if layouts and any(layout != layouts[0] for layout in layouts[1:]):
+            raise ValueError(
+                "Model, transition, and observation state layouts must agree."
+            )
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
         _validate_categorical_state(categorical_state, inferred_categorical_state)
-        if control_dim is None:
+        if control_layout is not None:
+            if control_dim is not None and control_dim != control_layout.state_dim:
+                raise ValueError("control_dim must match control_layout dimension.")
+            control_dim = control_layout.state_dim
+        elif control_dim is None:
             control_dim = 0
 
         # Skip shape validation when inside a numpyro plate context, since
@@ -244,7 +304,7 @@ class DynamicalModel(eqx.Module):
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.
             inferred_obs_dim = _infer_observation_dim_in_plate_context(
-                observation_model=observation_model,
+                observation_model=self.observation_distribution,
                 x_probe=x_probe,
                 u_probe=u_probe,
                 t_probe=t_probe,
@@ -260,15 +320,16 @@ class DynamicalModel(eqx.Module):
                     t_probe=t_probe,
                 )
             else:
+                structured_x, structured_u = self._structured_inputs(x_probe, u_probe)
                 _validate_discrete_state_evolution_output_shape(
                     state_evolution=state_evolution,
                     state_dim=inferred_state_dim,
-                    x_probe=x_probe,
-                    u_probe=u_probe,
+                    x_probe=structured_x,
+                    u_probe=structured_u,
                     t_probe=t_probe,
                 )
 
-            obs_dist = observation_model(x_probe, u_probe, t_probe)
+            obs_dist = self.observation_distribution(x_probe, u_probe, t_probe)
             inferred_obs_dim = _infer_vector_dim_from_distribution(
                 obs_dist, "observation_model(x, u, t)"
             )
@@ -282,10 +343,76 @@ class DynamicalModel(eqx.Module):
                 continuous_state_evolution,
             )
 
+        component_observation_layout = getattr(
+            observation_model, "observation_layout", None
+        )
+        if (
+            observation_layout is not None
+            and component_observation_layout is not None
+            and observation_layout != component_observation_layout
+        ):
+            raise ValueError("Model and observation output layouts must agree.")
+        validation_observation_layout = (
+            observation_layout or component_observation_layout
+        )
+        if (
+            validation_observation_layout is not None
+            and validation_observation_layout.state_dim != inferred_obs_dim
+        ):
+            raise ValueError(
+                "Observation layout dimension must match the observation distribution."
+            )
+
         self.state_dim = int(inferred_state_dim)
+        # Scalar observation variance needs the output width before it can
+        # be stored as a dense covariance for all inference backends.
+        from dynestyx.models.observations import GaussianObservation
+        from dynestyx.models.state_evolution import GaussianStateEvolution
+
+        if isinstance(self.state_evolution, GaussianStateEvolution):
+            self.state_evolution = self.state_evolution.resolve_covariance(
+                inferred_state_dim
+            )
+        if isinstance(self.observation_model, GaussianObservation):
+            self.observation_model = self.observation_model.resolve_covariance(
+                inferred_obs_dim
+            )
         self.observation_dim = int(inferred_obs_dim)
         self.control_dim = int(control_dim)
         self.categorical_state = bool(inferred_categorical_state)
+
+    def _structured_inputs(self, x, u):
+        if self.state_layout is not None:
+            x = self.state_layout.unflatten(x)
+        if self.control_layout is not None and u is not None:
+            u = self.control_layout.unflatten(u)
+        return x, u
+
+    def transition_distribution(self, x, u, t_now, t_next):
+        """Evaluate the transition on structured inputs; return a flat distribution."""
+        x, u = self._structured_inputs(x, u)
+        return self.state_evolution(x, u, t_now, t_next)
+
+    def observation_distribution(self, x, u, t):
+        """Evaluate observations on structured inputs; return a flat distribution."""
+        x, u = self._structured_inputs(x, u)
+        return self.observation_model(x, u, t)
+
+    def transition_mean(self, x, u, t_now, t_next):
+        """Flat Gaussian transition mean for inference backends."""
+        x, u = self._structured_inputs(x, u)
+        mean = getattr(self.state_evolution, "mean", None)
+        if mean is not None:
+            return mean(x, u, t_now, t_next)
+        return self.state_evolution(x, u, t_now, t_next).mean
+
+    def observation_mean(self, x, u, t):
+        """Flat Gaussian observation mean for inference backends."""
+        x, u = self._structured_inputs(x, u)
+        mean = getattr(self.observation_model, "mean", None)
+        if mean is not None:
+            return mean(x, u, t)
+        return self.observation_model(x, u, t).mean
 
 
 class ContinuousTimeStateEvolution(eqx.Module):
@@ -437,15 +564,21 @@ class DiscreteTimeStateEvolution(eqx.Module):
     error when an unavailable moment or density is requested.
 
     Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input or None.
+        x (State): Current state, structured when the model declares a state layout.
+        u (Control | None): Current control, structured when a control layout is declared, or None.
         t_now (Time): Current time index $t_k$.
         t_next (Time): Next time index $t_{k+1}$ (for non-uniform sampling or continuous-time embeddings).
+        state_layout (Layout | None): Optional structured state metadata.
 
     Returns:
         numpyro.distributions.Distribution: Distribution over the next state $x_{t_{k+1}}$.
             In practice this should be a `numpyro.distributions.Distribution` instance.
     """
+
+    state_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
+
+    def _flatten_state(self, x):
+        return x if self.state_layout is None else self.state_layout.flatten(x)
 
     def __call__(
         self,
@@ -479,6 +612,20 @@ class ObservationModel(eqx.Module):
         log_prob(y_t, x_t, u_t, t, ...): Compute $\\log p(y_t \\mid x_t, u_t, t)$.
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
+
+    state_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
+
+    def _flatten_state(self, x):
+        return x if self.state_layout is None else self.state_layout.flatten(x)
+
+    observation_layout: Layout | None = eqx.field(
+        static=True, default=None, kw_only=True
+    )
+
+    def _flatten_observation(self, y):
+        return (
+            y if self.observation_layout is None else self.observation_layout.flatten(y)
+        )
 
     def __call__(
         self,

@@ -590,6 +590,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         numpyro.deterministic(f"{name}_joint_log_prob", joint_log_prob)
 
         return LatentStateResult(
+            state_layout=dynamics.state_layout,
+            observation_layout=dynamics.observation_layout,
             joint_log_prob=joint_log_prob,
             state_path_params=validated_state_path_params,
             state_path_param_times=state_path_param_times,
@@ -757,6 +759,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
             }
             state_path = dense_member_values["state_path"]
             result = LatentStateResult(
+                state_layout=dynamics.state_layout,
+                observation_layout=dynamics.observation_layout,
                 joint_log_prob=dense_member_values["joint_log_prob"],
                 state_path_params=ragged_member_values["state_path_params"],
                 state_path_param_times=ragged_member_values["state_path_param_times"],

@@ -8,6 +8,7 @@
         - LinearGaussianObservation
         - GaussianObservation
         - DiracIdentityObservation
+        - DiracObservation
 
 ## State evolution models
 
@@ -16,6 +17,7 @@
       members:
         - LinearGaussianStateEvolution
         - GaussianStateEvolution
+        - DiracStateEvolution
 
 ## LTI model factories
 
