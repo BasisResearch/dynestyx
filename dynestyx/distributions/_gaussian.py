@@ -1,7 +1,6 @@
 """Shared normalization of independent variance and full covariance inputs."""
 
 import jax.numpy as jnp
-from numpyro import distributions as dist
 
 from dynestyx.utils import _raise_now_or_error_if
 
@@ -35,33 +34,6 @@ def normalize_covariance(value, layout=None):
     elif value.shape[-2] != value.shape[-1]:
         raise ValueError("Full covariance must have square trailing axes.")
     return value, diagonal
-
-
-def gaussian_distribution(loc, covariance, diagonal):
-    """Build a scalar/vector Gaussian, preserving leading distribution batches."""
-    loc = jnp.asarray(loc)
-    width = 1 if loc.ndim == 0 else loc.shape[-1]
-    if diagonal:
-        if covariance.ndim and covariance.shape[-1] != width:
-            raise ValueError(
-                f"Expected {width} diagonal variances; got {covariance.shape}."
-            )
-        return dist.Normal(loc, jnp.sqrt(covariance)).to_event(
-            0 if loc.ndim == 0 else 1
-        )
-    if covariance.shape[-2:] != (width, width):
-        raise ValueError(
-            f"Expected covariance shape ({width}, {width}); got {covariance.shape}."
-        )
-    return dist.MultivariateNormal(loc=loc, covariance_matrix=covariance)
-
-
-def dense_covariance(distribution):
-    """Materialize covariance only at a backend boundary requiring a matrix."""
-    if isinstance(distribution, dist.MultivariateNormal):
-        return distribution.covariance_matrix
-    variance = jnp.atleast_1d(distribution.variance)
-    return covariance_matrix(variance, True, variance.shape[-1])
 
 
 def covariance_matrix(covariance, diagonal, dimension):

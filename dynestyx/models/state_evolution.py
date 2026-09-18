@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
-from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
+from dynestyx.distributions._gaussian import covariance_matrix, normalize_covariance
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
 from dynestyx.models.layout import Layout
@@ -227,29 +227,51 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
 
     F: Callable
     cov: Any
-    _diagonal: bool | None = eqx.field(static=True)
+    _diagonal: bool = eqx.field(static=True, default=False)
 
     def __init__(self, F: Callable, cov, *, state_layout: Layout | None = None):
         self.F = F
         self.state_layout = state_layout
         if callable(cov):
-            self.cov, self._diagonal = cov, None
+            self.cov = cov
         else:
-            self.cov, self._diagonal = normalize_covariance(cov, state_layout)
+            covariance, diagonal = normalize_covariance(cov, state_layout)
+            dimension = (
+                state_layout.state_dim
+                if state_layout is not None
+                else (covariance.shape[-1] if covariance.ndim else None)
+            )
+            self.cov = (
+                covariance_matrix(covariance, diagonal, dimension)
+                if dimension is not None
+                else covariance
+            )
+
+    def resolve_covariance(self, state_dim):
+        """Return a copy with scalar process variance expanded to dense covariance."""
+        if not callable(self.cov) and jnp.ndim(self.cov) == 0:
+            return eqx.tree_at(
+                lambda model: model.cov,
+                self,
+                covariance_matrix(self.cov, True, state_dim),
+            )
+        return self
 
     def mean(self, x, u, t_now, t_next):
         """Return the flat conditional mean, adapting the user's state layout."""
         return self._flatten_state(self.F(self._unflatten_state(x), u, t_now, t_next))
 
     def __call__(self, x, u, t_now, t_next):
-        loc = self.mean(x, u, t_now, t_next)
-        covariance, diagonal = self.cov, self._diagonal
+        loc = jnp.atleast_1d(self.mean(x, u, t_now, t_next))
+        covariance = self.cov
+        diagonal = False if callable(covariance) else jnp.ndim(covariance) == 0
         if callable(covariance):
             covariance, diagonal = normalize_covariance(
                 covariance(self._unflatten_state(x), u, t_now, t_next),
                 self.state_layout,
             )
-        return gaussian_distribution(loc, covariance, diagonal)
+        covariance = covariance_matrix(covariance, diagonal, loc.shape[-1])
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=covariance)
 
 
 class DiracStateEvolution(DiscreteTimeStateEvolution):

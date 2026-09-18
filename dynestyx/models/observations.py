@@ -9,7 +9,7 @@ from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
-from dynestyx.distributions._gaussian import gaussian_distribution, normalize_covariance
+from dynestyx.distributions._gaussian import covariance_matrix, normalize_covariance
 from dynestyx.models.core import ObservationModel
 from dynestyx.models.layout import Layout
 
@@ -207,12 +207,13 @@ class GaussianObservation(ObservationModel):
 
     When an ``observation_layout`` is provided, ``cov`` must be a scalar variance
     or a matching structure of pointwise variances (independent Gaussians).
-    Full covariance matrices are not supported with a layout.
+    Full covariance inputs are not supported with a layout. Accepted variances
+    are expanded to dense covariance matrices internally.
     """
 
     h: Callable
     R: object
-    _diagonal: bool = eqx.field(static=True)
+    _diagonal: bool = eqx.field(static=True, default=False)
 
     def __init__(
         self,
@@ -232,14 +233,38 @@ class GaussianObservation(ObservationModel):
         self.h = h
         self.state_layout = state_layout
         self.observation_layout = observation_layout
-        self.R, self._diagonal = normalize_covariance(cov, observation_layout)
+        covariance, diagonal = normalize_covariance(cov, observation_layout)
+        # A scalar needs the output width, which may only be known when the
+        # observation is attached to a DynamicalModel.
+        dimension = (
+            observation_layout.state_dim
+            if observation_layout is not None
+            else (covariance.shape[-1] if covariance.ndim else None)
+        )
+        self.R = (
+            covariance_matrix(covariance, diagonal, dimension)
+            if dimension is not None
+            else covariance
+        )
+
+    def resolve_covariance(self, observation_dim):
+        """Return a copy with scalar observation variance expanded to dense R."""
+        if jnp.ndim(self.R) == 0:
+            return eqx.tree_at(
+                lambda model: model.R,
+                self,
+                covariance_matrix(self.R, True, observation_dim),
+            )
+        return self
 
     def mean(self, x, u, t):
         """Return the flat conditional observation mean."""
         return self._flatten_observation(self.h(self._unflatten_state(x), u, t))
 
     def __call__(self, x, u, t):
-        return gaussian_distribution(self.mean(x, u, t), self.R, self._diagonal)
+        loc = jnp.atleast_1d(self.mean(x, u, t))
+        covariance = covariance_matrix(self.R, jnp.ndim(self.R) == 0, loc.shape[-1])
+        return dist.MultivariateNormal(loc=loc, covariance_matrix=covariance)
 
 
 class DiracObservation(ObservationModel):

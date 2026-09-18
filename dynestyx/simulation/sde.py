@@ -217,6 +217,10 @@ class SDESimulator(BaseSimulator):
         | None = None,
     ) -> SimulatedResult:
         """Run pure forward SDE simulation from provided initial states."""
+        if dynamics.state_layout is not None or dynamics.observation_layout is not None:
+            raise NotImplementedError(
+                "SDE simulation does not yet support structured state or observation layouts."
+            )
         n_sim = initial_state.shape[0]
 
         control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, times)
@@ -279,6 +283,10 @@ class SDESimulator(BaseSimulator):
         Therefore, `dsx.simulate(..., rng_key=root_key)` is equivalent to
         `SDESimulator().simulate(..., rng_key=jax.random.split(root_key)[1])`.
         """
+        if dynamics.state_layout is not None or dynamics.observation_layout is not None:
+            raise NotImplementedError(
+                "SDE simulation does not yet support structured state or observation layouts."
+            )
         if not isinstance(
             dynamics.state_evolution, StochasticContinuousTimeStateEvolution
         ):

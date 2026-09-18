@@ -844,10 +844,6 @@ def test_plate_discrete_dirac_forward_and_conditioning_shapes():
     _assert_hierarchical_dirac_latent_shapes_and_finite(tr, (2,), t, state_dim=2)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Nested plate discrete Dirac rollout currently emits NaNs in states.",
-)
 def test_nested_plate_discrete_dirac_forward_and_conditioning_shapes():
     t = jnp.arange(4.0)
 

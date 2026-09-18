@@ -286,11 +286,13 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
         return SimulatedResult(
+            state_layout=dynamics.state_layout,
+            observation_layout=dynamics.observation_layout,
             times=_tile_times(times, n_sim),
             x_0=initial_state,
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
-        )
+        ).unflatten()
 
     def simulate(
         self,

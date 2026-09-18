@@ -57,6 +57,7 @@ def _stack_simulated_results(
     """Stack per-member simulation results back onto the plate grid.
     First stacks all array-valued fields, then chains the site registrations.
     """
+    results = [result.flatten() for result in results]
     stacked_fields = {}
     for field in dataclasses.fields(results[0]):
         values = [getattr(result, field.name) for result in results]
@@ -73,18 +74,24 @@ def _stack_simulated_results(
             *plate_shapes, *arrays[0].shape
         )
 
+    for name in ("state_layout", "observation_layout"):
+        layout = getattr(results[0], name)
+        if any(getattr(result, name) != layout for result in results):
+            raise ValueError("Plate simulator members must have identical layouts.")
+        stacked_fields[name] = layout
     return SimulatedResult(
         **stacked_fields,
         _register_numpyro_sites=chain_numpyro_site_registrations(
             *(result._register_numpyro_sites for result in results)
         ),
-    )
+    ).unflatten()
 
 
 def _register_simulated_result_sites(
     result: SimulatedResult, *, site_name: str
 ) -> None:
     """Register a simulation result's populated fields as deterministic sites."""
+    result = result.flatten()
     for field in dataclasses.fields(result):
         value = getattr(result, field.name)
         if eqx.is_array(value):

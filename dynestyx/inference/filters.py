@@ -129,6 +129,8 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             )
 
         result = self._build_infer_result(obs_times, filtered_dists)
+        result.state_layout = dynamics.state_layout
+        result.observation_layout = dynamics.observation_layout
 
         # Observation inputs remain available to outer consumers such as Evaluation.
         forwarded_result = fwd(

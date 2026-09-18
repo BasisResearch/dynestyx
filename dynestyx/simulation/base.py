@@ -198,22 +198,24 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                     ctrl_values=ctrl_v_seg,
                     predict_times=predict_times,
                 )
-                assert seg_result.states is not None
-                assert seg_result.observations is not None
-                predicted_states = seg_result.states
+                assert seg_result.flatten().states is not None
+                assert seg_result.flatten().observations is not None
+                predicted_states = seg_result.flatten().states
                 return SimulatedResult(
+                    state_layout=dynamics.state_layout,
+                    observation_layout=dynamics.observation_layout,
                     predicted_states=predicted_states,
-                    predicted_observations=seg_result.observations,
+                    predicted_observations=seg_result.flatten().observations,
                     predicted_times=_tile_times(
                         predict_times, predicted_states.shape[0]
                     ),
                     _register_numpyro_sites=lambda _site_name: (
                         _register_simulated_result_sites(
-                            SimulatedResult(x_0=seg_result.x_0),
+                            SimulatedResult(x_0=seg_result.flatten().x_0),
                             site_name=seg_name,
                         )
                     ),
-                )
+                ).unflatten()
 
             n_pred = len(predict_times)
 
@@ -262,7 +264,10 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 attr: str,
             ) -> Real[Array, "n_simulations predict_time dim"]:
                 return _merge_segments(
-                    [cast(Array, getattr(result, attr)) for result in seg_results],
+                    [
+                        cast(Array, getattr(result.flatten(), attr))
+                        for result in seg_results
+                    ],
                     seg_masks,
                     n_pred,
                 )
@@ -272,6 +277,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             # (and any plate members) are aggregated. Preserve only unique,
             # segment-level metadata such as each realized x_0 in this callback.
             return SimulatedResult(
+                state_layout=dynamics.state_layout,
+                observation_layout=dynamics.observation_layout,
                 predicted_states=predicted_states,
                 predicted_observations=_merge_attr("observations"),
                 predicted_times=_tile_times(predict_times, predicted_states.shape[0]),
@@ -280,7 +287,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                         (
                             lambda _site_name, seg_name=seg_name, seg_result=seg_result: (
                                 _register_simulated_result_sites(
-                                    SimulatedResult(x_0=seg_result.x_0),
+                                    SimulatedResult(x_0=seg_result.flatten().x_0),
                                     site_name=seg_name,
                                 )
                             )
@@ -290,7 +297,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                         )
                     )
                 ),
-            )
+            ).unflatten()
 
         if rng_key is None:
             raise ValueError("PRNG key required for simulation.")

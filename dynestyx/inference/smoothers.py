@@ -147,6 +147,8 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
             ),
         )
         result = self._build_infer_result(obs_times, smoothed_dists)
+        result.state_layout = dynamics.state_layout
+        result.observation_layout = dynamics.observation_layout
         filtered_result = None
         rollout_smoothed_result = result if smoothed_dists is not None else None
         posterior_rollout_final_only = predict_times is not None and bool(

@@ -154,7 +154,9 @@ def _is_known_vector_field(path) -> bool:
     return len(names) >= 3 and names[-3:] == ("state_evolution", "drift", "b")
 
 
-def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool:
+def _leaf_is_plate_batched(
+    leaf, plate_shapes: tuple[int, ...], path=(), *, tree=None
+) -> bool:
     """Return True if a pytree leaf should be sliced or vmapped over plates.
 
     Scalars with shape ``plate_shapes`` and tensors with explicit event axes are
@@ -163,6 +165,29 @@ def _leaf_is_plate_batched(leaf, plate_shapes: tuple[int, ...], path=()) -> bool
     """
     if not isinstance(leaf, jax.Array):
         return False
+    # Gaussian noise has a known event rank. Consult its owning module rather
+    # than guessing from shape: a shared variance vector may have exactly the
+    # same shape as the plate, while a batched vector has one event axis.
+    parent = tree
+    for key in path[:-1]:
+        if isinstance(key, jax.tree_util.GetAttrKey):
+            parent = getattr(parent, key.name, None)
+        elif isinstance(key, jax.tree_util.DictKey) and isinstance(parent, dict):
+            parent = parent[key.key]
+        elif isinstance(key, jax.tree_util.SequenceKey) and isinstance(
+            parent, (tuple, list)
+        ):
+            parent = parent[key.idx]
+        else:
+            parent = None
+            break
+    name = getattr(path[-1], "name", None) if path else None
+    diagonal = getattr(parent, "_diagonal", None)
+    if name in {"cov", "R"} and diagonal is not None:
+        event_rank = (0 if leaf.ndim == 0 else 1) if diagonal else 2
+        return leaf.ndim == len(plate_shapes) + event_rank and _array_has_plate_dims(
+            leaf, plate_shapes, min_suffix_ndim=event_rank
+        )
     if not _array_has_plate_dims(leaf, plate_shapes, min_suffix_ndim=0):
         return False
     suffix_ndim = leaf.ndim - len(plate_shapes)
@@ -261,7 +286,7 @@ def _has_any_batched_plate_source(
             if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
                 return True
             continue
-        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
+        if _leaf_is_plate_batched(leaf, plate_shapes, path=path, tree=dynamics):
             return True
 
     if any(

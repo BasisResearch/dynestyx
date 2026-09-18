@@ -52,8 +52,11 @@ fields without a layout. Repeating either conversion is a no-op. Directly
 constructed results are assumed to contain flat arrays until `.unflatten()` is
 called.
 
-Independent Gaussian distributions are used internally. Filter backends that need
-dense covariance matrices receive diagonal matrices. Algorithm memory requirements
+Gaussian transitions and observations expand independent variances into dense
+covariance matrices. Without a layout, a constant scalar variance is expanded
+once the dimension is known during model construction. Callable process
+covariances are expanded when evaluated. Gaussian initial conditions likewise construct a multivariate Normal with dense
+covariance. Algorithm memory requirements
 therefore remain unchanged: a layout does not make an EKF or UKF scalable to very
 large states. Existing backend restrictions also remain: cd-dynamax discrete
 EKF/UKF require constant process covariance and ignore absolute time arguments.

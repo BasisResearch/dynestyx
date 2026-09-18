@@ -82,7 +82,8 @@ def simulate(
 
     Returns:
         SimulatedResult: Simulated times, initial states, state paths, and
-            observations.
+            observations. State and observation fields use their declared layouts
+            when present; ``result.flatten()`` exposes arrays in those same fields.
 
     Raises:
         ValueError: If `predict_times` is not provided, controls are incomplete

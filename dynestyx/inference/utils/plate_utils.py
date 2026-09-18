@@ -57,7 +57,11 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
                 if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes)
                 else None
             )
-        return 0 if _leaf_is_plate_batched(leaf, plate_shapes, path=path) else None
+        return (
+            0
+            if _leaf_is_plate_batched(leaf, plate_shapes, path=path, tree=tree)
+            else None
+        )
 
     return jax.tree_util.tree_map_with_path(
         _axis,
@@ -222,7 +226,7 @@ def _slice_tree_for_plate_member(
                     leaf.coefficient[plate_idx],
                 )
             return leaf
-        if _leaf_is_plate_batched(leaf, plate_shapes, path=path):
+        if _leaf_is_plate_batched(leaf, plate_shapes, path=path, tree=tree):
             return leaf[plate_idx]
         return leaf
 

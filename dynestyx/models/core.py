@@ -133,9 +133,7 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     categorical_state: bool
     continuous_time: bool
-    state_layout: Layout | None = eqx.field(
-        static=True, default=None, kw_only=True
-    )
+    state_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
     observation_layout: Layout | None = eqx.field(
         static=True, default=None, kw_only=True
     )
@@ -333,6 +331,19 @@ class DynamicalModel(eqx.Module):
             )
 
         self.state_dim = int(inferred_state_dim)
+        # Scalar observation variance needs the output width before it can
+        # be stored as a dense covariance for all inference backends.
+        from dynestyx.models.observations import GaussianObservation
+        from dynestyx.models.state_evolution import GaussianStateEvolution
+
+        if isinstance(self.state_evolution, GaussianStateEvolution):
+            self.state_evolution = self.state_evolution.resolve_covariance(
+                inferred_state_dim
+            )
+        if isinstance(self.observation_model, GaussianObservation):
+            self.observation_model = self.observation_model.resolve_covariance(
+                inferred_obs_dim
+            )
         self.observation_dim = int(inferred_obs_dim)
         self.control_dim = int(control_dim)
         self.categorical_state = bool(inferred_categorical_state)
@@ -498,9 +509,7 @@ class DiscreteTimeStateEvolution(eqx.Module):
             In practice this should be a `numpyro.distributions.Distribution` instance.
     """
 
-    state_layout: Layout | None = eqx.field(
-        static=True, default=None, kw_only=True
-    )
+    state_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
 
     def _unflatten_state(self, x):
         return x if self.state_layout is None else self.state_layout.unflatten(x)
@@ -541,9 +550,7 @@ class ObservationModel(eqx.Module):
         sample(x, u, t, ...): Sample $y_t \\sim p(y_t \\mid x_t, u_t, t)$.
     """
 
-    state_layout: Layout | None = eqx.field(
-        static=True, default=None, kw_only=True
-    )
+    state_layout: Layout | None = eqx.field(static=True, default=None, kw_only=True)
 
     def _unflatten_state(self, x):
         return x if self.state_layout is None else self.state_layout.unflatten(x)

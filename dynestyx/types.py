@@ -6,7 +6,9 @@ from typing import Protocol, runtime_checkable
 
 import equinox as eqx
 import jax.numpy as jnp
-from jaxtyping import Array, Int, Real
+from jaxtyping import Array, Int, PyTree, Real
+
+from dynestyx.models.layout import Layout
 
 
 @runtime_checkable
@@ -58,6 +60,25 @@ class ConditionedResult:
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )
+
+    state_layout: Layout | None = dataclasses.field(default=None, kw_only=True)
+    observation_layout: Layout | None = dataclasses.field(default=None, kw_only=True)
+
+    @property
+    def structured_means(self):
+        """Posterior means as a pytree; posterior distributions remain flat."""
+        if not self.dists:
+            return None
+        means = jnp.stack(
+            [
+                jnp.asarray(d.mean)[..., None] if not d.event_shape else d.mean
+                for d in self.dists
+            ],
+            axis=-2,
+        )
+        return (
+            means if self.state_layout is None else self.state_layout.unflatten(means)
+        )
 
     def __call__(
         self, t: float | int | Real[Array, ""]
@@ -130,51 +151,96 @@ class LatentStateResult:
     completed_obs_values: Real[Array, "*completed_obs_shape"] | None = None
     state_dists: list | None = None
 
+    state_layout: Layout | None = dataclasses.field(default=None, kw_only=True)
+    observation_layout: Layout | None = dataclasses.field(default=None, kw_only=True)
+
+    @property
+    def structured_state_path(self):
+        """The reconstructed latent trajectory in its declared structure."""
+        if self.state_path is None or self.state_layout is None:
+            return self.state_path
+        return self.state_layout.unflatten(self.state_path)
+
 
 class SimulatedResult(eqx.Module):
-    """Result of simulation without eager NumPyro side effects.
+    """Simulation output in the user's declared state and observation structures.
 
-    This result therefore stores the realized state path ``x`` and observation path ``y``
-    produced on the requested simulator time grid.
-
-    For raw forward simulation, ``times``, ``x_0``, ``states``, and
-    ``observations`` are populated. The field names match their NumPyro site
-    suffixes. When a simulator is layered outside a Filter or Smoother for
-    posterior rollout, the same result object instead carries
-    ``predicted_times``, ``predicted_states``, and
-    ``predicted_observations``.
+    With layouts, ``x_0``, ``states``, ``observations``, and corresponding
+    ``predicted_*`` fields contain pytrees with leading plate, simulation, and
+    time axes. Without layouts they retain their existing array representation.
+    ``flatten()`` returns vector arrays in the same fields for inference inputs
+    and NumPyro sites; no duplicate flat fields are stored. Simulation backends construct flat results, then call ``unflatten()``.
     """
 
     times: Real[Array, "*plate n_simulations time"] | None = None
-    x_0: (
-        Real[Array, "*plate n_simulations state_dim"]
-        | Real[Array, "*plate n_simulations"]
-        | None
-    ) = None
-    states: (
-        Real[Array, "*plate n_simulations time state_dim"]
-        | Real[Array, "*plate n_simulations time"]
-        | None
-    ) = None
-    observations: (
-        Real[Array, "*plate n_simulations time observation_dim"]
-        | Real[Array, "*plate n_simulations time"]
-        | None
-    ) = None
+    x_0: PyTree[Array] | None = None
+    states: PyTree[Array] | None = None
+    observations: PyTree[Array] | None = None
     predicted_times: Real[Array, "*plate n_simulations predict_time"] | None = None
-    predicted_states: (
-        Real[Array, "*plate n_simulations predict_time state_dim"]
-        | Real[Array, "*plate n_simulations predict_time"]
-        | None
-    ) = None
-    predicted_observations: (
-        Real[Array, "*plate n_simulations predict_time observation_dim"]
-        | Real[Array, "*plate n_simulations predict_time"]
-        | None
-    ) = None
+    predicted_states: PyTree[Array] | None = None
+    predicted_observations: PyTree[Array] | None = None
     _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
         default=None, repr=False, static=True
     )
+    state_layout: Layout | None = eqx.field(default=None, static=True, kw_only=True)
+    observation_layout: Layout | None = eqx.field(
+        default=None, static=True, kw_only=True
+    )
+
+    _is_flat: bool = eqx.field(default=True, static=True, kw_only=True, repr=False)
+
+    def unflatten(self):
+        """Return a structured copy, preserving leading axes and layout metadata.
+
+        Newly constructed results hold flat arrays. Missing fields and absent
+        layouts are unchanged; calling this again on a structured result is a no-op.
+        """
+        return self._convert(flat=False)
+
+    def flatten(self):
+        """Return a flat copy; calling this on a flat result is a no-op."""
+        return self._convert(flat=True)
+
+    def _convert(self, *, flat):
+        if self._is_flat == flat or (
+            self.state_layout is None and self.observation_layout is None
+        ):
+            return self
+        updates = {}
+        for name, layout in (
+            ("x_0", self.state_layout),
+            ("states", self.state_layout),
+            ("predicted_states", self.state_layout),
+            ("observations", self.observation_layout),
+            ("predicted_observations", self.observation_layout),
+        ):
+            value = getattr(self, name)
+            if layout is not None and value is not None:
+                updates[name] = (
+                    layout.flatten(value) if flat else layout.unflatten(value)
+                )
+        return dataclasses.replace(self, **updates, _is_flat=flat)
+
+    # Keep the explicit names from the initial structured-state implementation.
+    @property
+    def structured_states(self):
+        return self.unflatten().states
+
+    @property
+    def structured_x_0(self):
+        return self.unflatten().x_0
+
+    @property
+    def structured_observations(self):
+        return self.unflatten().observations
+
+    @property
+    def structured_predicted_states(self):
+        return self.unflatten().predicted_states
+
+    @property
+    def structured_predicted_observations(self):
+        return self.unflatten().predicted_observations
 
 
 def as_scalar_time_array(
