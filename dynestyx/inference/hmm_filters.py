@@ -55,7 +55,7 @@ def hmm_log_transition_matrix(
     log p(x_{t_next} = j | x_{t_now} = i, u)
     shape: (K, K)
     """
-    state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+    state_transition = cast(DiscreteStateTransition, dynamics.transition_distribution)
 
     def row(x_prev):
         dist = state_transition(x=x_prev, u=u, t_now=t_now, t_next=t_next)
@@ -84,7 +84,7 @@ def hmm_log_emission_probs_masked(
     """log p(y_t, observed entries | x_t, u_t) for each latent state."""
 
     def lp(x):
-        obs_dist = dynamics.observation_model(x=x, u=u, t=t)
+        obs_dist = dynamics.observation_distribution(x=x, u=u, t=t)
         return masked_observation_log_prob(
             obs_dist,
             y=y,

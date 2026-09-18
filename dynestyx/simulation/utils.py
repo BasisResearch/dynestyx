@@ -125,7 +125,7 @@ def _sample_observation_path(
     def _sample_at_time(t_idx: Int[Array, ""]):
         x_t = states[t_idx]
         t = times[t_idx]
-        obs_dist = dynamics.observation_model(x=x_t, u=ctrl(t), t=t)
+        obs_dist = dynamics.observation_distribution(x=x_t, u=ctrl(t), t=t)
         return obs_dist.sample(obs_keys[t_idx])
 
     return jax.vmap(_sample_at_time)(jnp.arange(len(times)))

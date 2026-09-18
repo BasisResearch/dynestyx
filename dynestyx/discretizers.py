@@ -180,6 +180,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 control_dim=dynamics.control_dim,
                 t0=dynamics.t0,
                 state_layout=dynamics.state_layout,
+                control_layout=dynamics.control_layout,
                 observation_layout=dynamics.observation_layout,
             )
         return fwd(

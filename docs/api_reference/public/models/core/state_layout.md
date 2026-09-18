@@ -7,16 +7,32 @@ should contain event shapes only, without batch axes.
 
 ::: dynestyx.models.layout.Layout
 
-Pass `state_layout=layout` to `GaussianStateEvolution` or `DiracStateEvolution`.
-Their `F` function receives and returns structured states. Observation operators
-receive structured states through `state_layout`, and can return a different
-structure through `observation_layout`. Without an observation layout, they
-continue returning scalar or flat observations. Controls remain flat.
+Pass `state_layout`, `control_layout`, and `observation_layout` to
+`DynamicalModel`. Each is independently optional and defaults to `None`.
+Before calling a transition or observation operator, the model restores the
+state and control structures. Without a corresponding layout, the input is
+unchanged; `u=None` remains `None`.
 
-Also pass `state_layout=layout` and `observation_layout=observation_layout` to
-`DynamicalModel` to declare the result structures. These model fields default to
-`None`; they are not inferred from the component layouts. This also supports
-plain callable transitions and observations, which still operate on flat events.
+Custom callables receive structured inputs but must return NumPyro distributions
+over flat coordinates. `observation_layout` describes the observation output;
+it does not change the state input to the observation function.
+
+Gaussian and Dirac helpers accept structured function outputs and flatten them
+using their output layouts. The model supplies omitted helper layouts from its
+own declarations. When specifying structured covariance values at helper
+construction, pass the output layout there too. Helpers do not unflatten their
+inputs themselves, so direct helper calls must supply the expected structure.
+
+Controls and observed data remain flat at the external API boundary:
+
+```python
+control_layout = dsx.Layout.from_example({"drive": jnp.zeros(2)})
+# controls["drive"] has shape (n_times, 2)
+ctrl_values = control_layout.flatten(controls)
+```
+
+A control layout determines `control_dim`; an explicit conflicting dimension is
+rejected. Continuous simulation and MPPI do not yet support layouts.
 
 `GaussianStateEvolution.cov` and `GaussianObservation.R` always mean variance:
 a scalar gives independent noise of that variance at every coordinate; a matching
@@ -33,7 +49,7 @@ Initial distributions and observed data still use flat events. For example:
 
 ```python
 layout = dsx.Layout.from_example(initial_state)
-initial_condition = dist.Normal(layout.flatten(initial_state), 0.1).to_event(1)
+initial_condition = dsx.GaussianInitialCondition(initial_state, cov=0.01, state_layout=layout)
 obs_values = observation_layout.flatten(structured_observations)
 ```
 
@@ -63,6 +79,6 @@ EKF/UKF require constant process covariance and ignore absolute time arguments.
 Use cuthbert for time-dependent discrete transitions. Exact Dirac models remain
 subject to each inference algorithm's requirements on noise and transition density.
 
-Existing custom subclasses keep their `__call__` contracts and can opt into the
-protected layout helpers. `LinearGaussianStateEvolution`,
-`LinearGaussianObservation`, and `FieldLayout` retain their existing APIs.
+Custom transition and observation subclasses follow the same structured-input,
+flat-distribution-output contract. Explicit linear-Gaussian matrix operators
+continue to describe operations on vectors.

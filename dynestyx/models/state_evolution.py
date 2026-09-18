@@ -259,7 +259,7 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
 
     def mean(self, x, u, t_now, t_next):
         """Return the flat conditional mean, adapting the user's state layout."""
-        return self._flatten_state(self.F(self._unflatten_state(x), u, t_now, t_next))
+        return self._flatten_state(self.F(x, u, t_now, t_next))
 
     def __call__(self, x, u, t_now, t_next):
         loc = jnp.atleast_1d(self.mean(x, u, t_now, t_next))
@@ -267,7 +267,7 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         diagonal = False if callable(covariance) else jnp.ndim(covariance) == 0
         if callable(covariance):
             covariance, diagonal = normalize_covariance(
-                covariance(self._unflatten_state(x), u, t_now, t_next),
+                covariance(x, u, t_now, t_next),
                 self.state_layout,
             )
         covariance = covariance_matrix(covariance, diagonal, loc.shape[-1])
@@ -284,7 +284,7 @@ class DiracStateEvolution(DiscreteTimeStateEvolution):
         self.state_layout = state_layout
 
     def mean(self, x, u, t_now, t_next):
-        return self._flatten_state(self.F(self._unflatten_state(x), u, t_now, t_next))
+        return self._flatten_state(self.F(x, u, t_now, t_next))
 
     def __call__(self, x, u, t_now, t_next):
         loc = jnp.asarray(self.mean(x, u, t_now, t_next))

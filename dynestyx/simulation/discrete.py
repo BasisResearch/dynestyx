@@ -55,7 +55,7 @@ def _sample_discrete_state_path_from_initial_state(
     if len(times) == 1:
         return jnp.expand_dims(initial_state, axis=0)
 
-    state_transition = cast(DiscreteStateTransition, dynamics.state_evolution)
+    state_transition = cast(DiscreteStateTransition, dynamics.transition_distribution)
 
     def _step(carry, t_idx):
         x_prev, key_curr = carry

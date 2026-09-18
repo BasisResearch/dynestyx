@@ -306,7 +306,7 @@ def _probe_observation_distribution(dynamics: DynamicalModel) -> dist.Distributi
     )
     u_probe = None if dynamics.control_dim == 0 else jnp.zeros((dynamics.control_dim,))
     t_probe = jnp.array(0.0) if dynamics.t0 is None else dynamics.t0
-    return dynamics.observation_model(x=x_probe, u=u_probe, t=t_probe)
+    return dynamics.observation_distribution(x=x_probe, u=u_probe, t=t_probe)
 
 
 def _categorical_support_size(obs_dist: dist.Distribution) -> int:
@@ -900,7 +900,7 @@ def prepare_observation_log_prob(
         t: Real[Array, ""],
         t_idx: int | Int[Array, ""],
     ) -> Real[Array, "*log_prob_batch"]:
-        obs_dist = dynamics.observation_model(x=x, u=u, t=t)
+        obs_dist = dynamics.observation_distribution(x=x, u=u, t=t)
         if distribution_mode == "augment":
             canonical_dist = _canonicalize_observation_distribution(
                 obs_dist,

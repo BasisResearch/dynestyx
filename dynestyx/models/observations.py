@@ -1,7 +1,7 @@
 """Observation model implementations."""
 
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -106,7 +106,7 @@ class LinearGaussianObservation(ObservationModel):
             [float | int | Real[Array, ""]],
             Float[Array, "*h_plate observation_dim state_dim"],
         ],
-        cov=_UNSET_COVARIANCE,
+        cov: Any = _UNSET_COVARIANCE,
         D: Float[Array, "*d_matrix_plate observation_dim control_dim"]
         | Callable[
             [float | int | Real[Array, ""]],
@@ -120,7 +120,7 @@ class LinearGaussianObservation(ObservationModel):
         ]
         | None = None,
         *,
-        R=_UNSET_COVARIANCE,
+        R: Any = _UNSET_COVARIANCE,
     ):
         """
         Args:
@@ -212,15 +212,15 @@ class GaussianObservation(ObservationModel):
     """
 
     h: Callable
-    R: object
+    R: Array
     _diagonal: bool = eqx.field(static=True, default=False)
 
     def __init__(
         self,
         h: Callable,
-        cov=_UNSET_COVARIANCE,
+        cov: Any = _UNSET_COVARIANCE,
         *,
-        R=_UNSET_COVARIANCE,
+        R: Any = _UNSET_COVARIANCE,
         state_layout: Layout | None = None,
         observation_layout: Layout | None = None,
     ):
@@ -259,7 +259,7 @@ class GaussianObservation(ObservationModel):
 
     def mean(self, x, u, t):
         """Return the flat conditional observation mean."""
-        return self._flatten_observation(self.h(self._unflatten_state(x), u, t))
+        return self._flatten_observation(self.h(x, u, t))
 
     def __call__(self, x, u, t):
         loc = jnp.atleast_1d(self.mean(x, u, t))
@@ -284,7 +284,7 @@ class DiracObservation(ObservationModel):
         self.observation_layout = observation_layout
 
     def mean(self, x, u, t):
-        return self._flatten_observation(self.h(self._unflatten_state(x), u, t))
+        return self._flatten_observation(self.h(x, u, t))
 
     def __call__(self, x, u, t):
         loc = jnp.asarray(self.mean(x, u, t))
@@ -310,12 +310,7 @@ class DiracIdentityObservation(ObservationModel):
         self.observation_layout = state_layout
 
     def __call__(self, x, u, t):
-        if self.state_layout is not None and (
-            jnp.ndim(x) == 0 or x.shape[-1] != self.state_layout.state_dim
-        ):
-            raise ValueError(
-                "Identity observation input must match the state layout's flat width."
-            )
+        x = self._flatten_state(x)
         # Treat scalar latent states as scalar events, and otherwise use only
         # the trailing state axis as the event dimension so any leading batch
         # or plate axes are preserved.

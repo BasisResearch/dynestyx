@@ -566,7 +566,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
             obs_t = _get_val_or_None(obs_values, t_idx)
             y_t = numpyro.sample(
                 f"{name}_y_{t_idx}",
-                dynamics.observation_model(x=x_t, u=u_t, t=t),
+                dynamics.observation_distribution(x=x_t, u=u_t, t=t),
                 obs=obs_t,
             )
             return carry, y_t

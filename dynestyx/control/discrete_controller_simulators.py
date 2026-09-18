@@ -285,7 +285,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
-        y_0 = dynamics.observation_model(x_0, None, times[0]).sample(
+        y_0 = dynamics.observation_distribution(x_0, None, times[0]).sample(
             initial_observation_key
         )
         # This first filter update conditions the initial-state prior on y_0;
@@ -332,10 +332,10 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                     f"{expected_control_shape}; got {u_k.shape}."
                 )
 
-            trans_dist = dynamics.state_evolution(x_prev, u_k, t_now, t_next)
+            trans_dist = dynamics.transition_distribution(x_prev, u_k, t_now, t_next)
             x_next = trans_dist.sample(transition_key)
 
-            obs_dist = dynamics.observation_model(x_next, u_k, t_next)
+            obs_dist = dynamics.observation_distribution(x_next, u_k, t_next)
             y_next = obs_dist.sample(observation_key)
 
             x_hat_next = compute_cuthbert_filter_update(

@@ -199,9 +199,13 @@ class ODESimulator(BaseSimulator):
         | None = None,
     ) -> SimulatedResult:
         """Run pure forward simulation for a deterministic continuous-time model."""
-        if dynamics.state_layout is not None or dynamics.observation_layout is not None:
+        if (
+            dynamics.state_layout is not None
+            or dynamics.observation_layout is not None
+            or dynamics.control_layout is not None
+        ):
             raise NotImplementedError(
-                "ODE simulation does not yet support structured state or observation layouts."
+                "ODE simulation does not yet support structured state, control, or observation layouts."
             )
         n_sim = initial_state.shape[0]
 
@@ -264,9 +268,13 @@ class ODESimulator(BaseSimulator):
         Therefore, `dsx.simulate(..., rng_key=root_key)` is equivalent to
         `ODESimulator().simulate(..., rng_key=jax.random.split(root_key)[1])`.
         """
-        if dynamics.state_layout is not None or dynamics.observation_layout is not None:
+        if (
+            dynamics.state_layout is not None
+            or dynamics.observation_layout is not None
+            or dynamics.control_layout is not None
+        ):
             raise NotImplementedError(
-                "ODE simulation does not yet support structured state or observation layouts."
+                "ODE simulation does not yet support structured state, control, or observation layouts."
             )
         if predict_times is None:
             raise ValueError("predict_times must be provided")

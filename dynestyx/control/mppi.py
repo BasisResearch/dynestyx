@@ -105,9 +105,10 @@ class MPPI(eqx.Module):
         if (
             self.dynamics.state_layout is not None
             or self.dynamics.observation_layout is not None
+            or self.dynamics.control_layout is not None
         ):
             raise NotImplementedError(
-                "MPPI does not yet support structured state or observation layouts."
+                "MPPI does not yet support structured state, control, or observation layouts."
             )
 
     def initial_state(

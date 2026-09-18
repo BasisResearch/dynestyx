@@ -167,7 +167,7 @@ def _observation_noise_covariance_sequence(
     ) -> Float[Array, "*plate observation_dim observation_dim"]:
         t = obs_times_time_major[t_idx]
         u_t = None if ctrl_values_time_major is None else ctrl_values_time_major[t_idx]
-        obs_dist = dynamics.observation_model(x_probe, u_t, t)
+        obs_dist = dynamics.observation_distribution(x_probe, u_t, t)
         _, covariance = _gaussian_mean_and_covariance(
             obs_dist,
             observation_dim=dynamics.observation_dim,
@@ -312,7 +312,7 @@ def _extract_single_cuthbert_enkf_prediction_arrays(
 
     def project_at_time(state_ensemble_t, time_t, control_t):
         def project_member(state):
-            observation_dist = dynamics.observation_model(state, control_t, time_t)
+            observation_dist = dynamics.observation_distribution(state, control_t, time_t)
             mean, _ = _gaussian_mean_and_covariance(
                 observation_dist,
                 observation_dim=dynamics.observation_dim,
@@ -323,7 +323,7 @@ def _extract_single_cuthbert_enkf_prediction_arrays(
         # Match the state-independent-noise probe used while constructing the
         # Cuthbert EnKF. In particular, do not let a particular ensemble member
         # select the observation covariance.
-        probe_dist = dynamics.observation_model(
+        probe_dist = dynamics.observation_distribution(
             jnp.zeros((dynamics.state_dim,), dtype=state_ensemble_t.dtype),
             control_t,
             time_t,
