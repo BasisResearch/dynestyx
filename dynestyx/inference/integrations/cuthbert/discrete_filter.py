@@ -559,7 +559,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
 
             def observation_fn(x):
-                return jnp.atleast_1d(jnp.asarray(obs_model.h(x, mi.u, mi.time)))
+                return jnp.atleast_1d(jnp.asarray(obs_model.mean(x, mi.u, mi.time)))
 
             return observation_fn, chol_R, y
         else:
