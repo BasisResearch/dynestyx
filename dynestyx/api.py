@@ -22,6 +22,7 @@ from dynestyx.observation_missingness import (
 )
 from dynestyx.types import SimulatedResult
 from dynestyx.utils import (
+    _flatten_control_values,
     _get_dynamics_with_t0,
     _validate_control_dim,
     _validate_controls,
@@ -37,9 +38,7 @@ def simulate(
     *,
     rng_key: PRNGKeyArray,
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: PyTree[Array] | None = None,
     predict_times: Real[Array, " predict_time"] | None = None,
     n_simulations: int = 1,
     simulator_config: SimulatorConfig | None = None,
@@ -57,6 +56,8 @@ def simulate(
         ctrl_times: Times associated with `ctrl_values`. If controls are
             provided, these times must match `predict_times`.
         ctrl_values: Control values, or `None` for an uncontrolled model.
+            With `control_layout`, provide a matching pytree with leading time
+            axes; controls are flattened internally.
         predict_times: Times at which to simulate states and observations.
         n_simulations: Number of independent trajectories to simulate.
         simulator_config: ODE or SDE solver configuration. Its type must match
@@ -96,6 +97,7 @@ def simulate(
     if predict_times is None:
         raise ValueError("predict_times must be provided")
 
+    ctrl_values = _flatten_control_values(dynamics, ctrl_values)
     _validate_site_sorting(ctrl_times, name="ctrl_times")
     _validate_site_sorting(predict_times, name="predict_times")
     _validate_controls(None, predict_times, ctrl_times, ctrl_values)
@@ -134,9 +136,7 @@ def log_prob(
     | Real[Array, " obs_time"]
     | None = None,
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"]
-    | Real[Array, " ctrl_time"]
-    | None = None,
+    ctrl_values: PyTree[Array] | None = None,
     missing_observation_strategy: MissingObservationStrategy = "auto",
     missing_obs_values: Real[Array, " n_missing_obs"]
     | Real[Array, " obs_time"]
@@ -169,6 +169,8 @@ def log_prob(
             When controls are provided, these times must match the union of
             `obs_times` and `state_path_param_times`.
         ctrl_values: Control values, or `None` for an uncontrolled model.
+            With `control_layout`, provide a matching pytree with leading time
+            axes; controls are flattened internally.
         missing_observation_strategy: Method used to handle missing
             observations. `"auto"` marginalizes supported observation
             distributions and otherwise uses augmentation for continuous
@@ -203,6 +205,7 @@ def log_prob(
         NotImplementedError: If the selected missing-observation strategy is
             unsupported by the observation distribution.
     """
+    ctrl_values = _flatten_control_values(dynamics, ctrl_values)
     state_path_param_times = jnp.asarray(state_path_param_times)
     _validate_site_sorting(state_path_param_times, name="state_path_param_times")
     _validate_inference_supported_model_classes(dynamics)

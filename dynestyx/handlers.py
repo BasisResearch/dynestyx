@@ -7,7 +7,7 @@ from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
 from effectful.ops.types import NotHandled
 from jax.experimental import sparse as jax_sparse
-from jaxtyping import Array, Bool, Real
+from jaxtyping import Array, Bool, PyTree, Real
 
 from dynestyx.models import (
     DynamicalModel,
@@ -18,6 +18,7 @@ from dynestyx.observation_missingness import (
 )
 from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
+    _flatten_control_values,
     _get_dynamics_with_t0,
     _validate_control_dim,
     _validate_controls,
@@ -120,9 +121,7 @@ def sample(
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
-    | None = None,
+    ctrl_values: PyTree[Array] | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
 ):
@@ -147,7 +146,8 @@ def sample(
         obs_times: Times at which to sample the observations.
         obs_values: Values of the observations at the given times.
         ctrl_times: Times at which to sample the controls.
-        ctrl_values: Values of the controls at the given times.
+        ctrl_values: Control values at the given times; a pytree matching
+            ``dynamics.control_layout`` when provided.
         predict_times: Times at which to predict the observations.
         **kwargs: Additional keyword arguments.
     """
@@ -179,9 +179,7 @@ def condition(
     | Real[Array, "*obs_value_plate obs_time"]
     | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
-    | None = None,
+    ctrl_values: PyTree[Array] | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
 ):
@@ -197,10 +195,12 @@ def condition(
         obs_times: Times at which observations are available.
         obs_values: Values of the observations at the given times.
         ctrl_times: Times at which controls are applied.
-        ctrl_values: Values of the controls at the given times.
+        ctrl_values: Control values at the given times; a pytree matching
+            ``dynamics.control_layout`` when provided.
         predict_times: Times at which to predict.
         **kwargs: Additional keyword arguments.
     """
+    ctrl_values = _flatten_control_values(dynamics, ctrl_values)
     dynamics_with_t0, obs_values_filled, obs_mask, obs_has_missing = (
         _validate_and_prepare(
             name,
@@ -271,7 +271,7 @@ def _condition_intp(
         _obs_has_missing: Internal precomputed flag indicating whether any
             observation entries are missing.
         ctrl_times: Times at which to sample the controls.
-        ctrl_values: Values of the controls at the given times.
+        ctrl_values: Internally flattened control values at the given times.
         predict_times: Times at which to predict the observations.
         **kwargs: Additional keyword arguments.
 

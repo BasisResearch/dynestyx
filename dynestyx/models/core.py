@@ -93,7 +93,7 @@ class DynamicalModel(eqx.Module):
         state_layout (Layout | None): Layout for callable state inputs and state results. Defaults
             to None; not inferred from the transition or observation model.
         control_layout (Layout | None): Layout for callable control inputs.
-            Infers control_dim when provided; external control arrays remain flat.
+            Infers control_dim when provided; public control values use this structure.
         observation_layout (Layout | None): Layout for observation results and
             helper output flattening. Custom callables return flat-event distributions.
         state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.

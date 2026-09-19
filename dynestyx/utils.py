@@ -11,7 +11,7 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
 from jax import Array, lax
-from jaxtyping import Real, Shaped
+from jaxtyping import PyTree, Real, Shaped
 
 from dynestyx.models import Diffusion, DynamicalModel
 
@@ -335,6 +335,15 @@ def _validate_nonnegative_float(name: str, value: float) -> None:
     """
     if not math.isfinite(value) or value < 0.0:
         raise ValueError(f"{name} must be a finite, nonnegative float, got {value!r}.")
+
+
+def _flatten_control_values(
+    dynamics: DynamicalModel, ctrl_values: PyTree[Array] | None
+) -> Array | None:
+    """Convert public control pytrees to backend vectors, preserving leading axes."""
+    if dynamics.control_layout is not None and ctrl_values is not None:
+        return dynamics.control_layout.flatten(ctrl_values)
+    return ctrl_values
 
 
 def _validate_control_dim(

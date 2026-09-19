@@ -1,4 +1,4 @@
-# State layour
+# Layout
 
 `Layout` maps a fixed pytree of array leaves to one flat trailing event axis.
 It preserves shared leading axes, including time, simulations, and plates. Leaves
@@ -23,12 +23,13 @@ own declarations. When specifying structured covariance values at helper
 construction, pass the output layout there too. Helpers do not unflatten their
 inputs themselves, so direct helper calls must supply the expected structure.
 
-Controls and observed data remain flat at the external API boundary:
+Pass structured controls directly to `simulate`, `sample`, `condition`, or
+`log_prob`. They are flattened internally before validation and backend processing:
 
 ```python
 control_layout = dsx.Layout.from_example({"drive": jnp.zeros(2)})
 # controls["drive"] has shape (n_times, 2)
-ctrl_values = control_layout.flatten(controls)
+ctrl_values = controls
 ```
 
 A control layout determines `control_dim`; an explicit conflicting dimension is

@@ -168,8 +168,8 @@ def _validate_continuous_state_evolution(
 def _validate_discrete_state_evolution_output_shape(
     state_evolution: Any,
     state_dim: int,
-    x_probe: Real[Array, " state_dim"] | Real[Array, ""],
-    u_probe: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    x_probe: Any,
+    u_probe: Any,
     t_probe: Real[Array, ""],
 ) -> None:
     """Validate a discrete-time state evolution against the inferred state dimension."""
