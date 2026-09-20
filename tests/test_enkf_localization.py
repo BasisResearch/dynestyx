@@ -141,6 +141,7 @@ def test_custom_taper_is_evaluated_only_for_two_distance_matrices():
             taper=custom_taper,
         ),
     )
+    assert config.localization is not None
     resolved = resolve_enkf_localization(
         config.localization, state_dim=3, observation_dim=2
     )
@@ -224,6 +225,9 @@ def test_filter_handler_shares_one_taper_across_time_and_plates(plate_shape):
 
     assert calls == [(3, 2), (2, 2)]
     predictions = handler.predicted_observations
+    assert predictions is not None
+    assert predictions.cov is not None
+    assert predictions.ensemble is not None
     assert predictions.cov.shape == (*plate_shape, 4, 2, 2)
     raw_ensemble = predictions.ensemble
     deviations = raw_ensemble - jnp.mean(raw_ensemble, axis=-2, keepdims=True)
@@ -521,6 +525,9 @@ def test_gaussian_scale_is_jittable_vmappable_and_differentiable(
                 ctrl_values=None,
                 resolved_localization=resolved,
             )
+            assert predictions is not None
+            assert predictions.mean is not None
+            assert predictions.obs_cov is not None
             return (
                 dist.MultivariateNormal(
                     predictions.mean, covariance_matrix=predictions.obs_cov
