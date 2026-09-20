@@ -26,7 +26,10 @@ from dynestyx.inference.configs.filter import (
     KFConfig,
     PFConfig,
 )
-from dynestyx.inference.enkf_localization import resolve_enkf_localization
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
+)
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )
@@ -64,21 +67,6 @@ class CuthbertInputs(NamedTuple):
     time_prev: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
     # (T+1,) bool — True only at index 1.
     is_first_step: Bool[Array, " cuthbert_time"] | Bool[Array, ""]
-
-
-class _LocalizedCuthbertInputs(NamedTuple):
-    """Cuthbert inputs carrying a precomputed marginal taper for scoring."""
-
-    y: Array
-    u: Array
-    u_prev: Array
-    time: Array
-    time_prev: Array
-    is_first_step: Array
-    localization_observation_taper: Array
-
-
-type EnKFCuthbertInputs = CuthbertInputs | _LocalizedCuthbertInputs
 
 
 def _extract_gaussian_chol(
@@ -350,6 +338,7 @@ def compute_cuthbert_filter(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
     store_predicted_ensemble: bool | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
@@ -357,6 +346,9 @@ def compute_cuthbert_filter(
     ``filter_config.include_predicted_observations``. Passing ``True`` or
     ``False`` explicitly overrides that default; smoothers use the explicit
     form when their backward pass requires forecast ensembles.
+
+    ``resolved_localization`` lets the caller share localization callbacks with
+    prediction extraction without storing fixed tapers in the state sequence.
 
     Returns:
         tuple: (marginal_loglik, states). By default states are aligned to
@@ -392,28 +384,18 @@ def compute_cuthbert_filter(
         "is_first_step": jnp.arange(obs_len + 1) == 1,
     }
 
-    resolved_localization = None
-    if isinstance(filter_config, EnKFConfig) and filter_config.localization is not None:
+    if (
+        resolved_localization is None
+        and isinstance(filter_config, EnKFConfig)
+        and filter_config.localization is not None
+    ):
         resolved_localization = resolve_enkf_localization(
             filter_config.localization,
             state_dim=dynamics.state_dim,
             observation_dim=dynamics.observation_dim,
         )
 
-    if (
-        resolved_localization is not None
-        and resolved_localization.observation_taper is not None
-    ):
-        observation_taper = resolved_localization.observation_taper
-        cuthbert_inputs = _LocalizedCuthbertInputs(
-            **input_kwargs,
-            localization_observation_taper=jnp.broadcast_to(
-                observation_taper,
-                (obs_len + 1, *observation_taper.shape),
-            ),
-        )
-    else:
-        cuthbert_inputs = CuthbertInputs(**input_kwargs)
+    cuthbert_inputs = CuthbertInputs(**input_kwargs)
 
     if store_predicted_ensemble is None:
         store_predicted_ensemble = bool(
@@ -468,6 +450,7 @@ def run_discrete_filter(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
     **kwargs,
 ) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
@@ -496,6 +479,7 @@ def run_discrete_filter(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        resolved_localization=resolved_localization,
     )
     filtered_dists = _cholesky_state_sequence_to_dists(
         states,
@@ -591,10 +575,10 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             obs_model, state_dim=state_dim, obs_dim=obs_dim
         )
 
-    def init_sample(key, mi: EnKFCuthbertInputs):
+    def init_sample(key, mi: CuthbertInputs):
         return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
 
-    def get_dynamics(mi: EnKFCuthbertInputs):
+    def get_dynamics(mi: CuthbertInputs):
         def dynamics_fn(x, key):
             def _noop(key):
                 return x
@@ -607,7 +591,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
         return dynamics_fn
 
-    def get_observations(mi: EnKFCuthbertInputs):
+    def get_observations(mi: CuthbertInputs):
         obs_model = dynamics.observation_model
         y = jnp.atleast_1d(jnp.asarray(mi.y))
 

@@ -22,11 +22,9 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EnKFConfig,
-    EnKFLocalizationConfig,
-    EnKFLocalizationFunctions,
 )
 from dynestyx.inference.enkf_localization import (
-    apply_precomputed_observation_taper,
+    ResolvedEnKFLocalization,
     resolve_enkf_localization,
 )
 from dynestyx.inference.utils.plate_utils import _make_plate_in_axes
@@ -382,6 +380,7 @@ def _extract_cuthbert_enkf_predictions(
     dynamics: DynamicalModel,
     filter_config: EnKFConfig,
     plate_shapes: tuple[int, ...],
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> PredictedObservationOutputs:
     """Extract Cuthbert EnKF forecasts, preserving any leading plate axes."""
     state_ensemble_raw = getattr(posterior, "predicted_ensemble", None)
@@ -395,29 +394,18 @@ def _extract_cuthbert_enkf_predictions(
     state_ensemble = jnp.asarray(state_ensemble_raw)
     covariance_modifier = None
     localization = filter_config.localization
-    if isinstance(localization, EnKFLocalizationFunctions):
-        covariance_modifier = resolve_enkf_localization(
+    if resolved_localization is None and localization is not None:
+        resolved_localization = resolve_enkf_localization(
             localization,
             state_dim=dynamics.state_dim,
             observation_dim=dynamics.observation_dim,
-        ).modify_predicted_observation_covariance
-    elif (
-        isinstance(localization, EnKFLocalizationConfig)
-        and localization.observation_distances is not None
-    ):
-
-        def covariance_modifier(covariance, inputs):
-            taper = getattr(inputs, "localization_observation_taper", None)
-            if taper is None:
-                raise ValueError(
-                    "Marginal EnKF localization predictions require the "
-                    "precomputed observation taper stored by the filter."
-                )
-            return apply_precomputed_observation_taper(
-                covariance,
-                taper,
-                observation_dim=dynamics.observation_dim,
-            )
+        )
+    if resolved_localization is not None:
+        # Distance-based callbacks close over one taper, shared across time and
+        # plate axes rather than replicated in the filter's model inputs.
+        covariance_modifier = (
+            resolved_localization.modify_predicted_observation_covariance
+        )
 
     def extract_arrays(dyn, ensemble, inputs):
         return _extract_single_cuthbert_enkf_prediction_arrays(
@@ -461,8 +449,13 @@ def extract_filter_predictions(
     | Real[Array, "... control_time"]
     | None,
     plate_shapes: tuple[int, ...] = (),
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> PredictedObservationOutputs | None:
-    """Extract canonical predictions from any filter backend that supports them."""
+    """Extract canonical predictions from any filter backend that supports them.
+
+    Pass the filter's ``resolved_localization`` to reuse its precomputed EnKF
+    tapers. Otherwise, localization is resolved from ``filter_config`` here.
+    """
     if not filter_config.include_predicted_observations or posterior is None:
         return None
 
@@ -493,6 +486,7 @@ def extract_filter_predictions(
             dynamics=dynamics,
             filter_config=filter_config,
             plate_shapes=plate_shapes,
+            resolved_localization=resolved_localization,
         )
 
     return None

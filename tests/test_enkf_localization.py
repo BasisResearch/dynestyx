@@ -1,6 +1,7 @@
 """Focused tests for structured Cuthbert EnKF localization."""
 
 import dataclasses
+from contextlib import ExitStack
 
 import jax
 import jax.numpy as jnp
@@ -140,12 +141,16 @@ def test_custom_taper_is_evaluated_only_for_two_distance_matrices():
             taper=custom_taper,
         ),
     )
+    resolved = resolve_enkf_localization(
+        config.localization, state_dim=3, observation_dim=2
+    )
     _, states = compute_cuthbert_filter(
         dynamics,
         config,
         jr.PRNGKey(8),
         obs_times=obs_times,
         obs_values=obs_values,
+        resolved_localization=resolved,
     )
     predictions = extract_filter_predictions(
         states,
@@ -153,12 +158,80 @@ def test_custom_taper_is_evaluated_only_for_two_distance_matrices():
         filter_config=config,
         obs_times=obs_times,
         ctrl_values=None,
+        resolved_localization=resolved,
     )
 
     assert calls == [(3, 2), (2, 2)]
     assert predictions is not None
     assert predictions.cov is not None
     assert predictions.cov.shape == (4, 2, 2)
+
+
+@pytest.mark.parametrize("include_predictions", [False, True])
+def test_localization_does_not_increase_retained_filter_state_size(include_predictions):
+    _, _, _, cross_distances, observation_distances = _problem()
+    config = EnKFConfig(
+        n_particles=10,
+        include_predicted_observations=include_predictions,
+        localization=EnKFLocalizationConfig(
+            state_observation_distances=cross_distances,
+            observation_distances=observation_distances,
+            taper="gaussian",
+            taper_scale=1.3,
+        ),
+    )
+    _, localized_states = jax.jit(lambda: _run(config))()
+    _, unlocalized_states = _run(dataclasses.replace(config, localization=None))
+
+    assert jax.tree.structure(localized_states) == jax.tree.structure(
+        unlocalized_states
+    )
+    assert sum(leaf.nbytes for leaf in jax.tree.leaves(localized_states)) == sum(
+        leaf.nbytes for leaf in jax.tree.leaves(unlocalized_states)
+    )
+    assert (localized_states.predicted_ensemble is not None) == include_predictions
+
+
+@pytest.mark.parametrize("plate_shape", [(), (2,), (2, 4)])
+def test_filter_handler_shares_one_taper_across_time_and_plates(plate_shape):
+    dynamics, obs_times, obs_values, cross_distances, observation_distances = _problem()
+    calls = []
+
+    def custom_taper(distances):
+        calls.append(distances.shape)
+        return gaussian(distances, 1.3)
+
+    config = EnKFConfig(
+        n_particles=10,
+        crn_seed=jr.PRNGKey(8),
+        localization=EnKFLocalizationConfig(
+            state_observation_distances=cross_distances,
+            observation_distances=observation_distances,
+            taper=custom_taper,
+        ),
+    )
+    handler = dsx.Filter(filter_config=config)
+    with ExitStack() as stack:
+        stack.enter_context(handler)
+        for axis, size in reversed(list(enumerate(plate_shape))):
+            stack.enter_context(dsx.plate(f"axis_{axis}", size))
+        dsx.condition(
+            "f",
+            dynamics,
+            obs_times=obs_times,
+            obs_values=jnp.broadcast_to(obs_values, (*plate_shape, *obs_values.shape)),
+        )
+
+    assert calls == [(3, 2), (2, 2)]
+    predictions = handler.predicted_observations
+    assert predictions.cov.shape == (*plate_shape, 4, 2, 2)
+    raw_ensemble = predictions.ensemble
+    deviations = raw_ensemble - jnp.mean(raw_ensemble, axis=-2, keepdims=True)
+    expected_cov = jnp.einsum("...ni,...nj->...ij", deviations, deviations) / (
+        config.n_particles - 1
+    )
+    expected_cov *= gaussian(observation_distances, 1.3)
+    assert jnp.allclose(predictions.cov, expected_cov)
 
 
 def test_direct_callbacks_are_forwarded_unchanged_and_receive_model_inputs():
@@ -401,7 +474,10 @@ def test_localization_supports_enrts_forward_filter():
 
 
 @pytest.mark.parametrize("custom_taper", [False, True])
-def test_gaussian_scale_is_jittable_vmappable_and_differentiable(custom_taper):
+@pytest.mark.parametrize("score_predictions", [False, True])
+def test_gaussian_scale_is_jittable_vmappable_and_differentiable(
+    custom_taper, score_predictions
+):
     dynamics, obs_times, obs_values, cross_distances, observation_distances = _problem()
 
     def objective(log_scale):
@@ -425,13 +501,33 @@ def test_gaussian_scale_is_jittable_vmappable_and_differentiable(custom_taper):
             perturb_measurements=False,
             localization=localization,
         )
-        marginal_loglik, _ = compute_cuthbert_filter(
+        resolved = resolve_enkf_localization(
+            localization, state_dim=3, observation_dim=2
+        )
+        marginal_loglik, states = compute_cuthbert_filter(
             dynamics,
             config,
             jr.PRNGKey(15),
             obs_times=obs_times,
             obs_values=obs_values,
+            resolved_localization=resolved,
         )
+        if score_predictions:
+            predictions = extract_filter_predictions(
+                states,
+                dynamics=dynamics,
+                filter_config=config,
+                obs_times=obs_times,
+                ctrl_values=None,
+                resolved_localization=resolved,
+            )
+            return (
+                dist.MultivariateNormal(
+                    predictions.mean, covariance_matrix=predictions.obs_cov
+                )
+                .log_prob(obs_values)
+                .sum()
+            )
         return marginal_loglik
 
     value = jax.jit(objective)(jnp.array(0.2))
