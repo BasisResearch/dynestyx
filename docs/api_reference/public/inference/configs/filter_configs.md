@@ -22,7 +22,9 @@ The single `Filter()` handler is directed to the appropriate filtering algorithm
 
 ## EnKF localization
 
-Localization is a common technique in EnKFs, related to the issue of estimating a covariance matrix from a few samples. The (cuthbert, discrete-time) EnKF supports localization via covariance tapering via pairwise distances, or direction control over localization functions, using `EnKFLocalizationConfig` for the former and `EnKFLocalizationFunctions` for the latter. For localization in a deterministic continuous-time dynamics, combine `EnKFConfig` with an ODE-flow `Discretizer`.
+Localization is a common technique in EnKFs, related to the issue of estimating a covariance matrix from a few samples. The (cuthbert, discrete-time) EnKF supports localization via covariance tapering via pairwise distances, or direct control over localization functions, using `EnKFLocalizationConfig` for the former and `EnKFLocalizationFunctions` for the latter. For localization in a deterministic continuous-time dynamics, combine `EnKFConfig` with an ODE-flow `Discretizer`.
+
+For a worked example with a custom differentiable taper, see [Learning EnKF localization with proper scoring rules](../../../../deep_dives/l96_localization_hyperparameter_scoring.ipynb). For the mathematical definitions of the taper functions and the factorization of the localized innovation covariance, see [Cuthbert's covariance localization reference](https://state-space-models.github.io/cuthbert/api_cuthbertlib/ensemble_kalman/localization/).
 
 Dynestyx offers a few built-in taper functions for commonly-used correlation functions, namely `"gaspari_cohn"` and `"gaussian"`. Supplying `observation_distances` localizes both the state–observation cross covariance and the observation marginal covariance; omitting it localizes only the cross covariance. A callable taper receives a distance matrix and may close over differentiable JAX parameters:
 
@@ -45,7 +47,7 @@ localization = EnKFLocalizationConfig(
 filter_config = EnKFConfig(localization=localization)
 ```
 
-For advanced usage, one may provide directly the functions that modify the covariance and cross-covariance:
+For advanced usage, one may provide directly the functions that modify the covariance and cross-covariance. [Cuthbert's localization tutorial](https://state-space-models.github.io/cuthbert/examples/enkf_localization_l96/) shows how to construct these callbacks from distance-based tapers and explains their role in the EnKF update:
 
 ```python
 from cuthbertlib.ensemble_kalman import construct_tapered_chol_innovation_covariance
