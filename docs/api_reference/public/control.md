@@ -28,7 +28,7 @@ $x_{k+1}$ and generates the observation $y_k$ (they are aligned).
 $$
 \begin{aligned}
 & \text{Times} = [t_0, \dots, t_{N}]\\
-&x_0 \sim p_0, \quad \tilde{p}_0 = p_0 \quad \text{Initialization step} \\
+&x_0 \sim p_0, \quad \tilde{p}_0 = p_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
 &\text{for } k = 0,\dots N-2:\\
 &\quad u_{k}, s_{k+1} =\pi(\tilde{p}_{k}, t_{k}, t_{k+1}, s_k)
   \quad \text{Select the control}\\
@@ -47,6 +47,10 @@ $$
   \quad \text{Update the filtering distribution using the observation}
 \end{aligned}
 $$
+
+Here $s_0$ is `simulate`'s `initial_policy_state`: `None` by default, for a
+stateless policy. It is never initialised for you, so a stateful policy must be
+given its initial state explicitly -- for MPPI, `MPPI.initial_state()`.
 
 Note the restrictions:
 
@@ -73,7 +77,7 @@ An alternative is to run the loop:
 $$
 \begin{aligned}
 & \text{Times} = [t_0, \dots, t_{N}]\\
-&x_0 \sim p_0, \quad \tilde{p}_0 = p_0 \quad \text{Initialization step} \\
+&x_0 \sim p_0, \quad \tilde{p}_0 = p_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
 &\text{for } k = 0,\dots N-1:\\
 &\quad u_{k}, s_{k+1} =\pi(\tilde{p}_{k}, t_{k}, t_{k+1}, s_k)
   \quad \text{Select the control}\\
@@ -132,7 +136,7 @@ As an algorithm on the grid, with the prediction and filter steps fused:
 $$
 \begin{aligned}
 & \text{Times} = [t_0, \dots, t_{N}]\\
-&x_0 \sim p_0, \quad \hat{p}_0 = p_0 \quad \text{Initialization step} \\
+&x_0 \sim p_0, \quad \hat{p}_0 = p_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
 &\text{for } k = 0,\dots N-1:\\
 &\quad u_{k}, s_{k+1} =\pi(\hat{p}_{k}, t_{k}, t_{k+1}, s_k)
   \quad \text{Select the control}\\

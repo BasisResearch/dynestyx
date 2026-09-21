@@ -373,20 +373,21 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         kept as the intended algorithm.
 
         On $\text{Times} = [t_0, \dots, t_N]$:
+
         $$
         \begin{aligned}
-        &x_0 \sim p_0, \quad \tilde{p}_0 = p_0
+        &x_0 \sim p_0, \quad \tilde{p}_0 = p_0, \quad s_0 \text{ given}
             && \text{Initialization step} \\
         &\text{for } k = 0, \dots, N-1: \\
         &\quad u_k, s_{k+1} = \pi(\tilde{p}_k, t_k, t_{k+1}, s_k)
             && \text{Select the control} \\
         &\quad y_k \sim p(y_k \mid x_k, u_k, t_k)
             && \text{Emit observation} \\
-        &\quad \hat{p}_k = \operatorname{FilterAnalysis}(y_k, \tilde{p}_k, u_k)
+        &\quad \hat{p}_k = \text{FilterAnalysis}(y_k, \tilde{p}_k, u_k)
             && \text{Update the filtering distribution} \\
         &\quad x_{k+1} \sim p(x_{k+1} \mid x_k, u_k, t_k, t_{k+1})
             && \text{State transition} \\
-        &\quad \tilde{p}_{k+1} = \operatorname{PredictionUpdate}(\hat{p}_k, u_k)
+        &\quad \tilde{p}_{k+1} = \text{PredictionUpdate}(\hat{p}_k, u_k)
             && \text{Predict the filtering distribution}
         \end{aligned}
         $$
@@ -570,7 +571,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         $$
         \begin{aligned}
-        &x_0 \sim p_0, \quad \hat{p}_0 = p_0
+        &x_0 \sim p_0, \quad \hat{p}_0 = p_0, \quad s_0 \text{ given}
             && \text{Initialization step} \\
         &\text{for } k = 0, \dots, N-1: \\
         &\quad u_k, s_{k+1} = \pi(\hat{p}_k, t_k, t_{k+1}, s_k)
@@ -579,7 +580,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             && \text{State transition} \\
         &\quad y_{k+1} \sim p(y_{k+1} \mid x_{k+1}, u_k, t_{k+1})
             && \text{Emit observation} \\
-        &\quad \hat{p}_{k+1} = \operatorname{FilterUpdate}(y_{k+1}, \hat{p}_k, u_k)
+        &\quad \hat{p}_{k+1} = \text{FilterUpdate}(y_{k+1}, \hat{p}_k, u_k)
             && \text{Update the filtering distribution}
         \end{aligned}
         $$
