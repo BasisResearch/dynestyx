@@ -9,7 +9,7 @@ selects it with a warning; an explicit `"same_time"` raises
 `NotImplementedError` -- we are working on it. Both conventions are described
 below.
 
-## `same_time` convention
+## `same_time` convention (not implemented yet)
 
 Notation:
 
