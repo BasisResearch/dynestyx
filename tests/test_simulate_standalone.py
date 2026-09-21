@@ -11,7 +11,7 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
-from tests.test_utils import value_at_time
+from tests.test_utils import assert_finite, value_at_time
 
 
 def _make_discrete_dynamics() -> dsx.DynamicalModel:
@@ -583,10 +583,10 @@ def test_discrete_simulator_previous_transition_zero_length_predict_times_edge_c
         predict_times=jnp.arange(1.0),
     )
 
-    assert result.x_0 is not None
-    assert jnp.asarray(result.times).shape == (1, 1)
-    assert jnp.asarray(result.states).shape == (1, 1, 1)
-    assert jnp.asarray(result.observations).shape == (1, 0, 1)
+    assert_finite(result.x_0, (1, 1), where="x_0")
+    assert_finite(result.times, (1, 1), where="times")
+    assert_finite(result.states, (1, 1, 1), where="states")
+    assert_finite(result.observations, (1, 0, 1), where="observations")
     assert result.controls is None  # no ctrl_values supplied
 
 

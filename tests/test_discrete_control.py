@@ -48,6 +48,7 @@ from dynestyx.models.lti_dynamics import LTI_discrete
 from dynestyx.models.observations import LinearGaussianObservation
 from tests.fixtures import _n_particles
 from tests.test_utils import (
+    assert_finite,
     assert_trace_sites_exist_and_field_all_finite,
     value_at_time,
 )
@@ -913,15 +914,10 @@ def test_single_timepoint_closed_loop_returns_only_the_initial_state():
         filter_config=KFConfig(filter_source="cuthbert"),
     )
 
-    assert result.states is not None
-    assert result.observations is not None
-    assert result.controls is not None
-    assert result.states.shape == (1, 1, 1)
-    assert result.observations.shape == (1, 0, 1)
-    assert result.controls.shape == (1, 0, 1)
-    assert result.ctrl_times is not None
-    assert result.ctrl_times.shape == (1, 0)
-    assert bool(jnp.all(jnp.isfinite(result.states)))
+    assert_finite(result.states, (1, 1, 1), where="states")
+    assert_finite(result.observations, (1, 0, 1), where="observations")
+    assert_finite(result.controls, (1, 0, 1), where="controls")
+    assert_finite(result.ctrl_times, (1, 0), where="ctrl_times")
 
 
 def test_determinism_same_seed_reproducible_different_seed_differs():

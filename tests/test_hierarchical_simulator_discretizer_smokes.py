@@ -40,6 +40,7 @@ from dynestyx.models import (
 from dynestyx.models.drifts import AffineDrift
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from tests.test_utils import (
+    assert_finite,
     assert_trace_sites_exist_and_field_all_finite,
     assert_tree_all_finite,
 )
@@ -322,10 +323,16 @@ def test_plate_previous_transition_slices_the_time_axis():
                 ctrl_values=ctrl_values,
             )
 
-    assert tr["f_times"]["value"].shape == (2, 1, 4)
-    assert tr["f_states"]["value"].shape == (2, 1, 4, 2)
-    assert tr["f_observations"]["value"].shape == (2, 1, 3, 1)
-    assert tr["f_controls"]["value"].shape == (2, 1, 3, 1)
+    # Shapes alone would pass on NaN-filled arrays, so check finiteness too.
+    for site, shape in [
+        ("f_times", (2, 1, 4)),
+        ("f_states", (2, 1, 4, 2)),
+        ("f_observations", (2, 1, 3, 1)),
+        ("f_controls", (2, 1, 3, 1)),
+        ("f_obs_times", (2, 1, 3)),
+        ("f_ctrl_times", (2, 1, 3)),
+    ]:
+        assert_finite(tr[site]["value"], shape, where=site)
 
 
 def test_plate_conditioning_discrete_single_and_nested():

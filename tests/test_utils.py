@@ -64,6 +64,21 @@ def assert_tree_all_finite(tree, *, where: str = "value") -> None:
     _walk(tree, "")
 
 
+def assert_finite(array, shape: tuple[int, ...] | None = None, *, where: str = "array"):
+    """Assert `array` exists, optionally has `shape`, and holds no NaN/inf.
+
+    A shape check alone passes on arrays full of NaNs, which has hidden broken
+    simulations before; checking finiteness alongside catches that. Returns the
+    array, so callers can keep using it after the check.
+    """
+    assert array is not None, f"{where} is None"
+    arr = jnp.asarray(array)
+    if shape is not None:
+        assert arr.shape == shape, f"{where} has shape {arr.shape}, expected {shape}"
+    assert_tree_all_finite(arr, where=where)
+    return arr
+
+
 def assert_trace_sites_exist_and_field_all_finite(
     tr,
     *site_names: str,
