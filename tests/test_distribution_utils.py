@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import numpyro
 import numpyro.distributions as dist
 
 from dynestyx.inference.utils.distribution_utils import (
@@ -77,10 +78,13 @@ def test_cholesky_state_sequence_to_dists_ensemble_is_low_rank():
     the one every other EnKF test misses by using ``state_dim=2``.
     """
     t_len, n_particles, state_dim = 3, 4, 16
+    jitter = 1e-5
     ensemble = jr.normal(jr.PRNGKey(0), (t_len, n_particles, state_dim))
     states = SimpleNamespace(ensemble=ensemble)
 
-    dists = _cholesky_state_sequence_to_dists(states, particle_mode=False)
+    dists = _cholesky_state_sequence_to_dists(
+        states, particle_mode=False, covariance_jitter=jitter
+    )
 
     assert len(dists) == t_len
     for t, d in enumerate(dists):
@@ -93,11 +97,13 @@ def test_cholesky_state_sequence_to_dists_ensemble_is_low_rank():
         assert jnp.allclose(d.mean, members.mean(axis=0), atol=1e-5)
 
         deviations = members - members.mean(axis=0)
-        expected_cov = deviations.T @ deviations / (n_particles - 1)
+        expected_cov = deviations.T @ deviations / (n_particles - 1) + jitter * jnp.eye(
+            state_dim
+        )
         assert jnp.allclose(d.covariance_matrix, expected_cov, atol=1e-5)
 
-        # The point of the change: the dense path samples nan here.
         assert jnp.isfinite(d.sample(jr.PRNGKey(t))).all()
+        assert jnp.isfinite(d.log_prob(d.mean))
 
 
 def test_cholesky_state_sequence_to_dists_full_rank_ensemble_stays_dense():
@@ -157,9 +163,11 @@ def test_covariance_jitter_shifts_only_the_covariance_diagonal():
     ensemble_states = SimpleNamespace(
         ensemble=jr.normal(jr.PRNGKey(0), (2, 4, state_dim))
     )
-    lr_exact = _cholesky_state_sequence_to_dists(
-        ensemble_states, particle_mode=False, covariance_jitter=0.0
-    )[0]
+    # This reference is deliberately singular; validate the jittered case below.
+    with numpyro.validation_enabled(False):
+        lr_exact = _cholesky_state_sequence_to_dists(
+            ensemble_states, particle_mode=False, covariance_jitter=0.0
+        )[0]
     lr_jittered = _cholesky_state_sequence_to_dists(
         ensemble_states, particle_mode=False, covariance_jitter=jitter
     )[0]
