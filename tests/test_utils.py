@@ -15,6 +15,18 @@ from numpyro.infer import Predictive
 _OUTPUT_MASTER_DIR: Path | None = None
 
 
+def value_at_time(values, grid, t):
+    """The entry of `values` that the time `grid` places at time `t`.
+
+    Used to read simulation outputs through their time fields (`times`,
+    `obs_times`, `ctrl_times`) rather than by position, so a wrong time field
+    fails the lookup instead of silently pairing the wrong entries.
+    """
+    matches = jnp.flatnonzero(grid == t)
+    assert matches.size == 1, f"time {t} appears {matches.size} times in {grid}"
+    return values[matches[0]]
+
+
 def assert_tree_all_finite(tree, *, where: str = "value") -> None:
     """Assert that every floating-point leaf in a nested value is finite."""
 

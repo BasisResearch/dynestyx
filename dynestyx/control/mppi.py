@@ -131,10 +131,15 @@ class MPPI(eqx.Module):
         consumed here, inside the per-candidate function that gets vmapped."""
         times = t_now + jnp.arange(self.horizon + 1) * self.dt  # (horizon+1,)
 
+        # Planning rollouts are open-loop and pad controls the "same_time" way
+        # (below), so pin that convention here whatever the model says: the
+        # outer closed loop may run the same model as "previous_transition".
+        # is_leaf lets tree_at replace the field when it is None (unspecified).
         pinned_dynamics = eqx.tree_at(
-            lambda m: m.initial_condition,
+            lambda m: (m.initial_condition, m.observation_control_alignment),
             self.dynamics,
-            dist.Delta(x0, event_dim=1),
+            (dist.Delta(x0, event_dim=1), "same_time"),
+            is_leaf=lambda x: x is None,
         )
         # dsx.simulate's same-index convention pairs ctrl_values[t] with both
         # the transition from t and the observation at t, so it needs

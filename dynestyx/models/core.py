@@ -104,13 +104,16 @@ class DynamicalModel(eqx.Module):
             exactly; a mismatch raises a ``ValueError`` at simulation time.
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
-        observation_control_alignment ("same_time" | "previous_transition"): Convention for how
-            observations pair with controls in discrete time. `"same_time"` (default) pairs
+        observation_control_alignment ("same_time" | "previous_transition" | None): Convention
+            for how observations pair with controls in discrete time. `"same_time"` pairs
             $y_k$ with $u_k$. `"previous_transition"`
             pairs $y_{k+1}$ with $u_k$ (the control that produced $x_{k+1}$); under this convention
-            $y_0$ is never sampled. `DiscreteControlLoopSimulator` always uses
-            `"previous_transition"`, independently of this field. Only `"same_time"` is
-            honored by Filter/Smoother/`LatentPathBuilder` posterior rollout and `mppi.py`.
+            $y_0$ is never sampled. `None` (default) leaves it unspecified: open-loop
+            simulation treats it as `"same_time"`, while closed-loop control
+            (`DiscreteControlLoopSimulator`) uses `"previous_transition"` with a warning.
+            Closed-loop control does not support an explicit `"same_time"` yet. Only
+            `"same_time"` is honored by Filter/Smoother/`LatentPathBuilder` posterior
+            rollout and `mppi.py`.
 
     Note:
         - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
@@ -135,7 +138,7 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     categorical_state: bool
     continuous_time: bool
-    observation_control_alignment: Literal["same_time", "previous_transition"]
+    observation_control_alignment: Literal["same_time", "previous_transition"] | None
 
     def __init__(
         self,
@@ -150,9 +153,8 @@ class DynamicalModel(eqx.Module):
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
         continuous_time: bool | None = None,
-        observation_control_alignment: Literal[
-            "same_time", "previous_transition"
-        ] = "same_time",
+        observation_control_alignment: Literal["same_time", "previous_transition"]
+        | None = None,
     ):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution

@@ -239,9 +239,15 @@ _VALID_OBSERVATION_CONTROL_ALIGNMENTS = ("same_time", "previous_transition")
 
 
 def _validate_observation_control_alignment(
-    observation_control_alignment: str, continuous_time: bool
+    observation_control_alignment: str | None, continuous_time: bool
 ) -> None:
-    """Validate the observation/control alignment convention."""
+    """Validate the observation/control alignment convention.
+
+    `None` means unspecified and is always accepted; consumers resolve it
+    (open loop to `"same_time"`, closed loop to `"previous_transition"`).
+    """
+    if observation_control_alignment is None:
+        return
     if observation_control_alignment not in _VALID_OBSERVATION_CONTROL_ALIGNMENTS:
         raise ValueError(
             "observation_control_alignment must be one of "

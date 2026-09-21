@@ -353,7 +353,7 @@ def _validate_controls(
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None,
     *,
-    observation_control_alignment: str = "same_time",
+    observation_control_alignment: str | None = None,
 ) -> None:
     """
     Validate control inputs against model time grids.

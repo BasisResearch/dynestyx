@@ -1,3 +1,5 @@
+from typing import Literal
+
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float
@@ -34,6 +36,8 @@ def LTI_discrete(
     d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
     initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
     initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
+    observation_control_alignment: Literal["same_time", "previous_transition"]
+    | None = None,
 ) -> DynamicalModel:
     """
     Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
@@ -72,6 +76,9 @@ def LTI_discrete(
             shape $(d_x,)$. Defaults to zeros.
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
+        observation_control_alignment ("same_time" | "previous_transition" | None):
+            Forwarded to `DynamicalModel`; see its docstring. Defaults to `None`
+            (unspecified).
 
     Notes:
         `control_dim` is inferred from B, or from D when B is None, and
@@ -109,6 +116,7 @@ def LTI_discrete(
         observation_model=observation_model,
         control_model=None,
         control_dim=control_dim,
+        observation_control_alignment=observation_control_alignment,
     )
 
 

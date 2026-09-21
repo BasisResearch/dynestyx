@@ -810,9 +810,11 @@ def test_dynamical_model_infers_dims_with_callable_linear_gaussian_fields() -> N
 # ---------------------------------------------------------------------------
 
 
-def test_observation_control_alignment_defaults_to_same_time() -> None:
+def test_observation_control_alignment_defaults_to_unspecified() -> None:
+    """None means unspecified: open-loop simulation treats it as "same_time",
+    closed-loop control as "previous_transition" (with a warning)."""
     model = _simple_discrete_model()
-    assert model.observation_control_alignment == "same_time"
+    assert model.observation_control_alignment is None
 
 
 def test_observation_control_alignment_previous_transition_stored() -> None:

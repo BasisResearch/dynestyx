@@ -321,10 +321,18 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
 
+        # Report the grids observations and controls sit on, so alignment can be
+        # read off the result: previous_transition drops t_0 from the
+        # observations and t_N from the controls, same_time drops neither.
+        obs_times = times if include_initial_condition else times[1:]
         controls = None
+        ctrl_times = None
         if ctrl_values is not None:
             controls = _ensure_trailing_dim(
                 jnp.broadcast_to(ctrl_values[None], (n_sim, *ctrl_values.shape))
+            )
+            ctrl_times = _tile_times(
+                times if include_initial_condition else times[:-1], n_sim
             )
 
         return SimulatedResult(
@@ -332,7 +340,9 @@ class DiscreteTimeSimulator(BaseSimulator):
             x_0=initial_state,
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
+            obs_times=_tile_times(obs_times, n_sim),
             controls=controls,
+            ctrl_times=ctrl_times,
         )
 
     def simulate(

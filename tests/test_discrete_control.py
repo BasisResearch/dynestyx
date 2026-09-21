@@ -1,5 +1,7 @@
 """Tests for DiscreteControlLoopSimulator and compute_cuthbert_filter_update."""
 
+import warnings
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -30,6 +32,8 @@ from dynestyx.inference.configs.filter import (
 )
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
+    compute_cuthbert_belief_analysis,
+    compute_cuthbert_belief_prediction,
     compute_cuthbert_filter,
     compute_cuthbert_filter_update,
 )
@@ -43,22 +47,43 @@ from dynestyx.models import (
 from dynestyx.models.lti_dynamics import LTI_discrete
 from dynestyx.models.observations import LinearGaussianObservation
 from tests.fixtures import _n_particles
-from tests.test_utils import assert_trace_sites_exist_and_field_all_finite
+from tests.test_utils import (
+    assert_trace_sites_exist_and_field_all_finite,
+    value_at_time,
+)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 
 
-def _lti_1d(A=1.0, B=1.0, Q=0.05, R=0.1):
-    """1D linear-Gaussian model matching the tutorial's discrete-time demo."""
+def _lti_1d(
+    A=1.0, B=1.0, Q=0.05, R=0.1, observation_control_alignment="previous_transition"
+):
+    """1D linear-Gaussian model matching the tutorial's discrete-time demo.
+
+    Defaults to "previous_transition" explicitly: the only convention
+    closed-loop control supports for now, and naming it keeps the
+    unspecified-field warning out of the suite. Pass `None` for an
+    unspecified model.
+    """
     return LTI_discrete(
         A=jnp.array([[A]]),
         Q=Q * jnp.eye(1),
         H=jnp.array([[1.0]]),
         R=R * jnp.eye(1),
         B=jnp.array([[B]]),
+        observation_control_alignment=observation_control_alignment,
     )
+
+
+def _with_alignment(dynamics, alignment):
+    """Set a model's observation/control convention.
+
+    The closed loop reads it from the model, but LTI_discrete does not expose
+    the field, so it is rewritten here after construction.
+    """
+    return eqx.tree_at(lambda m: m.observation_control_alignment, dynamics, alignment)
 
 
 class _LinearPolicy(eqx.Module):
@@ -106,6 +131,7 @@ def _black_box_dynamics():
         state_evolution=_black_box_state_evolution,
         observation_model=LinearGaussianObservation(H=jnp.eye(1), R=0.1 * jnp.eye(1)),
         control_dim=1,
+        observation_control_alignment="previous_transition",
     )
 
 
@@ -467,6 +493,231 @@ def test_rejects_wrong_policy_control_shape():
         )
 
 
+def test_closed_loop_previous_transition_transitions_observations_and_times():
+    """Closed loop under "previous_transition", checked at every time on a
+    model that reveals which control each step used: x_{k+1} = x_k + u_k and
+    y = x + 100 u (near-deterministic). The policy emits u_k = k + 1, so every
+    control is distinct and known in advance. The grid is non-uniform so a
+    time-shifted field cannot line up by accident.
+
+    The observation model refuses u=None, so this also checks the closed loop
+    never emits an observation without a control -- i.e. there is no y_0.
+    """
+
+    def state_evolution(x, u, t_now, t_next):
+        return dist.MultivariateNormal(x + u, 1e-8 * jnp.eye(1))
+
+    def observation_model(x, u, t):
+        if u is None:
+            raise ValueError("closed-loop observations require a control")
+        return dist.MultivariateNormal(x + 100.0 * u, 1e-8 * jnp.eye(1))
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=state_evolution,
+        observation_model=observation_model,
+        control_dim=1,
+        observation_control_alignment="previous_transition",
+    )
+
+    class _CountingPolicy:
+        """u_k = k + 1, independent of the belief."""
+
+        def __call__(self, x_hat, t_now, t_next, s):
+            return jnp.reshape(s + 1.0, (1,)), s + 1.0
+
+    predict_times = jnp.array([0.0, 1.0, 2.5, 4.0, 7.0])
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=_CountingPolicy(),
+        filter_config=EKFConfig(filter_source="cuthbert"),
+        initial_policy_state=jnp.asarray(0.0),
+    )
+    assert result.times is not None and result.states is not None
+    assert result.obs_times is not None and result.observations is not None
+    assert result.ctrl_times is not None and result.controls is not None
+    times = jnp.asarray(result.times)[0]
+    obs_times = jnp.asarray(result.obs_times)[0]
+    ctrl_times = jnp.asarray(result.ctrl_times)[0]
+    states = jnp.asarray(result.states)[0]
+    observations = jnp.asarray(result.observations)[0]
+    controls = jnp.asarray(result.controls)[0]
+
+    # Grids: states span every time (x_0 included); controls stop at t_{N-1},
+    # the last time the policy has a later time to look ahead to; observations
+    # start at t_1, since no control precedes y_0.
+    assert jnp.array_equal(times, predict_times)
+    assert states.shape[0] == len(times)
+    assert jnp.array_equal(ctrl_times, times[:-1])
+    assert jnp.array_equal(obs_times, times[1:])
+    assert jnp.array_equal(controls, jnp.arange(1.0, len(times))[:, None])
+
+    for t_k, t_next in zip(times[:-1], times[1:], strict=True):
+        x_k = value_at_time(states, times, t_k)
+        x_next = value_at_time(states, times, t_next)
+        u_k = value_at_time(controls, ctrl_times, t_k)
+        # Every transition t_k -> t_{k+1} is driven by u_k ...
+        assert jnp.allclose(x_next, x_k + u_k, atol=1e-3)
+        # ... and y_{k+1} is emitted with that same u_k.
+        y_next = value_at_time(observations, obs_times, t_next)
+        assert jnp.allclose(y_next, x_next + 100.0 * u_k, atol=1e-3)
+
+
+def test_previous_transition_policy_sees_the_filtered_belief():
+    """Under this convention y_k precedes the choice of u_k, so the policy is
+    handed the filtered p_hat_k rather than a predicted belief."""
+
+    class _EchoBeliefPolicy:
+        def __call__(self, x_hat, t_now, t_next, s):
+            del t_now, t_next, s
+            mean = filter_state_mean(x_hat)
+            return -0.5 * mean, jnp.ravel(mean)[0]
+
+    result = dsx.simulate(
+        _lti_1d(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(5.0),
+        control_policy=_EchoBeliefPolicy(),
+        filter_config=KFConfig(
+            filter_source="cuthbert", record_filtered_states_mean=True
+        ),
+        initial_policy_state=jnp.asarray(0.0),
+    )
+    seen = jnp.ravel(result.policy_states)
+    filtered = jnp.ravel(result.filtered_states_mean[0])
+    # p_hat_k for k = 0..N-1; the last belief is never acted on.
+    assert jnp.allclose(seen, filtered[:-1], atol=1e-5)
+
+
+def test_online_control_rejects_an_unknown_alignment():
+    """DynamicalModel.__init__ rejects unknown values, but eqx.tree_at rewrites
+    the field past that validation -- which is exactly how MPPI edits models --
+    so simulate's own dispatch still has to catch it."""
+    dynamics = _with_alignment(_lti_1d(), "whenever")
+    sim = DiscreteControlLoopSimulator(control_policy=_simple_policy())
+    with pytest.raises(ValueError, match="not recognized"):
+        sim.simulate(dynamics, rng_key=jr.PRNGKey(0), predict_times=jnp.arange(4.0))
+
+
+def test_explicit_same_time_online_control_is_not_implemented_yet():
+    """Closed-loop "same_time" needs separate prediction and analysis steps that
+    cuthbert does not expose. An explicit request must fail loudly rather than
+    fall back to "previous_transition"."""
+    with pytest.raises(NotImplementedError, match="same_time"):
+        dsx.simulate(
+            _lti_1d(observation_control_alignment="same_time"),
+            rng_key=jr.PRNGKey(0),
+            predict_times=jnp.arange(4.0),
+            control_policy=_simple_policy(),
+        )
+
+
+def test_unspecified_alignment_resolves_to_previous_transition_with_a_warning():
+    predict_times = jnp.arange(4.0)
+    with pytest.warns(UserWarning, match="unspecified"):
+        result = dsx.simulate(
+            _lti_1d(observation_control_alignment=None),
+            rng_key=jr.PRNGKey(0),
+            predict_times=predict_times,
+            control_policy=_simple_policy(),
+            filter_config=KFConfig(filter_source="cuthbert"),
+        )
+    assert result.obs_times is not None
+    # previous_transition's signature: no y_0, observations start at t_1.
+    assert jnp.array_equal(result.obs_times[0], predict_times[1:])
+
+
+def test_explicit_previous_transition_does_not_warn():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        dsx.simulate(
+            _lti_1d(),
+            rng_key=jr.PRNGKey(0),
+            predict_times=jnp.arange(4.0),
+            control_policy=_simple_policy(),
+            filter_config=KFConfig(filter_source="cuthbert"),
+        )
+
+
+def test_discretizer_carries_an_explicit_same_time_through():
+    """An explicit choice on a continuous-time model must survive
+    discretization. Dropping it would silently turn "same_time" into the
+    unspecified default and so into "previous_transition"."""
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.array([1.0]), jnp.eye(1)),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=lambda x, u, t: u, diffusion=FullDiffusion(0.1 * jnp.eye(1))
+        ),
+        observation_model=LinearGaussianObservation(H=jnp.eye(1), R=0.1 * jnp.eye(1)),
+        control_dim=1,
+        observation_control_alignment="same_time",
+    )
+    sim = DiscreteControlLoopSimulator(
+        control_policy=_simple_policy(), filter_config=EKFConfig()
+    )
+
+    def model():
+        with sim:
+            with Discretizer(EulerMaruyamaConfig()):
+                return dsx.sample("f", dynamics, predict_times=jnp.arange(4.0))
+
+    with pytest.raises(NotImplementedError, match="same_time"):
+        _run_trace(model)
+
+
+def _filter_step_inputs():
+    """A real model, filter, belief and key, so the stubs are reached past the
+    runtime type checks rather than failing on their arguments."""
+    dynamics = _lti_1d()
+    filter_obj, _ = build_cuthbert_filter(
+        dynamics,
+        KFConfig(filter_source="cuthbert"),
+        key=jr.PRNGKey(0),
+        want_parallel=False,
+    )
+    state = compute_cuthbert_filter_update(
+        dynamics,
+        filter_obj=filter_obj,
+        prev_state=None,
+        key=jr.PRNGKey(1),
+        y=jnp.array([0.5]),
+        u=jnp.array([0.0]),
+        t=jnp.array(0.0),
+        t_prev=jnp.array(-1.0),
+    )
+    return dynamics, filter_obj, state, jr.PRNGKey(2)
+
+
+def test_belief_prediction_stub_is_not_implemented_yet():
+    dynamics, filter_obj, state, key = _filter_step_inputs()
+    with pytest.raises(NotImplementedError, match="prediction-only"):
+        compute_cuthbert_belief_prediction(
+            dynamics,
+            filter_obj,
+            state,
+            key,
+            u=jnp.array([0.0]),
+            t=jnp.array(1.0),
+            t_prev=jnp.array(0.0),
+        )
+
+
+def test_belief_analysis_stub_is_not_implemented_yet():
+    dynamics, filter_obj, state, key = _filter_step_inputs()
+    with pytest.raises(NotImplementedError, match="analysis-only"):
+        compute_cuthbert_belief_analysis(
+            dynamics,
+            filter_obj,
+            state,
+            key,
+            y=jnp.array([0.5]),
+            u=jnp.array([0.0]),
+            t=jnp.array(0.0),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Group 4: end-to-end shape & output-key tests
 # ---------------------------------------------------------------------------
@@ -502,11 +753,16 @@ def test_end_to_end_shapes_and_finiteness(filter_config):
         "f_filtered_states_mean",
         where="end-to-end shapes test",
     )
+    # "previous_transition" on [t_0..t_N]: states and filtered beliefs span the
+    # whole grid (p_hat_0 is the prior); controls cover t_0..t_{N-1} and the
+    # observations they produce t_1..t_N, since no y_0 exists.
     T = len(predict_times)
     assert tr["f_states"]["value"].shape == (1, T, 1)
     assert tr["f_observations"]["value"].shape == (1, T - 1, 1)
     assert tr["f_controls"]["value"].shape == (1, T - 1, 1)
     assert tr["f_filtered_states_mean"]["value"].shape == (1, T, 1)
+    assert jnp.array_equal(tr["f_ctrl_times"]["value"][0], predict_times[:-1])
+    assert jnp.array_equal(tr["f_obs_times"]["value"][0], predict_times[1:])
 
 
 @pytest.mark.parametrize(
@@ -579,6 +835,8 @@ def test_array_policy_state_preserves_shape_and_values():
     tr = _run_trace(model)
     policy_states = tr["f_policy_states"]["value"]
     T = len(predict_times)
+    # One policy call per control, so T-1: the policy cannot act at the final
+    # time, having no later time to look ahead to.
     assert policy_states.shape == (1, T - 1, 1)
     assert jnp.array_equal(policy_states[0, :, 0], jnp.arange(1, T, dtype=jnp.float32))
 
@@ -615,93 +873,6 @@ def test_closed_loop_stabilizes_vs_uncontrolled_baseline():
     assert final_controlled < final_uncontrolled
 
 
-def test_closed_loop_observations_use_transition_controls_and_omit_y0():
-    """Every returned observation pairs directly with the control that drove
-    its state transition; the closed loop never inserts an uncontrolled y_0.
-    """
-    control_dim = 1
-
-    dynamics = DynamicalModel(
-        initial_condition=dist.MultivariateNormal(jnp.array([0.0]), 1e-6 * jnp.eye(1)),
-        state_evolution=LTI_discrete(
-            A=jnp.array([[1.0]]),
-            Q=1e-6 * jnp.eye(1),
-            H=jnp.array([[1.0]]),
-            R=1e-6 * jnp.eye(1),
-            B=jnp.array([[0.0]]),
-        ).state_evolution,
-        observation_model=LinearGaussianObservation(
-            H=jnp.zeros((1, 1)),  # observation ignores state entirely
-            R=1e-6 * jnp.eye(1),
-            D=jnp.array([[1.0]]),  # observation is (near-)exactly u
-        ),
-        control_dim=control_dim,
-    )
-
-    class _GrowingPolicy:
-        """A distinct, easily-identified control value at every step."""
-
-        def __call__(self, x_hat, t_now, t_next, s):
-            return jnp.reshape(s + 1.0, (1,)), s + 1.0
-
-    sim = DiscreteControlLoopSimulator(control_policy=_GrowingPolicy())
-    predict_times = jnp.arange(0.0, 6.0)
-
-    def model():
-        with sim:
-            return dsx.sample(
-                "f",
-                dynamics,
-                predict_times=predict_times,
-                initial_policy_state=jnp.array(0.0),
-            )
-
-    tr = _run_trace(model)
-    controls = tr["f_controls"]["value"][0, :, 0]
-    observations = tr["f_observations"]["value"][0, :, 0]
-
-    assert observations.shape == controls.shape
-    assert jnp.allclose(observations, controls, atol=1e-2)
-
-
-def test_closed_loop_never_calls_observation_model_without_a_control():
-    """Closed-loop control has a fixed previous-transition convention even
-    when the model's open-loop convention is the default ``same_time``.
-    """
-
-    def observation_model(x, u, t):
-        del t
-        if u is None:
-            raise ValueError("closed-loop observations require a control")
-        return dist.MultivariateNormal(x + u, 1e-3 * jnp.eye(1))
-
-    base = _lti_1d(A=1.0, B=1.0, Q=1e-3, R=1e-3)
-    dynamics = DynamicalModel(
-        initial_condition=base.initial_condition,
-        state_evolution=base.state_evolution,
-        observation_model=observation_model,
-        control_dim=1,
-        # The closed-loop simulator intentionally ignores this open-loop choice.
-        observation_control_alignment="same_time",
-    )
-    predict_times = jnp.arange(4.0)
-
-    result = dsx.simulate(
-        dynamics,
-        rng_key=jr.PRNGKey(0),
-        predict_times=predict_times,
-        control_policy=_simple_policy(),
-        filter_config=EKFConfig(),
-    )
-
-    assert result.states is not None
-    assert result.observations is not None
-    assert result.controls is not None
-    assert result.states.shape == (1, len(predict_times), 1)
-    assert result.observations.shape == (1, len(predict_times) - 1, 1)
-    assert result.controls.shape == result.observations.shape
-
-
 def test_first_closed_loop_policy_call_uses_initial_belief():
     dynamics = LTI_discrete(
         A=jnp.eye(1),
@@ -711,6 +882,7 @@ def test_first_closed_loop_policy_call_uses_initial_belief():
         B=jnp.eye(1),
         initial_mean=jnp.array([2.0]),
         initial_cov=0.5 * jnp.eye(1),
+        observation_control_alignment="previous_transition",
     )
 
     class _BeliefMeanPolicy:
@@ -730,7 +902,9 @@ def test_first_closed_loop_policy_call_uses_initial_belief():
     assert jnp.allclose(result.controls[0, 0], dynamics.initial_condition.mean)
 
 
-def test_single_timepoint_closed_loop_returns_no_observations_or_controls():
+def test_single_timepoint_closed_loop_returns_only_the_initial_state():
+    """A one-point grid leaves the policy no later time to look ahead to, so
+    the loop body never runs: one state, nothing observed or controlled."""
     result = dsx.simulate(
         _lti_1d(),
         rng_key=jr.PRNGKey(0),
@@ -745,6 +919,9 @@ def test_single_timepoint_closed_loop_returns_no_observations_or_controls():
     assert result.states.shape == (1, 1, 1)
     assert result.observations.shape == (1, 0, 1)
     assert result.controls.shape == (1, 0, 1)
+    assert result.ctrl_times is not None
+    assert result.ctrl_times.shape == (1, 0)
+    assert bool(jnp.all(jnp.isfinite(result.states)))
 
 
 def test_determinism_same_seed_reproducible_different_seed_differs():
@@ -793,7 +970,11 @@ def test_discretizer_wrapped_sde_runs_end_to_end():
             with Discretizer(EulerMaruyamaConfig()):
                 return dsx.sample("f", dynamics, predict_times=predict_times)
 
-    tr = _run_trace(model)
+    # A continuous-time model cannot hold "previous_transition", and the
+    # Discretizer carries the unspecified field through, so the closed loop
+    # resolves it to "previous_transition" and warns.
+    with pytest.warns(UserWarning, match="unspecified"):
+        tr = _run_trace(model)
     assert_trace_sites_exist_and_field_all_finite(
         tr,
         "f_states",
@@ -836,8 +1017,11 @@ def test_discretizer_wrapped_nonlinear_2d_diverges_uncontrolled_stabilizes_contr
 
         return _run_trace(model, rng_seed=0)
 
-    tr_controlled = run(k=1.0)
-    tr_uncontrolled = run(k=0.0)
+    # Unspecified field on a continuous-time model: resolved with a warning.
+    with pytest.warns(UserWarning, match="unspecified"):
+        tr_controlled = run(k=1.0)
+    with pytest.warns(UserWarning, match="unspecified"):
+        tr_uncontrolled = run(k=0.0)
 
     assert_trace_sites_exist_and_field_all_finite(
         tr_controlled, "f_states", where="nonlinear 2d controlled"
@@ -1000,13 +1184,15 @@ def test_dsx_simulate_with_control_policy_rejects_ctrl_values():
     dynamics = _lti_1d()
     predict_times = jnp.arange(0.0, 5.0)
 
+    # A control grid that is valid for this "previous_transition" model
+    # (predict_times[:-1]), so the closed-loop check is what rejects it.
     with pytest.raises(ValueError, match="computes controls online"):
         dsx.simulate(
             dynamics,
             rng_key=jr.PRNGKey(0),
             predict_times=predict_times,
-            ctrl_times=predict_times,
-            ctrl_values=jnp.zeros((5, 1)),
+            ctrl_times=predict_times[:-1],
+            ctrl_values=jnp.zeros((4, 1)),
             control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
         )
 
