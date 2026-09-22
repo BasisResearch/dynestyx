@@ -7,7 +7,6 @@ from collections.abc import Callable
 from typing import Literal
 
 import jax.numpy as jnp
-import jax.scipy as jsp
 import numpy as np
 import numpyro.distributions as dist
 from jax.errors import TracerArrayConversionError, TracerBoolConversionError
@@ -277,14 +276,14 @@ def _masked_multivariate_normal_log_prob(
     mask_outer = mask_f[:, None] * mask_f[None, :]
     masked_cov = cov * mask_outer + jnp.diag(1.0 - mask_f)
 
-    chol = jnp.linalg.cholesky(masked_cov)
-    whitened = jsp.linalg.solve_triangular(chol, residual[..., None], lower=True)[
-        ..., 0
-    ]
-    quad = jnp.sum(whitened**2, axis=-1)
-    logdet = 2.0 * jnp.sum(jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
-    n_obs = jnp.sum(mask_f)
-    return -0.5 * (quad + logdet + n_obs * LOG_2PI)
+    # Include covariance batch axes while preserving shared Cholesky factors.
+    residual = jnp.broadcast_to(residual, obs_dist.batch_shape + obs_dist.event_shape)
+    masked_normal = dist.MultivariateNormal(
+        jnp.zeros(obs_dist.event_shape, dtype=residual.dtype),
+        covariance_matrix=masked_cov,
+    )
+    n_missing = mask_f.size - jnp.sum(mask_f)
+    return masked_normal.log_prob(residual) + 0.5 * n_missing * LOG_2PI
 
 
 def _lift_scalar_observation_distribution(

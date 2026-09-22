@@ -1,5 +1,7 @@
 """Observed marginals through the public distribution scorer."""
 
+import math
+
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
@@ -11,22 +13,45 @@ COVARIANCE = jnp.array([[0.5, 0.1, 0.08], [0.1, 0.4, 0.05], [0.08, 0.05, 0.3]])
 OBSERVED = jnp.array([0, 2])
 
 
-def test_masked_gaussian_preserves_batch_axes_and_gradients():
-    loc = jnp.arange(18, dtype=float).reshape(2, 3, 3) / 20
-    covariance = COVARIANCE * jnp.linspace(0.7, 1.3, 6).reshape(2, 3, 1, 1)
-    y = jnp.array([0.4, jnp.nan, 0.7])
+@pytest.mark.parametrize(
+    ("mean_batch", "covariance_batch"),
+    [((2, 3), (2, 3)), ((2, 3), ()), ((), (2, 3)), ((2, 1), (1, 3))],
+    ids=["aligned", "shared_covariance", "shared_mean", "crossed_axes"],
+)
+@pytest.mark.parametrize(
+    "observed",
+    [OBSERVED, jnp.arange(3), jnp.array([], dtype=int)],
+    ids=["partial", "complete", "missing"],
+)
+def test_masked_gaussian_preserves_batch_axes_and_gradients(
+    mean_batch, covariance_batch, observed
+):
+    loc = (
+        jnp.arange(math.prod(mean_batch) * 3, dtype=float).reshape(mean_batch + (3,))
+        / 20
+    )
+    covariance = COVARIANCE * jnp.linspace(
+        0.7, 1.3, math.prod(covariance_batch)
+    ).reshape(covariance_batch + (1, 1))
+    mask = jnp.zeros(3, dtype=bool).at[observed].set(True)
+    y = jnp.where(mask, jnp.array([0.4, 0.2, 0.7]), jnp.nan)
 
     def score(mean, cov):
         return dsx.masked_observation_log_prob(
             dist.MultivariateNormal(mean, cov),
             y=y,
-            obs_mask=jnp.array([True, False, True]),
+            obs_mask=mask,
         )
 
     def reference(mean, cov):
+        batch_shape = jnp.broadcast_shapes(mean.shape[:-1], cov.shape[:-2])
+        if observed.size == 0:
+            return jnp.zeros(batch_shape)
+        mean = jnp.broadcast_to(mean, batch_shape + (3,))
+        cov = jnp.broadcast_to(cov, batch_shape + (3, 3))
         return dist.MultivariateNormal(
-            mean[..., OBSERVED], cov[..., OBSERVED[:, None], OBSERVED]
-        ).log_prob(y[OBSERVED])
+            mean[..., observed], cov[..., observed[:, None], observed]
+        ).log_prob(y[observed])
 
     actual = jax.jit(score)(loc, covariance)
     actual_gradients = jax.grad(
