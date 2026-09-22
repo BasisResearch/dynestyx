@@ -201,19 +201,25 @@ class SimulatedResult(eqx.Module):
         """Return a flat copy; calling this on a flat result is a no-op."""
         return self._convert(flat=True)
 
-    def _convert(self, *, flat):
-        if self._is_flat == flat or (
-            self.state_layout is None and self.observation_layout is None
-        ):
-            return self
-        updates = {}
-        for name, layout in (
+    def _layout_fields(self):
+        """Field-name/layout pairs that ``flatten()``/``unflatten()`` convert.
+
+        Subclasses extend this with their own laid-out fields.
+        """
+        return (
             ("x_0", self.state_layout),
             ("states", self.state_layout),
             ("predicted_states", self.state_layout),
             ("observations", self.observation_layout),
             ("predicted_observations", self.observation_layout),
-        ):
+        )
+
+    def _convert(self, *, flat):
+        layout_fields = self._layout_fields()
+        if self._is_flat == flat or all(layout is None for _, layout in layout_fields):
+            return self
+        updates = {}
+        for name, layout in layout_fields:
             value = getattr(self, name)
             if layout is not None and value is not None:
                 updates[name] = (

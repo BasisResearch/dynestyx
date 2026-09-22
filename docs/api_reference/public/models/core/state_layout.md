@@ -32,6 +32,12 @@ control_layout = dsx.Layout.from_example({"drive": jnp.zeros(2)})
 ctrl_values = controls
 ```
 
+A closed-loop `control_policy` likewise returns its control in the layout's
+structure, and `DiscreteControlLoopSimulator` validates it against the layout
+before flattening it for the transition, observation, and filter. A flat vector
+of shape `(control_dim,)` remains acceptable. Recorded `controls` come back
+structured, like `states` and `observations`.
+
 A control layout determines `control_dim`; an explicit conflicting dimension is
 rejected. Continuous simulation and MPPI do not yet support layouts.
 

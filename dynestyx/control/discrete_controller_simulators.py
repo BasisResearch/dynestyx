@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from typing import Any, Protocol, runtime_checkable
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -20,6 +21,7 @@ from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import DynamicalModel
+from dynestyx.models.layout import Layout
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
 from dynestyx.types import SimulatedResult
@@ -89,6 +91,36 @@ def filter_state_dist(state: Any, filter_config: BaseFilterConfig) -> Distributi
         )
 
 
+def _flatten_policy_control(
+    dynamics: DynamicalModel, u_k: Any
+) -> Real[Array, " control_dim"]:
+    """Validate one policy control and return it as a flat vector.
+
+    With `dynamics.control_layout`, the policy may return the control in the
+    declared structure; it is checked against the layout and flattened here.
+    Everything downstream -- `transition_distribution`,
+    `observation_distribution`, and the filter update -- takes flat controls
+    and unflattens them itself where the model needs the structure.
+    """
+    expected_control_shape = (dynamics.control_dim,)
+    layout = dynamics.control_layout
+    if layout is not None and not isinstance(u_k, Array):
+        try:
+            u_k = layout.flatten(u_k)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                "control_policy must return one control matching "
+                f"dynamics.control_layout: {e}"
+            ) from e
+    u_k = jnp.asarray(u_k)
+    if u_k.shape != expected_control_shape:
+        raise ValueError(
+            "control_policy must return one control vector with shape "
+            f"{expected_control_shape}; got {u_k.shape}."
+        )
+    return u_k
+
+
 @runtime_checkable
 class PolicyCallable(Protocol):
     r"""Structural protocol for a control policy $\pi$.
@@ -108,6 +140,12 @@ class PolicyCallable(Protocol):
     callable matching this signature works, including an `equinox.Module`
     with a matching `__call__` (e.g. a learned neural policy) or a plain
     Python function (e.g. an LQR gain lookup).
+
+    With `dynamics.control_layout`, the policy returns its control in that
+    structure (the same pytree the stepper receives) instead of a flat
+    vector; the loop checks it against the layout and flattens it, because
+    the transition, observation, and filter all take flat controls. A flat
+    vector of shape `(control_dim,)` stays acceptable either way.
 
     `control_policy` never receives a PRNG key and must return a concrete
     value, not a NumPyro `Distribution` (returning one raises a `ValueError`
@@ -141,9 +179,17 @@ class ControlledSimulatedResult(SimulatedResult):
     """
 
     # control_time = time - 1 (no control is chosen after the final state).
-    controls: Real[Array, "n_simulations control_time control_dim"] | None = None
+    controls: PyTree[Array] | None = None
     filtered_states_mean: Real[Array, "n_simulations time state_dim"] | None = None
     policy_states: PyTree | None = None
+    control_layout: Layout | None = eqx.field(default=None, static=True, kw_only=True)
+
+    def _layout_fields(self):
+        return (*super()._layout_fields(), ("controls", self.control_layout))
+
+    @property
+    def structured_controls(self):
+        return self.unflatten().controls
 
 
 class DiscreteControlLoopSimulator(BaseSimulator):
@@ -324,13 +370,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                     "Returning a distribution is not yet supported, instead "
                     "sample from this distribution inside your policy."
                 )
-            u_k = jnp.asarray(u_k)
-            expected_control_shape = (dynamics.control_dim,)
-            if u_k.shape != expected_control_shape:
-                raise ValueError(
-                    "control_policy must return one control vector with shape "
-                    f"{expected_control_shape}; got {u_k.shape}."
-                )
+            u_k = _flatten_policy_control(dynamics, u_k)
 
             trans_dist = dynamics.transition_distribution(x_prev, u_k, t_now, t_next)
             x_next = trans_dist.sample(transition_key)
@@ -396,6 +436,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         return ControlledSimulatedResult(
             state_layout=dynamics.state_layout,
             observation_layout=dynamics.observation_layout,
+            control_layout=dynamics.control_layout,
             times=_tile_times(times, 1),
             x_0=jnp.expand_dims(x_0, axis=0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),

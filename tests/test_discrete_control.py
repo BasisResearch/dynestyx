@@ -36,10 +36,14 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 from dynestyx.inference.integrations.utils import WeightedParticles
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
+    DiracInitialCondition,
+    DiracObservation,
+    DiracStateEvolution,
     DynamicalModel,
     FullDiffusion,
     StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.models.layout import Layout
 from dynestyx.models.lti_dynamics import LTI_discrete
 from dynestyx.models.observations import LinearGaussianObservation
 from tests.fixtures import _n_particles
@@ -463,6 +467,75 @@ def test_rejects_wrong_policy_control_shape():
             rng_key=jr.PRNGKey(0),
             predict_times=jnp.arange(3.0),
             control_policy=_ScalarPolicy(),
+        )
+
+
+def _structured_control_dynamics():
+    """Structured state and control: the stepper sees both as pytrees."""
+    x_0 = {"pos": jnp.zeros(2)}
+    state_layout = Layout.from_example(x_0)
+    control_layout = Layout.from_example({"thrust": jnp.zeros(2)})
+
+    def F(state, u, t_now, t_next):
+        return {"pos": state["pos"] + (t_next - t_now) * u["thrust"]}
+
+    return DynamicalModel(
+        initial_condition=DiracInitialCondition(x_0, state_layout=state_layout),
+        state_evolution=DiracStateEvolution(F=F, state_layout=state_layout),
+        observation_model=DiracObservation(
+            lambda state, u, t: state,
+            state_layout=state_layout,
+            observation_layout=state_layout,
+        ),
+        state_layout=state_layout,
+        observation_layout=state_layout,
+        control_layout=control_layout,
+    )
+
+
+@pytest.mark.parametrize("structured_policy", [True, False])
+def test_policy_control_follows_control_layout(structured_policy):
+    """A policy may return the layout's pytree or the equivalent flat vector."""
+    dynamics = _structured_control_dynamics()
+    thrust = jnp.array([1.0, -2.0])
+
+    def policy(x_hat, t_now, t_next, s):
+        return ({"thrust": thrust} if structured_policy else thrust), s
+
+    times = jnp.arange(0.0, 4.0)
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=times,
+        control_policy=policy,
+        filter_config=PFConfig(n_particles=_n_particles(8)),
+    )
+
+    T = len(times)
+    assert result.controls["thrust"].shape == (1, T - 1, 2)
+    assert jnp.allclose(result.controls["thrust"], thrust)
+    assert jnp.allclose(result.states["pos"][0, -1], (T - 1) * thrust)
+    assert jnp.allclose(result.flatten().controls, thrust)
+
+
+@pytest.mark.parametrize(
+    ("returned", "match"),
+    [
+        ({"thrust_x": jnp.zeros(2)}, "structure does not match"),
+        ({"thrust": jnp.zeros(3)}, "trailing shape"),
+    ],
+)
+def test_rejects_policy_control_not_matching_control_layout(returned, match):
+    def policy(x_hat, t_now, t_next, s):
+        return returned, s
+
+    with pytest.raises(ValueError, match=match):
+        dsx.simulate(
+            _structured_control_dynamics(),
+            rng_key=jr.PRNGKey(0),
+            predict_times=jnp.arange(3.0),
+            control_policy=policy,
+            filter_config=PFConfig(n_particles=_n_particles(8)),
         )
 
 
