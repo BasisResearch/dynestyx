@@ -96,15 +96,16 @@ def _flatten_policy_control(
 ) -> Real[Array, " control_dim"]:
     """Validate one policy control and return it as a flat vector.
 
-    With `dynamics.control_layout`, the policy may return the control in the
-    declared structure; it is checked against the layout and flattened here.
-    Everything downstream -- `transition_distribution`,
-    `observation_distribution`, and the filter update -- takes flat controls
-    and unflattens them itself where the model needs the structure.
+    With `dynamics.control_layout`, the policy returns the control in the
+    declared structure and it is flattened through the layout here, exactly as
+    `_flatten_control_values` does for open-loop `ctrl_values`. Everything
+    downstream -- `transition_distribution`, `observation_distribution`, and
+    the filter update -- takes flat controls and unflattens them itself where
+    the model needs the structure.
     """
     expected_control_shape = (dynamics.control_dim,)
     layout = dynamics.control_layout
-    if layout is not None and not isinstance(u_k, Array):
+    if layout is not None:
         try:
             u_k = layout.flatten(u_k)
         except (TypeError, ValueError) as e:
@@ -142,10 +143,11 @@ class PolicyCallable(Protocol):
     Python function (e.g. an LQR gain lookup).
 
     With `dynamics.control_layout`, the policy returns its control in that
-    structure (the same pytree the stepper receives) instead of a flat
-    vector; the loop checks it against the layout and flattens it, because
-    the transition, observation, and filter all take flat controls. A flat
-    vector of shape `(control_dim,)` stays acceptable either way.
+    structure (the same pytree the stepper receives) and the loop flattens it
+    through the layout, because the transition, observation, and filter all
+    take flat controls. As for open-loop `ctrl_values`, the layout is then the
+    only accepted form; without one, the policy returns a flat
+    `(control_dim,)` vector.
 
     `control_policy` never receives a PRNG key and must return a concrete
     value, not a NumPyro `Distribution` (returning one raises a `ValueError`

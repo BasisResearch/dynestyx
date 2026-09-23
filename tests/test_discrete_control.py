@@ -493,14 +493,13 @@ def _structured_control_dynamics():
     )
 
 
-@pytest.mark.parametrize("structured_policy", [True, False])
-def test_policy_control_follows_control_layout(structured_policy):
-    """A policy may return the layout's pytree or the equivalent flat vector."""
+def test_policy_control_follows_control_layout():
+    """A policy returns the layout's pytree; the loop flattens it."""
     dynamics = _structured_control_dynamics()
     thrust = jnp.array([1.0, -2.0])
 
     def policy(x_hat, t_now, t_next, s):
-        return ({"thrust": thrust} if structured_policy else thrust), s
+        return {"thrust": thrust}, s
 
     times = jnp.arange(0.0, 4.0)
     result = dsx.simulate(
@@ -523,6 +522,9 @@ def test_policy_control_follows_control_layout(structured_policy):
     [
         ({"thrust_x": jnp.zeros(2)}, "structure does not match"),
         ({"thrust": jnp.zeros(3)}, "trailing shape"),
+        # With a layout declared, the layout is the only accepted form, so a
+        # flat vector is rejected the same way ctrl_values would be.
+        (jnp.zeros(2), "structure does not match"),
     ],
 )
 def test_rejects_policy_control_not_matching_control_layout(returned, match):
