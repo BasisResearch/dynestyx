@@ -119,8 +119,9 @@ class PolicyCallable(Protocol):
     $\tilde x_k$ is the loop's current state estimate. Which state that is
     depends on the convention:
 
-    - under `same_time`, $\tilde x_k$ is the predicted state
-    - under `previous_transition`, $\tilde x_k$ is the filtered state
+    - under `same_time`, $\tilde x_k$ is the predicted state $\hat{x}_{k|k-1}$
+    - under `previous_transition`, $\tilde x_k$ is the filtered state $\hat{x}_{k|k}$
+    where $\hat{x}_{k|j}$ is the state estimate at time $t_k$ given observations up to time $t_j$.
 
     At $k=0$, this is always the model's initial-state distribution $x_0$.
 
