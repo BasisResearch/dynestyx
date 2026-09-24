@@ -1415,8 +1415,6 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
         t_now,
         (nominal, jr.PRNGKey(0)),
     )
-
-    # Plain SimulatedResult now carries the controls; no ControlledSimulatedResult.
     assert result.times is not None
     assert result.states is not None
     assert result.observations is not None
