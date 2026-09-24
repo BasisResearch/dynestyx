@@ -1,12 +1,14 @@
 """Basic Model Predictive Path Integral (MPPI) controller.
 
 Deliberately simple: samples candidate control sequences as Gaussian
-perturbations around a nominal sequence, scores each with a user-supplied
-loss, and returns the softmax-weighted mean -- the standard MPPI-style control law.
-No colored noise, adaptive covariance, or other refinements; the goal is a
-plain example that plugs into `DiscreteControlLoopSimulator`'s
-`control_policy=` slot (see `dynestyx.control.discrete_controller_simulators.
-PolicyCallable`), not a state-of-the-art implementation.
+perturbations (white, AR(1), or power-law/colored across the horizon --
+see `MPPI.noise_config` and `WhiteNoise`/`AR1Noise`/`ColoredNoise`) around a
+nominal sequence, scores each with a user-supplied loss, and returns the
+softmax-weighted mean -- the standard MPPI-style control law. No adaptive
+covariance or other refinements; the goal is a plain example that plugs into
+`DiscreteControlLoopSimulator`'s `control_policy=` slot (see
+`dynestyx.control.discrete_controller_simulators.PolicyCallable`), not a
+state-of-the-art implementation.
 """
 
 from collections.abc import Callable
@@ -28,6 +30,42 @@ from dynestyx.models import DynamicalModel
 # (vmapped across all n_samples candidates) on that candidate's full rollout result.
 # See MPPI.loss_fn for the full shape contract.
 type MPPILossFn = Callable[[ControlledSimulatedResult], Real[Array, ""]]
+
+
+class NoiseConfig(eqx.Module):
+    """Base class for `MPPI.noise_config` variants (see `WhiteNoise`,
+    `AR1Noise`, `ColoredNoise`). Not instantiated directly."""
+
+
+class WhiteNoise(NoiseConfig):
+    """i.i.d. Gaussian perturbations, uncorrelated across the horizon:
+    `Cov(eps_h, eps_h') = 0` for `h != h'`. The original, uncorrelated MPPI
+    noise -- no hyperparameters."""
+
+
+class AR1Noise(NoiseConfig):
+    r"""AR(1)/Ornstein-Uhlenbeck-style perturbations, correlated across the
+    horizon as `Cov(eps_h, eps_h') = rho ** |h - h'|`. Smoother than
+    `WhiteNoise`; `rho=0` is equivalent to `WhiteNoise`.
+
+    Attributes:
+        rho: Correlation coefficient in `[0, 1)`. Defaults to `0.5`.
+    """
+
+    rho: float = 0.5
+
+
+class ColoredNoise(NoiseConfig):
+    r"""Power-law (`1/f**beta`) perturbations generated in the frequency
+    domain -- smoother, low-frequency-dominated perturbations for larger
+    `beta`. `beta=0` is equivalent to `WhiteNoise`.
+
+    Attributes:
+        beta: Power-law exponent. `0` is white, `1` is "pink", `2` is
+            Brownian-like. Defaults to `2.0`.
+    """
+
+    beta: float = 2.0
 
 
 class MPPI(eqx.Module):
@@ -69,8 +107,15 @@ class MPPI(eqx.Module):
         horizon: Planning horizon length `H` -- the number of internal
             one-step `dynamics` calls per rollout. Defaults to `10`.
         noise_std: Standard deviation of the Gaussian perturbations added to
-            the nominal sequence, scalar or shape `(control_dim,)`. Defaults
-            to `1.0`.
+            the nominal sequence, scalar or shape `(control_dim,)`. Marginal
+            (per-timestep) standard deviation regardless of `noise_config`
+            -- every `NoiseConfig` variant has unit marginal variance per
+            timestep before this scaling is applied. Defaults to `1.0`.
+        noise_config: A `NoiseConfig` selecting how the perturbations are
+            correlated across the horizon: `WhiteNoise()` (i.i.d.),
+            `AR1Noise(rho=...)` (default, `rho=0.5`), or
+            `ColoredNoise(beta=...)` (power-law). See each class's
+            docstring.
         n_samples: Number of sampled control sequences per call. Defaults to
             `20`.
         dt: Fixed planning step size. Defaults to `1.0`.
@@ -94,11 +139,20 @@ class MPPI(eqx.Module):
     noise_std: Real[Array, ""] | Real[Array, " control_dim"] = eqx.field(
         default_factory=lambda: jnp.array(1.0)
     )
+    noise_config: NoiseConfig = eqx.field(default_factory=AR1Noise)
     n_samples: int = eqx.field(static=True, default=20)
     dt: float = eqx.field(static=True, default=1.0)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
+
+    def __check_init__(self) -> None:
+        if not isinstance(self.noise_config, NoiseConfig):
+            raise TypeError(
+                "noise_config must be a NoiseConfig instance (WhiteNoise(), "
+                f"AR1Noise(rho=...), or ColoredNoise(beta=...)), got "
+                f"{self.noise_config!r}"
+            )
 
     def initial_state(
         self,
@@ -111,6 +165,60 @@ class MPPI(eqx.Module):
             jnp.zeros((self.horizon, self.dynamics.control_dim)),
             jr.PRNGKey(self.seed),
         )
+
+    def _sample_noise(
+        self, key: PRNGKeyArray, control_dim: int
+    ) -> Real[Array, "n_samples horizon control_dim"]:
+        """Draw `(n_samples, horizon, control_dim)` perturbations with unit
+        marginal variance per timestep and the horizon-correlation structure
+        selected by `noise_config`, then scale by `noise_std`. The concrete
+        `NoiseConfig` subclass is part of the pytree structure (not a leaf),
+        so this `isinstance` dispatch is resolved at trace time -- each
+        compiled instance only ever contains one mode's ops."""
+        shape = (self.n_samples, self.horizon, control_dim)
+
+        if isinstance(self.noise_config, WhiteNoise):
+            eps = jr.normal(key, shape)
+
+        elif isinstance(self.noise_config, AR1Noise):
+            # eps_h = rho * eps_{h-1} + sqrt(1 - rho**2) * xi_h, xi_h ~ N(0, I),
+            # eps_0 = xi_0 -- a stationary AR(1) process with unit marginal
+            # variance and Cov(eps_h, eps_h') = rho**|h-h'|.
+            xi = jr.normal(key, (self.horizon, self.n_samples, control_dim))
+            rho = self.noise_config.rho
+
+            def step(eps_prev, xi_h):
+                eps_h = rho * eps_prev + jnp.sqrt(1.0 - rho**2) * xi_h
+                return eps_h, eps_h
+
+            _, rest = jax.lax.scan(step, xi[0], xi[1:])
+            eps = jnp.concatenate([xi[:1], rest], axis=0).transpose(1, 0, 2)
+
+        else:  # ColoredNoise
+            # Power-law (1/f**beta) noise: scale the rfft of white noise by
+            # freq**(-beta/2) along the horizon axis, then invert. The f=0
+            # bin is clamped to the fundamental frequency 1/horizon (rather
+            # than zeroed or left to blow up) following the standard
+            # Timmer-Koenig cutoff, and the scale is renormalized (via
+            # Parseval's theorem) so each timestep keeps unit variance,
+            # matching WhiteNoise/AR1Noise for a fair noise_std comparison.
+            assert isinstance(self.noise_config, ColoredNoise)
+            white = jr.normal(key, shape)
+            freqs = jnp.fft.rfftfreq(self.horizon)
+            freqs = jnp.maximum(freqs, 1.0 / self.horizon)
+            scale = freqs ** (-self.noise_config.beta / 2.0)
+            n_freqs = scale.shape[0]
+            is_edge = (jnp.arange(n_freqs) == 0) | (
+                (self.horizon % 2 == 0) & (jnp.arange(n_freqs) == n_freqs - 1)
+            )
+            mult = jnp.where(is_edge, 1.0, 2.0)
+            sigma = jnp.sqrt(jnp.sum(scale**2 * mult) / self.horizon)
+            scale = scale / sigma
+
+            spectrum = jnp.fft.rfft(white, axis=1) * scale[None, :, None]
+            eps = jnp.fft.irfft(spectrum, n=self.horizon, axis=1)
+
+        return self.noise_std * eps
 
     def _rollout_and_score_one(
         self,
@@ -201,9 +309,7 @@ class MPPI(eqx.Module):
         key, noise_key, rollout_key = jr.split(key, 3)
         control_dim = nominal.shape[-1]
 
-        noise = self.noise_std * jr.normal(
-            noise_key, (self.n_samples, self.horizon, control_dim)
-        )
+        noise = self._sample_noise(noise_key, control_dim)
         control_candidates = (
             nominal[None, :, :] + noise
         )  # (n_samples, horizon, control_dim)
@@ -256,4 +362,11 @@ class MPPI(eqx.Module):
         return u0, next_s
 
 
-__all__ = ["MPPI", "MPPILossFn"]
+__all__ = [
+    "MPPI",
+    "MPPILossFn",
+    "NoiseConfig",
+    "WhiteNoise",
+    "AR1Noise",
+    "ColoredNoise",
+]
