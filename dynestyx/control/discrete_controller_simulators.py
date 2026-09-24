@@ -93,7 +93,9 @@ def filter_state_dist(state: Any, filter_config: BaseFilterConfig) -> Distributi
         )
 
 
-def _validate_policy_control(u: Any, control_dim: int) -> Real[Array, " control_dim"]:
+def _validate_policy_control(
+    u: Array | Distribution, control_dim: int
+) -> Real[Array, " control_dim"]:
     """Normalize one control returned by a policy, rejecting bad shapes."""
     if isinstance(u, Distribution):
         raise ValueError(
