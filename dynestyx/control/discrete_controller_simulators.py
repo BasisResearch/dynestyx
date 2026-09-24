@@ -342,7 +342,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 "is not implemented yet -- we are working on it. It needs separate "
                 "prediction and analysis filter steps, which cuthbert does not "
                 "expose. Use observation_control_alignment='previous_transition', "
-                "or leave it unspecified."
+                "or leave it unspecified. Tracked in "
+                "https://github.com/BasisResearch/dynestyx/issues/372."
             )
         # DynamicalModel.__init__ already rejects unknown values, but
         # eqx.tree_at rewrites the field without calling it.
