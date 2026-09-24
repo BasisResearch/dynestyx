@@ -1249,6 +1249,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../../tutorials/control/observation_control_alignment.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observation-control alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1263,10 +1291,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_4" >
         
           
-          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_2_4" id="__nav_3_2_4_label" tabindex="0">
             
   
   
@@ -1284,8 +1312,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5752,7 +5780,7 @@ returns the anchor unchanged rather than introducing a JAX runtime callback.</p>
 
 
 <h2 id="dynestyx.utils._validate_controls" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_validate_controls</span><span class="p">(</span><span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*obs_time_plate obs_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*predict_time_plate predict_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*ctrl_time_plate ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*ctrl_value_plate ctrl_time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*ctrl_value_plate ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+            <code class=" language-python"><span class="n">_validate_controls</span><span class="p">(</span><span class="n">obs_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*obs_time_plate obs_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*predict_time_plate predict_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*ctrl_time_plate ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*ctrl_value_plate ctrl_time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*ctrl_value_plate ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">observation_control_alignment</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
 <a href="#dynestyx.utils._validate_controls" class="headerlink" title="Permanent link">&para;</a></h2>
 
@@ -5765,7 +5793,10 @@ returns the anchor unchanged rather than introducing a JAX runtime callback.</p>
 - At least one of obs_times or predict_times must be provided.
 - If both obs_times and predict_times are present, ctrl_times must match their union.
 - Otherwise ctrl_times must match whichever single grid is provided.
-- Matching is set-like (order-insensitive) and length-preserving.</p>
+- Matching is set-like (order-insensitive) and length-preserving.
+- When observation_control_alignment is "previous_transition", ctrl_times must
+  instead match predict_times[:-1] (one control per transition); obs_times-based
+  conditioning is not supported yet under this convention (see issue #312).</p>
 
 
 <p><span class="doc-section-title">Raises:</span></p>

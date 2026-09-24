@@ -1249,6 +1249,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../../tutorials/control/observation_control_alignment.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observation-control alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1263,10 +1291,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_4" >
         
           
-          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_2_4" id="__nav_3_2_4_label" tabindex="0">
             
   
   
@@ -1284,8 +1312,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5189,6 +5217,27 @@ suffixes. When a simulator is layered outside a Filter or Smoother for
 posterior rollout, the same result object instead carries
 <code>predicted_times</code>, <code>predicted_states</code>, and
 <code>predicted_observations</code>.</p>
+<p><code>obs_times</code> and <code>ctrl_times</code> record where <code>observations</code> and
+<code>controls</code> actually sit -- the names match the <code>obs_times</code> /
+<code>ctrl_times</code> keywords used elsewhere in the API. They need not equal
+<code>times</code>, so read alignment off these fields rather than inferring it
+from array lengths: e.g. open-loop <code>"previous_transition"</code> observes on
+<code>times[1:]</code> and controls on <code>times[:-1]</code>.</p>
+<p><code>obs_times</code> is populated by every simulator. <code>ctrl_times</code> accompanies
+<code>controls</code>: populated by <code>DiscreteTimeSimulator</code> (when controls are
+supplied) and <code>DiscreteControlLoopSimulator</code>, and <code>None</code> for an
+uncontrolled model or for ODE/SDE simulators, which do not record
+<code>controls</code> yet.</p>
+<p>For open-loop simulation of a discrete-time model with
+<code>dynamics.observation_control_alignment="previous_transition"</code>, states are
+of length :math:<code>T</code> (matching <code>times</code>), while <code>observations</code> and
+<code>controls</code> are of length :math:<code>T-1</code>. Closed-loop simulation currently
+runs this convention only (an unspecified field resolves to it; an explicit
+<code>"same_time"</code> is not implemented yet), so it returns the same shapes. In
+both cases, :math:<code>y_0</code> is never sampled because there is no control that
+produced it.</p>
+<p>See
+<a class="autorefs autorefs-internal" href="../simulators/#dynestyx.simulation.DiscreteTimeSimulator">DiscreteTimeSimulator</a>.</p>
 
 
 

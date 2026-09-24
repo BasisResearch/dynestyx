@@ -1243,6 +1243,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../../../tutorials/control/observation_control_alignment.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observation-control alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1257,10 +1285,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_4" >
         
           
-          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_2_4" id="__nav_3_2_4_label" tabindex="0">
             
   
   
@@ -1278,8 +1306,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5171,6 +5199,30 @@ Gets set automatically from the concrete type of <code>state_evolution</code>.</
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.models.core.DynamicalModel.observation_control_alignment">observation_control_alignment</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ObservationControlAlignment (dynestyx.models.core.ObservationControlAlignment)" href="../../../developer/models/core_models/#dynestyx.models.core.ObservationControlAlignment">ObservationControlAlignment</a> | <span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Convention
+for how observations pair with controls in discrete time; see
+<code>ObservationControlAlignment</code>, whose members can also be given as their
+strings (<code>"same_time"</code>, <code>"previous_transition"</code>). <code>"same_time"</code> pairs
+<span class="arithmatex">\(y_k\)</span> with <span class="arithmatex">\(u_k\)</span>. <code>"previous_transition"</code>
+pairs <span class="arithmatex">\(y_{k+1}\)</span> with <span class="arithmatex">\(u_k\)</span> (the control that produced <span class="arithmatex">\(x_{k+1}\)</span>); under this convention
+<span class="arithmatex">\(y_0\)</span> is never sampled. <code>None</code> (default) leaves it unspecified: open-loop
+simulation treats it as <code>"same_time"</code>, while closed-loop control
+(<code>DiscreteControlLoopSimulator</code>) uses <code>"previous_transition"</code> with a warning.
+Closed-loop control does not support an explicit <code>"same_time"</code> yet. Only
+<code>"same_time"</code> is honored by Filter/Smoother/<code>LatentPathBuilder</code> posterior
+rollout and <code>mppi.py</code>. A continuous-time model accepts either value, but
+it only takes full effect once the model is discretized; see
+<code>ObservationControlAlignment</code>.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -5216,7 +5268,7 @@ allows batched initial-condition parameters such as
 
 
 <h3 id="dynestyx.models.core.DynamicalModel.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">ObservationModelLike</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">state_evolution</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">observation_model</span><span class="p">:</span> <span class="n">ObservationModelLike</span><span class="p">,</span> <span class="n">control_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">control_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Array</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">categorical_state</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">continuous_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_control_alignment</span><span class="p">:</span> <span class="n">ObservationControlAlignment</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#dynestyx.models.core.DynamicalModel.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -5227,6 +5279,73 @@ allows batched initial-condition parameters such as
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="dynestyx.models.core.ObservationControlAlignment" class="doc doc-heading">
+            <code>ObservationControlAlignment</code>
+
+
+<a href="#dynestyx.models.core.ObservationControlAlignment" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.StrEnum">StrEnum</span></code></p>
+
+
+
+        <p>Which control an observation sees in a discrete-time model.</p>
+<ul>
+<li><code>SAME_TIME</code> (<code>"same_time"</code>): <span class="arithmatex">\(y_k \sim p(y_k \mid x_k, u_k, t_k)\)</span>, so
+  <span class="arithmatex">\(y_k\)</span> is paired with the control <span class="arithmatex">\(u_k\)</span> applied at the same time.</li>
+<li><code>PREVIOUS_TRANSITION</code> (<code>"previous_transition"</code>):
+  <span class="arithmatex">\(y_{k+1} \sim p(y_{k+1} \mid x_{k+1}, u_k, t_{k+1})\)</span>, so <span class="arithmatex">\(y_{k+1}\)</span> is
+  paired with <span class="arithmatex">\(u_k\)</span>, the control that produced <span class="arithmatex">\(x_{k+1}\)</span>, and <span class="arithmatex">\(y_0\)</span> is
+  never sampled.</li>
+</ul>
+<p>A <code>StrEnum</code>, so each member equals its string: <code>DynamicalModel</code> accepts
+<code>ObservationControlAlignment.PREVIOUS_TRANSITION</code> and
+<code>"previous_transition"</code> alike, and rejects any other value.</p>
+<p>On a continuous-time model the convention is meant for its discretized
+form: it takes full effect once a <code>Discretizer</code> turns the model into a
+discrete-time one. The continuous-time simulators do not implement
+<code>"previous_transition"</code> yet. They still sample <span class="arithmatex">\(y_0\)</span> and pair each <span class="arithmatex">\(y_k\)</span>
+with <span class="arithmatex">\(u_k\)</span>, even though control validation already follows the
+convention: <code>ctrl_times</code> must be <code>predict_times[:-1]</code>, and
+<code>obs_times</code>-based inference is rejected. Consistent continuous-time
+support is planned for a future PR.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 
 
 

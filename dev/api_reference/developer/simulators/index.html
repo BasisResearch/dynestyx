@@ -1249,6 +1249,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../../tutorials/control/observation_control_alignment.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observation-control alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1263,10 +1291,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_4" >
         
           
-          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_2_4" id="__nav_3_2_4_label" tabindex="0">
             
   
   
@@ -1284,8 +1312,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5507,18 +5535,24 @@ these sites are not added.</p>
 
         <p>Generate trajectories from a discrete-time dynamical model.</p>
 <p>For prediction times <span class="arithmatex">\(t_0,\ldots,t_{T-1}\)</span>, this simulator draws
-<code>n_simulations</code> independent paths according to</p>
+<code>n_simulations</code> independent paths according to:</p>
 <div class="arithmatex">\[
 x_0^{(m)} \sim p_0(x_0), \qquad
 x_{k+1}^{(m)}
   \sim p\!\left(x_{k+1}\mid x_k^{(m)},u_k,t_k,t_{k+1}\right),
-\qquad
+\]</div>
+<p>The observation distribution depends on <code>dynamics.observation_control_alignment</code>:</p>
+<p>For <code>"same_time"</code> (default): <span class="arithmatex">\(y_k\)</span> is paired with <span class="arithmatex">\(u_k\)</span> and <span class="arithmatex">\(x_k\)</span> (including <span class="arithmatex">\(k=0\)</span>):</p>
+<div class="arithmatex">\[
 y_k^{(m)} \sim p(y_k\mid x_k^{(m)},u_k,t_k).
 \]</div>
-<p>The first state in the returned path is the initial-condition draw at
-<code>predict_times[0]</code>; the simulator then makes one transition draw for each
-adjacent pair of prediction times and samples one observation conditional
-on every realized state. See
+<p>States, times, observations, and controls are all of length <span class="arithmatex">\(T\)</span>.</p>
+<p>For <code>"previous_transition"</code>: <span class="arithmatex">\(y_{k+1}\)</span> is paired with <span class="arithmatex">\(u_k\)</span> and <span class="arithmatex">\(x_{k+1}\)</span> (<span class="arithmatex">\(y_0\)</span> is never sampled).</p>
+<div class="arithmatex">\[
+y_{k+1}^{(m)} \sim p(y_{k+1}\mid x_{k+1}^{(m)},u_k,t_{k+1}).
+\]</div>
+<p>States and times are of length <span class="arithmatex">\(T\)</span>, but observations and controls are of length <span class="arithmatex">\(T-1\)</span>.</p>
+<p>See
 <a class="autorefs autorefs-internal" href="../models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a>
 for how a discrete transition model is represented in a <code>DynamicalModel</code>.</p>
 <p>Use <code>DiscreteTimeSimulator</code> as a context manager around a model containing
@@ -5559,10 +5593,14 @@ standalone pure-JAX generation without a NumPyro trace.</p>
 control, and the two adjacent time values. Prediction times therefore need
 not be uniformly spaced, provided the model's transition accepts those
 intervals.</p>
-<p>If controls are supplied, <code>ctrl_times</code> must contain every prediction time
-exactly. <code>ctrl_values[k]</code> is used for the transition beginning at <span class="arithmatex">\(t_k\)</span>
-and for the observation at <span class="arithmatex">\(t_k\)</span>. The paired control arrays are validated
-before simulation.</p>
+<p>If controls are supplied, <code>ctrl_times</code> must exactly match the grid
+required by <code>dynamics.observation_control_alignment</code>: the full
+<code>predict_times</code> for <code>"same_time"</code> (default) -- <code>ctrl_values[k]</code> is used
+for the transition beginning at <span class="arithmatex">\(t_k\)</span> and for the observation at
+<span class="arithmatex">\(t_k\)</span> -- or <code>predict_times[:-1]</code> for <code>"previous_transition"</code> --
+<code>ctrl_values[k]</code> drives the transition into <span class="arithmatex">\(x_{k+1}\)</span> and the
+observation <span class="arithmatex">\(y_{k+1}\)</span>. The paired control arrays are validated before
+simulation.</p>
 <p>This handler is generation-only and does not condition on <code>obs_times</code> or
 <code>obs_values</code>. Use
 <a class="autorefs autorefs-internal" href="../inference/latent_path_builder/#dynestyx.inference.latent.builder.LatentPathBuilder">LatentPathBuilder</a>
@@ -5597,7 +5635,13 @@ has length one.</p>
 <li><code>"f_states"</code>: latent states, shape
   <code>(*plate_shape, n_simulations, T, state_dim)</code>;</li>
 <li><code>"f_observations"</code>: sampled observations, shape
-  <code>(*plate_shape, n_simulations, T, observation_dim)</code>.</li>
+  <code>(*plate_shape, n_simulations, T, observation_dim)</code> for <code>"same_time"</code>,
+  or <code>(*plate_shape, n_simulations, T-1, observation_dim)</code> for
+  <code>"previous_transition"</code>;</li>
+<li><code>"f_controls"</code>: the (aligned) controls used, when the model is
+  controlled, shape <code>(*plate_shape, n_simulations, T, control_dim)</code> for
+  <code>"same_time"</code> or <code>(*plate_shape, n_simulations, T-1, control_dim)</code> for
+  <code>"previous_transition"</code>; absent when the model is uncontrolled.</li>
 </ul>
 <p>Here <code>"f"</code> is replaced by the <code>name</code> passed to <code>dsx.sample</code>. Under
 <code>Predictive(..., num_samples=N)</code>, NumPyro prepends an <code>N</code> axis to each
@@ -5682,7 +5726,7 @@ execution. Defaults to one and must be greater than or equal to one.</p>
 
 
 <h3 id="dynestyx.simulation.DiscreteTimeSimulator._simulate_forward_from_initial_state" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_simulate_forward_from_initial_state</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'n_simulations state_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' n_simulations'</span><span class="p">],</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' time'</span><span class="p">],</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimulatedResult</span></code>
+            <code class=" language-python"><span class="n">_simulate_forward_from_initial_state</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'n_simulations state_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' n_simulations'</span><span class="p">],</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' time'</span><span class="p">],</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'ctrl_time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimulatedResult</span></code>
 
 <a href="#dynestyx.simulation.DiscreteTimeSimulator._simulate_forward_from_initial_state" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -5690,6 +5734,8 @@ execution. Defaults to one and must be greater than or equal to one.</p>
     <div class="doc doc-contents ">
 
         <p>Run pure forward simulation for a discrete-time model.</p>
+<p>ctrl_values has its own length ("ctrl_time"): len(times) for same_time or
+len(times) - 1 for previous_transition.</p>
 
 
     </div>

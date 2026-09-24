@@ -1249,6 +1249,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../../tutorials/control/observation_control_alignment.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observation-control alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1263,10 +1291,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_4" >
         
           
-          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_2_4" id="__nav_3_2_4_label" tabindex="0">
             
   
   
@@ -1284,8 +1312,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6301,7 +6329,9 @@ unsupported by the observation distribution.</p>
             <td>
               <div class="doc-md-description">
                 <p>Times associated with <code>ctrl_values</code>. If controls are
-provided, these times must match <code>predict_times</code>.</p>
+provided, these times must match <code>predict_times</code> for models with
+<code>dynamics.observation_control_alignment="same_time"</code> (default), or
+<code>predict_times[:-1]</code> for <code>"previous_transition"</code>.</p>
               </div>
             </td>
             <td>
@@ -6390,7 +6420,12 @@ When given, controls are computed online in closed loop via
 instead of being drawn from the uncontrolled/<code>ctrl_values</code>
 transition -- <code>ctrl_times</code>/<code>ctrl_values</code> must not be passed
 together with <code>control_policy</code>, and <code>simulator_config</code> is not
-accepted either.</p>
+accepted either. The closed loop follows
+<code>dynamics.observation_control_alignment</code>, the same field that
+governs open-loop simulation. Only <code>"previous_transition"</code> is
+implemented for now: an unspecified field resolves to it with a
+warning, and an explicit <code>"same_time"</code> raises
+<code>NotImplementedError</code>.</p>
               </div>
             </td>
             <td>
