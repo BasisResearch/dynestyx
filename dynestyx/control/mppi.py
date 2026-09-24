@@ -9,6 +9,7 @@ plain example that plugs into `DiscreteControlLoopSimulator`'s
 PolicyCallable`), not a state-of-the-art implementation.
 """
 
+import warnings
 from collections.abc import Callable
 
 import equinox as eqx
@@ -21,7 +22,7 @@ from jaxtyping import PRNGKeyArray, Real
 from numpyro.distributions import Distribution
 
 import dynestyx as dsx
-from dynestyx.models import DynamicalModel
+from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.types import SimulatedResult
 
 # (result: SimulatedResult) -> scalar, called once per sampled rollout
@@ -105,6 +106,16 @@ class MPPI(eqx.Module):
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
+
+    def __post_init__(self) -> None:
+        alignment = self.dynamics.observation_control_alignment
+        if alignment not in (None, ObservationControlAlignment.PREVIOUS_TRANSITION):
+            warnings.warn(
+                f"dynamics.observation_control_alignment is '{alignment}', but "
+                "MPPI plans its rollouts under 'previous_transition'.",
+                UserWarning,
+                stacklevel=5,
+            )
 
     def initial_state(
         self,
