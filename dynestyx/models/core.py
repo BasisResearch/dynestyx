@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from enum import StrEnum
+from typing import Any, Protocol, cast, runtime_checkable
 
 import equinox as eqx
 import jax
@@ -22,7 +23,6 @@ from dynestyx.models.checkers import (
     _validate_continuous_time_flag,
     _validate_discrete_state_evolution_output_shape,
     _validate_imex_potential_conflict,
-    _validate_observation_control_alignment,
     _validate_observation_dim,
     _validate_state_dim,
 )
@@ -58,6 +58,34 @@ type StateEvolutionLike = (
     ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | DiscreteStateTransition
 )
 type ObservationModelLike = ObservationModel | ObservationCallable
+
+
+class ObservationControlAlignment(StrEnum):
+    r"""Which control an observation sees in a discrete-time model.
+
+    - `SAME_TIME` (`"same_time"`): $y_k \sim p(y_k \mid x_k, u_k, t_k)$, so
+      $y_k$ is paired with the control $u_k$ applied at the same time.
+    - `PREVIOUS_TRANSITION` (`"previous_transition"`):
+      $y_{k+1} \sim p(y_{k+1} \mid x_{k+1}, u_k, t_{k+1})$, so $y_{k+1}$ is
+      paired with $u_k$, the control that produced $x_{k+1}$, and $y_0$ is
+      never sampled.
+
+    A `StrEnum`, so each member equals its string: `DynamicalModel` accepts
+    `ObservationControlAlignment.PREVIOUS_TRANSITION` and
+    `"previous_transition"` alike, and rejects any other value.
+
+    On a continuous-time model the convention is meant for its discretized
+    form: it takes full effect once a `Discretizer` turns the model into a
+    discrete-time one. The continuous-time simulators do not implement
+    `"previous_transition"` yet. They still sample $y_0$ and pair each $y_k$
+    with $u_k$, even though control validation already follows the
+    convention: `ctrl_times` must be `predict_times[:-1]`, and
+    `obs_times`-based inference is rejected. Consistent continuous-time
+    support is planned for a future PR.
+    """
+
+    SAME_TIME = "same_time"
+    PREVIOUS_TRANSITION = "previous_transition"
 
 
 class DynamicalModel(eqx.Module):
@@ -104,8 +132,10 @@ class DynamicalModel(eqx.Module):
             exactly; a mismatch raises a ``ValueError`` at simulation time.
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
-        observation_control_alignment ("same_time" | "previous_transition" | None): Convention
-            for how observations pair with controls in discrete time. `"same_time"` pairs
+        observation_control_alignment (ObservationControlAlignment | str | None): Convention
+            for how observations pair with controls in discrete time; see
+            `ObservationControlAlignment`, whose members can also be given as their
+            strings (`"same_time"`, `"previous_transition"`). `"same_time"` pairs
             $y_k$ with $u_k$. `"previous_transition"`
             pairs $y_{k+1}$ with $u_k$ (the control that produced $x_{k+1}$); under this convention
             $y_0$ is never sampled. `None` (default) leaves it unspecified: open-loop
@@ -113,7 +143,9 @@ class DynamicalModel(eqx.Module):
             (`DiscreteControlLoopSimulator`) uses `"previous_transition"` with a warning.
             Closed-loop control does not support an explicit `"same_time"` yet. Only
             `"same_time"` is honored by Filter/Smoother/`LatentPathBuilder` posterior
-            rollout and `mppi.py`.
+            rollout and `mppi.py`. A continuous-time model accepts either value, but
+            it only takes full effect once the model is discretized; see
+            `ObservationControlAlignment`.
 
     Note:
         - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
@@ -138,7 +170,7 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     categorical_state: bool
     continuous_time: bool
-    observation_control_alignment: Literal["same_time", "previous_transition"] | None
+    observation_control_alignment: ObservationControlAlignment | None
 
     def __init__(
         self,
@@ -153,17 +185,18 @@ class DynamicalModel(eqx.Module):
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
         continuous_time: bool | None = None,
-        observation_control_alignment: Literal["same_time", "previous_transition"]
-        | None = None,
+        observation_control_alignment: ObservationControlAlignment | str | None = None,
     ):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
         )
         _validate_continuous_time_flag(continuous_time, inferred_continuous_time)
         self.continuous_time = inferred_continuous_time
-        _validate_observation_control_alignment(
-            observation_control_alignment, self.continuous_time
-        )
+        if observation_control_alignment is not None:
+            # Accepts a member or its string; raises ValueError for anything else.
+            observation_control_alignment = ObservationControlAlignment(
+                observation_control_alignment
+            )
         self.observation_control_alignment = observation_control_alignment
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution

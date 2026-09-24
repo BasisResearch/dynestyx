@@ -16,6 +16,7 @@ from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
+    ObservationControlAlignment,
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.diffusions import (
@@ -817,48 +818,53 @@ def test_observation_control_alignment_defaults_to_unspecified() -> None:
     assert model.observation_control_alignment is None
 
 
-def test_observation_control_alignment_previous_transition_stored() -> None:
+@pytest.mark.parametrize(
+    "given",
+    [ObservationControlAlignment.PREVIOUS_TRANSITION, "previous_transition"],
+    ids=["member", "string"],
+)
+def test_observation_control_alignment_accepts_a_member_or_its_string(given) -> None:
+    """Either form is stored as the enum member, which still equals its
+    string, so code comparing against "previous_transition" keeps working."""
     model = DynamicalModel(
         initial_condition=dist.Normal(0.0, 1.0),
         state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
         observation_model=lambda x, u, t: dist.Normal(x, 0.1),
         control_dim=0,
-        observation_control_alignment="previous_transition",
+        observation_control_alignment=given,
+    )
+    assert (
+        model.observation_control_alignment
+        is ObservationControlAlignment.PREVIOUS_TRANSITION
     )
     assert model.observation_control_alignment == "previous_transition"
 
 
-def test_observation_control_alignment_rejects_invalid_literal() -> None:
-    # Under the pytest jaxtyping import hook (see pyproject.toml addopts),
-    # jaxtyping's own Literal[...] enforcement rejects an invalid value before
-    # DynamicalModel.__init__'s body -- and _validate_observation_control_alignment
-    # within it -- ever runs, raising jaxtyping.TypeCheckError (a TypeError
-    # subclass) rather than the ValueError _validate_observation_control_alignment
-    # raises outside that instrumented context. Accept either so this test is
-    # correct with or without the import hook active.
-    with pytest.raises((ValueError, TypeError)):
+def test_observation_control_alignment_rejects_an_unknown_value() -> None:
+    """The enum is the list of valid values: converting anything else raises."""
+    with pytest.raises(ValueError, match="not a valid ObservationControlAlignment"):
         DynamicalModel(
             initial_condition=dist.Normal(0.0, 1.0),
             state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
             observation_model=lambda x, u, t: dist.Normal(x, 0.1),
             control_dim=0,
-            observation_control_alignment="bogus",  # ty: ignore[invalid-argument-type]
+            observation_control_alignment="bogus",
         )
 
 
-def test_observation_control_alignment_previous_transition_rejects_continuous_time() -> (
+def test_observation_control_alignment_previous_transition_accepted_on_continuous_time() -> (
     None
 ):
-    with pytest.raises(
-        ValueError,
-        match="observation_control_alignment='previous_transition' is only supported "
-        "for discrete-time models",
-    ):
-        DynamicalModel(
-            initial_condition=_initial_condition_2d(),
-            state_evolution=ContinuousTimeStateEvolution(
-                drift=lambda x, u, t: -0.3 * x
-            ),
-            observation_model=_observation_model_2d,
-            observation_control_alignment="previous_transition",
-        )
+    """A continuous-time model may hold "previous_transition" so that a
+    Discretizer can carry it into the discrete-time model it builds."""
+    model = DynamicalModel(
+        initial_condition=_initial_condition_2d(),
+        state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -0.3 * x),
+        observation_model=_observation_model_2d,
+        observation_control_alignment="previous_transition",
+    )
+    assert model.continuous_time
+    assert (
+        model.observation_control_alignment
+        is ObservationControlAlignment.PREVIOUS_TRANSITION
+    )

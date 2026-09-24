@@ -953,6 +953,7 @@ def test_discretizer_wrapped_sde_runs_end_to_end():
         state_evolution=cte,
         observation_model=LinearGaussianObservation(H=jnp.eye(1), R=0.2 * jnp.eye(1)),
         control_dim=1,
+        observation_control_alignment="previous_transition",
     )
     policy = _LinearPolicy(K=jnp.array([[0.5]]))
     sim = DiscreteControlLoopSimulator(
@@ -966,11 +967,13 @@ def test_discretizer_wrapped_sde_runs_end_to_end():
             with Discretizer(EulerMaruyamaConfig()):
                 return dsx.sample("f", dynamics, predict_times=predict_times)
 
-    # A continuous-time model cannot hold "previous_transition", and the
-    # Discretizer carries the unspecified field through, so the closed loop
-    # resolves it to "previous_transition" and warns.
-    with pytest.warns(UserWarning, match="unspecified"):
+    # The continuous-time model states its convention, and the Discretizer
+    # carries it into the discrete-time model, so the closed loop runs it
+    # without the unspecified-field warning.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
         tr = _run_trace(model)
+    assert jnp.array_equal(tr["f_obs_times"]["value"][0], predict_times[1:])
     assert_trace_sites_exist_and_field_all_finite(
         tr,
         "f_states",

@@ -23,8 +23,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
-from dynestyx.models import DynamicalModel
-from dynestyx.models.checkers import _VALID_OBSERVATION_CONTROL_ALIGNMENTS
+from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
 from dynestyx.types import SimulatedResult
@@ -328,8 +327,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 UserWarning,
                 stacklevel=2,
             )
-            alignment = "previous_transition"
-        if alignment == "previous_transition":
+            alignment = ObservationControlAlignment.PREVIOUS_TRANSITION
+        if alignment == ObservationControlAlignment.PREVIOUS_TRANSITION:
             return self.online_control_loop_previous_transition(
                 dynamics,
                 rng_key=rng_key,
@@ -337,7 +336,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 filter_config=filter_config,
                 initial_policy_state=initial_policy_state,
             )
-        if alignment == "same_time":
+        if alignment == ObservationControlAlignment.SAME_TIME:
             raise NotImplementedError(
                 "Closed-loop control with observation_control_alignment='same_time' "
                 "is not implemented yet -- we are working on it. It needs separate "
@@ -345,9 +344,12 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 "expose. Use observation_control_alignment='previous_transition', "
                 "or leave it unspecified."
             )
+        # DynamicalModel.__init__ already rejects unknown values, but
+        # eqx.tree_at rewrites the field without calling it.
         raise ValueError(
             "observation_control_alignment not recognized, has to be one of "
-            f"{_VALID_OBSERVATION_CONTROL_ALIGNMENTS}; got {alignment!r}."
+            f"{[member.value for member in ObservationControlAlignment]}; "
+            f"got {alignment!r}."
         )
 
     def online_control_loop_same_time(
