@@ -101,7 +101,6 @@ def _validate_policy_control(u: Any, control_dim: int) -> Real[Array, " control_
             "Returning a distribution is not yet supported, instead "
             "sample from this distribution inside your policy."
         )
-    u = jnp.asarray(u)
     expected_control_shape = (control_dim,)
     if u.shape != expected_control_shape:
         raise ValueError(
@@ -131,13 +130,6 @@ class PolicyCallable(Protocol):
     time points. Any plain
     callable matching this signature works, including an `equinox.Module`
     with a matching `__call__`  or a plain Python function.
-
-    `t_now`/`t_next` are the current and next
-    time points. Any plain
-    callable matching this signature works, including an `equinox.Module`
-    with a matching `__call__`  or a plain
-    Python function.
-
     `control_policy` must return a concrete
     value.
 
@@ -199,12 +191,16 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     filter steps, which cuthbert does not expose; an explicit `"same_time"`
     raises `NotImplementedError` until they are built.
 
-    Both loops are written out in full on the Closed-loop control page
-    (`docs/api_reference/public/control.md`).
+    Both loops are written out in full on the
+    [Closed-loop control page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/control/).
 
-    The one-step filter update currently uses Cuthbert and supports `KFConfig`,
-    `EKFConfig`, `EnKFConfig`, and `PFConfig`. Plated controlled simulation is
-    not yet supported; see
+    The one-step filter update runs on the cuthbert backend
+    (`filter_source="cuthbert"`). See the
+    [filters page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/inference/filters/)
+    for the available filters, and `build_cuthbert_filter` in
+    [`discrete_filter.py`](https://github.com/BasisResearch/dynestyx/blob/main/dynestyx/inference/integrations/cuthbert/discrete_filter.py)
+    for which of them the online update supports. Plated controlled simulation
+    is not yet supported; see
     [Issue #318](https://github.com/BasisResearch/dynestyx/issues/318).
 
     Attributes:
@@ -213,8 +209,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             (default `None`, for a stateless policy) -- `control_policy` is
             never introspected for an `initial_state()` method; a stateful
             policy's initial state must always be passed explicitly.
-        filter_config: Selects the filtering algorithm
-            (`KFConfig`/`EKFConfig`/`EnKFConfig`/`PFConfig`). Defaults to
+        filter_config: Selects the filtering algorithm; any config
+            `build_cuthbert_filter` accepts (see above). Defaults to
             `_default_filter_config(dynamics)` when `None`. The online one-step
             update currently requires `filter_source="cuthbert"`. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
