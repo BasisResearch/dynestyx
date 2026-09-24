@@ -642,6 +642,117 @@ def test_explicit_previous_transition_does_not_warn():
         )
 
 
+@pytest.mark.parametrize("alignment", ["same_time", "previous_transition"])
+def test_true_state_loop_grids_and_control_pairing(alignment):
+    """Without a filter both conventions run. On a model whose outputs reveal
+    the control that produced them (x_{k+1} = x_k + u_k and y = x + 100 u,
+    near-deterministic) and a policy emitting u_k = k + 1, check the grids and,
+    at every time, which control each state and observation used: "same_time"
+    emits y_k with u_k at t_k, "previous_transition" emits y_{k+1} with u_k at
+    t_{k+1}. The grid is non-uniform so a shifted field cannot line up by
+    accident."""
+
+    def state_evolution(x, u, t_now, t_next):
+        return dist.MultivariateNormal(x + u, 1e-8 * jnp.eye(1))
+
+    def observation_model(x, u, t):
+        return dist.MultivariateNormal(x + 100.0 * u, 1e-8 * jnp.eye(1))
+
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=state_evolution,
+        observation_model=observation_model,
+        control_dim=1,
+        observation_control_alignment=alignment,
+    )
+
+    def counting_policy(x_hat, t_now, t_next, s):
+        return jnp.reshape(s + 1.0, (1,)), s + 1.0
+
+    predict_times = jnp.array([0.0, 1.0, 2.5, 4.0, 7.0])
+    result = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        control_policy=counting_policy,
+        use_true_state=True,
+        initial_policy_state=jnp.asarray(0.0),
+    )
+    assert result.times is not None and result.states is not None
+    assert result.obs_times is not None and result.observations is not None
+    assert result.ctrl_times is not None and result.controls is not None
+    # No filter ran, so there is no belief to report.
+    assert result.filtered_states_mean is None
+    times = jnp.asarray(result.times)[0]
+    obs_times = jnp.asarray(result.obs_times)[0]
+    ctrl_times = jnp.asarray(result.ctrl_times)[0]
+    states = jnp.asarray(result.states)[0]
+    observations = jnp.asarray(result.observations)[0]
+    controls = jnp.asarray(result.controls)[0]
+
+    # States span every time; controls stop at t_{N-1} in both conventions;
+    # observations drop the last time under "same_time" and the first under
+    # "previous_transition".
+    assert jnp.array_equal(times, predict_times)
+    assert states.shape[0] == len(times)
+    assert jnp.array_equal(ctrl_times, times[:-1])
+    expected_obs_times = times[:-1] if alignment == "same_time" else times[1:]
+    assert jnp.array_equal(obs_times, expected_obs_times)
+    assert jnp.array_equal(controls, jnp.arange(1.0, len(times))[:, None])
+
+    for t_k, t_next in zip(times[:-1], times[1:], strict=True):
+        x_k = value_at_time(states, times, t_k)
+        x_next = value_at_time(states, times, t_next)
+        u_k = value_at_time(controls, ctrl_times, t_k)
+        # u_k drives the transition t_k -> t_{k+1} ...
+        assert jnp.allclose(x_next, x_k + u_k, atol=1e-3)
+        # ... and the observation it pairs with under each convention.
+        if alignment == "same_time":
+            y, x = value_at_time(observations, obs_times, t_k), x_k
+        else:
+            y, x = value_at_time(observations, obs_times, t_next), x_next
+        assert jnp.allclose(y, x + 100.0 * u_k, atol=1e-3)
+
+
+def test_true_state_policy_sees_the_exact_state_not_an_estimate():
+    """The policy is handed a Delta at x_k, so x_hat.mean is the realized state
+    exactly -- not a filtered estimate of it, which noisy observations would
+    pull away from the truth."""
+
+    def echo_state_policy(x_hat, t_now, t_next, s):
+        # Records what it was shown; applies no control.
+        mean = x_hat.mean
+        return jnp.zeros_like(mean), jnp.ravel(mean)[0]
+
+    result = dsx.simulate(
+        _lti_1d(Q=0.5, R=2.0),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(5.0),
+        control_policy=echo_state_policy,
+        use_true_state=True,
+        initial_policy_state=jnp.asarray(0.0),
+    )
+    assert result.states is not None and result.policy_states is not None
+    seen = jnp.ravel(result.policy_states)
+    states = jnp.ravel(jnp.asarray(result.states)[0])
+    # x_k for k = 0..N-1; the policy never acts at t_N.
+    assert jnp.array_equal(seen, states[:-1])
+
+
+def test_use_true_state_rejects_a_filter_config():
+    """use_true_state=True builds no filter, so a filter config passed with it
+    would be silently ignored."""
+    with pytest.raises(ValueError, match="use_true_state"):
+        dsx.simulate(
+            _lti_1d(),
+            rng_key=jr.PRNGKey(0),
+            predict_times=jnp.arange(4.0),
+            control_policy=_simple_policy(),
+            filter_config=KFConfig(filter_source="cuthbert"),
+            use_true_state=True,
+        )
+
+
 def test_discretizer_carries_an_explicit_same_time_through():
     """An explicit choice on a continuous-time model must survive
     discretization. Dropping it would silently turn "same_time" into the
