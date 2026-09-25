@@ -696,72 +696,50 @@ def masked_observation_log_prob(
     if not event_shape:
         return obs_dist.mask(mask[0]).log_prob(values[0])
 
-    return _masked_observation_log_prob(
-        obs_dist,
-        y=values,
-        obs_mask=mask,
-        row_has_any_observed=jnp.any(mask),
-        observation_dim=values.shape[0],
-        has_partial_missing=False,
-        expected_mode=_distribution_mode(obs_dist, has_partial_missing=False),
-        expected_event_shape=event_shape,
-    )
-
-
-def _masked_observation_log_prob(
-    obs_dist: dist.Distribution,
-    *,
-    y: Real[Array, " observation_dim"],
-    obs_mask: Bool[Array, " observation_dim"],
-    row_has_any_observed: Bool[Array, ""],
-    observation_dim: int,
-    has_partial_missing: bool,
-    expected_mode: ObservationDistributionMode,
-    expected_event_shape: tuple[int, ...],
-) -> Real[Array, "*log_prob_batch"]:
-    """Score only the observed portion of one observation row."""
-    obs_dist = _canonicalize_observation_distribution(
-        obs_dist, observation_dim=observation_dim
-    )
-
-    if has_partial_missing:
-        try:
-            actual_mode = _distribution_mode(
-                obs_dist, has_partial_missing=has_partial_missing
-            )
-        except NotImplementedError as exc:
-            raise ValueError(
-                "Partial missingness requires a time-stable marginalizable "
-                "observation family. The simulator was configured with "
-                f"{expected_mode!r}, but encountered an unsupported "
-                f"{type(obs_dist).__name__} at runtime."
-            ) from exc
-
-        actual_event_shape = tuple(obs_dist.event_shape)
-        if actual_mode != expected_mode or actual_event_shape != expected_event_shape:
-            raise ValueError(
-                "Partial missingness requires the observation distribution "
-                "family and event shape to remain fixed across time. "
-                f"Expected mode {expected_mode!r} with event shape "
-                f"{expected_event_shape}, but received mode "
-                f"{actual_mode!r} with event shape {actual_event_shape}."
-            )
-
-    if expected_mode == "masked":
-        row_is_partial = row_has_any_observed & ~jnp.all(obs_mask)
-        y = _raise_now_or_error_if(
-            y,
-            row_is_partial,
+    mode = _distribution_mode(obs_dist, has_partial_missing=False)
+    if mode == "masked":
+        row_has_any_observed = jnp.any(mask)
+        values = _raise_now_or_error_if(
+            values,
+            row_has_any_observed & ~jnp.all(mask),
             "Partial missingness currently requires marginalizable "
             "MultivariateNormal observations or factorizable "
             "Independent(..., 1) observations.",
         )
-        return obs_dist.mask(row_has_any_observed).log_prob(y)
+        return obs_dist.mask(row_has_any_observed).log_prob(values)
 
-    if expected_mode == "independent":
-        return obs_dist.base_dist.mask(obs_mask).to_event(1).log_prob(y)
+    if mode == "independent":
+        return obs_dist.base_dist.mask(mask).to_event(1).log_prob(values)
 
-    return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
+    return _masked_multivariate_normal_log_prob(obs_dist, values, mask)
+
+
+def _check_observation_contract(
+    obs_dist: dist.Distribution,
+    *,
+    expected_mode: ObservationDistributionMode,
+    expected_event_shape: tuple[int, ...],
+) -> None:
+    """Require a marginalizable distribution with the expected family and event shape."""
+    try:
+        actual_mode = _distribution_mode(obs_dist, has_partial_missing=True)
+    except NotImplementedError as exc:
+        raise ValueError(
+            "Partial missingness requires a time-stable marginalizable "
+            "observation family. The simulator was configured with "
+            f"{expected_mode!r}, but encountered an unsupported "
+            f"{type(obs_dist).__name__} at runtime."
+        ) from exc
+
+    actual_event_shape = tuple(obs_dist.event_shape)
+    if actual_mode != expected_mode or actual_event_shape != expected_event_shape:
+        raise ValueError(
+            "Partial missingness requires the observation distribution "
+            "family and event shape to remain fixed across time. "
+            f"Expected mode {expected_mode!r} with event shape "
+            f"{expected_event_shape}, but received mode "
+            f"{actual_mode!r} with event shape {actual_event_shape}."
+        )
 
 
 def prepare_observation_log_prob(
@@ -850,7 +828,7 @@ def prepare_observation_log_prob(
         (
             filled_obs,
             obs_mask,
-            row_has_any_observed,
+            _row_has_any_observed,
             has_missing,
             has_partial_missing,
             _,
@@ -861,7 +839,7 @@ def prepare_observation_log_prob(
         filled_obs = precomputed_filled_obs
         obs_mask = precomputed_obs_mask
         (
-            row_has_any_observed,
+            _row_has_any_observed,
             has_missing,
             has_partial_missing,
             _,
@@ -975,15 +953,17 @@ def prepare_observation_log_prob(
             assert completed_obs is not None
             return canonical_dist.log_prob(completed_obs[t_idx])
 
-        return _masked_observation_log_prob(
-            obs_dist,
-            y=filled_obs[t_idx],
-            obs_mask=obs_mask[t_idx],
-            row_has_any_observed=row_has_any_observed[t_idx],
-            observation_dim=observation_dim,
-            has_partial_missing=has_partial_missing,
-            expected_mode=distribution_mode,
-            expected_event_shape=expected_event_shape,
+        obs_dist = _canonicalize_observation_distribution(
+            obs_dist, observation_dim=observation_dim
+        )
+        if has_partial_missing:
+            _check_observation_contract(
+                obs_dist,
+                expected_mode=distribution_mode,
+                expected_event_shape=expected_event_shape,
+            )
+        return masked_observation_log_prob(
+            obs_dist, y=filled_obs[t_idx], obs_mask=obs_mask[t_idx]
         )
 
     returned_completed_obs = (
