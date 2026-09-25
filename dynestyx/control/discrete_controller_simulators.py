@@ -118,13 +118,14 @@ class PolicyCallable(Protocol):
     $$u_k, s_{k+1} = \pi(\tilde x_k, t_k, t_{k+1}, s_k)$$
 
     $\tilde x_k$ is the loop's current state estimate. Which state that is
-    depends on the convention:
+    depends on the convention.
 
+    When using `use_true_state=True`: `\tilde x_k` is the a `Dirac` distribution centered on the true state $x_k$ (including at $k=0$). 
+
+    When using `use_true_state=False` (default), this is distribution depending on the filter configuration:
     - under `same_time`, $\tilde x_k$ is the predicted state $\hat{x}_{k|k-1}$
     - under `previous_transition`, $\tilde x_k$ is the filtered state $\hat{x}_{k|k}$
-    where $\hat{x}_{k|j}$ is the state estimate at time $t_k$ given observations up to time $t_j$.
-
-    At $k=0$, this is always the model's initial-state distribution $x_0$.
+    where $\hat{x}_{k|j}$ is the state estimate at time $t_k$ given observations up to time $t_j$. At $k=0$, this is model's initial-state distribution $x_0$.
 
     With `use_true_state=True` there is no filter and no estimate: $\tilde x_k$
     is the true state $x_k$, handed over as a `Delta` at that state, so
