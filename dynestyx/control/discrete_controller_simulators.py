@@ -822,9 +822,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             `filtered_states_mean` is always `None`.
         """
         N = len(times) - 1
-        # Split three ways and drop the filter key the filtered loops take
-        # here, so a no-filter run draws the same initial state and the same
-        # transition/observation noise as a filtered run from the same seed.
+        # filter_key is unused here, but we still draw it to ensure randomness is consistent
         rollout_key, initial_state_key, _unused_filter_key = jr.split(rng_key, 3)
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
@@ -837,7 +835,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             t_next = times[t_idx + 1]
 
             # u_k = pi(x_k). The policy takes a distribution, so the known
-            # state goes in as a Delta: a belief with no uncertainty in it.
+            # state goes in as a Delta.
             u_k, s_next = self.control_policy(
                 Delta(x_k, event_dim=jnp.ndim(x_k)), t_now, t_next, s_k
             )

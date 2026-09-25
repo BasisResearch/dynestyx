@@ -653,10 +653,10 @@ def test_true_state_loop_grids_and_control_pairing(alignment):
     accident."""
 
     def state_evolution(x, u, t_now, t_next):
-        return dist.MultivariateNormal(x + u, 1e-8 * jnp.eye(1))
+        return dist.MultivariateNormal(x + u, 1e-1 * jnp.eye(1))
 
     def observation_model(x, u, t):
-        return dist.MultivariateNormal(x + 100.0 * u, 1e-8 * jnp.eye(1))
+        return dist.MultivariateNormal(x + 100.0 * u, 1e-1 * jnp.eye(1))
 
     dynamics = DynamicalModel(
         initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
