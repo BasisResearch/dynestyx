@@ -5,6 +5,7 @@ from jaxtyping import Array, Float
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    ObservationControlAlignment,
 )
 from dynestyx.models.diffusions import FullDiffusion
 from dynestyx.models.drifts import AffineDrift
@@ -34,6 +35,7 @@ def LTI_discrete(
     d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
     initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
     initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
+    observation_control_alignment: ObservationControlAlignment | str | None = None,
 ) -> DynamicalModel:
     """
     Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
@@ -72,6 +74,9 @@ def LTI_discrete(
             shape $(d_x,)$. Defaults to zeros.
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
+        observation_control_alignment (ObservationControlAlignment | str | None):
+            Forwarded to `DynamicalModel`; see its docstring. Defaults to `None`
+            (unspecified).
 
     Notes:
         `control_dim` is inferred from B, or from D when B is None, and
@@ -109,6 +114,7 @@ def LTI_discrete(
         observation_model=observation_model,
         control_model=None,
         control_dim=control_dim,
+        observation_control_alignment=observation_control_alignment,
     )
 
 

@@ -327,6 +327,88 @@ def compute_cuthbert_filter_update(
     return filter_obj.filter_combine(prev_state, prep_state)
 
 
+def compute_cuthbert_belief_prediction(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any,
+    key: PRNGKeyArray,
+    *,
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+    t_prev: Real[Array, ""],
+) -> Any:
+    r"""Prediction step alone: advance a belief without an observation.
+
+    Maps the filtered belief $\hat p_k$ at `t_prev` to the predicted belief
+    $\tilde p_{k+1}$ at `t`, through the transition driven by `u`:
+
+    $$\tilde p_{k+1}(x) = \int p(x \mid x', u)\, \hat p_k(x')\, dx'.$$
+
+    Not implemented yet. Cuthbert's `Filter` exposes only the fused
+    predict-and-update `filter_combine`, so this step has to be built from
+    cuthbertlib primitives per filter family; that is planned for a
+    follow-up. Closed-loop `"same_time"` control depends on it.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Filtered belief at `t_prev`.
+        key: PRNG key for the step.
+        u: Control driving the transition from `t_prev` to `t`, or `None`.
+        t: Time to predict to.
+        t_prev: Time the belief currently sits at.
+
+    Raises:
+        NotImplementedError: Always, for now.
+    """
+    raise NotImplementedError(
+        "compute_cuthbert_belief_prediction is not implemented yet: cuthbert's "
+        "Filter only exposes the fused predict-and-update filter_combine, so a "
+        "prediction-only step still has to be built from cuthbertlib primitives."
+    )
+
+
+def compute_cuthbert_belief_analysis(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any,
+    key: PRNGKeyArray,
+    *,
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+) -> Any:
+    r"""Analysis step alone: condition a belief on one observation.
+
+    Maps the predicted belief $\tilde p_k$ at `t` to the filtered belief
+    $\hat p_k$ by conditioning on `y`, with the observation model evaluated
+    under control `u`:
+
+    $$\hat p_k(x) \propto p(y \mid x, u)\, \tilde p_k(x).$$
+
+    Not implemented yet, for the same reason as
+    `compute_cuthbert_belief_prediction`: cuthbert's `Filter` only exposes the
+    fused `filter_combine`. Closed-loop `"same_time"` control depends on it.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Predicted belief at `t`.
+        key: PRNG key for the step.
+        y: Observation at `t`.
+        u: Control the observation model sees at `t`, or `None`.
+        t: Observation time.
+
+    Raises:
+        NotImplementedError: Always, for now.
+    """
+    raise NotImplementedError(
+        "compute_cuthbert_belief_analysis is not implemented yet: cuthbert's "
+        "Filter only exposes the fused predict-and-update filter_combine, so an "
+        "analysis-only step still has to be built from cuthbertlib primitives."
+    )
+
+
 def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,

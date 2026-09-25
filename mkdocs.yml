@@ -42,6 +42,7 @@ nav:
     - Examples:
       - Quick Example L63: quick_example.ipynb
       - SDEs with Non-Gaussian Observations: tutorials/sde_non_gaussian_observations.ipynb
+      - Observation-control alignment: tutorials/control/observation_control_alignment.ipynb
       - Closed-loop Control:
         - Controller basics: tutorials/control/controller_demo.ipynb
         - Optimizing a controller: tutorials/control/control_optimization.ipynb

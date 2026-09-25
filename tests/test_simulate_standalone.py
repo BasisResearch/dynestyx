@@ -1,5 +1,7 @@
 """Tests for the pure-JAX dsx.simulate entry point."""
 
+from typing import Literal
+
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -9,6 +11,7 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
+from tests.test_utils import assert_finite, value_at_time
 
 
 def _make_discrete_dynamics() -> dsx.DynamicalModel:
@@ -406,3 +409,246 @@ def test_predictive_simulator_matches_standalone_simulate(
         "Simulator + Predictive, dsx.simulate, and pre-split Simulator.simulate "
         f"produced different values for {mismatched_fields}"
     )
+
+
+# ---------------------------------------------------------------------------
+# observation_control_alignment="previous_transition" (#312)
+# ---------------------------------------------------------------------------
+
+
+def _make_control_revealing_dynamics(
+    observation_control_alignment: Literal["same_time", "previous_transition"],
+) -> dsx.DynamicalModel:
+    """Deterministic 1-D discrete model whose transition and observation both
+    reveal the control they used -- x_{k+1} = x_k + u and y = x + 100 u -- so
+    tests can check exactly which control each one saw under the given
+    convention."""
+
+    def _state_evolution(x, u, t_now, t_next):
+        del t_now, t_next
+        u = jnp.zeros_like(x) if u is None else u
+        return dist.Delta(x + u).to_event(1)
+
+    def _observation_model(x, u, t):
+        del t
+        u = jnp.zeros_like(x) if u is None else u
+        return dist.Delta(x + 100.0 * u).to_event(1)
+
+    return dsx.DynamicalModel(
+        control_dim=1,
+        initial_condition=dist.Delta(jnp.array([0.0])).to_event(1),
+        state_evolution=_state_evolution,
+        observation_model=_observation_model,
+        observation_control_alignment=observation_control_alignment,
+    )
+
+
+def test_same_time_pairs_each_observation_with_the_control_at_its_time():
+    """same_time: u_k drives the transition out of x_k *and* the observation
+    y_k. The model reveals both: x_{k+1} = x_k + u_k and y_k = x_k + 100 u_k.
+
+    Values are looked up through times/ctrl_times/obs_times, so a wrong time
+    field fails the test too.
+    """
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_values = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+    result = dsx.simulate(
+        _make_control_revealing_dynamics("same_time"),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=predict_times,
+        ctrl_values=ctrl_values,
+    )
+    assert result.times is not None and result.states is not None
+    assert result.obs_times is not None and result.observations is not None
+    assert result.ctrl_times is not None and result.controls is not None
+    times = jnp.asarray(result.times)[0]
+    obs_times = jnp.asarray(result.obs_times)[0]
+    ctrl_times = jnp.asarray(result.ctrl_times)[0]
+    states = jnp.asarray(result.states)[0]
+    observations = jnp.asarray(result.observations)[0]
+    controls = jnp.asarray(result.controls)[0]
+
+    # Grids: states and observations on every time. One control per time too
+    # -- the last one drives only the final observation, there being no
+    # transition left for it -- so ctrl_times is the full grid, not times[:-1].
+    assert jnp.array_equal(times, predict_times)
+    assert states.shape[0] == len(times)
+    assert jnp.array_equal(obs_times, times)
+    assert jnp.array_equal(ctrl_times, times)
+    assert jnp.array_equal(controls, ctrl_values)
+
+    # Every transition t_k -> t_{k+1} is driven by u_k ...
+    for t_k, t_next in zip(times[:-1], times[1:], strict=True):
+        x_k, x_next = (
+            value_at_time(states, times, t_k),
+            value_at_time(states, times, t_next),
+        )
+        u_k = value_at_time(controls, ctrl_times, t_k)
+        assert jnp.array_equal(x_next, x_k + u_k)
+    # ... and every y_k is emitted with u_k, the control at its own time --
+    # including y_0, and y_N whose control drives no transition.
+    for t_k in obs_times:
+        y_k = value_at_time(observations, obs_times, t_k)
+        x_k = value_at_time(states, times, t_k)
+        u_k = value_at_time(controls, ctrl_times, t_k)
+        assert jnp.array_equal(y_k, x_k + 100.0 * u_k)
+
+
+def test_previous_transition_pairs_each_observation_with_the_control_before_it():
+    """previous_transition: u_k drives the transition into x_{k+1} and the
+    observation y_{k+1}, so there is no y_0. Same revealing model as above:
+    x_{k+1} = x_k + u_k and y = x + 100 u.
+    """
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_values = jnp.array([[1.0], [2.0], [3.0]])
+    result = dsx.simulate(
+        _make_control_revealing_dynamics("previous_transition"),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=predict_times[:-1],
+        ctrl_values=ctrl_values,
+    )
+    assert result.times is not None and result.states is not None
+    assert result.obs_times is not None and result.observations is not None
+    assert result.ctrl_times is not None and result.controls is not None
+    times = jnp.asarray(result.times)[0]
+    obs_times = jnp.asarray(result.obs_times)[0]
+    ctrl_times = jnp.asarray(result.ctrl_times)[0]
+    states = jnp.asarray(result.states)[0]
+    observations = jnp.asarray(result.observations)[0]
+    controls = jnp.asarray(result.controls)[0]
+
+    # Grids: states still span every time (x_0 included); controls stop at
+    # t_{N-1}, the last time a transition leaves from; observations start at
+    # t_1, since no control precedes y_0.
+    assert jnp.array_equal(times, predict_times)
+    assert states.shape[0] == len(times)
+    assert jnp.array_equal(ctrl_times, times[:-1])
+    assert jnp.array_equal(obs_times, times[1:])
+    assert jnp.array_equal(controls, ctrl_values)
+
+    for t_k, t_next in zip(times[:-1], times[1:], strict=True):
+        x_k, x_next = (
+            value_at_time(states, times, t_k),
+            value_at_time(states, times, t_next),
+        )
+        u_k = value_at_time(controls, ctrl_times, t_k)
+        # Every transition t_k -> t_{k+1} is driven by u_k ...
+        assert jnp.array_equal(x_next, x_k + u_k)
+        # ... and y_{k+1} is emitted with that same u_k, not a control at
+        # t_{k+1} (which, for the final time, does not even exist).
+        y_next = value_at_time(observations, obs_times, t_next)
+        assert jnp.array_equal(y_next, x_next + 100.0 * u_k)
+
+
+def test_uncontrolled_simulation_has_no_controls_or_ctrl_times():
+    result = dsx.simulate(
+        _make_discrete_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(4.0),
+    )
+    assert result.controls is None
+    assert result.ctrl_times is None
+
+
+def test_discrete_simulator_previous_transition_rejects_ctrl_times_matching_full_predict_times():
+    """dsx.simulate's _validate_controls gate requires an exact-length match
+    against predict_times[:-1] for previous_transition; DiscreteTimeSimulator's
+    own _align_ctrl_values_to_times permits a superset ctrl_times, so this must
+    go through the public dsx.simulate entry point to observe the rejection."""
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    ctrl_values = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+
+    with pytest.raises(
+        ValueError,
+        match="expected 3 time points but got 4",
+    ):
+        dsx.simulate(
+            _make_control_revealing_dynamics("previous_transition"),
+            rng_key=jr.PRNGKey(0),
+            predict_times=predict_times,
+            ctrl_times=predict_times,
+            ctrl_values=ctrl_values,
+        )
+
+
+def test_discrete_simulator_previous_transition_zero_length_predict_times_edge_case():
+    """With a single prediction time, there are zero transitions/controls, so
+    observations/controls are empty -- but x_0/states/times are still the
+    (length-1) seed, same as same_time."""
+    result = dsx.simulate(
+        _make_control_revealing_dynamics("previous_transition"),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(1.0),
+    )
+
+    assert_finite(result.x_0, (1, 1), where="x_0")
+    assert_finite(result.times, (1, 1), where="times")
+    assert_finite(result.states, (1, 1, 1), where="states")
+    assert_finite(result.observations, (1, 0, 1), where="observations")
+    assert result.controls is None  # no ctrl_values supplied
+
+
+def test_discrete_simulator_previous_transition_rejects_obs_times():
+    predict_times = jnp.array([0.0, 1.0, 2.0])
+
+    with pytest.raises(
+        ValueError,
+        match="observation_control_alignment='previous_transition' does not support "
+        "obs_times",
+    ):
+        dsx.condition(
+            "f",
+            _make_control_revealing_dynamics("previous_transition"),
+            obs_times=predict_times,
+            obs_values=jnp.zeros((3, 1)),
+            predict_times=predict_times,
+        )
+
+
+def test_discrete_simulator_time_fields_tile_across_simulations():
+    """obs_times/ctrl_times carry the n_simulations axis like times does."""
+    predict_times = jnp.array([0.0, 1.0, 2.0, 3.0])
+    result = dsx.DiscreteTimeSimulator(n_simulations=3).simulate(
+        _make_control_revealing_dynamics("previous_transition"),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        ctrl_times=predict_times[:-1],
+        ctrl_values=jnp.array([[1.0], [2.0], [3.0]]),
+    )
+    assert result.obs_times is not None
+    assert result.ctrl_times is not None
+    assert jnp.asarray(result.obs_times).shape == (3, 3)
+    assert jnp.asarray(result.ctrl_times).shape == (3, 3)
+    assert jnp.array_equal(
+        jnp.asarray(result.obs_times), jnp.tile(predict_times[1:], (3, 1))
+    )
+
+
+@pytest.mark.parametrize(
+    ("make_dynamics", "simulator_config"),
+    [
+        (_make_ode_dynamics, dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000)),
+        (
+            _make_sde_dynamics,
+            dsx.SDESimulatorConfig(dt0=0.01, max_steps=2_000, source="em_scan"),
+        ),
+    ],
+    ids=["ode", "sde"],
+)
+def test_continuous_simulators_report_obs_times(make_dynamics, simulator_config):
+    """ODE/SDE simulators observe at every prediction time. They do not record
+    controls yet, so ctrl_times stays None alongside controls."""
+    predict_times = jnp.linspace(0.0, 0.5, 5)
+    result = dsx.simulate(
+        make_dynamics(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=predict_times,
+        n_simulations=2,
+        simulator_config=simulator_config,
+    )
+    assert result.obs_times is not None
+    assert jnp.asarray(result.obs_times).shape == (2, len(predict_times))
+    assert jnp.array_equal(jnp.asarray(result.obs_times)[0], predict_times)
+    assert result.ctrl_times is None
