@@ -1,47 +1,25 @@
 # Discretization
 
-A continuous-time `DynamicalModel` can be converted into a discrete-time model
-without entering an effect-handler context:
+Discrete-time inference methods need transitions between observation times, so
+a continuous-time model has to be discretized before they can use it. There are
+two ways to do this. Both take the same configurations and use the same
+[automatic routing](#automatic-routing).
 
-```python
-import dynestyx as dsx
-from dynestyx.discretizers import EulerMaruyamaConfig
-
-discrete_dynamics = dsx.discretize_dynamics(
-    continuous_dynamics,
-    EulerMaruyamaConfig(),
-)
-```
-
-The returned model preserves the initial condition, observation model, control
-metadata, and initial time. Its state evolution is the interval transition
-selected by the discretizer configuration.
-
-## Sampling and scoring
-
-Use the returned model's distributions directly:
-
-```python
-initial_state = discrete_dynamics.initial_condition.sample(initial_key)
-discrete_dynamics.initial_condition.log_prob(initial_state)
-
-transition = discrete_dynamics.state_evolution(
-    x=previous_state, u=control, t_now=t_now, t_next=t_next
-)
-state = transition.sample(key)
-transition.log_prob(state)
-```
-
-Sampling requires a transition with `sample`; scoring additionally requires
-`log_prob`. `EulerMaruyamaConfig` supplies both for its Gaussian approximation.
-`DiffraxSampleConfig` supplies sampling only.
-
-For dense all-pairs scores, [map over the transition distributions](../models/core/discrete_time_state_evolution.md#all-pairs-transition-scores).
-For missing observations, use [masked_observation_log_prob](../models/core/observation_model.md#masked_observation_log_prob).
+- **Effect-handler form**: wrap the model call in a `Discretizer` context. Your
+  model code stays in continuous time and unchanged, so you can switch the
+  discretization or the inference method by changing only the surrounding
+  contexts. Use this with dynestyx's inference and simulation handlers, such as
+  `Filter` or `LatentPathBuilder`.
+- **Direct form**: call `discretize_dynamics` or
+  `discretize_state_evolution` and get the discretized model or state evolution
+  back as an object. Use this when you need the transition distributions
+  themselves, for example to sample or score transitions in your own inference
+  code.
 
 ## Effect-handler form
 
-A `Discretizer` maps a `ContinuousTimeStateEvolution` to a `DiscreteTimeStateEvolution` by discretizing the corresponding ODE or SDE; the resulting model is compatible with discrete-time inference techniques in `dynestyx` when the selected transition interface supplies what the inference method requires. The discretizer context should be placed *inside* the corresponding inference context:
+Place `Discretizer` *inside* the inference or simulation context, so the outer
+handler receives the discretized dynamics:
 
 ```python
 import dynestyx as dsx
@@ -56,19 +34,61 @@ with Filter(EnKFConfig(n_particles=100)):
         result = model(obs_times=obs_times, obs_values=obs_values)
 ```
 
-The config (in the above, `MeanTrajectoryLinearizationConfig`) changes the corresponding method for discretizing the continuous-time dynamics. See [Discretizer configurations](../inference/configs/discretizer_configs.md) for more information about each.
+The configuration, here `MeanTrajectoryLinearizationConfig`, selects the
+discretization method. See
+[Discretizer configurations](../inference/configs/discretizer_configs.md) to
+compare them.
+
+## Direct form
+
+`discretize_dynamics` returns a complete discrete-time model:
+
+```python
+import dynestyx as dsx
+from dynestyx.discretizers import EulerMaruyamaConfig
+
+discrete_dynamics = dsx.discretize_dynamics(
+    continuous_dynamics,
+    EulerMaruyamaConfig(),
+)
+```
+
+The returned model keeps the initial condition, observation model, control
+metadata and initial time; only the state evolution is replaced by the
+discretized transition. To discretize a state evolution without building a
+`DynamicalModel`, use [`discretize_state_evolution`](#state-evolution-only).
+
+### Sampling and scoring
+
+The returned model's distributions can be sampled and scored directly:
+
+```python
+initial_state = discrete_dynamics.initial_condition.sample(initial_key)
+discrete_dynamics.initial_condition.log_prob(initial_state)
+
+transition = discrete_dynamics.state_evolution(
+    x=previous_state, u=control, t_now=t_now, t_next=t_next
+)
+state = transition.sample(key)
+transition.log_prob(state)
+```
+
+`log_prob` is available when the configuration provides a transition density.
+`EulerMaruyamaConfig` provides the density of its Gaussian approximation;
+`DiffraxSampleConfig` only samples.
+
+For dense all-pairs scores, [map over the transition distributions](../models/core/discrete_time_state_evolution.md#all-pairs-transition-scores).
+For missing observations, use [masked_observation_log_prob](../models/core/observation_model.md#masked_observation_log_prob).
 
 ## Automatic routing
 
-When no configuration is supplied, `Discretizer()` chooses automatically:
+With no configuration, the method is chosen as follows:
 
 - a deterministic ODE is integrated with `ODEFlowConfig()`, producing a Delta transition at the numerical flow endpoint;
 - an `AffineDrift` with constant diffusion and no potential is discretized exactly; and
 - other SDE models use Euler--Maruyama discretization by default.
 
 Pass `ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)` to customize ODE integration; all Diffrax settings are taken from the nested `ODESimulatorConfig`.
-
-Both `discretize_dynamics()` and `Discretizer()` use this routing.
 
 ## Local affine-Gaussian parameters
 
@@ -120,8 +140,5 @@ fixed over each interval. No linearization state is needed.
       show_root_toc_entry: false
 
 ## State evolution only
-
-Use `discretize_state_evolution` to discretize a continuous state evolution
-without constructing a `DynamicalModel`.
 
 ::: dynestyx.discretizers.discretize_state_evolution
