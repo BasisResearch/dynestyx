@@ -646,17 +646,17 @@ def test_explicit_previous_transition_does_not_warn():
 def test_true_state_loop_grids_and_control_pairing(alignment):
     """Without a filter both conventions run. On a model whose outputs reveal
     the control that produced them (x_{k+1} = x_k + u_k and y = x + 100 u,
-    near-deterministic) and a policy emitting u_k = k + 1, check the grids and,
+    both deterministic) and a policy emitting u_k = k + 1, check the grids and,
     at every time, which control each state and observation used: "same_time"
     emits y_k with u_k at t_k, "previous_transition" emits y_{k+1} with u_k at
     t_{k+1}. The grid is non-uniform so a shifted field cannot line up by
     accident."""
 
     def state_evolution(x, u, t_now, t_next):
-        return dist.MultivariateNormal(x + u, 1e-1 * jnp.eye(1))
+        return dist.Delta(x + u, event_dim=1)
 
     def observation_model(x, u, t):
-        return dist.MultivariateNormal(x + 100.0 * u, 1e-1 * jnp.eye(1))
+        return dist.Delta(x + 100.0 * u, event_dim=1)
 
     dynamics = DynamicalModel(
         initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
@@ -705,13 +705,13 @@ def test_true_state_loop_grids_and_control_pairing(alignment):
         x_next = value_at_time(states, times, t_next)
         u_k = value_at_time(controls, ctrl_times, t_k)
         # u_k drives the transition t_k -> t_{k+1} ...
-        assert jnp.allclose(x_next, x_k + u_k, atol=1e-3)
+        assert jnp.allclose(x_next, x_k + u_k)
         # ... and the observation it pairs with under each convention.
         if alignment == "same_time":
             y, x = value_at_time(observations, obs_times, t_k), x_k
         else:
             y, x = value_at_time(observations, obs_times, t_next), x_next
-        assert jnp.allclose(y, x + 100.0 * u_k, atol=1e-3)
+        assert jnp.allclose(y, x + 100.0 * u_k)
 
 
 def test_true_state_policy_sees_the_exact_state_not_an_estimate():

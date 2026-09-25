@@ -355,17 +355,20 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         # Perfect state knowledge: no filter is built, and both conventions
         # run, the policy reading x_k straight off the trajectory.
         if self.use_true_state:
-            no_filter_loop = (
-                self.online_control_loop_same_time_no_filter
-                if alignment == ObservationControlAlignment.SAME_TIME
-                else self.online_control_loop_previous_transition_no_filter
-            )
-            return no_filter_loop(
-                dynamics,
-                rng_key=rng_key,
-                times=times,
-                initial_policy_state=initial_policy_state,
-            )
+            if alignment == ObservationControlAlignment.SAME_TIME:
+                return self.online_control_loop_same_time_no_filter(
+                    dynamics,
+                    rng_key=rng_key,
+                    times=times,
+                    initial_policy_state=initial_policy_state,
+                )
+            if alignment == ObservationControlAlignment.PREVIOUS_TRANSITION:
+                return self.online_control_loop_previous_transition_no_filter(
+                    dynamics,
+                    rng_key=rng_key,
+                    times=times,
+                    initial_policy_state=initial_policy_state,
+                )
 
         filter_config = (
             self.filter_config
