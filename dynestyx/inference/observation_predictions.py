@@ -23,6 +23,10 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeUKFConfig,
     EnKFConfig,
 )
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
+)
 from dynestyx.inference.utils.plate_utils import _make_plate_in_axes
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
@@ -299,8 +303,9 @@ def _build_prediction_outputs(
 def _extract_single_cuthbert_enkf_prediction_arrays(
     dynamics: DynamicalModel,
     state_ensemble: Float[Array, "time n_members state_dim"],
-    times: Real[Array, " time"],
-    controls: Real[Array, "time control_dim"],
+    model_inputs: Any,
+    *,
+    modify_predicted_observation_covariance=None,
 ) -> tuple[
     Float[Array, "time observation_dim"],
     Float[Array, "time observation_dim observation_dim"],
@@ -309,6 +314,8 @@ def _extract_single_cuthbert_enkf_prediction_arrays(
     Float[Array, "time observation_dim observation_dim"],
 ]:
     """Project one observation-aligned Cuthbert forecast sequence into data space."""
+    times = jnp.asarray(model_inputs.time)
+    controls = jnp.asarray(model_inputs.u)
 
     def project_at_time(state_ensemble_t, time_t, control_t):
         def project_member(state):
@@ -352,6 +359,11 @@ def _extract_single_cuthbert_enkf_prediction_arrays(
         deviations,
         deviations,
     ) / (n_members - 1)
+    if modify_predicted_observation_covariance is not None:
+        pred_cov = jax.vmap(modify_predicted_observation_covariance)(
+            pred_cov,
+            model_inputs,
+        )
 
     return (
         pred_mean,
@@ -366,7 +378,9 @@ def _extract_cuthbert_enkf_predictions(
     posterior: Any,
     *,
     dynamics: DynamicalModel,
+    filter_config: EnKFConfig,
     plate_shapes: tuple[int, ...],
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> PredictedObservationOutputs:
     """Extract Cuthbert EnKF forecasts, preserving any leading plate axes."""
     state_ensemble_raw = getattr(posterior, "predicted_ensemble", None)
@@ -378,14 +392,32 @@ def _extract_cuthbert_enkf_predictions(
         )
 
     state_ensemble = jnp.asarray(state_ensemble_raw)
-    times = jnp.asarray(model_inputs.time)
-    controls = jnp.asarray(model_inputs.u)
+    covariance_modifier = None
+    localization = filter_config.localization
+    if resolved_localization is None and localization is not None:
+        resolved_localization = resolve_enkf_localization(
+            localization,
+            state_dim=dynamics.state_dim,
+            observation_dim=dynamics.observation_dim,
+        )
+    if resolved_localization is not None:
+        # Distance-based callbacks close over one taper, shared across time and
+        # plate axes rather than replicated in the filter's model inputs.
+        covariance_modifier = (
+            resolved_localization.modify_predicted_observation_covariance
+        )
 
-    extract_arrays = _extract_single_cuthbert_enkf_prediction_arrays
+    def extract_arrays(dyn, ensemble, inputs):
+        return _extract_single_cuthbert_enkf_prediction_arrays(
+            dyn,
+            ensemble,
+            inputs,
+            modify_predicted_observation_covariance=covariance_modifier,
+        )
+
     if plate_shapes:
         in_axes = (
             _make_plate_in_axes(dynamics, plate_shapes),
-            0,
             0,
             0,
         )
@@ -395,8 +427,7 @@ def _extract_cuthbert_enkf_predictions(
     pred_mean, pred_cov, obs_cov, observation_ensemble, noise_cov = extract_arrays(
         dynamics,
         state_ensemble,
-        times,
-        controls,
+        model_inputs,
     )
     return PredictedObservationOutputs(
         mean=pred_mean,
@@ -418,8 +449,13 @@ def extract_filter_predictions(
     | Real[Array, "... control_time"]
     | None,
     plate_shapes: tuple[int, ...] = (),
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> PredictedObservationOutputs | None:
-    """Extract canonical predictions from any filter backend that supports them."""
+    """Extract canonical predictions from any filter backend that supports them.
+
+    Pass the filter's ``resolved_localization`` to reuse its precomputed EnKF
+    tapers. Otherwise, localization is resolved from ``filter_config`` here.
+    """
     if not filter_config.include_predicted_observations or posterior is None:
         return None
 
@@ -448,7 +484,9 @@ def extract_filter_predictions(
         return _extract_cuthbert_enkf_predictions(
             posterior,
             dynamics=dynamics,
+            filter_config=filter_config,
             plate_shapes=plate_shapes,
+            resolved_localization=resolved_localization,
         )
 
     return None

@@ -21,6 +21,7 @@ from dynestyx.inference.checkers import (
 )
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
+    ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -30,12 +31,21 @@ from dynestyx.inference.configs.filter import (
     DiscreteTimeConfigs,
     EKFConfig,
     EnKFConfig,
+    EnKFLocalizationConfig,
+    EnKFLocalizationFunctions,
     HMMConfig,
     HMMConfigs,
     KFConfig,
+    ModifyCrossCovariance,
+    ModifyPredictedObservationCovariance,
     PFConfig,
     PFResamplingConfig,
+    TaperCovarianceFn,
     UKFConfig,
+)
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (
@@ -306,6 +316,18 @@ class Filter(BaseLogFactorAdder):
                 warnings.simplefilter("ignore")
                 key = numpyro.prng_key()  # returns None outside seed handler
 
+        resolved_localization = None
+        if (
+            isinstance(config, EnKFConfig)
+            and config.filter_source == "cuthbert"
+            and config.localization is not None
+        ):
+            resolved_localization = resolve_enkf_localization(
+                config.localization,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
+            )
+
         if plate_shapes:
             return self._add_log_factors_batched(
                 name,
@@ -320,6 +342,7 @@ class Filter(BaseLogFactorAdder):
                 _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                resolved_localization=resolved_localization,
             )
 
         if not isinstance(config, HMMConfigs):
@@ -372,6 +395,7 @@ class Filter(BaseLogFactorAdder):
                 obs_values=obs_values,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                resolved_localization=resolved_localization,
                 **kwargs,
             )
         else:
@@ -387,6 +411,7 @@ class Filter(BaseLogFactorAdder):
             filter_config=config,
             obs_times=obs_times,
             ctrl_values=ctrl_values,
+            resolved_localization=resolved_localization,
         )
 
         self.marginal_loglik = marginal_loglik
@@ -462,6 +487,7 @@ class Filter(BaseLogFactorAdder):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        resolved_localization: ResolvedEnKFLocalization | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
@@ -519,6 +545,7 @@ class Filter(BaseLogFactorAdder):
                         obs_values=ov,
                         ctrl_times=ct,
                         ctrl_values=cv,
+                        resolved_localization=resolved_localization,
                     )
 
             elif config.filter_source == "cd_dynamax":
@@ -681,6 +708,7 @@ class Filter(BaseLogFactorAdder):
             obs_times=obs_times,
             ctrl_values=ctrl_values,
             plate_shapes=plate_shapes,
+            resolved_localization=resolved_localization,
         )
 
         if output_kind == "continuous":
@@ -734,6 +762,7 @@ def _filter_discrete_time(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
     **kwargs,
 ) -> tuple[
     Real[Array, ""] | None,
@@ -776,6 +805,7 @@ def _filter_discrete_time(
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            resolved_localization=resolved_localization,
             **kwargs,
         )
     else:
@@ -825,6 +855,7 @@ def _filter_continuous_time(
 
 
 __all__ = [
+    "ConstructCholInnovationCovariance",
     "ContinuousTimeKFConfig",
     "ContinuousTimeDPFConfig",
     "ContinuousTimeEnKFConfig",
@@ -832,11 +863,16 @@ __all__ = [
     "ContinuousTimeUKFConfig",
     "EKFConfig",
     "EnKFConfig",
+    "EnKFLocalizationConfig",
+    "EnKFLocalizationFunctions",
     "Filter",
     "HMMConfig",
     "HMMConfigs",
     "KFConfig",
+    "ModifyCrossCovariance",
+    "ModifyPredictedObservationCovariance",
     "PFConfig",
     "PFResamplingConfig",
+    "TaperCovarianceFn",
     "UKFConfig",
 ]
