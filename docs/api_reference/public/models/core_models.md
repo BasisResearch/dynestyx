@@ -4,6 +4,7 @@
     options:
       members:
         - DynamicalModel
+        - ObservationControlAlignment
         - ContinuousTimeStateEvolution
         - DiscreteTimeStateEvolution
         - ObservationModel

@@ -8,6 +8,7 @@ from dynestyx.models.core import (
     DeterministicContinuousTimeStateEvolution,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    ObservationControlAlignment,
     ObservationModel,
     StochasticContinuousTimeStateEvolution,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "LinearGaussianObservationParams",
     "LinearGaussianParams",
     "LinearGaussianStateEvolution",
+    "ObservationControlAlignment",
     "ObservationModel",
     "StochasticContinuousTimeStateEvolution",
     "LTI_continuous",

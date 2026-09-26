@@ -5,11 +5,23 @@ from jaxtyping import Array, Float
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
+    ObservationControlAlignment,
 )
 from dynestyx.models.diffusions import FullDiffusion
 from dynestyx.models.drifts import AffineDrift
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.models.state_evolution import LinearGaussianStateEvolution
+
+
+def _infer_control_dim(B: Array | None, D: Array | None) -> int:
+    if B is None:
+        return D.shape[-1] if D is not None else 0
+    control_dim = B.shape[-1]
+    if D is not None and D.shape[-1] != control_dim:
+        raise ValueError(
+            f"B and D must share the control dimension; got B.shape={B.shape}, D.shape={D.shape}"
+        )
+    return control_dim
 
 
 def LTI_discrete(
@@ -23,6 +35,7 @@ def LTI_discrete(
     d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
     initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
     initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
+    observation_control_alignment: ObservationControlAlignment | str | None = None,
 ) -> DynamicalModel:
     """
     Build a discrete-time linear time-invariant (LTI) `DynamicalModel`.
@@ -50,8 +63,7 @@ def LTI_discrete(
         R (jax.Array): Observation-noise covariance with shape
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the transition model
-            with shape $(d_x, d_u)$. If None, no control term is used and
-            `control_dim` is set to 0.
+            with shape $(d_x, d_u)$. If None, no transition control term is used.
         b (jax.Array | None): Optional additive transition bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -62,12 +74,19 @@ def LTI_discrete(
             shape $(d_x,)$. Defaults to zeros.
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
+        observation_control_alignment (ObservationControlAlignment | str | None):
+            Forwarded to `DynamicalModel`; see its docstring. Defaults to `None`
+            (unspecified).
+
+    Notes:
+        `control_dim` is inferred from B, or from D when B is None, and
+        defaults to 0 when both are None.
 
     Returns:
         DynamicalModel: A discrete-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else 0
+    control_dim = _infer_control_dim(B, D)
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)
@@ -95,6 +114,7 @@ def LTI_discrete(
         observation_model=observation_model,
         control_model=None,
         control_dim=control_dim,
+        observation_control_alignment=observation_control_alignment,
     )
 
 
@@ -137,8 +157,7 @@ def LTI_continuous(
         R (jax.Array): Observation-noise covariance with shape
             $(d_y, d_y)$.
         B (jax.Array | None): Optional control matrix in the drift with shape
-            $(d_x, d_u)$. If None, no control term is used and `control_dim` is
-            set to 0.
+            $(d_x, d_u)$. If None, no drift control term is used.
         b (jax.Array | None): Optional additive drift bias with shape
             $(d_x,)$.
         D (jax.Array | None): Optional control matrix in the observation model
@@ -150,11 +169,15 @@ def LTI_continuous(
         initial_cov (jax.Array | None): Optional initial-state covariance $C_0$
             with shape $(d_x, d_x)$. Defaults to identity.
 
+    Notes:
+        `control_dim` is inferred from B, or from D when B is None, and
+        defaults to 0 when both are None.
+
     Returns:
         DynamicalModel: A continuous-time LTI state-space model.
     """
     state_dim = A.shape[-1]
-    control_dim = B.shape[-1] if B is not None else 0
+    control_dim = _infer_control_dim(B, D)
 
     if initial_mean is None:
         initial_mean = jnp.zeros(state_dim)

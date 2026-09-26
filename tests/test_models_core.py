@@ -16,6 +16,7 @@ from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
+    ObservationControlAlignment,
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.diffusions import (
@@ -803,3 +804,67 @@ def test_dynamical_model_infers_dims_with_callable_linear_gaussian_fields() -> N
             ),
             observation_model=dsx.LinearGaussianObservation(H=jnp.eye(2), R=jnp.eye(2)),
         )
+
+
+# ---------------------------------------------------------------------------
+# observation_control_alignment field (#312)
+# ---------------------------------------------------------------------------
+
+
+def test_observation_control_alignment_defaults_to_unspecified() -> None:
+    """None means unspecified: open-loop simulation treats it as "same_time",
+    closed-loop control as "previous_transition" (with a warning)."""
+    model = _simple_discrete_model()
+    assert model.observation_control_alignment is None
+
+
+@pytest.mark.parametrize(
+    "given",
+    [ObservationControlAlignment.PREVIOUS_TRANSITION, "previous_transition"],
+    ids=["member", "string"],
+)
+def test_observation_control_alignment_accepts_a_member_or_its_string(given) -> None:
+    """Either form is stored as the enum member, which still equals its
+    string, so code comparing against "previous_transition" keeps working."""
+    model = DynamicalModel(
+        initial_condition=dist.Normal(0.0, 1.0),
+        state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
+        observation_model=lambda x, u, t: dist.Normal(x, 0.1),
+        control_dim=0,
+        observation_control_alignment=given,
+    )
+    assert (
+        model.observation_control_alignment
+        is ObservationControlAlignment.PREVIOUS_TRANSITION
+    )
+    assert model.observation_control_alignment == "previous_transition"
+
+
+def test_observation_control_alignment_rejects_an_unknown_value() -> None:
+    """The enum is the list of valid values: converting anything else raises."""
+    with pytest.raises(ValueError, match="not a valid ObservationControlAlignment"):
+        DynamicalModel(
+            initial_condition=dist.Normal(0.0, 1.0),
+            state_evolution=lambda x, u, t_now, t_next: dist.Normal(x, 0.1),
+            observation_model=lambda x, u, t: dist.Normal(x, 0.1),
+            control_dim=0,
+            observation_control_alignment="bogus",
+        )
+
+
+def test_observation_control_alignment_previous_transition_accepted_on_continuous_time() -> (
+    None
+):
+    """A continuous-time model may hold "previous_transition" so that a
+    Discretizer can carry it into the discrete-time model it builds."""
+    model = DynamicalModel(
+        initial_condition=_initial_condition_2d(),
+        state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -0.3 * x),
+        observation_model=_observation_model_2d,
+        observation_control_alignment="previous_transition",
+    )
+    assert model.continuous_time
+    assert (
+        model.observation_control_alignment
+        is ObservationControlAlignment.PREVIOUS_TRANSITION
+    )

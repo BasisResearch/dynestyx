@@ -113,9 +113,9 @@ def discretize_dynamics(
 ) -> DynamicalModel:
     """Build a discrete-time model from continuous-time dynamics.
 
-    Preserves the initial condition, observation model, control metadata, and
-    initial time. The state evolution uses the transition selected by
-    `discretizer_config`.
+    Preserves the initial condition, observation model, control metadata,
+    observation-control alignment, and initial time. The state evolution uses
+    the transition selected by `discretizer_config`.
 
     When no config is provided, deterministic ODEs use their numerical flow,
     affine SDEs with constant diffusion and no potential use an exact Gaussian
@@ -149,6 +149,7 @@ def discretize_dynamics(
         control_model=dynamics.control_model,
         control_dim=dynamics.control_dim,
         t0=dynamics.t0,
+        observation_control_alignment=dynamics.observation_control_alignment,
     )
 
 
