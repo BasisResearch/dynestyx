@@ -13,6 +13,8 @@ from dynestyx.inference.configs.filter import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.observation_missingness import (
+    _canonicalize_observation_distribution,
+    _check_observation_contract,
     masked_observation_log_prob,
     prepare_observation_views,
     probe_observation_distribution_contract,
@@ -73,7 +75,6 @@ def hmm_log_emission_probs_masked(
     xs: Int[Array, " n_states"],
     y: Shaped[Array, " observation_dim"],
     obs_mask: Bool[Array, " observation_dim"],
-    row_has_any_observed: Bool[Array, ""],
     t: float | int | Real[Array, ""],
     observation_dim: int,
     has_partial_missing: bool,
@@ -84,17 +85,17 @@ def hmm_log_emission_probs_masked(
     """log p(y_t, observed entries | x_t, u_t) for each latent state."""
 
     def lp(x):
-        obs_dist = dynamics.observation_model(x=x, u=u, t=t)
-        return masked_observation_log_prob(
-            obs_dist,
-            y=y,
-            obs_mask=obs_mask,
-            row_has_any_observed=row_has_any_observed,
+        obs_dist = _canonicalize_observation_distribution(
+            dynamics.observation_model(x=x, u=u, t=t),
             observation_dim=observation_dim,
-            has_partial_missing=has_partial_missing,
-            expected_mode=expected_mode,
-            expected_event_shape=expected_event_shape,
         )
+        if has_partial_missing:
+            _check_observation_contract(
+                obs_dist,
+                expected_mode=expected_mode,
+                expected_event_shape=expected_event_shape,
+            )
+        return masked_observation_log_prob(obs_dist, y=y, obs_mask=obs_mask)
 
     return jax.vmap(lp)(xs)
 
@@ -142,7 +143,7 @@ def hmm_log_components(
     )
     obs_mask = _obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask
     (
-        row_has_any_observed,
+        _row_has_any_observed,
         _has_missing,
         has_partial_missing,
         _has_fully_missing_rows,
@@ -155,12 +156,11 @@ def hmm_log_components(
     )
     if ctrl_values is not None:
         log_emit_seq = jax.vmap(
-            lambda y, obs_mask_t, row_has_any, t, u: hmm_log_emission_probs_masked(
+            lambda y, obs_mask_t, t, u: hmm_log_emission_probs_masked(
                 dynamics,
                 xs,
                 y,
                 obs_mask_t,
-                row_has_any,
                 t,
                 observation_dim,
                 has_partial_missing,
@@ -171,18 +171,16 @@ def hmm_log_components(
         )(
             obs_values_filled,
             obs_mask,
-            row_has_any_observed,
             obs_times,
             ctrl_values,
         )
     else:
         log_emit_seq = jax.vmap(
-            lambda y, obs_mask_t, row_has_any, t: hmm_log_emission_probs_masked(
+            lambda y, obs_mask_t, t: hmm_log_emission_probs_masked(
                 dynamics,
                 xs,
                 y,
                 obs_mask_t,
-                row_has_any,
                 t,
                 observation_dim,
                 has_partial_missing,
@@ -193,7 +191,6 @@ def hmm_log_components(
         )(
             obs_values_filled,
             obs_mask,
-            row_has_any_observed,
             obs_times,
         )
 
