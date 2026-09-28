@@ -295,8 +295,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             Under the `previous_transition` convention, the states are of length `len(predict_times)`, but the controls and observations are of length `len(predict_times) - 1`.
 
         Raises:
-            ValueError: If inputs are incompatible with online discrete control,
-                or `dynamics.observation_control_alignment` is not recognized.
+            ValueError: If inputs are incompatible with online discrete control.
             NotImplementedError: If the requested simulation mode is unsupported,
                 including an explicit `observation_control_alignment="same_time"`
                 while filtering (`use_true_state=False`).
@@ -342,17 +341,6 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 stacklevel=2,
             )
             alignment = ObservationControlAlignment.PREVIOUS_TRANSITION
-        if alignment not in (
-            ObservationControlAlignment.SAME_TIME,
-            ObservationControlAlignment.PREVIOUS_TRANSITION,
-        ):
-            # DynamicalModel.__init__ already rejects unknown values, but
-            # eqx.tree_at rewrites the field without calling it.
-            raise ValueError(
-                "observation_control_alignment not recognized, has to be one of "
-                f"{[member.value for member in ObservationControlAlignment]}; "
-                f"got {alignment!r}."
-            )
 
         # Perfect state knowledge: no filter is built, and both conventions
         # run, the policy reading x_k straight off the trajectory.

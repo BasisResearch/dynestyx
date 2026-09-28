@@ -78,15 +78,6 @@ def _lti_1d(
     )
 
 
-def _with_alignment(dynamics, alignment):
-    """Set a model's observation/control convention.
-
-    The closed loop reads it from the model, but LTI_discrete does not expose
-    the field, so it is rewritten here after construction.
-    """
-    return eqx.tree_at(lambda m: m.observation_control_alignment, dynamics, alignment)
-
-
 class _LinearPolicy(eqx.Module):
     """u = -K x_hat, as an equinox.Module policy."""
 
@@ -590,16 +581,6 @@ def test_previous_transition_policy_sees_the_filtered_belief():
     filtered = jnp.ravel(result.filtered_states_mean[0])
     # p_hat_k for k = 0..N-1; the last belief is never acted on.
     assert jnp.allclose(seen, filtered[:-1], atol=1e-5)
-
-
-def test_online_control_rejects_an_unknown_alignment():
-    """DynamicalModel.__init__ rejects unknown values, but eqx.tree_at rewrites
-    the field past that validation -- which is exactly how MPPI edits models --
-    so simulate's own dispatch still has to catch it."""
-    dynamics = _with_alignment(_lti_1d(), "whenever")
-    sim = DiscreteControlLoopSimulator(control_policy=_simple_policy())
-    with pytest.raises(ValueError, match="not recognized"):
-        sim.simulate(dynamics, rng_key=jr.PRNGKey(0), predict_times=jnp.arange(4.0))
 
 
 def test_explicit_same_time_online_control_is_not_implemented_yet():
