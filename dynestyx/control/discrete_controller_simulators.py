@@ -203,10 +203,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     [Closed-loop control page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/control/).
 
     With `use_true_state=True` the loop skips filtering altogether and hands
-    the policy the true state $x_k$. No
-    belief is predicted or updated, so both conventions run, in
-    `online_control_loop_same_time_no_filter` and
-    `online_control_loop_previous_transition_no_filter`.
+    the policy the true state $x_k$. Both conventions run.
 
     The one-step filter update runs on the cuthbert backend
     (`filter_source="cuthbert"`). See the
@@ -345,20 +342,13 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         # Perfect state knowledge: no filter is built, and both conventions
         # run, the policy reading x_k straight off the trajectory.
         if self.use_true_state:
-            if alignment == ObservationControlAlignment.SAME_TIME:
-                return self.online_control_loop_same_time_no_filter(
-                    dynamics,
-                    rng_key=rng_key,
-                    times=times,
-                    initial_policy_state=initial_policy_state,
-                )
-            if alignment == ObservationControlAlignment.PREVIOUS_TRANSITION:
-                return self.online_control_loop_previous_transition_no_filter(
-                    dynamics,
-                    rng_key=rng_key,
-                    times=times,
-                    initial_policy_state=initial_policy_state,
-                )
+            return self._online_control_loop_no_filter(
+                dynamics,
+                rng_key=rng_key,
+                times=times,
+                same_time=alignment == ObservationControlAlignment.SAME_TIME,
+                initial_policy_state=initial_policy_state,
+            )
 
         filter_config = (
             self.filter_config
@@ -385,7 +375,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 "a filter. Tracked in "
                 "https://github.com/BasisResearch/dynestyx/issues/372."
             )
-        return self.online_control_loop_previous_transition(
+        return self._online_control_loop_previous_transition(
             dynamics,
             rng_key=rng_key,
             times=times,
@@ -393,7 +383,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             initial_policy_state=initial_policy_state,
         )
 
-    def online_control_loop_same_time(
+    def _online_control_loop_same_time(
         self,
         dynamics: DynamicalModel,
         *,
@@ -596,7 +586,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             policy_states=policy_states,
         )
 
-    def online_control_loop_previous_transition(
+    def _online_control_loop_previous_transition(
         self,
         dynamics: DynamicalModel,
         *,
@@ -768,158 +758,22 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             policy_states=policy_states,
         )
 
-    def online_control_loop_same_time_no_filter(
+    def _online_control_loop_no_filter(
         self,
         dynamics: DynamicalModel,
         *,
         rng_key: PRNGKeyArray,
         times: Real[Array, " predict_time"],
+        same_time: bool,
         initial_policy_state: PyTree | None = None,
     ) -> ControlledSimulatedResult:
-        r"""Run the closed loop under `"same_time"` on the true state.
+        r"""Run the closed loop on the true state, without a filter.
 
-        No filter runs: the policy is handed $x_k$ itself, as a `Delta`.
-
-        On $\text{Times} = [t_0, \dots, t_N]$:
-
-        $$
-        \begin{aligned}
-        &x_0 \sim p_0, \quad s_0 \text{ given}
-            && \text{Initialization step} \\
-        &\text{for } k = 0, \dots, N-1: \\
-        &\quad u_k, s_{k+1} = \pi(x_k, t_k, t_{k+1}, s_k)
-            && \text{Select the control} \\
-        &\quad y_k \sim p(y_k \mid x_k, u_k, t_k)
-            && \text{Emit observation} \\
-        &\quad x_{k+1} \sim p(x_{k+1} \mid x_k, u_k, t_k, t_{k+1})
-            && \text{State transition}
-        \end{aligned}
-        $$
-
-        $u_k$ both generates $y_k$ and drives the transition into $x_{k+1}$.
-        The loop yields $N+1$ states on $[t_0, \dots, t_N]$, and $N$ controls
-        and observations on $[t_0, \dots, t_{N-1}]$: the policy needs
-        $t_{k+1}$ to choose $u_k$, so it never acts at $t_N$, and without $u_N$
-        there is no $y_N$.
-
-        Args:
-            dynamics: Discrete-time dynamical model.
-            rng_key: Root key for the environment's randomness.
-            times: Strictly increasing simulation times, at least one. A single
-                time yields one state and nothing else.
-            initial_policy_state: Initial state $s_0$ passed to `control_policy`.
-
-        Returns:
-            `times` and `states` of length $N+1$; `observations`, `obs_times`,
-            `controls`, `ctrl_times` and `policy_states` of length $N$.
-            `filtered_states_mean` is always `None`.
+        The policy is handed $x_k$ itself, as a `Delta`. Both conventions
+        share this loop and differ only in which state and time each
+        observation uses (see [Closed-loop control page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/control/)).
         """
         N = len(times) - 1
-        # filter_key is unused here, but we still draw it to ensure randomness is consistent
-        rollout_key, initial_state_key, _unused_filter_key = jr.split(rng_key, 3)
-
-        x_0 = dynamics.initial_condition.sample(initial_state_key)
-        s_0 = initial_policy_state
-
-        def _step(carry, t_idx):
-            x_k, s_k, rollout_key = carry
-            rollout_key, observation_key, transition_key = jr.split(rollout_key, 3)
-            t_now = times[t_idx]
-            t_next = times[t_idx + 1]
-
-            # u_k = pi(x_k). The policy takes a distribution, so the known
-            # state goes in as a Delta.
-            u_k, s_next = self.control_policy(
-                Delta(x_k, event_dim=jnp.ndim(x_k)), t_now, t_next, s_k
-            )
-            u_k = _validate_policy_control(u_k, dynamics.control_dim)
-
-            # y_k ~ p(y_k | x_k, u_k)
-            y_k = dynamics.observation_model(x_k, u_k, t_now).sample(observation_key)
-
-            # x_{k+1} ~ p(x_{k+1} | x_k, u_k)
-            x_next = dynamics.state_evolution(x_k, u_k, t_now, t_next).sample(
-                transition_key
-            )
-
-            return (x_next, s_next, rollout_key), (x_k, y_k, s_next, u_k)
-
-        init_carry = (x_0, s_0, rollout_key)
-        (x_final, _s_final, _), (xs, ys, ss, us) = jax.lax.scan(
-            _step, init_carry, jnp.arange(N)
-        )
-
-        # The scan emits x_k, so the final state has to be appended.
-        states = jnp.concatenate([xs, jnp.expand_dims(x_final, 0)], axis=0)
-        # y_k is emitted at t_k, so observations and controls share the grid.
-        obs_times = times[:-1]
-        ctrl_times = times[:-1]
-
-        policy_states = None
-        if s_0 is not None:
-            policy_states = jax.tree_util.tree_map(
-                lambda leaf: jnp.expand_dims(leaf, axis=0), ss
-            )
-
-        return ControlledSimulatedResult(
-            times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
-            states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
-            observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
-            obs_times=_tile_times(obs_times, 1),
-            controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
-            ctrl_times=_tile_times(ctrl_times, 1),
-            filtered_states_mean=None,
-            policy_states=policy_states,
-        )
-
-    def online_control_loop_previous_transition_no_filter(
-        self,
-        dynamics: DynamicalModel,
-        *,
-        rng_key: PRNGKeyArray,
-        times: Real[Array, " predict_time"],
-        initial_policy_state: PyTree | None = None,
-    ) -> ControlledSimulatedResult:
-        r"""Run the closed loop under `"previous_transition"` on the true state.
-
-        No filter runs: the policy is handed $x_k$ itself, as a `Delta`.
-
-        On $\text{Times} = [t_0, \dots, t_N]$:
-
-        $$
-        \begin{aligned}
-        &x_0 \sim p_0, \quad s_0 \text{ given}
-            && \text{Initialization step} \\
-        &\text{for } k = 0, \dots, N-1: \\
-        &\quad u_k, s_{k+1} = \pi(x_k, t_k, t_{k+1}, s_k)
-            && \text{Select the control} \\
-        &\quad x_{k+1} \sim p(x_{k+1} \mid x_k, u_k, t_k, t_{k+1})
-            && \text{State transition} \\
-        &\quad y_{k+1} \sim p(y_{k+1} \mid x_{k+1}, u_k, t_{k+1})
-            && \text{Emit observation}
-        \end{aligned}
-        $$
-
-        $u_k$ both drives the transition into $x_{k+1}$ and generates
-        $y_{k+1}$, so there is no $y_0$. The loop yields $N+1$ states on
-        $[t_0, \dots, t_N]$, $N$ controls on $[t_0, \dots, t_{N-1}]$ and $N$
-        observations on $[t_1, \dots, t_N]$.
-
-        Args:
-            dynamics: Discrete-time dynamical model.
-            rng_key: Root key for the environment's randomness.
-            times: Strictly increasing simulation times, at least one. A single
-                time yields one state and nothing else.
-            initial_policy_state: Initial state $s_0$ passed to `control_policy`.
-
-        Returns:
-            `times` and `states` of length $N+1$; `observations`, `obs_times`,
-            `controls`, `ctrl_times` and `policy_states` of length $N$.
-            `filtered_states_mean` is always `None`.
-        """
-        N = len(times) - 1
-
         # filter_key is unused here, but we still draw it to ensure randomness is consistent
         rollout_key, initial_state_key, _unused_filter_key = jr.split(rng_key, 3)
 
@@ -944,20 +798,19 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 transition_key
             )
 
-            # y_{k+1} ~ p(y_{k+1} | x_{k+1}, u_k)
-            y_next = dynamics.observation_model(x_next, u_k, t_next).sample(
-                observation_key
-            )
+            # The only difference between the conventions: y_k ~ p(y_k | x_k, u_k)
+            # under same_time, y_{k+1} ~ p(y_{k+1} | x_{k+1}, u_k) otherwise.
+            x_obs, t_obs = (x_k, t_now) if same_time else (x_next, t_next)
+            y = dynamics.observation_model(x_obs, u_k, t_obs).sample(observation_key)
 
-            return (x_next, s_next, rollout_key), (x_next, y_next, s_next, u_k)
+            return (x_next, s_next, rollout_key), (x_next, y, s_next, u_k)
 
         init_carry = (x_0, s_0, rollout_key)
         _, (xs, ys, ss, us) = jax.lax.scan(_step, init_carry, jnp.arange(N))
 
-        # x_0 precedes the loop; every observation follows a transition, so
-        # they start at t_1 while controls start at t_0.
+        # x_0 precedes the loop; the scan emits x_1..x_N.
         states = jnp.concatenate([jnp.expand_dims(x_0, 0), xs], axis=0)
-        obs_times = times[1:]
+        obs_times = times[:-1] if same_time else times[1:]
         ctrl_times = times[:-1]
 
         policy_states = None
