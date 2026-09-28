@@ -26,6 +26,10 @@ from dynestyx.inference.configs.filter import (
     KFConfig,
     PFConfig,
 )
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
+)
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )
@@ -148,6 +152,18 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
             config.resampling_method.differential_method
         )
     elif isinstance(config, EnKFConfig):
+        reserved_hooks = {
+            "modify_cross_covariance",
+            "construct_chol_innovation_covariance",
+            "modify_predicted_observation_covariance",
+        }
+        conflicts = sorted(reserved_hooks.intersection(kwargs))
+        if conflicts:
+            raise ValueError(
+                "EnKF localization callback names are reserved in "
+                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
+                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
+            )
         kwargs["n_particles"] = config.n_particles
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
@@ -203,6 +219,15 @@ def build_cuthbert_filter(
             raise ValueError(
                 "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        if (
+            filter_config.localization is not None
+            and "_resolved_enkf_localization" not in filter_kwargs
+        ):
+            filter_kwargs["_resolved_enkf_localization"] = resolve_enkf_localization(
+                filter_config.localization,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
             )
         filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
     elif isinstance(filter_config, KFConfig):
@@ -395,6 +420,7 @@ def compute_cuthbert_filter(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
     store_predicted_ensemble: bool | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
@@ -402,6 +428,9 @@ def compute_cuthbert_filter(
     ``filter_config.include_predicted_observations``. Passing ``True`` or
     ``False`` explicitly overrides that default; smoothers use the explicit
     form when their backward pass requires forecast ensembles.
+
+    ``resolved_localization`` lets the caller share localization callbacks with
+    prediction extraction without storing fixed tapers in the state sequence.
 
     Returns:
         tuple: (marginal_loglik, states). By default states are aligned to
@@ -428,14 +457,27 @@ def compute_cuthbert_filter(
     dummy_u = jnp.zeros_like(ctrl_values[:1])
     dummy_time = jnp.zeros_like(times[:1])
 
-    cuthbert_inputs = CuthbertInputs(
-        y=jnp.concatenate([dummy_y, ys], axis=0),
-        u=jnp.concatenate([dummy_u, ctrl_values], axis=0),
-        u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
-        time=jnp.concatenate([dummy_time, times], axis=0),
-        time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(obs_len + 1) == 1,
-    )
+    input_kwargs = {
+        "y": jnp.concatenate([dummy_y, ys], axis=0),
+        "u": jnp.concatenate([dummy_u, ctrl_values], axis=0),
+        "u_prev": jnp.concatenate([dummy_u, u_prev], axis=0),
+        "time": jnp.concatenate([dummy_time, times], axis=0),
+        "time_prev": jnp.concatenate([dummy_time, time_prev], axis=0),
+        "is_first_step": jnp.arange(obs_len + 1) == 1,
+    }
+
+    if (
+        resolved_localization is None
+        and isinstance(filter_config, EnKFConfig)
+        and filter_config.localization is not None
+    ):
+        resolved_localization = resolve_enkf_localization(
+            filter_config.localization,
+            state_dim=dynamics.state_dim,
+            observation_dim=dynamics.observation_dim,
+        )
+
+    cuthbert_inputs = CuthbertInputs(**input_kwargs)
 
     if store_predicted_ensemble is None:
         store_predicted_ensemble = bool(
@@ -443,12 +485,16 @@ def compute_cuthbert_filter(
             and filter_config.include_predicted_observations
         )
 
+    build_kwargs = {"store_predicted_ensemble": store_predicted_ensemble}
+    if resolved_localization is not None:
+        build_kwargs["_resolved_enkf_localization"] = resolved_localization
+
     filter_obj, parallel = build_cuthbert_filter(
         dynamics,
         filter_config,
         key,
         want_parallel=True,
-        extra_filter_kwargs={"store_predicted_ensemble": store_predicted_ensemble},
+        extra_filter_kwargs=build_kwargs,
     )
 
     init_inputs = jax.tree.map(lambda leaf: leaf[0], cuthbert_inputs)
@@ -486,6 +532,7 @@ def run_discrete_filter(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
     **kwargs,
 ) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
@@ -514,6 +561,7 @@ def run_discrete_filter(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        resolved_localization=resolved_localization,
     )
     filtered_dists = _cholesky_state_sequence_to_dists(
         states,
@@ -590,6 +638,18 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
+
+    localization_kwargs = {}
+    resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
+    if resolved_localization is not None:
+        if resolved_localization.modify_cross_covariance is not None:
+            localization_kwargs["modify_cross_covariance"] = (
+                resolved_localization.modify_cross_covariance
+            )
+        if resolved_localization.construct_chol_innovation_covariance is not None:
+            localization_kwargs["construct_chol_innovation_covariance"] = (
+                resolved_localization.construct_chol_innovation_covariance
+            )
 
     obs_model = dynamics.observation_model
     if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
@@ -681,6 +741,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         store_predicted_ensemble=bool(
             filter_kwargs.get("store_predicted_ensemble", False)
         ),
+        **localization_kwargs,
     )
 
 
