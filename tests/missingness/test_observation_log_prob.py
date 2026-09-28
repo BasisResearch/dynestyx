@@ -128,6 +128,37 @@ def test_observation_log_prob_accepts_scalar_time_series():
     )
 
 
+def test_observation_log_prob_complete_row_uses_runtime_distribution_family():
+    def observation_model(x, u, t):
+        loc = jnp.broadcast_to(x, (2,))
+        # The probe receives a length-one state; the runtime state is scalar.
+        if x.ndim == 1:
+            return dist.MultivariateNormal(loc, jnp.eye(2))
+        return dist.Normal(loc, 1.0).to_event(1)
+
+    obs_values = jnp.array([[0.3, 0.1]])
+    log_prob, _, _, _ = prepare_observation_log_prob(
+        _build_scalar_dynamics(observation_model), obs_values
+    )
+    x = jnp.array(0.2)
+
+    actual = log_prob(x=x, u=None, t=jnp.array(0.0), t_idx=0)
+    expected = dist.Normal(x, 1.0).log_prob(obs_values[0]).sum()
+
+    assert actual.shape == ()
+    assert jnp.allclose(actual, expected)
+
+
+def test_observation_log_prob_rejects_row_shorter_than_event_shape():
+    log_prob, _, _, _ = prepare_observation_log_prob(
+        _build_vector_dynamics(lambda x, u, t: dist.MultivariateNormal(x, jnp.eye(2))),
+        jnp.array([[0.3]]),
+    )
+
+    with pytest.raises(ValueError, match="observation event shape"):
+        log_prob(x=jnp.zeros(2), u=None, t=jnp.array(0.0), t_idx=0)
+
+
 def test_observation_log_prob_rejects_more_than_two_dimensions():
     with pytest.raises(TypeCheckError, match="parameter 'obs_values'"):
         prepare_observation_log_prob(
