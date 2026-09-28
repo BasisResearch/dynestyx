@@ -129,9 +129,8 @@ class PolicyCallable(Protocol):
 
     where $\hat{x}_{k|j}$ is the state estimate at time $t_k$ given observations up to time $t_j$. At $k=0$, this is the model's initial-state distribution $p_0$.
 
-    With `use_true_state=True` there is no filter and no estimate: $\tilde x_k$
-    is the true state $x_k$, handed over as a `Delta` at that state, so
-    `x_hat.mean` is $x_k$ exactly.
+    With `use_true_state=True` there is no filtering: $\tilde x_k$
+    is a `Delta` centered on the true state $x_k$.
 
     It is always a NumPyro `Distribution`.
     Use `x_hat.mean` for a family-agnostic point estimate.
