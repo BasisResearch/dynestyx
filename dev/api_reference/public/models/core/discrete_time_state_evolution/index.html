@@ -2612,6 +2612,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DiscreteTimeStateEvolution
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2628,6 +2646,36 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#all-pairs-transition-scores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        All-pairs transition scores
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -5191,7 +5239,25 @@ In practice this should be a <code>numpyro.distributions.Distribution</code> ins
 
     </div>
 
-</div>
+</div><h2 id="all-pairs-transition-scores">All-pairs transition scores<a class="headerlink" href="#all-pairs-transition-scores" title="Permanent link">&para;</a></h2>
+<p>Use <code>vmap</code> to score every pair of previous and current states:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">score_from</span><span class="p">(</span><span class="n">previous_state</span><span class="p">):</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">state_evolution</span><span class="p">(</span>
+        <span class="n">x</span><span class="o">=</span><span class="n">previous_state</span><span class="p">,</span> <span class="n">u</span><span class="o">=</span><span class="n">control</span><span class="p">,</span> <span class="n">t_now</span><span class="o">=</span><span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="o">=</span><span class="n">t_next</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">transition</span><span class="o">.</span><span class="n">log_prob</span><span class="p">,</span> <span class="n">out_axes</span><span class="o">=-</span><span class="mi">1</span><span class="p">)(</span><span class="n">states</span><span class="p">)</span>
+
+
+<span class="n">pairwise_log_prob</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">score_from</span><span class="p">,</span> <span class="n">out_axes</span><span class="o">=-</span><span class="mi">2</span><span class="p">)(</span><span class="n">previous_states</span><span class="p">)</span>
+</code></pre></div>
+<p>The result has shape <code>(*log_prob_batch, n_previous, n_current)</code>, preserving
+distribution batch axes. Dense evaluation requires work and output storage
+proportional to <code>n_previous * n_current</code> per batch member.</p>
+<p>For joint state-path and observation scoring, pass the complete discrete path
+to <a href="../../../handlers/#pure-apis">log_prob</a> as <code>state_path_params</code>.</p>
 
 
 

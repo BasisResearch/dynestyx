@@ -2691,6 +2691,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#masked_observation_log_prob" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        masked_observation_log_prob
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5170,6 +5181,156 @@ the <a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distribut
 
 
   </div>
+
+    </div>
+
+</div><h2 id="masked_observation_log_prob">masked_observation_log_prob<a class="headerlink" href="#masked_observation_log_prob" title="Permanent link">&para;</a></h2>
+<p>Score the observed marginal of a distribution returned by an observation model:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
+
+<span class="n">observation_dist</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">time</span><span class="p">)</span>
+<span class="n">log_likelihood</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">masked_observation_log_prob</span><span class="p">(</span>
+    <span class="n">observation_dist</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">observation</span><span class="p">,</span> <span class="n">obs_mask</span><span class="o">=</span><span class="n">observed</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>This also works with plain callable observation models.</p>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Evaluate the marginal log density of observed components.</p>
+<p>Partial observations require <code>MultivariateNormal</code> or factorizable
+<code>Independent(..., 1)</code> distributions. Scalar observations and fully
+observed or fully missing vectors support other distribution families.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>obs_dist</code>
+            </td>
+            <td>
+                  <code><span title="numpyro.distributions.Distribution">Distribution</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scalar or vector observation distribution.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39; observation_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>One observation, broadcast over distribution batch axes. Values
+at missing components are ignored and may be NaN.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>obs_mask</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Bool">Bool</span>[<span title="jaxtyping.Array">Array</span>, &#39; observation_dim&#39;] | <span title="jaxtyping.Bool">Bool</span>[<span title="jaxtyping.Array">Array</span>, &#39;&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Boolean mask matching <code>y</code>, with <code>True</code> at observed components.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>Array</code></td>            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jaxtyping.Array">Array</span>, &#39;*log_prob_batch&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Observed-marginal log density, retaining distribution batch
+axes. A fully missing observation contributes zero.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>y</code> and <code>obs_mask</code> do not match the scalar or vector
+event shape, or partial marginalization is unsupported.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If unsupported partial marginalization is detected
+during JIT execution.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
 
     </div>
 

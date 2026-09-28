@@ -2752,6 +2752,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#linearize_drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        linearize_drift
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#imexdrift" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5522,7 +5533,131 @@ is accepted for compatibility with the <code>Drift</code> protocol but is not us
 
     </div>
 
-</div><h2 id="imexdrift">ImExDrift<a class="headerlink" href="#imexdrift" title="Permanent link">&para;</a></h2>
+</div><h2 id="linearize_drift">linearize_drift<a class="headerlink" href="#linearize_drift" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Linearize a drift in state at fixed control and time.</p>
+<p>Returns <code>AffineDrift(A=J, b=drift(x, u, t) - J @ x)</code>, where <code>J</code> is the
+state Jacobian at the supplied reference. Control is incorporated into
+<code>A</code> and <code>b</code>, so <code>B=None</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>drift</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Drift (dynestyx.models.drifts.Drift)" href="../../core_models/#dynestyx.models.drifts.Drift">Drift</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Drift callable. Use <code>state_evolution.total_drift</code> to include
+any potential-gradient contribution.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>x</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; state_dim&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Reference state.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>u</code>
+            </td>
+            <td>
+                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;&#39;] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fixed control, or <code>None</code> for an uncontrolled drift.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>t</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | <span title="int">int</span> | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fixed time.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>AffineDrift</code></td>            <td>
+                  <code><span title="dynestyx.models.drifts.AffineDrift">AffineDrift</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Local affine drift conditional on the supplied control
+and time.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div><p>For local affine-Gaussian transition parameters, compose the returned drift
+with <a href="../../../discretizers/discretizer/#local-affine-gaussian-parameters">exact affine discretization</a>.</p>
+<h2 id="imexdrift">ImExDrift<a class="headerlink" href="#imexdrift" title="Permanent link">&para;</a></h2>
 
 
 <div class="doc doc-object doc-class">

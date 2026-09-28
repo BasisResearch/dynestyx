@@ -4736,10 +4736,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynestyx.discretizers._discretize_state_evolution" class="md-nav__link">
+  <a href="#dynestyx.discretizers.discretize_dynamics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        _discretize_state_evolution
+        discretize_dynamics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.discretize_state_evolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        discretize_state_evolution
       
     </span>
   </a>
@@ -6116,15 +6127,141 @@ after integrating the flow. Defaults to <code>0.0</code>.</p>
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.discretizers._discretize_state_evolution" class="doc doc-heading">
-            <code class=" language-python"><span class="n">_discretize_state_evolution</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseDiscretizerConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiscreteTimeStateEvolution</span></code>
+<h2 id="dynestyx.discretizers.discretize_dynamics" class="doc doc-heading">
+            <code class=" language-python"><span class="n">discretize_dynamics</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">discretizer_config</span><span class="p">:</span> <span class="n">BaseDiscretizerConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicalModel</span></code>
 
-<a href="#dynestyx.discretizers._discretize_state_evolution" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.discretizers.discretize_dynamics" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents ">
 
-        <p>Build the private discrete transition selected by a config.</p>
+        <p>Build a discrete-time model from continuous-time dynamics.</p>
+<p>Preserves the initial condition, observation model, control metadata,
+observation-control alignment, and initial time. The state evolution uses
+the transition selected by <code>discretizer_config</code>.</p>
+<p>When no config is provided, deterministic ODEs use their numerical flow,
+affine SDEs with constant diffusion and no potential use an exact Gaussian
+transition, and other SDEs use Euler--Maruyama.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dynamics</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Continuous-time model to discretize.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>discretizer_config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../../public/inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Explicit discretization config, or <code>None</code> for
+automatic routing.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>DynamicalModel</code></td>            <td>
+                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A discrete-time model with the selected interval
+transition.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="TypeError">TypeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>dynamics</code> is already discrete-time or the config is not
+compatible with its continuous state evolution.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.discretizers.discretize_state_evolution" class="doc doc-heading">
+            <code class=" language-python"><span class="n">discretize_state_evolution</span><span class="p">(</span><span class="n">cte</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">BaseDiscretizerConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiscreteTimeStateEvolution</span></code>
+
+<a href="#dynestyx.discretizers.discretize_state_evolution" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Discretize a continuous state evolution.</p>
+<p>Uses the same transition discretization as <code>discretize_dynamics</code>.</p>
 
 
     </div>

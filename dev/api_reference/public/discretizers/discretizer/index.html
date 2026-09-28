@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#discretizers" class="md-skip">
+        <a href="#discretization" class="md-skip">
           Skip to content
         </a>
       
@@ -3353,10 +3353,93 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#effect-handler-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Effect-handler form
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#direct-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct form
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Direct form">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sampling-and-scoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling and scoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#automatic-routing" class="md-nav__link">
     <span class="md-ellipsis">
       
         Automatic routing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-affine-gaussian-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local affine-Gaussian parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.discretize_dynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        discretize_dynamics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-evolution-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State evolution only
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.discretizers.discretize_state_evolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        discretize_state_evolution
       
     </span>
   </a>
@@ -5081,8 +5164,26 @@
   
 
 
-<h1 id="discretizers">Discretizers<a class="headerlink" href="#discretizers" title="Permanent link">&para;</a></h1>
-<p>A <code>Discretizer</code> maps a <code>ContinuousTimeStateEvolution</code> to a <code>DiscreteTimeStateEvolution</code> by discretizing the corresponding ODE or SDE; the resulting model is compatible with discrete-time inference techniques in <code>dynestyx</code> when the selected transition interface supplies what the inference method requires. The discretizer context should be placed <em>inside</em> the corresponding inference context:</p>
+<h1 id="discretization">Discretization<a class="headerlink" href="#discretization" title="Permanent link">&para;</a></h1>
+<p>Discrete-time inference methods need transitions between observation times, so
+a continuous-time model has to be discretized before they can use it. There are
+two ways to do this. Both take the same configurations and use the same
+<a href="#automatic-routing">automatic routing</a>.</p>
+<ul>
+<li><strong>Effect-handler form</strong>: wrap the model call in a <code>Discretizer</code> context. Your
+  model code stays in continuous time and unchanged, so you can switch the
+  discretization or the inference method by changing only the surrounding
+  contexts. Use this with dynestyx's inference and simulation handlers, such as
+  <code>Filter</code> or <code>LatentPathBuilder</code>.</li>
+<li><strong>Direct form</strong>: call <code>discretize_dynamics</code> or
+  <code>discretize_state_evolution</code> and get the discretized model or state evolution
+  back as an object. Use this when you need the transition distributions
+  themselves, for example to sample or score transitions in your own inference
+  code.</li>
+</ul>
+<h2 id="effect-handler-form">Effect-handler form<a class="headerlink" href="#effect-handler-form" title="Permanent link">&para;</a></h2>
+<p>Place <code>Discretizer</code> <em>inside</em> the inference or simulation context, so the outer
+handler receives the discretized dynamics:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.discretizers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Discretizer</span><span class="p">,</span>
@@ -5094,15 +5195,262 @@
     <span class="k">with</span> <span class="n">Discretizer</span><span class="p">(</span><span class="n">MeanTrajectoryLinearizationConfig</span><span class="p">()):</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 </code></pre></div>
-<p>The config (in the above, <code>MeanTrajectoryLinearizationConfig</code>) changes the corresponding method for discretizing the continuous-time dynamics. See <a href="../../inference/configs/discretizer_configs/">Discretizer configurations</a> for more information about each.</p>
+<p>The configuration, here <code>MeanTrajectoryLinearizationConfig</code>, selects the
+discretization method. See
+<a href="../../inference/configs/discretizer_configs/">Discretizer configurations</a> to
+compare them.</p>
+<h2 id="direct-form">Direct form<a class="headerlink" href="#direct-form" title="Permanent link">&para;</a></h2>
+<p><code>discretize_dynamics</code> returns a complete discrete-time model:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.discretizers</span><span class="w"> </span><span class="kn">import</span> <span class="n">EulerMaruyamaConfig</span>
+
+<span class="n">discrete_dynamics</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">discretize_dynamics</span><span class="p">(</span>
+    <span class="n">continuous_dynamics</span><span class="p">,</span>
+    <span class="n">EulerMaruyamaConfig</span><span class="p">(),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The returned model keeps the initial condition, observation model, control
+metadata and initial time; only the state evolution is replaced by the
+discretized transition. To discretize a state evolution without building a
+<code>DynamicalModel</code>, use <a href="#state-evolution-only"><code>discretize_state_evolution</code></a>.</p>
+<h3 id="sampling-and-scoring">Sampling and scoring<a class="headerlink" href="#sampling-and-scoring" title="Permanent link">&para;</a></h3>
+<p>The returned model's distributions can be sampled and scored directly:</p>
+<div class="highlight"><pre><span></span><code><span class="n">initial_state</span> <span class="o">=</span> <span class="n">discrete_dynamics</span><span class="o">.</span><span class="n">initial_condition</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">initial_key</span><span class="p">)</span>
+<span class="n">discrete_dynamics</span><span class="o">.</span><span class="n">initial_condition</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span>
+
+<span class="n">transition</span> <span class="o">=</span> <span class="n">discrete_dynamics</span><span class="o">.</span><span class="n">state_evolution</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="n">previous_state</span><span class="p">,</span> <span class="n">u</span><span class="o">=</span><span class="n">control</span><span class="p">,</span> <span class="n">t_now</span><span class="o">=</span><span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="o">=</span><span class="n">t_next</span>
+<span class="p">)</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="n">transition</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+</code></pre></div>
+<p><code>log_prob</code> is available when the configuration provides a transition density.
+<code>EulerMaruyamaConfig</code> provides the density of its Gaussian approximation;
+<code>DiffraxSampleConfig</code> only samples.</p>
+<p>For dense all-pairs scores, <a href="../../models/core/discrete_time_state_evolution/#all-pairs-transition-scores">map over the transition distributions</a>.
+For missing observations, use <a href="../../models/core/observation_model/#masked_observation_log_prob">masked_observation_log_prob</a>.</p>
 <h2 id="automatic-routing">Automatic routing<a class="headerlink" href="#automatic-routing" title="Permanent link">&para;</a></h2>
-<p>When no configuration is supplied, <code>Discretizer()</code> chooses automatically:</p>
+<p>With no configuration, the method is chosen as follows:</p>
 <ul>
 <li>a deterministic ODE is integrated with <code>ODEFlowConfig()</code>, producing a Delta transition at the numerical flow endpoint;</li>
 <li>an <code>AffineDrift</code> with constant diffusion and no potential is discretized exactly; and</li>
 <li>other SDE models use Euler--Maruyama discretization by default.</li>
 </ul>
 <p>Pass <code>ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)</code> to customize ODE integration; all Diffrax settings are taken from the nested <code>ODESimulatorConfig</code>.</p>
+<h2 id="local-affine-gaussian-parameters">Local affine-Gaussian parameters<a class="headerlink" href="#local-affine-gaussian-parameters" title="Permanent link">&para;</a></h2>
+<p>Use <a href="../../models/core/drifts/#linearize_drift">linearize_drift</a> to construct
+a local affine drift, then discretize it with <code>ExactAffineConfig</code>. This
+composition requires structurally constant additive diffusion:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.discretizers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExactAffineConfig</span>
+
+<span class="n">cte</span> <span class="o">=</span> <span class="n">continuous_dynamics</span><span class="o">.</span><span class="n">state_evolution</span>
+<span class="n">local</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">StochasticContinuousTimeStateEvolution</span><span class="p">(</span>
+    <span class="n">drift</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">linearize_drift</span><span class="p">(</span>
+        <span class="n">cte</span><span class="o">.</span><span class="n">total_drift</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">reference_state</span><span class="p">,</span> <span class="n">u</span><span class="o">=</span><span class="n">control</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t_now</span>
+    <span class="p">),</span>
+    <span class="n">diffusion</span><span class="o">=</span><span class="n">cte</span><span class="o">.</span><span class="n">diffusion</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">transition</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">discretize_state_evolution</span><span class="p">(</span>
+    <span class="n">local</span><span class="p">,</span> <span class="n">ExactAffineConfig</span><span class="p">(</span><span class="n">covariance_jitter</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">params</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">params_at</span><span class="p">(</span><span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">)</span>
+
+<span class="n">A</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">A</span>
+<span class="n">bias</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">bias</span>
+<span class="n">Q</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">cov</span>
+</code></pre></div>
+<p>The resulting <code>LinearGaussianParams</code> give the approximation used by
+<code>LocalLinearizationConfig</code> with matching covariance jitter. The drift is
+linearized at <code>reference_state</code>, with time and control frozen at the left
+endpoint. The fixed control can affect <code>A</code>, <code>bias</code>, and <code>cov</code>. The parameters
+are conditional on that control, so <code>B=None</code>.</p>
+<p>Use <code>vmap</code> to evaluate parameters along a reference trajectory. Trajectory
+selection, observation linearization, and inference are handled separately.</p>
+<p>For time-invariant affine drift with constant additive diffusion and no
+potential term, discretization with <code>ExactAffineConfig(covariance_jitter=0)</code> produces a
+<code>LinearGaussianStateEvolution</code> whose <code>params_at(t_now, t_next)</code> method returns
+exact interval parameters up to floating-point error, assuming control is held
+fixed over each interval. No linearization state is needed.</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Configuration-driven discretization of continuous-time models.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.discretizers.discretize_dynamics" class="doc doc-heading">
+            <code class=" language-python"><span class="n">discretize_dynamics</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="n">discretizer_config</span><span class="p">:</span> <span class="n">BaseDiscretizerConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicalModel</span></code>
+
+<a href="#dynestyx.discretizers.discretize_dynamics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build a discrete-time model from continuous-time dynamics.</p>
+<p>Preserves the initial condition, observation model, control metadata,
+observation-control alignment, and initial time. The state evolution uses
+the transition selected by <code>discretizer_config</code>.</p>
+<p>When no config is provided, deterministic ODEs use their numerical flow,
+affine SDEs with constant diffusion and no potential use an exact Gaussian
+transition, and other SDEs use Euler--Maruyama.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dynamics</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Continuous-time model to discretize.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>discretizer_config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="BaseDiscretizerConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.discretizer.BaseDiscretizerConfig)" href="../../inference/configs/discretizer_configs/#dynestyx.inference.configs.discretizer.BaseDiscretizerConfig">BaseDiscretizerConfig</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Explicit discretization config, or <code>None</code> for
+automatic routing.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>DynamicalModel</code></td>            <td>
+                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A discrete-time model with the selected interval
+transition.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="TypeError">TypeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>dynamics</code> is already discrete-time or the config is not
+compatible with its continuous state evolution.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="state-evolution-only">State evolution only<a class="headerlink" href="#state-evolution-only" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynestyx.discretizers.discretize_state_evolution"></a>
+    <div class="doc doc-contents first">
+
+        <p>Discretize a continuous state evolution.</p>
+<p>Uses the same transition discretization as <code>discretize_dynamics</code>.</p>
+
+
+    </div>
+
+</div>
 
 
 
