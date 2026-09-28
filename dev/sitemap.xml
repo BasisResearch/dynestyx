@@ -329,6 +329,10 @@
          <lastmod>2026-09-28</lastmod>
     </url>
     <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/l96_localization_hyperparameter_scoring/</loc>
+         <lastmod>2026-09-28</lastmod>
+    </url>
+    <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/deep_dives/lv_uode/</loc>
          <lastmod>2026-09-28</lastmod>
     </url>
@@ -446,6 +450,10 @@
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/12_observation_scoring_with_filters/</loc>
+         <lastmod>2026-09-28</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/tutorials/gentle_intro/13_enkf_localization/</loc>
          <lastmod>2026-09-28</lastmod>
     </url>
     <url>
