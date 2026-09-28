@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
-from numpyro.distributions import Distribution
+from numpyro.distributions import Delta, Distribution
 
 from dynestyx.inference.configs.filter import BaseFilterConfig, PFConfig
 from dynestyx.inference.filters import _default_filter_config
@@ -117,16 +117,22 @@ class PolicyCallable(Protocol):
 
     $$u_k, s_{k+1} = \pi(\tilde x_k, t_k, t_{k+1}, s_k)$$
 
-    $\tilde x_k$ is the loop's current state estimate. Which state that is
-    depends on the convention:
+    $\tilde x_k$ is the loop's current state or state estimate. Which one it is
+    depends on `use_true_state` and on the convention.
+
+    When using `use_true_state=True`, $\tilde x_k$ is a `Delta` distribution centered on the true state $x_k$ (including at $k=0$).
+
+    When using `use_true_state=False` (default), this is a distribution depending on the filter configuration:
 
     - under `same_time`, $\tilde x_k$ is the predicted state $\hat{x}_{k|k-1}$
     - under `previous_transition`, $\tilde x_k$ is the filtered state $\hat{x}_{k|k}$
-    where $\hat{x}_{k|j}$ is the state estimate at time $t_k$ given observations up to time $t_j$.
 
-    At $k=0$, this is always the model's initial-state distribution $x_0$.
+    where $\hat{x}_{k|j}$ is the state estimate at time $t_k$ given observations up to time $t_j$. At $k=0$, this is the model's initial-state distribution $p_0$.
 
-    It is a NumPyro `Distribution`, depending on the filter configuration.
+    With `use_true_state=True` there is no filtering: $\tilde x_k$
+    is a `Delta` centered on the true state $x_k$.
+
+    It is always a NumPyro `Distribution`.
     Use `x_hat.mean` for a family-agnostic point estimate.
     `t_now`/`t_next` are the current and next
     time points. Any plain
@@ -184,7 +190,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     With convention `"previous_transition"`, the control $u_k$ is chosen
     *after* seeing the observation $y_k$ (which uses the previous control). The
     policy therefore sees the filtered belief $\hat p_k$. This is the only
-    convention closed-loop control supports for now, and it is what an
+    convention the filtered closed loop supports for now, and it is what an
     unspecified (`None`) field resolves to, with a warning.
 
     With convention `"same_time"`, the control $u_k$ would be chosen *before*
@@ -195,6 +201,9 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
     Both loops are written out in full on the
     [Closed-loop control page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/control/).
+
+    With `use_true_state=True` the loop skips filtering altogether and hands
+    the policy the true state $x_k$. Both conventions run.
 
     The one-step filter update runs on the cuthbert backend
     (`filter_source="cuthbert"`). See the
@@ -218,6 +227,12 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
             as they do for `Filter` (see `dynestyx.utils._should_record_field`).
+            Must not be given together with `use_true_state=True`, which
+            filters nothing.
+        use_true_state: Give the policy the true state $x_k$ instead of a
+            filtered belief, and run no filter at all. Defaults to `False`.
+            Observations are still emitted and returned, but nothing consumes
+            them, and `filtered_states_mean` is always `None`.
         n_simulations: Currently only `1` is supported.
     """
 
@@ -226,11 +241,19 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         *,
         control_policy: PolicyCallable,
         filter_config: BaseFilterConfig | None = None,
+        use_true_state: bool = False,
         n_simulations: int = 1,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
+        if use_true_state and filter_config is not None:
+            raise ValueError(
+                "use_true_state=True runs the closed loop on the true state and "
+                "builds no filter, so filter_config has no effect; pass one or "
+                "the other."
+            )
         self.control_policy = control_policy
         self.filter_config = filter_config
+        self.use_true_state = use_true_state
 
     def _validate_plate_support(self) -> None:
         raise NotImplementedError(
@@ -265,14 +288,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         Returns:
             States, observations, controls, filtered beliefs and policy states
             on all `predict_times`.
-            Under the `"same_time"` convention, the states, controls and observations are all of length `len(predict_times)`.
+            Under the `"same_time"` convention, the states are of length `len(predict_times)`, but the controls and observations are of length `len(predict_times) - 1`.
             Under the `previous_transition` convention, the states are of length `len(predict_times)`, but the controls and observations are of length `len(predict_times) - 1`.
 
         Raises:
-            ValueError: If inputs are incompatible with online discrete control,
-                or `dynamics.observation_control_alignment` is not recognized.
+            ValueError: If inputs are incompatible with online discrete control.
             NotImplementedError: If the requested simulation mode is unsupported,
-                including an explicit `observation_control_alignment="same_time"`.
+                including an explicit `observation_control_alignment="same_time"`
+                while filtering (`use_true_state=False`).
 
         Warns:
             UserWarning: If `dynamics.observation_control_alignment` is
@@ -305,6 +328,28 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         if T < 1:
             raise ValueError("times must contain at least one timepoint")
 
+        alignment = dynamics.observation_control_alignment
+        if alignment is None:
+            warnings.warn(
+                "dynamics.observation_control_alignment is unspecified; closed-loop "
+                "control uses 'previous_transition'. Set it explicitly on the model "
+                "to silence this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
+            alignment = ObservationControlAlignment.PREVIOUS_TRANSITION
+
+        # Perfect state knowledge: no filter is built, and both conventions
+        # run, the policy reading x_k straight off the trajectory.
+        if self.use_true_state:
+            return self._online_control_loop_no_filter(
+                dynamics,
+                rng_key=rng_key,
+                times=times,
+                same_time=alignment == ObservationControlAlignment.SAME_TIME,
+                initial_policy_state=initial_policy_state,
+            )
+
         filter_config = (
             self.filter_config
             if self.filter_config is not None
@@ -320,42 +365,25 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 f"filter_source={filter_config.filter_source!r}."
             )
 
-        alignment = dynamics.observation_control_alignment
-        if alignment is None:
-            warnings.warn(
-                "dynamics.observation_control_alignment is unspecified; closed-loop "
-                "control uses 'previous_transition'. Set it explicitly on the model "
-                "to silence this warning.",
-                UserWarning,
-                stacklevel=2,
-            )
-            alignment = ObservationControlAlignment.PREVIOUS_TRANSITION
-        if alignment == ObservationControlAlignment.PREVIOUS_TRANSITION:
-            return self.online_control_loop_previous_transition(
-                dynamics,
-                rng_key=rng_key,
-                times=times,
-                filter_config=filter_config,
-                initial_policy_state=initial_policy_state,
-            )
         if alignment == ObservationControlAlignment.SAME_TIME:
             raise NotImplementedError(
                 "Closed-loop control with observation_control_alignment='same_time' "
                 "is not implemented yet -- we are working on it. It needs separate "
                 "prediction and analysis filter steps, which cuthbert does not "
                 "expose. Use observation_control_alignment='previous_transition', "
-                "or leave it unspecified. Tracked in "
+                "leave it unspecified, or pass use_true_state=True to run without "
+                "a filter. Tracked in "
                 "https://github.com/BasisResearch/dynestyx/issues/372."
             )
-        # DynamicalModel.__init__ already rejects unknown values, but
-        # eqx.tree_at rewrites the field without calling it.
-        raise ValueError(
-            "observation_control_alignment not recognized, has to be one of "
-            f"{[member.value for member in ObservationControlAlignment]}; "
-            f"got {alignment!r}."
+        return self._online_control_loop_previous_transition(
+            dynamics,
+            rng_key=rng_key,
+            times=times,
+            filter_config=filter_config,
+            initial_policy_state=initial_policy_state,
         )
 
-    def online_control_loop_same_time(
+    def _online_control_loop_same_time(
         self,
         dynamics: DynamicalModel,
         *,
@@ -558,7 +586,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             policy_states=policy_states,
         )
 
-    def online_control_loop_previous_transition(
+    def _online_control_loop_previous_transition(
         self,
         dynamics: DynamicalModel,
         *,
@@ -727,6 +755,79 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
             ctrl_times=_tile_times(ctrl_times, 1),
             filtered_states_mean=filtered_states_mean,
+            policy_states=policy_states,
+        )
+
+    def _online_control_loop_no_filter(
+        self,
+        dynamics: DynamicalModel,
+        *,
+        rng_key: PRNGKeyArray,
+        times: Real[Array, " predict_time"],
+        same_time: bool,
+        initial_policy_state: PyTree | None = None,
+    ) -> ControlledSimulatedResult:
+        r"""Run the closed loop on the true state, without a filter.
+
+        The policy is handed $x_k$ itself, as a `Delta`. Both conventions
+        share this loop and differ only in which state and time each
+        observation uses (see [Closed-loop control page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/control/)).
+        """
+        N = len(times) - 1
+        # filter_key is unused here, but we still draw it to ensure randomness is consistent
+        rollout_key, initial_state_key, _unused_filter_key = jr.split(rng_key, 3)
+
+        x_0 = dynamics.initial_condition.sample(initial_state_key)
+        s_0 = initial_policy_state
+
+        def _step(carry, t_idx):
+            x_k, s_k, rollout_key = carry
+            rollout_key, transition_key, observation_key = jr.split(rollout_key, 3)
+            t_now = times[t_idx]
+            t_next = times[t_idx + 1]
+
+            # u_k = pi(x_k). The policy takes a distribution, so the known
+            # state goes in as a Delta.
+            u_k, s_next = self.control_policy(
+                Delta(x_k, event_dim=jnp.ndim(x_k)), t_now, t_next, s_k
+            )
+            u_k = _validate_policy_control(u_k, dynamics.control_dim)
+
+            # x_{k+1} ~ p(x_{k+1} | x_k, u_k)
+            x_next = dynamics.state_evolution(x_k, u_k, t_now, t_next).sample(
+                transition_key
+            )
+
+            # The only difference between the conventions: y_k ~ p(y_k | x_k, u_k)
+            # under same_time, y_{k+1} ~ p(y_{k+1} | x_{k+1}, u_k) otherwise.
+            x_obs, t_obs = (x_k, t_now) if same_time else (x_next, t_next)
+            y = dynamics.observation_model(x_obs, u_k, t_obs).sample(observation_key)
+
+            return (x_next, s_next, rollout_key), (x_next, y, s_next, u_k)
+
+        init_carry = (x_0, s_0, rollout_key)
+        _, (xs, ys, ss, us) = jax.lax.scan(_step, init_carry, jnp.arange(N))
+
+        # x_0 precedes the loop; the scan emits x_1..x_N.
+        states = jnp.concatenate([jnp.expand_dims(x_0, 0), xs], axis=0)
+        obs_times = times[:-1] if same_time else times[1:]
+        ctrl_times = times[:-1]
+
+        policy_states = None
+        if s_0 is not None:
+            policy_states = jax.tree_util.tree_map(
+                lambda leaf: jnp.expand_dims(leaf, axis=0), ss
+            )
+
+        return ControlledSimulatedResult(
+            times=_tile_times(times, 1),
+            x_0=jnp.expand_dims(x_0, axis=0),
+            states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
+            observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
+            obs_times=_tile_times(obs_times, 1),
+            controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
+            ctrl_times=_tile_times(ctrl_times, 1),
+            filtered_states_mean=None,
             policy_states=policy_states,
         )
 
