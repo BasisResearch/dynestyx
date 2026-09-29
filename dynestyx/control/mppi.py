@@ -69,6 +69,42 @@ class ColoredNoise(NoiseConfig):
     beta: float = 2.0
 
 
+class NoiseConfig(eqx.Module):
+    """Base class for `MPPI.noise_config` variants (see `WhiteNoise`,
+    `AR1Noise`, `ColoredNoise`). Not instantiated directly."""
+
+
+class WhiteNoise(NoiseConfig):
+    """i.i.d. Gaussian perturbations, uncorrelated across the horizon:
+    `Cov(eps_h, eps_h') = 0` for `h != h'`. The original, uncorrelated MPPI
+    noise -- no hyperparameters."""
+
+
+class AR1Noise(NoiseConfig):
+    r"""AR(1)/Ornstein-Uhlenbeck-style perturbations, correlated across the
+    horizon as `Cov(eps_h, eps_h') = rho ** |h - h'|`. Smoother than
+    `WhiteNoise`; `rho=0` is equivalent to `WhiteNoise`.
+
+    Attributes:
+        rho: Correlation coefficient in `[0, 1)`. Defaults to `0.5`.
+    """
+
+    rho: float = 0.5
+
+
+class ColoredNoise(NoiseConfig):
+    r"""Power-law (`1/f**beta`) perturbations generated in the frequency
+    domain -- smoother, low-frequency-dominated perturbations for larger
+    `beta`. `beta=0` is equivalent to `WhiteNoise`.
+
+    Attributes:
+        beta: Power-law exponent. `0` is white, `1` is "pink", `2` is
+            Brownian-like. Defaults to `2.0`.
+    """
+
+    beta: float = 2.0
+
+
 class MPPI(eqx.Module):
     r"""Model Predictive Path Integral (MPPI) controller.
 
