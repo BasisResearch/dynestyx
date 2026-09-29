@@ -12,6 +12,7 @@ from dynestyx.control.mppi import (
     AR1Noise,
     ColoredNoise,
     MPPILossFn,
+    MPPIStepInfo,
     NoiseConfig,
     WhiteNoise,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "DiscreteControlLoopSimulator",
     "MPPI",
     "MPPILossFn",
+    "MPPIStepInfo",
     "NoiseConfig",
     "PolicyCallable",
     "WhiteNoise",

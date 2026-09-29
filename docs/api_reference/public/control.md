@@ -188,6 +188,10 @@ rather than inferring alignment from shapes. With state estimation,
     options:
       show_root_heading: true
 
+::: dynestyx.control.mppi.MPPIStepInfo
+    options:
+      show_root_heading: true
+
 ::: dynestyx.control.mppi.NoiseConfig
     options:
       show_root_heading: true

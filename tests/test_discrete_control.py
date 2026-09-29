@@ -1501,11 +1501,12 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     )
 
     nominal = jnp.array([[1.0], [2.0], [3.0]])
-    _, _, result = mppi.plan_step(
+    _, _, info = mppi.plan_step(
         dist.Delta(x_0).to_event(1),
         t_now,
         {"nominal_sequence": nominal, "key": jr.PRNGKey(0)},
     )
+    result = info.results
     assert result.times is not None
     assert result.states is not None
     assert result.observations is not None
@@ -1544,11 +1545,12 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
         n_simulations=n_simulations,
     )
 
-    _, _, result = mppi.plan_step(
+    _, _, info = mppi.plan_step(
         dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1)),
         jnp.array(0.0),
         mppi.initial_state(),
     )
+    result = info.results
 
     assert result.states is not None
     assert result.controls is not None

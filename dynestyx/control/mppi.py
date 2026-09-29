@@ -11,6 +11,7 @@ weighting, and where rollouts start can be overridden by subclassing `MPPI`.
 import abc
 import warnings
 from collections.abc import Callable
+from typing import NamedTuple
 
 import equinox as eqx
 import jax
@@ -27,6 +28,25 @@ from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.types import SimulatedResult
 
 type MPPILossFn = Callable[[SimulatedResult], Real[Array, ""]]
+
+
+class MPPIStepInfo(NamedTuple):
+    """What one MPPI planning step computed, handed to `MPPI.update_state`.
+
+    Attributes:
+        x_hat: The belief handed to the policy.
+        t_now: The current time.
+        candidates: The candidate control sequences,
+            `(n_samples, horizon, control_dim)`.
+        losses: Their (always finite) losses, `(n_samples,)`.
+        results: Their rollouts, a `SimulatedResult` batched over candidates.
+    """
+
+    x_hat: Distribution
+    t_now: Real[Array, ""]
+    candidates: Real[Array, "n_samples horizon control_dim"]
+    losses: Real[Array, " n_samples"]
+    results: SimulatedResult
 
 
 def _as_horizon(horizon) -> int | tuple[float, ...]:
@@ -208,7 +228,8 @@ class MPPI(eqx.Module):
     context `(x_hat, t_now, s)`: the belief handed to the policy, the current
     time, and the policy state `s`, a dict with entries `"nominal_sequence"`
     (the sequence the candidates are sampled around) and `"key"` (MPPI's own
-    PRNG key). A subclass may add any other entries (any pytrees).
+    PRNG key). A subclass may add other entries (any pytrees) in
+    `initial_state`; after that the entries are fixed.
 
     1. `rollout_initial_condition(x_hat, t_now, s)`: the distribution each
        rollout's $x_0$ is drawn from. Default: a `Delta` at `x_hat.mean`.
@@ -220,40 +241,19 @@ class MPPI(eqx.Module):
     4. `combine_sequences(losses, candidates, x_hat, t_now, s)`: chooses the
        weights and returns the plan, the combined sequence. Default: the
        softmax weighting above.
-    5. `update_state(key, plan, candidates, losses, results, x_hat, t_now, s)`:
-       returns the next policy state, the only hook that does. Default: `s`
-       with `"nominal_sequence"` set to the plan shifted left by one (last
-       entry repeated) and `"key"` set to `key`, the advanced PRNG key; other
-       entries unchanged. An override that doesn't store `key` reuses the
-       same randomness on every call.
+    5. `update_state(plan, info, s)`: returns the next policy state, the only
+       hook that does. `info` is an `MPPIStepInfo` with the rest of the step:
+       `x_hat`, `t_now`, `candidates`, `losses` and `results` (the rollouts).
+       Default: `s` with `"nominal_sequence"` set to the plan shifted left by
+       one (last entry repeated), other entries unchanged.
 
-    `plan_step` then applies `plan[0]`.
+    `plan_step` then applies `plan[0]` and advances the next state's `"key"`
+    entry.
 
-    To carry extra memory across steps (an adaptive temperature, a noise
-    covariance, ...), add an entry to the state `initial_state` returns, read
-    it in any hook, and update it in `update_state`:
-
-    ```python
-    class AdaptiveMPPI(MPPI):
-        def initial_state(self):
-            s = super().initial_state()
-            return {**s, "temperature": jnp.asarray(self.temperature)}
-
-        def combine_sequences(self, losses, candidates, x_hat, t_now, s):
-            weights = jax.nn.softmax(-losses / s["temperature"])
-            return jnp.einsum("k,khc->hc", weights, candidates)
-
-        def update_state(self, key, plan, candidates, losses, results, x_hat, t_now, s):
-            s = super().update_state(key, plan, candidates, losses, results, x_hat, t_now, s)
-            weights = jax.nn.softmax(-losses / s["temperature"])
-            ess = 1.0 / jnp.sum(weights**2)  # effective sample size
-            factor = jnp.where(ess < 0.1 * len(losses), 1.5, 0.9)
-            return {**s, "temperature": factor * s["temperature"]}
-    ```
 
     Hooks run inside `jax.lax.scan` (and possibly `jax.grad`), so they must be
     pure and JAX-traceable and must not draw randomness from `s["key"]`
-    (`sample_controls` gets its own key, and `update_state` the next one). The state `update_state` returns
+    (`sample_controls` gets its own key). The state `update_state` returns
     must keep the structure, shapes and dtypes of the one it received. New fields on an `MPPI` subclass need a default (or
     `eqx.field(kw_only=True)`).
 
@@ -451,23 +451,19 @@ class MPPI(eqx.Module):
 
     def update_state(
         self,
-        key: PRNGKeyArray,
         plan: Real[Array, "horizon control_dim"],
-        candidates: Real[Array, "n_samples horizon control_dim"],
-        losses: Real[Array, " n_samples"],
-        results: SimulatedResult,
-        x_hat: Distribution,
-        t_now: Real[Array, ""],
+        info: MPPIStepInfo,
         s: dict,
     ) -> dict:
-        """Next policy state, from the advanced PRNG key and this step's plan,
-        candidates, (finite) losses and candidate rollouts.
+        """Next policy state, from this step's plan and `info` (an
+        `MPPIStepInfo`: the belief, time, candidates, their finite losses and
+        rollouts). Must return the same entries as `s`.
 
         Default: `s` with `"nominal_sequence"` set to the plan shifted left by
-        one with the last entry repeated (the receding-horizon warm start) and
-        `"key"` set to `key`; other entries unchanged."""
+        one with the last entry repeated (the receding-horizon warm start);
+        other entries unchanged."""
         next_nominal = jnp.concatenate([plan[1:], plan[-1:]], axis=0)
-        return {**s, "nominal_sequence": next_nominal, "key": key}
+        return {**s, "nominal_sequence": next_nominal}
 
     def _rollout_and_score_one(
         self,
@@ -520,18 +516,24 @@ class MPPI(eqx.Module):
         x_hat: Distribution,
         t_now: Real[Array, ""],
         s: dict,
-    ) -> tuple[Real[Array, " control_dim"], dict, SimulatedResult]:
-        """Do MPPI's full planning step and also return the batch of every
-        candidate rollout considered (`n_samples`-wide `SimulatedResult`).
-        -- useful for debugging.
+    ) -> tuple[Real[Array, " control_dim"], dict, MPPIStepInfo]:
+        """Do MPPI's full planning step and also return what it computed, as
+        the `MPPIStepInfo`, useful for debugging.
 
         `__call__` (used by `DiscreteControlLoopSimulator`) is a
-        thin wrapper around this that drops the rollout batch, since
+        thin wrapper around this that drops the info, since
         `PolicyCallable`'s return signature can't carry a third value.
 
-        Every field is shaped `(n_samples, n_simulations, horizon, ...)`.
-        `predicted_*` are always `None` (not meaningful for a planning rollout).
+        Every field of `info.results` is shaped
+        `(n_samples, n_simulations, horizon, ...)`. `predicted_*` are always
+        `None` (not meaningful for a planning rollout).
         """
+        if not isinstance(s, dict) or "key" not in s:
+            got = f"entries {sorted(s)}" if isinstance(s, dict) else type(s).__name__
+            raise ValueError(
+                "MPPI's policy state must be a dict with a 'key' entry (MPPI's "
+                f"PRNG key), as returned by initial_state(); got {got}."
+            )
         key, sample_key, rollout_key = jr.split(s["key"], 3)
 
         initial_condition = self.rollout_initial_condition(x_hat, t_now, s)
@@ -555,12 +557,26 @@ class MPPI(eqx.Module):
         losses = jnp.where(jnp.isfinite(losses), losses, jnp.finfo(losses.dtype).max)
 
         plan = self.combine_sequences(losses, candidates, x_hat, t_now, s)
-        next_s = self.update_state(
-            key, plan, candidates, losses, results, x_hat, t_now, s
+        info = MPPIStepInfo(
+            x_hat=x_hat,
+            t_now=t_now,
+            candidates=candidates,
+            losses=losses,
+            results=results,
         )
+        next_s = self.update_state(plan, info, s)
+        if not isinstance(next_s, dict) or set(next_s) != set(s):
+            got = set(next_s) if isinstance(next_s, dict) else set()
+            raise ValueError(
+                "update_state must return a dict with the same entries as the "
+                "state it received (those created by initial_state()); "
+                f"added {sorted(got - set(s))}, removed {sorted(set(s) - got)}."
+            )
+        # MPPI owns its randomness: always advance the key.
+        next_s = {**next_s, "key": key}
 
-        # Also return the rollout batch, for debugging/analysis.
-        return plan[0], next_s, results
+        # Also return the step's info, for debugging/analysis.
+        return plan[0], next_s, info
 
     def __call__(
         self,
@@ -577,6 +593,7 @@ class MPPI(eqx.Module):
 __all__ = [
     "MPPI",
     "MPPILossFn",
+    "MPPIStepInfo",
     "NoiseConfig",
     "WhiteNoise",
     "AR1Noise",
