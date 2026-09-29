@@ -81,9 +81,7 @@ class WhiteNoise(NoiseConfig):
 
 class AR1Noise(NoiseConfig):
     r"""Ornstein-Uhlenbeck perturbations observed at the planning times,
-    correlated as `Cov(eps_h, eps_h') = rho ** |t_h - t_h'|`, where `t_h` is
-    the time perturbation `h` starts. On a uniform grid with step `dt`,
-    consecutive perturbations are correlated by `rho ** dt`. Smoother than
+    correlated as `Cov(eps_h, eps_h') = rho ** |t_h - t_h'|`. Smoother than
     `WhiteNoise`; `rho=0` is equivalent to `WhiteNoise`.
 
     Attributes:
@@ -106,12 +104,10 @@ class AR1Noise(NoiseConfig):
         control_dim: int,
     ) -> Real[Array, "n_samples horizon control_dim"]:
         # eps_h = rho_h * eps_{h-1} + sqrt(1 - rho_h**2) * xi_h with
-        # rho_h = rho ** (t_h - t_{h-1}): an exact OU discretization at
-        # arbitrary times, keeping unit marginal variance.
+        # rho_h = rho ** (t_h - t_{h-1}).
         horizon = len(times) - 1
         xi = jr.normal(key, (horizon, n_samples, control_dim))
-        # (horizon - 1,) gaps between perturbation start times. Plain NumPy
-        # unless rho is traced, so a unit step reproduces rho exactly.
+
         rhos = self.rho ** np.diff(times[:-1])
 
         def step(eps_prev, inputs):
