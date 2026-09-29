@@ -6,6 +6,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import numpy as np
 import numpyro.distributions as dist
 import pytest
 from numpyro.handlers import seed, trace
@@ -17,7 +18,7 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_dist,
     filter_state_mean,
 )
-from dynestyx.control.mppi import MPPI
+from dynestyx.control.mppi import MPPI, AR1Noise, ColoredNoise, WhiteNoise
 from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaConfig,
@@ -1561,3 +1562,33 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
     )
     # ...while the transition noise differs from draw to draw.
     assert not jnp.allclose(result.states[:, 0], result.states[:, 1])
+
+
+# ---------------------------------------------------------------------------
+# Group 11: MPPI noise configs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "noise", [WhiteNoise(), AR1Noise(rho=0.5), ColoredNoise(beta=2.0)]
+)
+def test_mppi_noise_has_unit_marginal_variance(noise):
+    """Every noise config has unit variance per step, so noise_std alone sets
+    the perturbation size."""
+    times = np.arange(9) * 0.5
+    eps = noise.sample(jr.PRNGKey(0), 20_000, times, 2)
+    assert eps.shape == (20_000, 8, 2)
+    assert jnp.allclose(jnp.var(eps, axis=0), 1.0, atol=0.05)
+
+
+def test_ar1_noise_correlation_follows_the_planning_times():
+    """On an uneven grid, Cov(eps_h, eps_h') = rho ** |t_h - t_h'|, where t_h is
+    when perturbation h starts -- correlation decays with time, not steps."""
+    times = np.array([0.0, 0.1, 0.3, 1.0, 1.5, 3.5])
+    rho = 0.5
+    eps = AR1Noise(rho=rho).sample(jr.PRNGKey(0), 50_000, times, 1)[..., 0]
+    starts = times[:-1]
+    expected = rho ** np.abs(starts[:, None] - starts[None, :])
+    assert jnp.allclose(jnp.cov(eps.T), expected, atol=0.03)
+
+
