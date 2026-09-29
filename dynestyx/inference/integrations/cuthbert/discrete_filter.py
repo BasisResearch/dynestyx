@@ -305,15 +305,7 @@ def compute_cuthbert_filter_update(
     )
 
     if is_first_step:
-        dummy_mi = CuthbertInputs(
-            y=jnp.zeros_like(jnp.asarray(y)),
-            u=jnp.zeros_like(u_arr),
-            u_prev=jnp.zeros_like(u_arr),
-            time=t_arr,
-            time_prev=t_arr,
-            is_first_step=jnp.asarray(False),
-        )
-        prev_state = filter_obj.init_prepare(dummy_mi, key=key_state)
+        prev_state = filter_obj.init_prepare(key=key_state)
 
     mi_t = CuthbertInputs(
         y=jnp.asarray(y),
@@ -497,14 +489,13 @@ def compute_cuthbert_filter(
         extra_filter_kwargs=build_kwargs,
     )
 
-    init_inputs = jax.tree.map(lambda leaf: leaf[0], cuthbert_inputs)
     filter_inputs = jax.tree.map(lambda leaf: leaf[1:], cuthbert_inputs)
     if key is None:
-        init_state = filter_obj.init_prepare(init_inputs)
+        init_state = filter_obj.init_prepare()
         filter_key = None
     else:
         init_key, filter_key = jax.random.split(key)
-        init_state = filter_obj.init_prepare(init_inputs, key=init_key)
+        init_state = filter_obj.init_prepare(key=init_key)
 
     raw_states = cuthbert_filter(
         filter_obj,
@@ -577,7 +568,7 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
     if filter_kwargs is None:
         filter_kwargs = {}
 
-    def init_sample(key, mi: CuthbertInputs):
+    def init_sample(key):
         return dynamics.initial_condition.sample(key)
 
     def propagate_sample(key, x_prev, mi: CuthbertInputs):
@@ -657,7 +648,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             obs_model, state_dim=state_dim, obs_dim=obs_dim
         )
 
-    def init_sample(key, mi: CuthbertInputs):
+    def init_sample(key):
         return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
 
     def get_dynamics(mi: CuthbertInputs):
@@ -872,9 +863,6 @@ def _cuthbert_filter_kalman(
     )
     chol_P0 = jnp.linalg.cholesky(squeeze_leading_singletons(ic.covariance_matrix, 2))
 
-    def get_init_params(mi: CuthbertInputs):
-        return m0, chol_P0
-
     get_dynamics_params = _kalman_dynamics_params_builder(
         evo, state_dim=state_dim, dtype=m0.dtype
     )
@@ -883,7 +871,8 @@ def _cuthbert_filter_kalman(
     )
 
     return kalman.build_filter(
-        get_init_params,  # type: ignore
+        m0,
+        chol_P0,
         get_dynamics_params,  # type: ignore
         get_observation_params,  # type: ignore
     )
@@ -908,15 +897,13 @@ def _cuthbert_filter_taylor_kf(
 
     rtol = filter_kwargs.get("rtol", None)
 
-    def get_init_log_density(mi: CuthbertInputs):
-        dist0 = dynamics.initial_condition
-        state_dim = dynamics.state_dim
+    dist0 = dynamics.initial_condition
+    state_dim = dynamics.state_dim
 
-        def init_log_density(x):
-            return jnp.asarray(dist0.log_prob(x)).sum()
+    def init_log_density(x):
+        return jnp.asarray(dist0.log_prob(x)).sum()
 
-        x0_lin = jnp.reshape(jnp.atleast_1d(jnp.asarray(dist0.mean)), (state_dim,))
-        return init_log_density, x0_lin
+    x0_lin = jnp.reshape(jnp.atleast_1d(jnp.asarray(dist0.mean)), (state_dim,))
 
     def get_dynamics_log_density(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
@@ -958,7 +945,8 @@ def _cuthbert_filter_taylor_kf(
         return log_potential, jnp.atleast_1d(jnp.asarray(state.mean))
 
     kf = taylor.build_filter(
-        get_init_log_density,  # type: ignore
+        init_log_density,
+        x0_lin,
         get_dynamics_log_density,  # type: ignore
         get_observation_func,  # type: ignore
         associative=False,
