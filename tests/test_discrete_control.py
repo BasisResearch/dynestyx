@@ -1457,11 +1457,9 @@ def test_mppi_masks_non_finite_losses_before_softmax():
 
     x_hat = dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1))
 
-    u0, (next_nominal, _) = mppi(
-        x_hat, jnp.array(0.0), jnp.array(1.0), mppi.initial_state()
-    )
+    u0, next_s = mppi(x_hat, jnp.array(0.0), jnp.array(1.0), mppi.initial_state())
     assert jnp.all(jnp.isfinite(u0))
-    assert jnp.all(jnp.isfinite(next_nominal))
+    assert jnp.all(jnp.isfinite(next_s["nominal_sequence"]))
 
 
 def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
@@ -1505,7 +1503,7 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     _, _, result = mppi.plan_step(
         dist.Delta(x_0).to_event(1),
         t_now,
-        (nominal, jr.PRNGKey(0)),
+        {"nominal_sequence": nominal, "key": jr.PRNGKey(0)},
     )
     assert result.times is not None
     assert result.states is not None
@@ -1520,7 +1518,7 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     observations, controls = result.observations[0, 0], result.controls[0, 0]
     # The rollout runs on t_0..t_H = t_now + dt * [0..H], but t_0 is dropped:
     # times start at t_1.
-    assert jnp.allclose(times, t_now + mppi.dt * jnp.arange(1, horizon + 1))
+    assert jnp.allclose(times, t_now + 1.0 * jnp.arange(1, horizon + 1))  # dt = 1
     assert not jnp.any(times == t_now)
     # x_0 = 0 is dropped too: states start at x_1 = x_0 + u_0 = 1, and x_0 is
     # only available separately, as result.x_0.
