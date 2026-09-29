@@ -148,7 +148,9 @@ class ColoredNoise(NoiseConfig):
         if not np.allclose(steps, steps.mean(), rtol=1e-3, atol=0.0):
             warnings.warn(
                 "It seems that your planning time steps are not equally "
-                f"spaced (steps {steps}). ColoredNoise shapes its 1/f**beta "
+                "spaced (steps "
+                f"{np.array2string(steps, precision=4, separator=', ')}). "
+                "ColoredNoise shapes its 1/f**beta "
                 "spectrum over the step index, so the resulting noise process "
                 "is power-law in steps, not in time: long and short steps get "
                 "the same correlation. Use AR1Noise for noise that adapts to "
@@ -268,9 +270,10 @@ class MPPI(eqx.Module):
             `(n_simulations, state_dim)`.
         horizon: Either the planning horizon length `H` (an int), with the
             rollout run on the uniform grid `t_now + dt * [0, 1, ..., H]`, or
-            an array of `H` planning times relative to `t_now` (strictly
-            increasing and positive), with the rollout run on
-            `t_now + [0, *horizon]`. Either way, `H` is the
+            the planning grid itself relative to `t_now`, `[0, t_1, ..., t_H]`
+            (starting at 0, strictly increasing), with the rollout run on
+            `t_now + horizon` -- e.g. `jnp.linspace(0.0, 1.0, 11)` for 10
+            steps of 0.1. Either way, `H` is the
             number of internal one-step `dynamics` calls per rollout (see
             `horizon_length`) and the grid is `planning_times`, which
             `noise_config` receives: `AR1Noise` adapts to uneven steps,
@@ -316,7 +319,7 @@ class MPPI(eqx.Module):
         default_factory=lambda: jnp.array(1.0)
     )
     noise_config: NoiseConfig = eqx.field(default_factory=AR1Noise)
-    n_samples: int = eqx.field(static=True, default=20)
+    n_samples: int = eqx.field(static=True, default=10)
     n_simulations: int = eqx.field(static=True, default=1)
     dt: float | None = eqx.field(static=True, default=None)
     temperature: float = 1.0
@@ -351,28 +354,30 @@ class MPPI(eqx.Module):
                     "the times already fix the planning steps."
                 )
             times = np.asarray(self.horizon)
-            if times.size == 0 or times[0] <= 0 or np.any(np.diff(times) <= 0):
+            if times.size < 2 or times[0] != 0 or np.any(np.diff(times) <= 0):
                 raise ValueError(
-                    "horizon times are relative to the current time and must "
-                    f"be positive and strictly increasing, got {self.horizon}."
+                    "horizon must be the planning grid relative to the current "
+                    "time, [0, t_1, ..., t_H]: starting at 0, strictly "
+                    "increasing, with at least one step. Got "
+                    f"{np.array2string(times, precision=4, separator=', ')}."
                 )
 
     @property
     def horizon_length(self) -> int:
         """Number of planning steps `H`: `horizon` itself when it is an int,
-        otherwise the number of times it lists."""
+        otherwise the number of steps in the grid it gives."""
         if isinstance(self.horizon, int):
             return self.horizon
-        return len(self.horizon)
+        return len(self.horizon) - 1
 
     @property
     def planning_times(self) -> Real[np.ndarray, " horizon_plus_one"]:
         """Rollout time grid relative to `t_now`, `[0, t_1, ..., t_H]`:
-        `dt * [0, 1, ..., H]` for an int `horizon`, else `[0, *horizon]`."""
+        `dt * [0, 1, ..., H]` for an int `horizon`, else `horizon` itself."""
         if isinstance(self.horizon, int):
             dt = 1.0 if self.dt is None else self.dt
             return np.arange(self.horizon + 1) * dt
-        return np.array((0.0, *self.horizon))
+        return np.array(self.horizon)
 
     def initial_state(self) -> dict:
         """Zero nominal control sequence plus MPPI's own seeded PRNG key, as
