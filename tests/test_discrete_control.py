@@ -6,7 +6,6 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import numpy as np
 import numpyro.distributions as dist
 import pytest
 from numpyro.handlers import seed, trace
@@ -1352,7 +1351,7 @@ def test_mppi_runs_end_to_end_without_a_key_argument():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=_mppi_loss,
-        horizon=10,
+        horizon=jnp.arange(11.0),
         noise_std=jnp.array(1.0),
         seed=0,
     )
@@ -1382,7 +1381,7 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=_mppi_loss,
-        horizon=5,
+        horizon=jnp.arange(6.0),
         noise_std=jnp.array(1.0),
         seed=0,
     )
@@ -1418,7 +1417,7 @@ def test_mppi_initial_state_and_call_depend_only_on_seed():
         return MPPI(
             dynamics=dynamics,
             loss_fn=_mppi_loss,
-            horizon=10,
+            horizon=jnp.arange(11.0),
             noise_std=jnp.array(1.0),
             seed=seed,
         )
@@ -1451,7 +1450,7 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=flaky_loss,
-        horizon=3,
+        horizon=jnp.arange(4.0),
         n_samples=20,
         noise_std=jnp.array(1.0),
     )
@@ -1495,7 +1494,7 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=lambda result: jnp.sum(result.states**2),
-        horizon=horizon,
+        horizon=jnp.arange(horizon + 1.0),
         n_samples=1,
         noise_std=jnp.array(0.0),  # candidate == nominal, so u is exactly known
     )
@@ -1540,7 +1539,7 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=lambda result: jnp.mean(jnp.sum(result.states**2, axis=(-2, -1))),
-        horizon=horizon,
+        horizon=jnp.arange(horizon + 1.0),
         n_samples=n_samples,
         n_simulations=n_simulations,
     )
@@ -1577,7 +1576,7 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
 def test_mppi_noise_has_unit_marginal_variance(noise):
     """Every noise config has unit variance per step, so noise_std alone sets
     the perturbation size."""
-    times = np.arange(9) * 0.5
+    times = jnp.arange(9) * 0.5
     eps = noise.sample(jr.PRNGKey(0), 20_000, times, 2)
     assert eps.shape == (20_000, 8, 2)
     assert jnp.allclose(jnp.var(eps, axis=0), 1.0, atol=0.05)
@@ -1586,9 +1585,9 @@ def test_mppi_noise_has_unit_marginal_variance(noise):
 def test_ar1_noise_correlation_follows_the_planning_times():
     """On an uneven grid, Cov(eps_h, eps_h') = rho ** |t_h - t_h'|, where t_h is
     when perturbation h starts -- correlation decays with time, not steps."""
-    times = np.array([0.0, 0.1, 0.3, 1.0, 1.5, 3.5])
+    times = jnp.array([0.0, 0.1, 0.3, 1.0, 1.5, 3.5])
     rho = 0.5
     eps = AR1Noise(rho=rho).sample(jr.PRNGKey(0), 50_000, times, 1)[..., 0]
     starts = times[:-1]
-    expected = rho ** np.abs(starts[:, None] - starts[None, :])
+    expected = rho ** jnp.abs(starts[:, None] - starts[None, :])
     assert jnp.allclose(jnp.cov(eps.T), expected, atol=0.03)

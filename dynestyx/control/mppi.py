@@ -49,19 +49,6 @@ class MPPIStepInfo(NamedTuple):
     results: SimulatedResult
 
 
-def _as_horizon(horizon) -> int | tuple[float, ...]:
-    """Keep an integer horizon; turn an array of times into a tuple of floats,
-    since `MPPI.horizon` is a static field and must be hashable."""
-    times = np.asarray(horizon)
-    if times.ndim == 0 and np.issubdtype(times.dtype, np.integer):
-        return int(times)
-    if times.ndim != 1:
-        raise ValueError(
-            f"horizon must be an int or a 1-D array of times, got shape {times.shape}."
-        )
-    return tuple(float(t) for t in times)
-
-
 class NoiseConfig(eqx.Module):
     """Base class for `MPPI.noise_config` variants (see `WhiteNoise`,
     `AR1Noise`, `ColoredNoise`).
@@ -72,7 +59,7 @@ class NoiseConfig(eqx.Module):
         self,
         key: PRNGKeyArray,
         n_samples: int,
-        times: Real[np.ndarray, " horizon_plus_one"],
+        times: Real[Array, " horizon_plus_one"],
         control_dim: int,
     ) -> Real[Array, "n_samples horizon control_dim"]:
         """Draw `(n_samples, horizon, control_dim)` perturbations with unit
@@ -80,7 +67,7 @@ class NoiseConfig(eqx.Module):
         as the variant defines. `MPPI` scales them by `noise_std`.
 
         `times` is the rollout grid relative to the current time,
-        `[0, t_1, ..., t_H]` (a concrete NumPy array, so `H = len(times) - 1`):
+        `[0, t_1, ..., t_H]` (`MPPI.horizon`, so `H = times.shape[0] - 1`):
         perturbation `k` is applied over `[times[k], times[k + 1])`."""
         raise NotImplementedError()
 
@@ -93,10 +80,10 @@ class WhiteNoise(NoiseConfig):
         self,
         key: PRNGKeyArray,
         n_samples: int,
-        times: Real[np.ndarray, " horizon_plus_one"],
+        times: Real[Array, " horizon_plus_one"],
         control_dim: int,
     ) -> Real[Array, "n_samples horizon control_dim"]:
-        return jr.normal(key, (n_samples, len(times) - 1, control_dim))
+        return jr.normal(key, (n_samples, times.shape[0] - 1, control_dim))
 
 
 class AR1Noise(NoiseConfig):
@@ -120,24 +107,22 @@ class AR1Noise(NoiseConfig):
         self,
         key: PRNGKeyArray,
         n_samples: int,
-        times: Real[np.ndarray, " horizon_plus_one"],
+        times: Real[Array, " horizon_plus_one"],
         control_dim: int,
     ) -> Real[Array, "n_samples horizon control_dim"]:
         # eps_h = rho_h * eps_{h-1} + sqrt(1 - rho_h**2) * xi_h with
         # rho_h = rho ** (t_h - t_{h-1}).
-        horizon = len(times) - 1
+        horizon = times.shape[0] - 1
         xi = jr.normal(key, (horizon, n_samples, control_dim))
 
-        rhos = self.rho ** np.diff(times[:-1])
+        rhos = self.rho ** jnp.diff(times[:-1])  # (horizon - 1,)
 
         def step(eps_prev, inputs):
             xi_h, rho_h, var_h = inputs
             eps_h = rho_h * eps_prev + jnp.sqrt(var_h) * xi_h
             return eps_h, eps_h
 
-        _, rest = jax.lax.scan(
-            step, xi[0], (xi[1:], jnp.asarray(rhos), jnp.asarray(1.0 - rhos**2))
-        )
+        _, rest = jax.lax.scan(step, xi[0], (xi[1:], rhos, 1.0 - rhos**2))
         return jnp.concatenate([xi[:1], rest], axis=0).transpose(1, 0, 2)
 
 
@@ -160,11 +145,13 @@ class ColoredNoise(NoiseConfig):
         self,
         key: PRNGKeyArray,
         n_samples: int,
-        times: Real[np.ndarray, " horizon_plus_one"],
+        times: Real[Array, " horizon_plus_one"],
         control_dim: int,
     ) -> Real[Array, "n_samples horizon control_dim"]:
+        # NumPy, not jnp: a Python `if` can't branch on jnp results while the
+        # planning step is being compiled. Tolerant, so float round-off in the
+        # times doesn't trigger it.
         steps = np.diff(times)
-        # Tolerant, so float round-off in the times doesn't trigger it.
         if not np.allclose(steps, steps.mean(), rtol=1e-3, atol=0.0):
             warnings.warn(
                 "It seems that your planning time steps are not equally "
@@ -178,7 +165,7 @@ class ColoredNoise(NoiseConfig):
                 UserWarning,
                 stacklevel=2,
             )
-        horizon = len(times) - 1
+        horizon = times.shape[0] - 1
         # Power-law (1/f**beta) noise: scale the rfft of white noise by
         # freq**(-beta/2) along the horizon axis.
         white = jr.normal(key, (n_samples, horizon, control_dim))
@@ -214,9 +201,10 @@ class MPPI(eqx.Module):
     step. The remainder becomes next step's nominal
     sequence, shifted left by one with the last entry repeated.
 
-    All candidates are rolled out with the same PRNG key (common random
-    numbers), so they face the same process and observation noise. The `n_simulations` rollouts
-    of one candidate draw different noise.
+    By default all candidates are rolled out with the same PRNG key (common
+    random numbers), so they face the same process and observation noise. The `n_simulations` rollouts
+    of one candidate draw different noise. Set `common_randomness=False` to
+    give each candidate its own noise instead (increases variance).
 
     Each rollout is run under the `"previous_transition"` observation/
     control convention, so a candidate's $u_k$ influences $x_{k+1}$ and
@@ -274,16 +262,13 @@ class MPPI(eqx.Module):
             starting state $x_0$ is not in `states` (no control produced it); it
             is available separately as `result.x_0`, shape
             `(n_simulations, state_dim)`.
-        horizon: Either the planning horizon length `H` (an int), with the
-            rollout run on the uniform grid `t_now + dt * [0, 1, ..., H]`, or
-            the planning grid itself relative to `t_now`, `[0, t_1, ..., t_H]`
+        horizon: The planning grid relative to `t_now`, `[0, t_1, ..., t_H]`
             (starting at 0, strictly increasing), with the rollout run on
             `t_now + horizon` -- e.g. `jnp.linspace(0.0, 1.0, 11)` for 10
-            steps of 0.1. Either way, `H` is the
-            number of internal one-step `dynamics` calls per rollout (see
-            `horizon_length`) and the grid is `planning_times`, which
-            `noise_config` receives: `AR1Noise` adapts to uneven steps,
-            `ColoredNoise` warns about them. Defaults to `10`.
+            steps of 0.1. `H` is the number of internal one-step `dynamics`
+            calls per rollout (see `horizon_length`). `noise_config` receives
+            the grid: `AR1Noise` adapts to uneven steps, `ColoredNoise` warns
+            about them. Required.
         noise_std: Standard deviation of the Gaussian perturbations added to
             the nominal sequence, scalar or shape `(control_dim,)`. Marginal
             (per-timestep) standard deviation regardless of `noise_config`
@@ -298,10 +283,12 @@ class MPPI(eqx.Module):
             `20`.
         n_simulations: Number of rollouts drawn per candidate control
             sequence, forwarded to `dsx.simulate`. Each draws different noise,
-            shared across candidates. Defaults to `1`.
-        dt: Fixed planning step size for an int `horizon`. Defaults to `1.0`
-            when not given. Must not be given when `horizon` is an array of
-            times, which already fixes the steps.
+            shared across candidates when `common_randomness` is `True`.
+            Defaults to `1`.
+        common_randomness: Whether all candidates are rolled out with the
+            same PRNG key, so their losses differ only through their controls
+            (lower-variance comparisons). With `False`, each candidate draws
+            independent process and observation noise. Defaults to `True`.
         temperature: MPPI's $\lambda \ge 0$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
             lowest-loss samples, and `0` applies the lowest-loss candidate
@@ -319,16 +306,14 @@ class MPPI(eqx.Module):
     dynamics: DynamicalModel
     loss_fn: MPPILossFn = eqx.field(static=True)
 
-    horizon: int | tuple[float, ...] = eqx.field(
-        static=True, default=10, converter=_as_horizon
-    )
+    horizon: Real[Array, " horizon_plus_one"]
     noise_std: Real[Array, ""] | Real[Array, " control_dim"] = eqx.field(
         default_factory=lambda: jnp.array(1.0)
     )
     noise_config: NoiseConfig = eqx.field(default_factory=AR1Noise)
     n_samples: int = eqx.field(static=True, default=10)
     n_simulations: int = eqx.field(static=True, default=1)
-    dt: float | None = eqx.field(static=True, default=None)
+    common_randomness: bool = eqx.field(static=True, default=True)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
@@ -354,37 +339,20 @@ class MPPI(eqx.Module):
         if isinstance(self.temperature, (int, float)) and self.temperature < 0:
             raise ValueError(f"temperature must be >= 0, got {self.temperature}.")
 
-        if isinstance(self.horizon, tuple):
-            if self.dt is not None:
-                raise ValueError(
-                    "dt must not be given when horizon is an array of times: "
-                    "the times already fix the planning steps."
-                )
-            times = np.asarray(self.horizon)
-            if times.size < 2 or times[0] != 0 or np.any(np.diff(times) <= 0):
-                raise ValueError(
-                    "horizon must be the planning grid relative to the current "
-                    "time, [0, t_1, ..., t_H]: starting at 0, strictly "
-                    "increasing, with at least one step. Got "
-                    f"{np.array2string(times, precision=4, separator=', ')}."
-                )
+        h = self.horizon
+        if jnp.ndim(h) != 1 or h.shape[0] < 2 or h[0] != 0 or jnp.any(jnp.diff(h) <= 0):
+            raise ValueError(
+                "horizon must be a 1-D array of planning times relative to the "
+                "current time, [0, t_1, ..., t_H]: starting at 0, strictly "
+                "increasing, with at least one step (an int horizon is not "
+                "supported; for H uniform steps of size dt use "
+                f"jnp.arange(H + 1) * dt). Got {h}."
+            )
 
     @property
     def horizon_length(self) -> int:
-        """Number of planning steps `H`: `horizon` itself when it is an int,
-        otherwise the number of steps in the grid it gives."""
-        if isinstance(self.horizon, int):
-            return self.horizon
-        return len(self.horizon) - 1
-
-    @property
-    def planning_times(self) -> Real[np.ndarray, " horizon_plus_one"]:
-        """Rollout time grid relative to `t_now`, `[0, t_1, ..., t_H]`:
-        `dt * [0, 1, ..., H]` for an int `horizon`, else `horizon` itself."""
-        if isinstance(self.horizon, int):
-            dt = 1.0 if self.dt is None else self.dt
-            return np.arange(self.horizon + 1) * dt
-        return np.array(self.horizon)
+        """Number of planning steps `H` in the grid `horizon`."""
+        return self.horizon.shape[0] - 1
 
     def initial_state(self) -> dict:
         """Zero nominal control sequence plus MPPI's own seeded PRNG key, as
@@ -421,7 +389,7 @@ class MPPI(eqx.Module):
         `noise_config` perturbations."""
         nominal = s["nominal_sequence"]
         noise = self.noise_config.sample(
-            key, self.n_samples, self.planning_times, nominal.shape[-1]
+            key, self.n_samples, self.horizon, nominal.shape[-1]
         )
         return nominal[None, :, :] + self.noise_std * noise
 
@@ -477,7 +445,7 @@ class MPPI(eqx.Module):
         it with `loss_fn`.
 
         Returns `(loss, result)`."""
-        times = t_now + jnp.asarray(self.planning_times)  # (horizon+1,)
+        times = t_now + self.horizon  # (horizon+1,)
 
         # Start the rollout from initial_condition, and plan under the
         # "previous_transition" convention so y_{k+1} and x_{k+1} both produced by u_k.
@@ -539,18 +507,26 @@ class MPPI(eqx.Module):
         initial_condition = self.rollout_initial_condition(x_hat, t_now, s)
         candidates = self.sample_controls(sample_key, x_hat, t_now, s)
 
-        # Every candidate shares rollout_key (common random numbers), so the
+        # With common random numbers every candidate shares rollout_key, so the
         # candidates face the same noise and their losses differ only through
-        # their controls.
-        def rollout_and_score(u_seq):
-            return self._rollout_and_score_one(
-                initial_condition, u_seq, rollout_key, t_now
+        # their controls; otherwise each candidate gets its own key.
+        n_candidates = candidates.shape[0]
+        if self.common_randomness:
+            rollout_keys = jnp.broadcast_to(
+                rollout_key, (n_candidates, *rollout_key.shape)
             )
+        else:
+            rollout_keys = jr.split(rollout_key, n_candidates)
+
+        def rollout_and_score(u_seq, key):
+            return self._rollout_and_score_one(initial_condition, u_seq, key, t_now)
 
         if self.batched:
-            losses, results = jax.vmap(rollout_and_score)(candidates)
+            losses, results = jax.vmap(rollout_and_score)(candidates, rollout_keys)
         else:
-            losses, results = jax.lax.map(rollout_and_score, candidates)
+            losses, results = jax.lax.map(
+                lambda args: rollout_and_score(*args), (candidates, rollout_keys)
+            )
         # A candidate whose rollout numerically diverges can produce a
         # nan loss. Clamping to the largest finite value keeps that candidate's
         # weight ~0 without corrupting the others
