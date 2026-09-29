@@ -45,6 +45,7 @@ def simulate(
     simulator_config: SimulatorConfig | None = None,
     control_policy: PolicyCallable | None = None,
     filter_config: BaseFilterConfig | None = None,
+    use_true_state: bool = False,
     initial_policy_state: PyTree | None = None,
 ) -> SimulatedResult:
     """Simulate states and observations without registering NumPyro sites.
@@ -55,7 +56,9 @@ def simulate(
         dynamics: Dynamical model to simulate.
         rng_key: JAX pseudorandom number generator key.
         ctrl_times: Times associated with `ctrl_values`. If controls are
-            provided, these times must match `predict_times`.
+            provided, these times must match `predict_times` for models with
+            `dynamics.observation_control_alignment="same_time"` (default), or
+            `predict_times[:-1]` for `"previous_transition"`.
         ctrl_values: Control values, or `None` for an uncontrolled model.
         predict_times: Times at which to simulate states and observations.
         n_simulations: Number of independent trajectories to simulate.
@@ -69,10 +72,20 @@ def simulate(
             instead of being drawn from the uncontrolled/`ctrl_values`
             transition -- `ctrl_times`/`ctrl_values` must not be passed
             together with `control_policy`, and `simulator_config` is not
-            accepted either.
+            accepted either. The closed loop follows
+            `dynamics.observation_control_alignment`, the same field that
+            governs open-loop simulation. While filtering, only
+            `"previous_transition"` is implemented: an unspecified field
+            resolves to it with a warning, and an explicit `"same_time"`
+            raises `NotImplementedError`. With `use_true_state=True`, both
+            conventions run.
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
+        use_true_state: Run the closed loop on the true state instead of a
+            filtered belief, forwarded to `DiscreteControlLoopSimulator` when
+            `control_policy` is given; ignored otherwise. `filter_config` must be left
+            unset. Defaults to `False`.
         initial_policy_state: Initial policy state $s_0$, forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise. Defaults to `None` (a stateless policy) --
@@ -97,7 +110,13 @@ def simulate(
 
     _validate_site_sorting(ctrl_times, name="ctrl_times")
     _validate_site_sorting(predict_times, name="predict_times")
-    _validate_controls(None, predict_times, ctrl_times, ctrl_values)
+    _validate_controls(
+        None,
+        predict_times,
+        ctrl_times,
+        ctrl_values,
+        observation_control_alignment=dynamics.observation_control_alignment,
+    )
     _validate_control_dim(dynamics, ctrl_values)
 
     dynamics_with_t0 = _get_dynamics_with_t0(dynamics, None, predict_times)
@@ -109,6 +128,7 @@ def simulate(
         simulator_config=simulator_config,
         control_policy=control_policy,
         filter_config=filter_config,
+        use_true_state=use_true_state,
     )
     _, simulation_key = jr.split(rng_key)
     return simulator.simulate(

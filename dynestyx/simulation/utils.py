@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
-from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
+from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.models import DynamicalModel
 from dynestyx.types import SimulatedResult, chain_numpyro_site_registrations
@@ -115,10 +115,8 @@ def _sample_observation_path(
     ctrl = control_path_eval if control_path_eval is not None else (lambda t: None)
     obs_keys = jr.split(rng_key, len(times))
 
-    def _sample_at_time(t_idx: Int[Array, ""]):
-        x_t = states[t_idx]
-        t = times[t_idx]
+    def _sample_at(x_t, t, key):
         obs_dist = dynamics.observation_model(x=x_t, u=ctrl(t), t=t)
-        return obs_dist.sample(obs_keys[t_idx])
+        return obs_dist.sample(key)
 
-    return jax.vmap(_sample_at_time)(jnp.arange(len(times)))
+    return jax.vmap(_sample_at)(states, times, obs_keys)

@@ -26,6 +26,10 @@ from dynestyx.inference.configs.filter import (
     KFConfig,
     PFConfig,
 )
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
+)
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )
@@ -148,6 +152,18 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
             config.resampling_method.differential_method
         )
     elif isinstance(config, EnKFConfig):
+        reserved_hooks = {
+            "modify_cross_covariance",
+            "construct_chol_innovation_covariance",
+            "modify_predicted_observation_covariance",
+        }
+        conflicts = sorted(reserved_hooks.intersection(kwargs))
+        if conflicts:
+            raise ValueError(
+                "EnKF localization callback names are reserved in "
+                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
+                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
+            )
         kwargs["n_particles"] = config.n_particles
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
@@ -203,6 +219,15 @@ def build_cuthbert_filter(
             raise ValueError(
                 "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        if (
+            filter_config.localization is not None
+            and "_resolved_enkf_localization" not in filter_kwargs
+        ):
+            filter_kwargs["_resolved_enkf_localization"] = resolve_enkf_localization(
+                filter_config.localization,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
             )
         filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
     elif isinstance(filter_config, KFConfig):
@@ -302,6 +327,88 @@ def compute_cuthbert_filter_update(
     return filter_obj.filter_combine(prev_state, prep_state)
 
 
+def compute_cuthbert_belief_prediction(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any,
+    key: PRNGKeyArray,
+    *,
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+    t_prev: Real[Array, ""],
+) -> Any:
+    r"""Prediction step alone: advance a belief without an observation.
+
+    Maps the filtered belief $\hat p_k$ at `t_prev` to the predicted belief
+    $\tilde p_{k+1}$ at `t`, through the transition driven by `u`:
+
+    $$\tilde p_{k+1}(x) = \int p(x \mid x', u)\, \hat p_k(x')\, dx'.$$
+
+    Not implemented yet. Cuthbert's `Filter` exposes only the fused
+    predict-and-update `filter_combine`, so this step has to be built from
+    cuthbertlib primitives per filter family; that is planned for a
+    follow-up. Closed-loop `"same_time"` control depends on it.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Filtered belief at `t_prev`.
+        key: PRNG key for the step.
+        u: Control driving the transition from `t_prev` to `t`, or `None`.
+        t: Time to predict to.
+        t_prev: Time the belief currently sits at.
+
+    Raises:
+        NotImplementedError: Always, for now.
+    """
+    raise NotImplementedError(
+        "compute_cuthbert_belief_prediction is not implemented yet: cuthbert's "
+        "Filter only exposes the fused predict-and-update filter_combine, so a "
+        "prediction-only step still has to be built from cuthbertlib primitives."
+    )
+
+
+def compute_cuthbert_belief_analysis(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any,
+    key: PRNGKeyArray,
+    *,
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+) -> Any:
+    r"""Analysis step alone: condition a belief on one observation.
+
+    Maps the predicted belief $\tilde p_k$ at `t` to the filtered belief
+    $\hat p_k$ by conditioning on `y`, with the observation model evaluated
+    under control `u`:
+
+    $$\hat p_k(x) \propto p(y \mid x, u)\, \tilde p_k(x).$$
+
+    Not implemented yet, for the same reason as
+    `compute_cuthbert_belief_prediction`: cuthbert's `Filter` only exposes the
+    fused `filter_combine`. Closed-loop `"same_time"` control depends on it.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Predicted belief at `t`.
+        key: PRNG key for the step.
+        y: Observation at `t`.
+        u: Control the observation model sees at `t`, or `None`.
+        t: Observation time.
+
+    Raises:
+        NotImplementedError: Always, for now.
+    """
+    raise NotImplementedError(
+        "compute_cuthbert_belief_analysis is not implemented yet: cuthbert's "
+        "Filter only exposes the fused predict-and-update filter_combine, so an "
+        "analysis-only step still has to be built from cuthbertlib primitives."
+    )
+
+
 def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
@@ -313,6 +420,7 @@ def compute_cuthbert_filter(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
     store_predicted_ensemble: bool | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
 
@@ -320,6 +428,9 @@ def compute_cuthbert_filter(
     ``filter_config.include_predicted_observations``. Passing ``True`` or
     ``False`` explicitly overrides that default; smoothers use the explicit
     form when their backward pass requires forecast ensembles.
+
+    ``resolved_localization`` lets the caller share localization callbacks with
+    prediction extraction without storing fixed tapers in the state sequence.
 
     Returns:
         tuple: (marginal_loglik, states). By default states are aligned to
@@ -346,14 +457,27 @@ def compute_cuthbert_filter(
     dummy_u = jnp.zeros_like(ctrl_values[:1])
     dummy_time = jnp.zeros_like(times[:1])
 
-    cuthbert_inputs = CuthbertInputs(
-        y=jnp.concatenate([dummy_y, ys], axis=0),
-        u=jnp.concatenate([dummy_u, ctrl_values], axis=0),
-        u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
-        time=jnp.concatenate([dummy_time, times], axis=0),
-        time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(obs_len + 1) == 1,
-    )
+    input_kwargs = {
+        "y": jnp.concatenate([dummy_y, ys], axis=0),
+        "u": jnp.concatenate([dummy_u, ctrl_values], axis=0),
+        "u_prev": jnp.concatenate([dummy_u, u_prev], axis=0),
+        "time": jnp.concatenate([dummy_time, times], axis=0),
+        "time_prev": jnp.concatenate([dummy_time, time_prev], axis=0),
+        "is_first_step": jnp.arange(obs_len + 1) == 1,
+    }
+
+    if (
+        resolved_localization is None
+        and isinstance(filter_config, EnKFConfig)
+        and filter_config.localization is not None
+    ):
+        resolved_localization = resolve_enkf_localization(
+            filter_config.localization,
+            state_dim=dynamics.state_dim,
+            observation_dim=dynamics.observation_dim,
+        )
+
+    cuthbert_inputs = CuthbertInputs(**input_kwargs)
 
     if store_predicted_ensemble is None:
         store_predicted_ensemble = bool(
@@ -361,12 +485,16 @@ def compute_cuthbert_filter(
             and filter_config.include_predicted_observations
         )
 
+    build_kwargs = {"store_predicted_ensemble": store_predicted_ensemble}
+    if resolved_localization is not None:
+        build_kwargs["_resolved_enkf_localization"] = resolved_localization
+
     filter_obj, parallel = build_cuthbert_filter(
         dynamics,
         filter_config,
         key,
         want_parallel=True,
-        extra_filter_kwargs={"store_predicted_ensemble": store_predicted_ensemble},
+        extra_filter_kwargs=build_kwargs,
     )
 
     init_inputs = jax.tree.map(lambda leaf: leaf[0], cuthbert_inputs)
@@ -404,6 +532,7 @@ def run_discrete_filter(
     obs_values: Real[Array, "obs_time observation_dim"],
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
     **kwargs,
 ) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
@@ -432,10 +561,14 @@ def run_discrete_filter(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        resolved_localization=resolved_localization,
     )
     filtered_dists = _cholesky_state_sequence_to_dists(
         states,
         particle_mode=isinstance(filter_config, PFConfig),
+        covariance_jitter=getattr(
+            filter_config, "recorded_filtered_states_cov_jitter", 0.0
+        ),
     )
     return marginal_loglik, states, filtered_dists
 
@@ -505,6 +638,18 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
+
+    localization_kwargs = {}
+    resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
+    if resolved_localization is not None:
+        if resolved_localization.modify_cross_covariance is not None:
+            localization_kwargs["modify_cross_covariance"] = (
+                resolved_localization.modify_cross_covariance
+            )
+        if resolved_localization.construct_chol_innovation_covariance is not None:
+            localization_kwargs["construct_chol_innovation_covariance"] = (
+                resolved_localization.construct_chol_innovation_covariance
+            )
 
     obs_model = dynamics.observation_model
     if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
@@ -596,6 +741,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         store_predicted_ensemble=bool(
             filter_kwargs.get("store_predicted_ensemble", False)
         ),
+        **localization_kwargs,
     )
 
 

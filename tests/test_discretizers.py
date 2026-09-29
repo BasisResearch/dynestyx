@@ -11,7 +11,7 @@ import dynestyx as dsx
 from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaConfig,
-    _discretize_state_evolution,
+    discretize_state_evolution,
 )
 from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
@@ -97,7 +97,7 @@ def _ctse_2d_zero_drift(diffusion_form: str) -> ContinuousTimeStateEvolution:
 
 def test_euler_maruyama_returns_gaussian_transition():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
+    evo = discretize_state_evolution(cte, EulerMaruyamaConfig())
     transition = evo(jnp.zeros(1), None, jnp.array(0.0), jnp.array(1.0))
 
     assert isinstance(evo, DiscreteTimeStateEvolution)
@@ -107,7 +107,7 @@ def test_euler_maruyama_returns_gaussian_transition():
 
 def test_euler_maruyama_matches_manual_mean_and_variance():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
+    evo = discretize_state_evolution(cte, EulerMaruyamaConfig())
     x = jnp.array([0.4])
     t0 = jnp.array(0.0)
     t1 = jnp.array(2.0)
@@ -119,7 +119,7 @@ def test_euler_maruyama_matches_manual_mean_and_variance():
 
 def test_euler_maruyama_batched_time_covariance_shape():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
+    evo = discretize_state_evolution(cte, EulerMaruyamaConfig())
     x = jnp.array([[0.0], [1.0], [2.0]])  # (3, 1) = (T, state_dim)
     t_now = jnp.array([0.0, 1.0, 2.0])
     t_next = jnp.array([0.5, 1.5, 2.5])
@@ -131,7 +131,7 @@ def test_euler_maruyama_batched_time_covariance_shape():
 
 def test_euler_maruyama_loc_cov_single_pass_consistent_with_transition():
     cte = _ctse_1d_zero_drift_unit_diffusion()
-    evo = _discretize_state_evolution(cte, EulerMaruyamaConfig())
+    evo = discretize_state_evolution(cte, EulerMaruyamaConfig())
     x = jnp.array([0.3])
     t0 = jnp.array(1.0)
     t1 = jnp.array(3.0)
@@ -157,6 +157,51 @@ def test_euler_maruyama_loc_cov_batched_state_accepts_scalar_times():
     assert out["cov"].shape == (3, 1, 1)
     assert jnp.allclose(out["loc"], x)
     assert jnp.allclose(out["cov"][:, 0, 0], 0.5)
+
+
+def test_discretize_dynamics_preserves_model_and_transition_semantics():
+    dynamics = DynamicalModel(
+        initial_condition=dist.MultivariateNormal(jnp.zeros(1), jnp.eye(1)),
+        state_evolution=ContinuousTimeStateEvolution(
+            drift=dsx.AffineDrift(
+                A=jnp.array([[-0.4]]), B=jnp.array([[0.3]]), b=jnp.array([0.2])
+            ),
+            diffusion=FullDiffusion(jnp.array([[0.3]])),
+        ),
+        observation_model=LinearGaussianObservation(H=jnp.eye(1), R=jnp.eye(1)),
+        control_model=object(),
+        control_dim=1,
+        t0=1.5,
+    )
+    state = jnp.array([0.4])
+    control = jnp.array([0.6])
+
+    discrete = dsx.discretize_dynamics(dynamics, EulerMaruyamaConfig())
+    transition = discrete.state_evolution(state, control, 1.5, 1.9)
+
+    assert not discrete.continuous_time
+    assert discrete.initial_condition is dynamics.initial_condition
+    assert discrete.observation_model is dynamics.observation_model
+    assert discrete.control_model is dynamics.control_model
+    assert discrete.control_dim == 1
+    assert discrete.t0 is not None
+    assert float(discrete.t0) == 1.5
+    assert jnp.allclose(
+        transition.mean, state + 0.4 * (-0.4 * state + 0.3 * control + 0.2)
+    )
+    assert jnp.allclose(transition.covariance_matrix, 0.4 * 0.3**2)
+
+
+def test_discretize_dynamics_rejects_discrete_model():
+    dynamics = dsx.LTI_discrete(
+        A=jnp.eye(1),
+        Q=jnp.eye(1),
+        H=jnp.eye(1),
+        R=jnp.eye(1),
+    )
+
+    with pytest.raises(TypeError, match="requires a continuous-time DynamicalModel"):
+        dsx.discretize_dynamics(dynamics)
 
 
 @pytest.mark.parametrize(
@@ -233,9 +278,9 @@ def test_automatic_routing():
         R=jnp.eye(1),
     )
     assert isinstance(
-        _discretize_state_evolution(affine.state_evolution),
+        discretize_state_evolution(affine.state_evolution),
         LinearGaussianStateEvolution,
     )
-    nonlinear = _discretize_state_evolution(_ctse_1d_zero_drift_unit_diffusion())
+    nonlinear = discretize_state_evolution(_ctse_1d_zero_drift_unit_diffusion())
     transition = nonlinear(jnp.zeros(1), None, jnp.array(0.0), jnp.array(1.0))
     assert isinstance(transition, dist.MultivariateNormal)

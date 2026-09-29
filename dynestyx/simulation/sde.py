@@ -258,6 +258,7 @@ class SDESimulator(BaseSimulator):
             x_0=initial_state,
             states=states,
             observations=observations,
+            obs_times=_tile_times(times, n_sim),
         )
 
     def simulate(

@@ -523,7 +523,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
     # ---------------------------------------------------------
     # Generate observations at some times
     predict_times = _profiled_arange(
-        fast_stop=1.0, fast_step=0.1, science_stop=2.0, science_step=0.001
+        fast_stop=0.5, fast_step=0.1, science_stop=2.0, science_step=0.001
     )
     obs_times = predict_times
 

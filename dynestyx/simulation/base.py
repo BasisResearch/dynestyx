@@ -1,5 +1,6 @@
 """Shared simulator helpers and base handler logic."""
 
+import dataclasses
 import itertools
 from collections.abc import Callable
 from typing import cast
@@ -503,12 +504,14 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         downstream_register = getattr(
             downstream_result, "_register_numpyro_sites", None
         )
-        results._register_numpyro_sites = chain_numpyro_site_registrations(
-            _register_self,
-            results._register_numpyro_sites,
-            downstream_register,
+        return dataclasses.replace(
+            results,
+            _register_numpyro_sites=chain_numpyro_site_registrations(
+                _register_self,
+                results._register_numpyro_sites,
+                downstream_register,
+            ),
         )
-        return results
 
     def simulate(
         self,

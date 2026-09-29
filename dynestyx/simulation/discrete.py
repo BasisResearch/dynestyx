@@ -49,7 +49,9 @@ def _sample_discrete_state_path_from_initial_state(
     initial_state: Real[Array, " state_dim"] | Real[Array, ""],
     rng_key: PRNGKeyArray,
     times: Real[Array, " time"],
-    ctrl_values: Real[Array, "time control_dim"] | Real[Array, " time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None,
 ) -> Real[Array, "time state_dim"] | Real[Array, " time"]:
     """Sample one canonical discrete state path from a fixed initial state."""
     if len(times) == 1:
@@ -108,20 +110,34 @@ class DiscreteTimeSimulator(BaseSimulator):
     r"""Generate trajectories from a discrete-time dynamical model.
 
     For prediction times \(t_0,\ldots,t_{T-1}\), this simulator draws
-    `n_simulations` independent paths according to
+    `n_simulations` independent paths according to:
 
     \[
     x_0^{(m)} \sim p_0(x_0), \qquad
     x_{k+1}^{(m)}
       \sim p\!\left(x_{k+1}\mid x_k^{(m)},u_k,t_k,t_{k+1}\right),
-    \qquad
+    \]
+
+    The observation distribution depends on `dynamics.observation_control_alignment`:
+
+    For `"same_time"` (default): \(y_k\) is paired with \(u_k\) and \(x_k\) (including \(k=0\)):
+
+    \[
     y_k^{(m)} \sim p(y_k\mid x_k^{(m)},u_k,t_k).
     \]
 
-    The first state in the returned path is the initial-condition draw at
-    `predict_times[0]`; the simulator then makes one transition draw for each
-    adjacent pair of prediction times and samples one observation conditional
-    on every realized state. See
+    States, times, observations, and controls are all of length \(T\).
+
+    For `"previous_transition"`: \(y_{k+1}\) is paired with \(u_k\) and \(x_{k+1}\) (\(y_0\) is never sampled).
+
+    \[
+    y_{k+1}^{(m)} \sim p(y_{k+1}\mid x_{k+1}^{(m)},u_k,t_{k+1}).
+    \]
+
+    States and times are of length \(T\), but observations and controls are of length \(T-1\).
+
+
+    See
     [DiscreteTimeStateEvolution][dynestyx.models.core.DiscreteTimeStateEvolution]
     for how a discrete transition model is represented in a `DynamicalModel`.
 
@@ -165,10 +181,14 @@ class DiscreteTimeSimulator(BaseSimulator):
     not be uniformly spaced, provided the model's transition accepts those
     intervals.
 
-    If controls are supplied, `ctrl_times` must contain every prediction time
-    exactly. `ctrl_values[k]` is used for the transition beginning at \(t_k\)
-    and for the observation at \(t_k\). The paired control arrays are validated
-    before simulation.
+    If controls are supplied, `ctrl_times` must exactly match the grid
+    required by `dynamics.observation_control_alignment`: the full
+    `predict_times` for `"same_time"` (default) -- `ctrl_values[k]` is used
+    for the transition beginning at \(t_k\) and for the observation at
+    \(t_k\) -- or `predict_times[:-1]` for `"previous_transition"` --
+    `ctrl_values[k]` drives the transition into \(x_{k+1}\) and the
+    observation \(y_{k+1}\). The paired control arrays are validated before
+    simulation.
 
     This handler is generation-only and does not condition on `obs_times` or
     `obs_values`. Use
@@ -198,7 +218,13 @@ class DiscreteTimeSimulator(BaseSimulator):
     - `"f_states"`: latent states, shape
       `(*plate_shape, n_simulations, T, state_dim)`;
     - `"f_observations"`: sampled observations, shape
-      `(*plate_shape, n_simulations, T, observation_dim)`.
+      `(*plate_shape, n_simulations, T, observation_dim)` for `"same_time"`,
+      or `(*plate_shape, n_simulations, T-1, observation_dim)` for
+      `"previous_transition"`;
+    - `"f_controls"`: the (aligned) controls used, when the model is
+      controlled, shape `(*plate_shape, n_simulations, T, control_dim)` for
+      `"same_time"` or `(*plate_shape, n_simulations, T-1, control_dim)` for
+      `"previous_transition"`; absent when the model is uncontrolled.
 
     Here `"f"` is replaced by the `name` passed to `dsx.sample`. Under
     `Predictive(..., num_samples=N)`, NumPyro prepends an `N` axis to each
@@ -250,15 +276,19 @@ class DiscreteTimeSimulator(BaseSimulator):
         | Real[Array, " n_simulations"],
         rng_key: PRNGKeyArray,
         times: Real[Array, " time"],
-        ctrl_values: Real[Array, "time control_dim"] | Real[Array, " time"] | None,
+        ctrl_values: Real[Array, "ctrl_time control_dim"]
+        | Real[Array, " ctrl_time"]
+        | None,
     ) -> SimulatedResult:
-        """Run pure forward simulation for a discrete-time model."""
+        """Run pure forward simulation for a discrete-time model.
+
+        ctrl_values has its own length ("ctrl_time"): len(times) for same_time or
+        len(times) - 1 for previous_transition.
+        """
         n_sim = initial_state.shape[0]
         sim_keys = jr.split(rng_key, n_sim)
-        ctrl_eval = (
-            (lambda t: ctrl_values[jnp.searchsorted(times, t, side="left")])
-            if ctrl_values is not None
-            else None
+        include_initial_condition = (
+            dynamics.observation_control_alignment != "previous_transition"
         )
 
         def _sim_one_trajectory(
@@ -273,23 +303,46 @@ class DiscreteTimeSimulator(BaseSimulator):
                 times=times,
                 ctrl_values=ctrl_values,
             )
+            # For previous_transition, drop x_0/t_0 before sampling observations (y_0 is never sampled).
+            obs_states, obs_times = (
+                (states, times)
+                if include_initial_condition
+                else (states[1:], times[1:])
+            )
+            ctrl_eval = (
+                (lambda t: ctrl_values[jnp.searchsorted(obs_times, t, side="left")])
+                if ctrl_values is not None
+                else None
+            )
             observations = self._emit_observations(
-                "",
-                dynamics,
-                states,
-                times,
-                None,
-                ctrl_eval,
-                key=key_obs,
+                "", dynamics, obs_states, obs_times, None, ctrl_eval, key=key_obs
             )
             return states, observations
 
         states, observations = jax.vmap(_sim_one_trajectory)(sim_keys, initial_state)
+
+        # Report the grids observations and controls sit on, so alignment can be
+        # read off the result: previous_transition drops t_0 from the
+        # observations and t_N from the controls, same_time drops neither.
+        obs_times = times if include_initial_condition else times[1:]
+        controls = None
+        ctrl_times = None
+        if ctrl_values is not None:
+            controls = _ensure_trailing_dim(
+                jnp.broadcast_to(ctrl_values[None], (n_sim, *ctrl_values.shape))
+            )
+            ctrl_times = _tile_times(
+                times if include_initial_condition else times[:-1], n_sim
+            )
+
         return SimulatedResult(
             times=_tile_times(times, n_sim),
             x_0=initial_state,
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
+            obs_times=_tile_times(obs_times, n_sim),
+            controls=controls,
+            ctrl_times=ctrl_times,
         )
 
     def simulate(
@@ -315,8 +368,13 @@ class DiscreteTimeSimulator(BaseSimulator):
         if predict_times is None:
             raise ValueError("predict_times must be provided")
 
+        align_times = (
+            predict_times[:-1]
+            if dynamics.observation_control_alignment == "previous_transition"
+            else predict_times
+        )
         aligned_ctrl_values = _align_ctrl_values_to_times(
-            times=predict_times,
+            times=align_times,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
         )

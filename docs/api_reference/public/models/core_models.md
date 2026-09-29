@@ -4,6 +4,7 @@
     options:
       members:
         - DynamicalModel
+        - ObservationControlAlignment
         - ContinuousTimeStateEvolution
         - DiscreteTimeStateEvolution
         - ObservationModel
@@ -13,3 +14,4 @@
       members:
         - Drift
         - Potential
+        - linearize_drift

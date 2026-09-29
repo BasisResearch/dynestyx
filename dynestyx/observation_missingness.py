@@ -7,7 +7,6 @@ from collections.abc import Callable
 from typing import Literal
 
 import jax.numpy as jnp
-import jax.scipy as jsp
 import numpy as np
 import numpyro.distributions as dist
 from jax.errors import TracerArrayConversionError, TracerBoolConversionError
@@ -255,11 +254,11 @@ def _masked_multivariate_normal_log_prob(
     obs_dist: dist.MultivariateNormal,
     y: Real[Array, " observation_dim"],
     obs_mask: Bool[Array, " observation_dim"],
-) -> Real[Array, ""]:
+) -> Real[Array, "*log_prob_batch"]:
     """Evaluate the observed marginal of a multivariate Normal distribution.
 
     The masked dimensions are replaced with an identity contribution so the
-    Cholesky solve keeps a fixed shape across time, while the resulting scalar
+    Cholesky solve keeps a fixed shape across time, while the resulting
     log-prob matches the exact Gaussian marginal over the observed components.
 
     Args:
@@ -268,7 +267,8 @@ def _masked_multivariate_normal_log_prob(
         obs_mask: Boolean vector with `True` at observed components.
 
     Returns:
-        Array: Scalar log probability of the observed components.
+        Array: Log probability of the observed components, retaining
+            distribution batch axes.
     """
     mask_f = obs_mask.astype(obs_dist.loc.dtype)
     residual = (y - obs_dist.loc) * mask_f
@@ -276,12 +276,14 @@ def _masked_multivariate_normal_log_prob(
     mask_outer = mask_f[:, None] * mask_f[None, :]
     masked_cov = cov * mask_outer + jnp.diag(1.0 - mask_f)
 
-    chol = jnp.linalg.cholesky(masked_cov)
-    whitened = jsp.linalg.solve_triangular(chol, residual, lower=True)
-    quad = jnp.dot(whitened, whitened)
-    logdet = 2.0 * jnp.sum(jnp.log(jnp.diag(chol)))
-    n_obs = jnp.sum(mask_f)
-    return -0.5 * (quad + logdet + n_obs * LOG_2PI)
+    # Include covariance batch axes while preserving shared Cholesky factors.
+    residual = jnp.broadcast_to(residual, obs_dist.batch_shape + obs_dist.event_shape)
+    masked_normal = dist.MultivariateNormal(
+        jnp.zeros(obs_dist.event_shape, dtype=residual.dtype),
+        covariance_matrix=masked_cov,
+    )
+    n_missing = mask_f.size - jnp.sum(mask_f)
+    return masked_normal.log_prob(residual) + 0.5 * n_missing * LOG_2PI
 
 
 def _lift_scalar_observation_distribution(
@@ -654,57 +656,90 @@ def probe_observation_distribution_contract(
 def masked_observation_log_prob(
     obs_dist: dist.Distribution,
     *,
-    y: Real[Array, " observation_dim"],
-    obs_mask: Bool[Array, " observation_dim"],
-    row_has_any_observed: Bool[Array, ""],
-    observation_dim: int,
-    has_partial_missing: bool,
-    expected_mode: ObservationDistributionMode,
-    expected_event_shape: tuple[int, ...],
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    obs_mask: Bool[Array, " observation_dim"] | Bool[Array, ""],
 ) -> Real[Array, "*log_prob_batch"]:
-    """Score only the observed portion of one observation row."""
-    obs_dist = _canonicalize_observation_distribution(
-        obs_dist, observation_dim=observation_dim
-    )
+    """Evaluate the marginal log density of observed components.
 
-    if has_partial_missing:
-        try:
-            actual_mode = _distribution_mode(
-                obs_dist, has_partial_missing=has_partial_missing
-            )
-        except NotImplementedError as exc:
-            raise ValueError(
-                "Partial missingness requires a time-stable marginalizable "
-                "observation family. The simulator was configured with "
-                f"{expected_mode!r}, but encountered an unsupported "
-                f"{type(obs_dist).__name__} at runtime."
-            ) from exc
+    Partial observations require `MultivariateNormal` or factorizable
+    `Independent(..., 1)` distributions. Scalar observations and fully
+    observed or fully missing vectors support other distribution families.
 
-        actual_event_shape = tuple(obs_dist.event_shape)
-        if actual_mode != expected_mode or actual_event_shape != expected_event_shape:
-            raise ValueError(
-                "Partial missingness requires the observation distribution "
-                "family and event shape to remain fixed across time. "
-                f"Expected mode {expected_mode!r} with event shape "
-                f"{expected_event_shape}, but received mode "
-                f"{actual_mode!r} with event shape {actual_event_shape}."
-            )
+    Args:
+        obs_dist: Scalar or vector observation distribution.
+        y: One observation, broadcast over distribution batch axes. Values
+            at missing components are ignored and may be NaN.
+        obs_mask: Boolean mask matching `y`, with `True` at observed components.
 
-    if expected_mode == "masked":
-        row_is_partial = row_has_any_observed & ~jnp.all(obs_mask)
-        y = _raise_now_or_error_if(
-            y,
-            row_is_partial,
+    Returns:
+        Array: Observed-marginal log density, retaining distribution batch
+            axes. A fully missing observation contributes zero.
+
+    Raises:
+        ValueError: If `y` and `obs_mask` do not match the scalar or vector
+            event shape, or partial marginalization is unsupported.
+        RuntimeError: If unsupported partial marginalization is detected
+            during JIT execution.
+    """
+    values = jnp.atleast_1d(jnp.asarray(y))
+    mask = jnp.atleast_1d(jnp.asarray(obs_mask))
+    event_shape = tuple(obs_dist.event_shape)
+    if (
+        values.ndim != 1
+        or values.shape != (event_shape or (1,))
+        or mask.shape != values.shape
+    ):
+        raise ValueError(
+            "y and obs_mask must match the scalar or vector observation event shape."
+        )
+    values = jnp.where(mask, values, 0)
+    if not event_shape:
+        return obs_dist.mask(mask[0]).log_prob(values[0])
+
+    mode = _distribution_mode(obs_dist, has_partial_missing=False)
+    if mode == "masked":
+        row_has_any_observed = jnp.any(mask)
+        values = _raise_now_or_error_if(
+            values,
+            row_has_any_observed & ~jnp.all(mask),
             "Partial missingness currently requires marginalizable "
             "MultivariateNormal observations or factorizable "
             "Independent(..., 1) observations.",
         )
-        return obs_dist.mask(row_has_any_observed).log_prob(y)
+        return obs_dist.mask(row_has_any_observed).log_prob(values)
 
-    if expected_mode == "independent":
-        return obs_dist.base_dist.mask(obs_mask).to_event(1).log_prob(y)
+    if mode == "independent":
+        return obs_dist.base_dist.mask(mask).to_event(1).log_prob(values)
 
-    return _masked_multivariate_normal_log_prob(obs_dist, y, obs_mask)
+    return _masked_multivariate_normal_log_prob(obs_dist, values, mask)
+
+
+def _check_observation_contract(
+    obs_dist: dist.Distribution,
+    *,
+    expected_mode: ObservationDistributionMode,
+    expected_event_shape: tuple[int, ...],
+) -> None:
+    """Require a marginalizable distribution with the expected family and event shape."""
+    try:
+        actual_mode = _distribution_mode(obs_dist, has_partial_missing=True)
+    except NotImplementedError as exc:
+        raise ValueError(
+            "Partial missingness requires a time-stable marginalizable "
+            "observation family. The simulator was configured with "
+            f"{expected_mode!r}, but encountered an unsupported "
+            f"{type(obs_dist).__name__} at runtime."
+        ) from exc
+
+    actual_event_shape = tuple(obs_dist.event_shape)
+    if actual_mode != expected_mode or actual_event_shape != expected_event_shape:
+        raise ValueError(
+            "Partial missingness requires the observation distribution "
+            "family and event shape to remain fixed across time. "
+            f"Expected mode {expected_mode!r} with event shape "
+            f"{expected_event_shape}, but received mode "
+            f"{actual_mode!r} with event shape {actual_event_shape}."
+        )
 
 
 def prepare_observation_log_prob(
@@ -793,7 +828,7 @@ def prepare_observation_log_prob(
         (
             filled_obs,
             obs_mask,
-            row_has_any_observed,
+            _row_has_any_observed,
             has_missing,
             has_partial_missing,
             _,
@@ -804,7 +839,7 @@ def prepare_observation_log_prob(
         filled_obs = precomputed_filled_obs
         obs_mask = precomputed_obs_mask
         (
-            row_has_any_observed,
+            _row_has_any_observed,
             has_missing,
             has_partial_missing,
             _,
@@ -918,15 +953,17 @@ def prepare_observation_log_prob(
             assert completed_obs is not None
             return canonical_dist.log_prob(completed_obs[t_idx])
 
+        obs_dist = _canonicalize_observation_distribution(
+            obs_dist, observation_dim=observation_dim
+        )
+        if has_partial_missing:
+            _check_observation_contract(
+                obs_dist,
+                expected_mode=distribution_mode,
+                expected_event_shape=expected_event_shape,
+            )
         return masked_observation_log_prob(
-            obs_dist,
-            y=filled_obs[t_idx],
-            obs_mask=obs_mask[t_idx],
-            row_has_any_observed=row_has_any_observed[t_idx],
-            observation_dim=observation_dim,
-            has_partial_missing=has_partial_missing,
-            expected_mode=distribution_mode,
-            expected_event_shape=expected_event_shape,
+            obs_dist, y=filled_obs[t_idx], obs_mask=obs_mask[t_idx]
         )
 
     returned_completed_obs = (

@@ -16,7 +16,7 @@ from dynestyx.discretizers import (
     LocalLinearizationConfig,
     MeanTrajectoryLinearizationConfig,
     ODEFlowConfig,
-    _discretize_state_evolution,
+    discretize_state_evolution,
 )
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.handlers import Evaluation
@@ -96,7 +96,7 @@ def _diffrax_config() -> DiffraxSampleConfig:
 
 
 def test_ode_flow_matches_controlled_linear_analytic_solution():
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         _ode_state_evolution(),
         ODEFlowConfig(simulator_config=_ode_config()),
     )
@@ -118,7 +118,7 @@ def test_ode_flow_matches_controlled_linear_analytic_solution():
 
 
 def test_ode_flow_positive_jitter_returns_independent_normal():
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         _ode_state_evolution(),
         ODEFlowConfig(simulator_config=_ode_config(), jitter_scale=0.3),
     )
@@ -151,7 +151,7 @@ def test_ode_flow_passes_simulator_config_settings(monkeypatch):
     monkeypatch.setattr(
         "dynestyx.discretization.ode_flow.solve_ode_interval", fake_solve
     )
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         _ode_state_evolution(),
         ODEFlowConfig(simulator_config=simulator_config),
     )
@@ -175,21 +175,21 @@ def test_ode_flow_rejects_invalid_jitter_scale(jitter_scale):
 def test_ode_flow_automatic_routing_and_config_type_errors():
     ode = _ode_state_evolution()
     assert isinstance(
-        _discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01),
+        discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01),
         dist.Delta,
     )
 
     with pytest.raises(TypeError, match="requires a stochastic"):
-        _discretize_state_evolution(ode, ExactAffineConfig())
+        discretize_state_evolution(ode, ExactAffineConfig())
     with pytest.raises(TypeError, match="requires a deterministic"):
-        _discretize_state_evolution(
+        discretize_state_evolution(
             _nonlinear_model().state_evolution,
             ODEFlowConfig(),
         )
 
 
 def test_ode_flow_is_jittable_and_differentiable():
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         _ode_state_evolution(),
         ODEFlowConfig(simulator_config=_ode_config()),
     )
@@ -327,7 +327,7 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
 
 
 def test_exact_affine_matches_scalar_ou_transition():
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         _affine_model().state_evolution,
         ExactAffineConfig(),
     )
@@ -348,7 +348,7 @@ def test_exact_affine_stiff_covariance_is_finite_in_float32():
         H=jnp.ones((1, 1), dtype=jnp.float32),
         R=jnp.eye(1, dtype=jnp.float32),
     )
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         model.state_evolution,
         ExactAffineConfig(),
     )
@@ -371,7 +371,7 @@ def test_exact_affine_integrator_covariance_remains_exact():
         H=jnp.ones((1, 1)),
         R=jnp.eye(1),
     )
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         model.state_evolution,
         ExactAffineConfig(),
     )
@@ -384,7 +384,7 @@ def test_exact_affine_integrator_covariance_remains_exact():
 
 
 def test_local_linearization_stiff_covariance_is_finite_in_float32():
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         StochasticContinuousTimeStateEvolution(
             drift=lambda x, u, t: -100.0 * x,
             diffusion=FullDiffusion(jnp.ones((1, 1), dtype=jnp.float32)),
@@ -398,6 +398,44 @@ def test_local_linearization_stiff_covariance_is_finite_in_float32():
     assert jnp.allclose(transition.covariance_matrix, 0.005, rtol=2e-5)
 
 
+def test_local_affine_composition_matches_controlled_transition():
+    cte = StochasticContinuousTimeStateEvolution(
+        drift=lambda x, u, t: u[0] * x**2 + t,
+        potential=lambda x, u, t: jnp.sum(x**4) / 4,
+        use_negative_gradient=True,
+        diffusion=FullDiffusion(jnp.array([[0.4]]), bm_dim=1),
+    )
+    state = jnp.array([1.2])
+    control = jnp.array([0.4])
+    previous_time, h, jitter = 0.2, 0.3, 1e-6
+    local = StochasticContinuousTimeStateEvolution(
+        drift=dsx.linearize_drift(cte.total_drift, x=state, u=control, t=previous_time),
+        diffusion=cte.diffusion,
+    )
+    evolution = discretize_state_evolution(
+        local, ExactAffineConfig(covariance_jitter=jitter)
+    )
+    assert isinstance(evolution, dsx.LinearGaussianStateEvolution)
+    params = evolution.params_at(previous_time, previous_time + h)
+    transition = discretize_state_evolution(
+        cte, LocalLinearizationConfig(covariance_jitter=jitter)
+    )(state, control, previous_time, previous_time + h)
+
+    rate = 2 * control[0] * state[0] - 3 * state[0] ** 2
+    offset = 2 * state[0] ** 3 - control[0] * state[0] ** 2 + previous_time
+    expected_A = jnp.exp(rate * h)
+    expected_bias = offset * jnp.expm1(rate * h) / rate
+    expected_cov = 0.4**2 * jnp.expm1(2 * rate * h) / (2 * rate) + jitter
+
+    assert params.B is None
+    assert jnp.allclose(params.A, expected_A)
+    assert params.bias is not None
+    assert jnp.allclose(params.bias, expected_bias)
+    assert jnp.allclose(params.cov, expected_cov)
+    assert jnp.allclose(transition.mean, expected_A * state + expected_bias)
+    assert jnp.allclose(transition.covariance_matrix, expected_cov)
+
+
 @pytest.mark.parametrize(
     "config",
     [
@@ -407,11 +445,11 @@ def test_local_linearization_stiff_covariance_is_finite_in_float32():
 )
 def test_gaussian_approximations_match_affine_transition(config):
     model = _affine_model()
-    exact = _discretize_state_evolution(
+    exact = discretize_state_evolution(
         model.state_evolution,
         ExactAffineConfig(),
     )(jnp.array([1.2]), None, 0.0, 0.2)
-    approximate = _discretize_state_evolution(
+    approximate = discretize_state_evolution(
         model.state_evolution,
         config,
     )(jnp.array([1.2]), None, 0.0, 0.2)
@@ -425,7 +463,7 @@ def test_gaussian_approximations_match_affine_transition(config):
 
 
 def test_mean_trajectory_linearization_runs_for_nonlinear_sde():
-    transition = _discretize_state_evolution(
+    transition = discretize_state_evolution(
         _nonlinear_model().state_evolution,
         MeanTrajectoryLinearizationConfig(ode_solver=_ode_config()),
     )(jnp.array([0.2]), None, 0.0, 0.1)
@@ -435,7 +473,7 @@ def test_mean_trajectory_linearization_runs_for_nonlinear_sde():
 
 
 def test_diffrax_sample_transition_samples_but_has_no_density():
-    transition = _discretize_state_evolution(
+    transition = discretize_state_evolution(
         _nonlinear_model().state_evolution,
         _diffrax_config(),
     )(jnp.array([0.0]), None, 0.0, 0.05)
@@ -453,7 +491,7 @@ def test_diffrax_sample_transition_samples_but_has_no_density():
 
 
 def test_diffrax_rsample_is_differentiable_in_initial_state():
-    evolution = _discretize_state_evolution(
+    evolution = discretize_state_evolution(
         _affine_model().state_evolution,
         _diffrax_config(),
     )
