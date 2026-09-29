@@ -477,8 +477,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         # The first policy acts on the model prior, which under "same_time" is
         # also the first predicted belief: p_tilde_0 = p_0.
-        p_tilde_0 = filter_obj.init_prepare(
-            initial_filter_inputs, key=initial_filter_state_key
+        p_tilde_0 = filter_obj.init_prepare(key=initial_filter_state_key)._replace(
+            model_inputs=initial_filter_inputs
         )
         s_0 = initial_policy_state
 
@@ -669,8 +669,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             is_first_step=jnp.asarray(False),
         )
         # The first policy acts on the model prior.
-        p_hat_0 = filter_obj.init_prepare(
-            initial_filter_inputs, key=initial_filter_state_key
+        p_hat_0 = filter_obj.init_prepare(key=initial_filter_state_key)._replace(
+            model_inputs=initial_filter_inputs
         )
         s_0 = initial_policy_state
 
