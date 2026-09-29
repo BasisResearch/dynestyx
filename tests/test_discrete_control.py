@@ -1590,5 +1590,3 @@ def test_ar1_noise_correlation_follows_the_planning_times():
     starts = times[:-1]
     expected = rho ** np.abs(starts[:, None] - starts[None, :])
     assert jnp.allclose(jnp.cov(eps.T), expected, atol=0.03)
-
-
