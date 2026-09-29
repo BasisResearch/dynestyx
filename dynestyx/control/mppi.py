@@ -434,7 +434,6 @@ class MPPI(eqx.Module):
         and the weighted mean of the candidates; `s` unchanged. With
         `temperature=0` all the weight goes to the lowest-loss candidate."""
 
-
         positive = self.temperature > 0
         safe_temperature = jnp.where(positive, self.temperature, 1.0)
         weights = jnp.where(
