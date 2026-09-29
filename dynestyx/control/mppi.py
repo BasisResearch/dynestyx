@@ -208,8 +208,7 @@ class MPPI(eqx.Module):
     context `(x_hat, t_now, s)`: the belief handed to the policy, the current
     time, and the policy state `s`, a dict with entries `"nominal_sequence"`
     (the sequence the candidates are sampled around) and `"key"` (MPPI's own
-    PRNG key), both rewritten by `plan_step` on every call. A subclass may add
-    any other entries (any pytrees); default MPPI passes them through untouched.
+    PRNG key). A subclass may add any other entries (any pytrees).
 
     1. `rollout_initial_condition(x_hat, t_now, s)`: the distribution each
        rollout's $x_0$ is drawn from. Default: a `Delta` at `x_hat.mean`.
@@ -219,16 +218,20 @@ class MPPI(eqx.Module):
     3. Rollouts and `loss_fn` (not overridable). Non-finite losses are clamped
        to the largest finite value.
     4. `combine_sequences(losses, candidates, x_hat, t_now, s)`: chooses the
-       weights and returns `(plan, s)`, the combined sequence and the policy
-       state. Default: the softmax weighting above, `s` unchanged.
+       weights and returns the plan, the combined sequence. Default: the
+       softmax weighting above.
+    5. `update_state(key, plan, candidates, losses, results, x_hat, t_now, s)`:
+       returns the next policy state, the only hook that does. Default: `s`
+       with `"nominal_sequence"` set to the plan shifted left by one (last
+       entry repeated) and `"key"` set to `key`, the advanced PRNG key; other
+       entries unchanged. An override that doesn't store `key` reuses the
+       same randomness on every call.
 
-    `plan_step` then applies `plan[0]` and returns `s` with
-    `"nominal_sequence"` set to the shifted plan and `"key"` advanced as the
-    next policy state.
+    `plan_step` then applies `plan[0]`.
 
     To carry extra memory across steps (an adaptive temperature, a noise
     covariance, ...), add an entry to the state `initial_state` returns, read
-    it in any hook, and return an updated value from `combine_sequences`:
+    it in any hook, and update it in `update_state`:
 
     ```python
     class AdaptiveMPPI(MPPI):
@@ -238,17 +241,20 @@ class MPPI(eqx.Module):
 
         def combine_sequences(self, losses, candidates, x_hat, t_now, s):
             weights = jax.nn.softmax(-losses / s["temperature"])
+            return jnp.einsum("k,khc->hc", weights, candidates)
+
+        def update_state(self, key, plan, candidates, losses, results, x_hat, t_now, s):
+            s = super().update_state(key, plan, candidates, losses, results, x_hat, t_now, s)
+            weights = jax.nn.softmax(-losses / s["temperature"])
             ess = 1.0 / jnp.sum(weights**2)  # effective sample size
             factor = jnp.where(ess < 0.1 * len(losses), 1.5, 0.9)
-            plan = jnp.einsum("k,khc->hc", weights, candidates)
-            return plan, {**s, "temperature": factor * s["temperature"]}
+            return {**s, "temperature": factor * s["temperature"]}
     ```
 
     Hooks run inside `jax.lax.scan` (and possibly `jax.grad`), so they must be
     pure and JAX-traceable and must not draw randomness from `s["key"]`
-    (`sample_controls` gets its own key). The state `combine_sequences`
-    returns must keep the structure, shapes and dtypes of the one it
-    received. New fields on an `MPPI` subclass need a default (or
+    (`sample_controls` gets its own key, and `update_state` the next one). The state `update_state` returns
+    must keep the structure, shapes and dtypes of the one it received. New fields on an `MPPI` subclass need a default (or
     `eqx.field(kw_only=True)`).
 
     Attributes:
@@ -312,6 +318,7 @@ class MPPI(eqx.Module):
 
     dynamics: DynamicalModel
     loss_fn: MPPILossFn = eqx.field(static=True)
+
     horizon: int | tuple[float, ...] = eqx.field(
         static=True, default=10, converter=_as_horizon
     )
@@ -425,14 +432,12 @@ class MPPI(eqx.Module):
         x_hat: Distribution,
         t_now: Real[Array, ""],
         s: dict,
-    ) -> tuple[Real[Array, "horizon control_dim"], dict]:
-        """Weight the candidates and combine them into this step's plan.
+    ) -> Real[Array, "horizon control_dim"]:
+        """Weight the candidates and combine them into this step's plan, whose
+        first entry is applied. `losses` are always finite.
 
-        Returns `(plan, s)`: the plan, whose first entry is applied, and the
-        policy state. `losses` are always
-        finite.
         Default: the softmax weights `softmax(-losses / temperature)`
-        and the weighted mean of the candidates; `s` unchanged. With
+        and the weighted mean of the candidates. With
         `temperature=0` all the weight goes to the lowest-loss candidate."""
 
         positive = self.temperature > 0
@@ -442,7 +447,27 @@ class MPPI(eqx.Module):
             jax.nn.softmax(-losses / safe_temperature),
             jax.nn.one_hot(jnp.argmin(losses), losses.shape[0], dtype=losses.dtype),
         )
-        return jnp.einsum("k,khc->hc", weights, candidates), s
+        return jnp.einsum("k,khc->hc", weights, candidates)
+
+    def update_state(
+        self,
+        key: PRNGKeyArray,
+        plan: Real[Array, "horizon control_dim"],
+        candidates: Real[Array, "n_samples horizon control_dim"],
+        losses: Real[Array, " n_samples"],
+        results: SimulatedResult,
+        x_hat: Distribution,
+        t_now: Real[Array, ""],
+        s: dict,
+    ) -> dict:
+        """Next policy state, from the advanced PRNG key and this step's plan,
+        candidates, (finite) losses and candidate rollouts.
+
+        Default: `s` with `"nominal_sequence"` set to the plan shifted left by
+        one with the last entry repeated (the receding-horizon warm start) and
+        `"key"` set to `key`; other entries unchanged."""
+        next_nominal = jnp.concatenate([plan[1:], plan[-1:]], axis=0)
+        return {**s, "nominal_sequence": next_nominal, "key": key}
 
     def _rollout_and_score_one(
         self,
@@ -529,15 +554,13 @@ class MPPI(eqx.Module):
         # weight ~0 without corrupting the others
         losses = jnp.where(jnp.isfinite(losses), losses, jnp.finfo(losses.dtype).max)
 
-        plan, s = self.combine_sequences(losses, candidates, x_hat, t_now, s)
+        plan = self.combine_sequences(losses, candidates, x_hat, t_now, s)
+        next_s = self.update_state(
+            key, plan, candidates, losses, results, x_hat, t_now, s
+        )
 
-        # Receding horizon: apply the first control; the rest warm-starts the
-        # next call. Any extra entries in s are passed through.
-        u0 = plan[0]
-        next_nominal = jnp.concatenate([plan[1:], plan[-1:]], axis=0)
-        next_s = {**s, "nominal_sequence": next_nominal, "key": key}
-
-        return u0, next_s, results  # return the rollout batch for debugging/analysis
+        # Also return the rollout batch, for debugging/analysis.
+        return plan[0], next_s, results
 
     def __call__(
         self,
