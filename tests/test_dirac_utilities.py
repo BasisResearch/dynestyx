@@ -16,6 +16,7 @@ def test_structured_dirac_model_simulates_in_flat_coordinates():
         control=dsx.Layout.from_example((jnp.zeros(1), jnp.zeros(1))),
         observation=dsx.Layout.from_example({"measured": jnp.zeros(2)}),
     )
+    assert layout.control is not None
 
     def transition(x, u, t_now, t_next):
         return {
@@ -98,6 +99,8 @@ def test_scalar_dirac_model_and_identity_observation():
         observation_model=observation,
     )
     result = dsx.simulate(dynamics, rng_key=jr.key(0), predict_times=jnp.arange(3.0))
+    assert result.states is not None
+    assert result.observations is not None
     assert jnp.array_equal(result.states[0, :, 0], jnp.array([2.0, 3.0, 4.0]))
     assert jnp.array_equal(result.observations[0, :, 0], result.states[0, :, 0])
     assert observation(jnp.array([1.0, 2.0]), None, 0).event_shape == (2,)
