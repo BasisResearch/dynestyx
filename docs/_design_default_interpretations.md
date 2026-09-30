@@ -20,10 +20,14 @@ When `obs_times` and `obs_values` are supplied and no learning handler (Filter/S
 | Model                                                                     | Default                      |
 | ------------------------------------------------------------------------- | ---------------------------- |
 | `obs_dim != state_dim`                                                    | Filter using the order below |
-| `obs_dim == state_dim`, discrete-time with an explicit transition density | `dsx.LatentPathBuilder`      |
-| `obs_dim == state_dim`, ODE                                               | `dsx.LatentPathBuilder`      |
+| `obs_dim == state_dim`, discrete-time with an explicit transition density | Size-based choice below      |
+| `obs_dim == state_dim`, ODE                                               | Size-based choice below      |
 | `obs_dim == state_dim`, SDE                                               | Filter using the order below |
 
+For the size-based choice, use `T * obs_dim`, where `T` is the number of
+observation times: below a cutoff, choose `dsx.LatentPathBuilder` (LPB); at or
+above it, choose a Filter using the order below. The cutoff is TBD and will be
+determined later through simple laptop experiments run by Codex.
 
 Choose the first compatible filter:
 
