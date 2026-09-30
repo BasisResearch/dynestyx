@@ -44,7 +44,9 @@ def test_enkf_ensemble_subspace(
 ):
     localization = (
         EnKFLocalizationFunctions(
-            modify_cross_covariance=lambda covariance, model_inputs: covariance
+            modify_cross_covariance=lambda cross_covariance, model_inputs: (
+                cross_covariance
+            )
         )
         if localized
         else None
@@ -90,11 +92,9 @@ def test_enkf_ensemble_subspace(
         n_particles=effective_particles,
         ensemble_subspace=overrides.get("ensemble_subspace", option),
     )
-    inputs = dict(
-        obs_times=jnp.arange(3.0),
-        obs_values=jnp.array(
-            [[0.1, 0.2, -0.1, 0.2], [0.0, 0.1, 0.2, 0.3], [0.2, -0.1, 0.0, 0.1]]
-        ),
+    obs_times = jnp.arange(3.0)
+    obs_values = jnp.array(
+        [[0.1, 0.2, -0.1, 0.2], [0.0, 0.1, 0.2, 0.3], [0.2, -0.1, 0.0, 0.1]]
     )
     with patch.object(
         ensemble_kalman_filter,
@@ -102,7 +102,7 @@ def test_enkf_ensemble_subspace(
         wraps=ensemble_kalman_filter.build_filter,
     ) as builder:
         loglik, states = compute_cuthbert_filter(
-            dynamics, effective_config, key, **inputs
+            dynamics, effective_config, key, obs_times=obs_times, obs_values=obs_values
         )
     assert builder.call_args.kwargs["ensemble_subspace"] is expected
     assert jnp.isfinite(loglik)
@@ -111,7 +111,7 @@ def test_enkf_ensemble_subspace(
 
     explicit_config = dataclasses.replace(effective_config, ensemble_subspace=expected)
     explicit_loglik, explicit_states = compute_cuthbert_filter(
-        dynamics, explicit_config, key, **inputs
+        dynamics, explicit_config, key, obs_times=obs_times, obs_values=obs_values
     )
     assert jnp.allclose(loglik, explicit_loglik)
     assert jnp.allclose(states.ensemble, explicit_states.ensemble)
