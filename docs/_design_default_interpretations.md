@@ -5,10 +5,12 @@ handler stack. Explicit handlers and configs take precedence.
 
 ## Simulation
 
+In all cases, the default `Discretizer` is applied for continuous time models.
+
 - `predict_times`, no simulator: add `Simulator()` on the outside.
-- `predict_times` + `ctrl_times`, no `ctrl_values`: use a closed-loop simulator
-instead. A control policy must be supplied. For continuous-time models, apply
-the default `Discretizer()` first.
+  - This rule also applies if `ctrl_times` and `ctrl_values` are both supplied 
+
+All other combinations of arguments are treated as ambiguous and raise an error.
 
 ## Learning
 
