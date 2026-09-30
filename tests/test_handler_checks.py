@@ -44,12 +44,6 @@ def test_closed_loop_order(inner):
         )
 
 
-def test_closed_loop_is_not_external_observation_inference():
-    with _closed_loop():
-        with pytest.raises(ValueError, match="Observations require"):
-            _validate_handler_stack(obs_values=True, predict_times=True)
-
-
 @pytest.mark.parametrize("factory", [dsx.Filter, dsx.Smoother, dsx.LatentPathBuilder])
 def test_unused_inference_warns(factory):
     with dsx.Simulator(), factory():
@@ -68,14 +62,14 @@ def test_unused_simulator_warns(factory):
 def test_reversed_stage_order(inner, outer):
     with handler(inner()), handler(outer()):
         with pytest.raises(ValueError, match="Invalid handler order.*outermost"):
-            _validate_handler_stack(obs_values=None, predict_times=None)
+            _validate_handler_stack()
 
 
 @pytest.mark.parametrize("factory", _STAGES[1:])
 def test_duplicate_stages(factory):
     with handler(factory()), handler(factory()):
         with pytest.raises(ValueError, match="one handler per stage"):
-            _validate_handler_stack(obs_values=None, predict_times=None)
+            _validate_handler_stack()
 
 
 @pytest.mark.parametrize(
@@ -97,17 +91,4 @@ def test_valid_full_stack_with_nested_plates():
     with ExitStack() as stack:
         for factory in reversed([_STAGES[0], *_STAGES]):
             stack.enter_context(handler(factory()))
-        _validate_handler_stack(obs_values=True, predict_times=True)
-
-
-@pytest.mark.parametrize("factory", [dict, dsx.Discretizer, dsx.Simulator])
-def test_observations_require_inference(factory):
-    with handler(factory()):
-        with pytest.raises(ValueError, match="Observations require"):
-            _validate_handler_stack(obs_values=True, predict_times=None)
-
-
-def test_predictions_require_simulator():
-    with dsx.Filter():
-        with pytest.raises(ValueError, match="predict_times requires a Simulator"):
-            _validate_handler_stack(obs_values=None, predict_times=True)
+        _validate_handler_stack()
