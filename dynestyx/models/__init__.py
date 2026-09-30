@@ -19,15 +19,18 @@ from dynestyx.models.diffusions import (
     ScalarDiffusion,
 )
 from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift, linearize_drift
+from dynestyx.models.initial_conditions import DiracInitialCondition
 from dynestyx.models.layout import Layout, Layouts
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
+    DiracObservation,
     GaussianObservation,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
 )
 from dynestyx.models.state_evolution import (
+    DiracStateEvolution,
     GaussianStateEvolution,
     LinearGaussianParams,
     LinearGaussianStateEvolution,
@@ -38,6 +41,9 @@ __all__ = [
     "DeterministicContinuousTimeStateEvolution",
     "AffineDrift",
     "DiracIdentityObservation",
+    "DiracInitialCondition",
+    "DiracStateEvolution",
+    "DiracObservation",
     "Diffusion",
     "DiscreteTimeStateEvolution",
     "DiagonalDiffusion",
