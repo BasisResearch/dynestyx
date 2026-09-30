@@ -1,7 +1,7 @@
 """Observation model implementations."""
 
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import jax.numpy as jnp
 from jax.experimental import sparse as jax_sparse
@@ -9,6 +9,8 @@ from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
 from dynestyx.models.core import ObservationModel
+from dynestyx.models.layout import Layouts
+from dynestyx.models.utils.distribution_utils import _dirac
 
 
 class LinearGaussianObservationParams(NamedTuple):
@@ -231,7 +233,49 @@ class GaussianObservation(ObservationModel):
         return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
 
 
-class DiracIdentityObservation(ObservationModel):
+class DiracObservation(ObservationModel):
+    """Deterministic observation with optional structured inputs and output."""
+
+    h: Callable[[Any, Any, Any], Any]
+    layout: Layouts | None
+    event_dim: int | None
+
+    def __init__(
+        self,
+        h: Callable[[Any, Any, Any], Any],
+        *,
+        layout: Layouts | None = None,
+        event_dim: int | None = None,
+    ):
+        self.h = h
+        self.layout = layout
+        self.event_dim = event_dim
+
+    def mean(self, x, u, t):
+        """Compute the observation location in flat coordinates."""
+        state_layout = None if self.layout is None else self.layout.state
+        control_layout = None if self.layout is None else self.layout.control
+        observation_layout = None if self.layout is None else self.layout.observation
+        if state_layout is not None:
+            x = state_layout.unflatten(x)
+        if control_layout is not None and u is not None:
+            u = control_layout.unflatten(u)
+        observation = self.h(x, u, t)
+        return (
+            jnp.asarray(observation)
+            if observation_layout is None
+            else observation_layout.flatten(observation)
+        )
+
+    def __call__(self, x, u, t):
+        return _dirac(self.mean(x, u, t), self.event_dim)
+
+
+def _identity_observation(x, u, t):
+    return x
+
+
+class DiracIdentityObservation(DiracObservation):
     """
     Noise-free identity observation model.
 
@@ -244,9 +288,5 @@ class DiracIdentityObservation(ObservationModel):
     i.e., the observation equals the latent state almost surely.
     """
 
-    def __call__(self, x, u, t):
-        # Treat scalar latent states as scalar events, and otherwise use only
-        # the trailing state axis as the event dimension so any leading batch
-        # or plate axes are preserved.
-        event_dim = 0 if jnp.ndim(x) == 0 else 1
-        return dist.Delta(x, event_dim=event_dim)
+    def __init__(self):
+        super().__init__(_identity_observation)
