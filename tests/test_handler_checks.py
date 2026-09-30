@@ -19,7 +19,7 @@ _STAGES = [
 ]
 
 
-@pytest.mark.parametrize("inner,outer", itertools.combinations(_STAGES, 2))
+@pytest.mark.parametrize("inner,outer", list(itertools.combinations(_STAGES, 2)))
 def test_reversed_stage_order(inner, outer):
     with handler(inner()), handler(outer()):
         with pytest.raises(ValueError, match="Invalid handler order.*outermost"):
@@ -35,7 +35,9 @@ def test_duplicate_stages(factory):
 
 @pytest.mark.parametrize(
     "inner,outer",
-    itertools.product([dsx.Filter, dsx.Smoother, dsx.LatentPathBuilder], repeat=2),
+    list(
+        itertools.product([dsx.Filter, dsx.Smoother, dsx.LatentPathBuilder], repeat=2)
+    ),
 )
 def test_duplicate_inference_before_execution(inner, outer):
     dynamics = dsx.LTI_discrete(A=jnp.eye(1), Q=jnp.eye(1), H=jnp.eye(1), R=jnp.eye(1))

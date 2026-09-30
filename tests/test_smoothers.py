@@ -554,7 +554,7 @@ def test_smoother_plate_batched_loglik_shape(smoother_config):
     obs_values = jnp.zeros((m, len(obs_times), 1))
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-        with Smoother(smoother_config=smoother_config):
+        with Simulator(), Smoother(smoother_config=smoother_config):
             _plate_discrete_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
