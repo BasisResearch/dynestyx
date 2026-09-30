@@ -13,7 +13,12 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
-from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
@@ -97,6 +102,10 @@ type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base for filter handlers."""
+
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self):
+        return [_DynestyxStackKind.FILTER, *fwd()]
 
     @implements(_condition_intp)
     def _sample_ds(

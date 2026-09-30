@@ -11,7 +11,12 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
@@ -96,6 +101,10 @@ def _valid_smoother_config_names(*, continuous_time: bool) -> list[str]:
 
 class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base class for smoother handlers."""
+
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self):
+        return [_DynestyxStackKind.SMOOTHER, *fwd()]
 
     @implements(_condition_intp)
     def _sample_ds(
