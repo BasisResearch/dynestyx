@@ -113,7 +113,13 @@ nav:
           - ODESimulator: api_reference/public/simulators/ode_simulator.md
           - SDESimulator: api_reference/public/simulators/sde_simulator.md
           - Simulator Configurations: api_reference/public/simulators/simulator_configs.md
-      - Closed-loop Control: api_reference/public/control.md
+      - Closed-loop Control:
+        - Overview: api_reference/public/control.md
+        - DiscreteControlLoopSimulator: api_reference/public/control/discrete_control_loop_simulator.md
+        - PolicyCallable: api_reference/public/control/policy_callable.md
+        - Provided Policies:
+          - Overview: api_reference/public/control/provided_policies.md
+          - MPPI: api_reference/public/control/mppi.md
       - Result Types: api_reference/public/result_types.md
       - Evaluation:
         - Evaluation: api_reference/public/evaluation/handlers.md
