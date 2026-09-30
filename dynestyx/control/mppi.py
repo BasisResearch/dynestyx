@@ -147,14 +147,14 @@ class MPPI(eqx.Module):
             `ColoredNoise(horizon, control_dim, beta=...)` (warns about them).
         n_samples: Number of sampled control sequences per call. Defaults to
             `10`.
-        n_simulations: Number of rollouts drawn per candidate control
-            sequence, forwarded to `dsx.simulate`. Each draws different noise,
-            shared across candidates when `common_randomness` is `True`.
+        n_simulations: Number of rollouts per candidate control sequence
+            (forwarded to `dsx.simulate`), each with its own noise draw, so
+            `loss_fn` can score a candidate over several noise realizations.
             Defaults to `1`.
-        common_randomness: Whether all candidates are rolled out with the
-            same PRNG key, so their losses differ only through their controls
-            (lower-variance comparisons). With `False`, each candidate draws
-            independent process and observation noise. Defaults to `True`.
+        common_randomness: If `True` (default), the j-th rollout uses the same
+            noise for every candidate, so candidates are compared under
+            identical noise and their losses differ only through their
+            controls. If `False`, every candidate draws its own noise.
         temperature: MPPI's $\lambda \ge 0$; higher values flatten the weights
             toward a uniform average, lower values concentrate weight on the
             lowest-loss samples, and `0` applies the lowest-loss candidate
