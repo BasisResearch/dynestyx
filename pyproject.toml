@@ -38,13 +38,7 @@ dependencies = [
     # numpyro<0.21.0 fails to import against jax>=0.10 (removed xla_pmap_p);
     # keep this floor aligned with the jax floor below.
     "numpyro>=0.21.0",
-    "pytest>=9.0.1",
-    "arviz>=1.0",
     "blackjax>=1.6",
-    "pytkdocs-tweaks>=0.0.8",
-    "mkdocstrings[python]>=1.0.1",
-    "jupyter>=1.1.1",
-    "ipywidgets>=8.1.8",
     "equinox>=0.13.2",
     "jaxtyping>=0.3.9",
     "diffrax>=0.7.2",
@@ -63,11 +57,16 @@ allow-direct-references = true
 
 [dependency-groups]
 dev = [
+    "arviz>=1.0",
+    "ipywidgets>=8.1.8",
+    "jupyter>=1.1.1",
     "mike>=2.1.0",
     "mkdocs-material>=9.7.1",
     "mkdocs>=1.6.1,<2",
+    "mkdocstrings[python]>=1.0.1",
     "pytest>=9.0.1",
     "pytest-xdist>=3.8.0",
+    "pytkdocs-tweaks>=0.0.8",
     "ruff>=0.14.11",
     "ty>=0.0.37",
     "typeguard>=2.13.3,<3",
