@@ -29,6 +29,8 @@ Choose the first compatible filter:
 2. **EnKF**; for continuous-time models, use `DiffraxSampleConfig`. (Applicable only for Gaussian observations.)
 3. **PF**; for continuous-time models, use `DiffraxSampleConfig`.
 
+Continuous time models are discretized here by default due to the better support of missing observations in `cuthbert`.
+
 If observations and prediction times are both supplied, apply both the learning
 and simulation rules.
 
