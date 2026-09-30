@@ -30,6 +30,30 @@ def _controlled_model():
     )
 
 
+def test_layouts_from_example_and_with_examples():
+    state_example = {"position": jnp.zeros(2)}
+    observation_example = jnp.zeros((2, 3))
+    control_example = (jnp.zeros(1), jnp.zeros(2))
+
+    state_only = dsx.Layouts.from_example(state=state_example)
+    assert state_only.state is not None
+    assert state_only.state.dim == 2
+    assert state_only.control is None
+    assert state_only.observation is None
+
+    extended = state_only.with_examples(
+        control=control_example, observation=observation_example
+    )
+    assert extended is not state_only
+    assert extended.state is state_only.state
+    assert extended.control is not None
+    assert extended.control.dim == 3
+    assert extended.observation is not None
+    assert extended.observation.dim == 6
+    assert state_only.control is None
+    assert state_only.observation is None
+
+
 def test_layout_round_trip_with_scalar_leaf_and_batch_axes():
     example = {"a": jnp.zeros((2, 2)), "b": (jnp.zeros(()), jnp.zeros(1))}
     layout = dsx.Layout.from_example(example)
@@ -68,27 +92,94 @@ def test_layout_rejects_empty_and_mixed_dtype_trees():
 
 
 def test_dynamics_can_close_over_layout_without_a_new_model_contract():
-    state = dsx.Layout.from_example({"position": jnp.zeros(2)})
-    layout = dsx.Layouts(state=state)
-
-    def transition(x, u, t_now, t_next):
-        position = state.unflatten(x)["position"]
-        next_position = position + 1
-        return dist.Delta(state.flatten({"position": next_position})).to_event(1)
-
-    dynamics = dsx.DynamicalModel(
-        initial_condition=dist.Delta(jnp.zeros(2)).to_event(1),
-        state_evolution=transition,
-        observation_model=lambda x, u, t: dist.Delta(x).to_event(1),
+    initial_state = {
+        "latent": jnp.array([0.5, -0.25]),
+        "observed": jnp.array([[1.0, 2.0], [3.0, 4.0]]),
+    }
+    initial_flat = jnp.array([0.5, -0.25, 1.0, 2.0, 3.0, 4.0])
+    layout = dsx.Layouts.from_example(
+        state=initial_state, observation=jnp.zeros((2, 2))
     )
-    flat = dsx.simulate(dynamics, rng_key=jr.key(0), predict_times=jnp.arange(3.0))
-    structured = flat.unflatten(layout)
+    state_layout = layout.state
+    observation_layout = layout.observation
+    assert state_layout is not None
+    assert observation_layout is not None
+    assert jnp.array_equal(state_layout.flatten(initial_state), initial_flat)
 
-    assert flat.states is not None
-    assert structured.states is not None
-    assert flat.states.shape == (1, 3, 2)
-    assert jnp.array_equal(
-        structured.states["position"][0, :, 0], jnp.array([0.0, 1.0, 2.0])
+    A = jnp.array([[0.1, 0.2], [-0.3, 0.4]])
+    alpha = 0.8
+
+    def structured_transition(x, u, t_now, t_next):
+        state = state_layout.unflatten(x)
+        next_state = {
+            "latent": alpha * state["latent"],
+            "observed": state["observed"]
+            + (t_next - t_now) * (A @ state["latent"])[:, None],
+        }
+        return dist.Normal(state_layout.flatten(next_state), 0.1).to_event(1)
+
+    def flat_transition(x, u, t_now, t_next):
+        latent = x[:2]
+        observed = x[2:].reshape(2, 2)
+        next_observed = observed + (t_next - t_now) * (A @ latent)[:, None]
+        loc = jnp.concatenate((alpha * latent, next_observed.reshape(-1)))
+        return dist.Normal(loc, 0.1).to_event(1)
+
+    def structured_observation(x, u, t):
+        state = state_layout.unflatten(x)
+        observation = jnp.logaddexp(0.0, state["observed"])
+        return dist.Normal(observation_layout.flatten(observation), 0.2).to_event(1)
+
+    def flat_observation(x, u, t):
+        observation = jnp.logaddexp(0.0, x[2:].reshape(2, 2))
+        return dist.Normal(observation.reshape(-1), 0.2).to_event(1)
+
+    initial_condition = dist.Normal(initial_flat, 0.05).to_event(1)
+    structured_dynamics = dsx.DynamicalModel(
+        initial_condition=initial_condition,
+        state_evolution=structured_transition,
+        observation_model=structured_observation,
+    )
+    flat_dynamics = dsx.DynamicalModel(
+        initial_condition=initial_condition,
+        state_evolution=flat_transition,
+        observation_model=flat_observation,
+    )
+    times = jnp.array([0.0, 1.0, 2.5, 3.0])
+    key = jr.key(0)
+    structured_model_result = dsx.simulate(
+        structured_dynamics, rng_key=key, predict_times=times, n_simulations=3
+    )
+    flat_model_result = dsx.simulate(
+        flat_dynamics, rng_key=key, predict_times=times, n_simulations=3
+    )
+
+    assert structured_model_result.x_0 is not None
+    assert structured_model_result.states is not None
+    assert structured_model_result.observations is not None
+    assert flat_model_result.x_0 is not None
+    assert flat_model_result.states is not None
+    assert flat_model_result.observations is not None
+    assert structured_model_result.states.shape == (3, 4, 6)
+    assert structured_model_result.observations.shape == (3, 4, 4)
+    assert jnp.allclose(structured_model_result.x_0, flat_model_result.x_0)
+    assert jnp.allclose(structured_model_result.states, flat_model_result.states)
+    assert jnp.allclose(
+        structured_model_result.observations, flat_model_result.observations
+    )
+
+    result = structured_model_result.unflatten(layout)
+    assert result.states is not None
+    assert result.observations is not None
+    assert result.states["latent"].shape == (3, 4, 2)
+    assert result.states["observed"].shape == (3, 4, 2, 2)
+    assert result.observations.shape == (3, 4, 2, 2)
+    assert jnp.allclose(result.states["latent"], flat_model_result.states[..., :2])
+    assert jnp.allclose(
+        result.states["observed"], flat_model_result.states[..., 2:].reshape(3, 4, 2, 2)
+    )
+    assert jnp.allclose(
+        result.observations, flat_model_result.observations.reshape(3, 4, 2, 2)
     )
 
 

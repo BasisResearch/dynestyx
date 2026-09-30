@@ -106,6 +106,37 @@ class Layouts:
     control: Layout | None = None
     observation: Layout | None = None
 
+    @classmethod
+    def from_example(
+        cls,
+        *,
+        state: Any = None,
+        control: Any = None,
+        observation: Any = None,
+    ) -> "Layouts":
+        """Build layouts for the supplied example values."""
+        return cls().with_examples(
+            state=state, control=control, observation=observation
+        )
+
+    def with_examples(
+        self,
+        *,
+        state: Any = None,
+        control: Any = None,
+        observation: Any = None,
+    ) -> "Layouts":
+        """Return new layouts, retaining fields without a supplied example."""
+        return type(self)(
+            state=self.state if state is None else Layout.from_example(state),
+            control=self.control if control is None else Layout.from_example(control),
+            observation=(
+                self.observation
+                if observation is None
+                else Layout.from_example(observation)
+            ),
+        )
+
     def __post_init__(self) -> None:
         for name in ("state", "control", "observation"):
             value = getattr(self, name)
