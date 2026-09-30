@@ -26,7 +26,7 @@ When `obs_times` and `obs_values` are supplied and no learning handler (Filter/S
 Choose the first compatible filter:
 
 1. **KF** using `cuthbert` with `Discretizer()` (default Discretizer will recognize linearity if possible).
-2. **EnKF**; for continuous-time models, use sampler discretization matching.
+2. **EnKF**; for continuous-time models, use `DiffraxSampleConfig`. (Applicable only for Gaussian observations.)
 3. **PF**; for continuous-time models, use sampler discretization.
 
 If observations and prediction times are both supplied, apply both the learning
