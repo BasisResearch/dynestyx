@@ -36,6 +36,8 @@ and simulation rules.
 
 ## To explore
 
+Implementation of the above may lead us to examining the handler stack in full; in this case, we should also provide informative errors due to common mis-orderings of the handler stack (e.g., putting `Discretizer` outside of the inference handler).
+
 Auto-selecting `DiracIdentityObservation` + `LatentPathBuilder` based on data
 smoothness and sampling density along a smoothed interpolant. Criteria are TBD;
 equal observation and state dimensions alone do not imply identity observations.
