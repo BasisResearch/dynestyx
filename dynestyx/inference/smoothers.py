@@ -103,7 +103,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base class for smoother handlers."""
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.SMOOTHER, *fwd()]
 
     @implements(_condition_intp)

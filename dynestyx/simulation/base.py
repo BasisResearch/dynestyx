@@ -408,7 +408,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         return _stack_simulated_results(member_results, plate_shapes=plate_shapes)
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.SIMULATOR, *fwd()]
 
     @implements(_condition_intp)

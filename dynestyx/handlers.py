@@ -40,7 +40,11 @@ class _DynestyxStackKind(Enum):
 
 @defop
 def _dynestyx_stack_kind() -> list[_DynestyxStackKind]:
-    """Return active dynestyx interpretation kinds, innermost first."""
+    """Return active dynestyx interpretation kinds, innermost first.
+
+    Implementations accept **kwargs so effectful saves an empty argument frame
+    when this query is called from inside another operation's implementation.
+    """
     return []
 
 
@@ -491,7 +495,7 @@ class plate(ObjectInterpretation):
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.PLATE, *fwd()]
 
     @implements(_condition_intp)

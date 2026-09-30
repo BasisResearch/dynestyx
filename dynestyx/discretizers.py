@@ -200,7 +200,7 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
         self.discretizer_config = discretizer_config
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.DISCRETIZER, *fwd()]
 
     @implements(_condition_intp)

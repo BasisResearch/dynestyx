@@ -60,3 +60,10 @@ def test_coproduct_and_unrelated_effect():
     empty.append(Kind.FILTER)
     assert _dynestyx_stack_kind() == []
     assert not hasattr(dsx, "_dynestyx_stack_kind")
+
+
+def test_query_inside_an_operation_with_arguments():
+    operation = defop(lambda name, **kwargs: None)
+    with dsx.Simulator(), dsx.Filter():
+        with handler({operation: lambda name, **kwargs: _dynestyx_stack_kind()}):
+            assert operation("site", obs_values="data") == [Kind.FILTER, Kind.SIMULATOR]

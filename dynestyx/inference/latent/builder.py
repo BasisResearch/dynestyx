@@ -609,7 +609,7 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
         )
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.LATENT_PATH_BUILDER, *fwd()]
 
     @implements(_condition_intp)

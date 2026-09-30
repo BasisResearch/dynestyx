@@ -104,7 +104,7 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base for filter handlers."""
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.FILTER, *fwd()]
 
     @implements(_condition_intp)

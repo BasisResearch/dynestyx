@@ -39,7 +39,7 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
     observation_scoring_config: ObservationScoringConfig
 
     @implements(_dynestyx_stack_kind)
-    def _stack_kind(self):
+    def _stack_kind(self, **kwargs):
         return [_DynestyxStackKind.EVALUATION, *fwd()]
 
     @implements(_condition_intp)
