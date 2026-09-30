@@ -364,7 +364,7 @@ def test_discrete_full_row_missing_correlated_student_t_mcmc_smoke():
     assert "alpha" in mcmc.get_samples()
 
 
-def test_discrete_categorical_conditioning_raises_clear_error():
+def test_discrete_categorical_conditioning_defaults_to_pf():
     times = jnp.arange(6.0)
     true_A = jnp.array([[0.95, 0.05], [0.1, 0.9]])
     with DiscreteTimeSimulator():
@@ -375,29 +375,24 @@ def test_discrete_categorical_conditioning_raises_clear_error():
         )
     obs_values = jnp.asarray(generated["f_observations"])[0, 0, :, 0]
 
-    with pytest.raises(
-        ValueError,
-        match="generation-only",
-    ):
-        with DiscreteTimeSimulator():
-            with seed(rng_seed=jr.PRNGKey(6)):
-                _scalar_categorical_hmm_like_model(
-                    A=true_A,
-                    obs_times=times,
-                    obs_values=obs_values,
-                )
+    with pytest.warns(UserWarning, match="PFConfig"), DiscreteTimeSimulator():
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(6)):
+            _scalar_categorical_hmm_like_model(
+                A=true_A,
+                obs_times=times,
+                obs_values=obs_values,
+            )
+    assert jnp.isfinite(tr["f_marginal_loglik"]["value"]).all()
 
 
-def test_discrete_dirac_missingness_raises_clear_error():
+def test_discrete_dirac_missingness_defaults_to_latent_path():
     times = jnp.arange(5.0)
     forward = _run_discrete_trace(discrete_dirac_model, predict_times=times)
     obs_values = forward["f_observations"]["value"][0]
     obs_values = set_full_row_missing(obs_values, 2)
 
-    with pytest.raises(
-        ValueError,
-        match="generation-only",
-    ):
-        _run_discrete_trace(
+    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+        tr = _run_discrete_trace(
             discrete_dirac_model, obs_times=times, obs_values=obs_values
         )
+    assert jnp.isfinite(tr["f_joint_log_prob"]["value"]).all()

@@ -1,20 +1,21 @@
+"""Input matrix with automatic completion of missing interpretation stages.
+
+Complete observation/control pairs are required. Prediction times add a simulator;
+observations add inference. Small known discrete models and ODEs choose LPB,
+whose predictions must be future-only. Explicit handlers retain their configs.
+
+| Inputs | Simulator only | Simulator + Filter | Filter only |
+| --- | --- | --- | --- |
+| Observations + predictions | Add inference, then simulate | Both run | Add Simulator |
+| Observations only | Add inference | Filter runs | Filter runs |
+| Predictions only | Simulate | Filter no-ops, simulate | Add Simulator |
+| Incomplete observation pair | Error | Error | Error |
+| Neither observation nor prediction times | Error | Error | Error |
+
+All cases retain existing model/handler compatibility and LPB rollout limits.
 """
-Tests for dsx.sample input matrix: obs_times, obs_values, predict_times.
 
-Matrix of expected behavior across three handler contexts:
-- Case 1: Simulator → Sample (Simulator only)
-- Case 2: Simulator → Filter → Sample (Filter + Simulator)
-- Case 3: Filter → Sample (Filter only)
-
-| Input Provided | Case 1: Simulator | Case 2: Sim+Filter | Case 3: Filter |
-|----------------|-------------------|--------------------|-----------------|
-| obs_times, obs_values, predict_times | Error | Filter consumes; Simulator runs | Error |
-| obs_times, obs_values | Error | Filter consumes; Simulator no-ops | Runs |
-| obs_times, predict_times (no obs_values) | Error | Error | Error |
-| predict_times only | Runs | No-op → Case 1 | Error |
-| obs_times only | Error | Error | Error |
-"""
-
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
@@ -117,8 +118,8 @@ def test_error_neither_obs_times_nor_predict_times():
 
 
 def test_case1_simulator_all_three_runs():
-    """Case 1: obs_times + obs_values + predict_times → Simulator errors."""
-    with pytest.raises(ValueError, match="generation-only"):
+    """Case 1: automatic LPB rejects in-window predictions."""
+    with pytest.raises((ValueError, eqx.EquinoxRuntimeError), match="in-window"):
         _run_model(
             jumpy_controls_model,
             obs_times=_TIMES,
@@ -143,9 +144,9 @@ def test_case1_simulator_predict_times_only_runs():
 
 
 def test_case1_simulator_obs_times_obs_values_only_discrete_runs():
-    """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → error."""
-    with pytest.raises(ValueError, match="generation-only"):
-        _run_model(
+    """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → default inference."""
+    with pytest.warns(UserWarning, match="dynestyx selected"):
+        tr = _run_model(
             jumpy_controls_model,
             obs_times=_TIMES,
             obs_values=_OBS_VALUES,
@@ -153,12 +154,13 @@ def test_case1_simulator_obs_times_obs_values_only_discrete_runs():
             ctrl_values=_CTRL_VALUES,
             context=DiscreteTimeSimulator(),
         )
+    assert "f_joint_log_prob_factor" in tr or "f_marginal_loglik" in tr
 
 
 def test_case1_simulator_obs_times_obs_values_only_ode_runs():
-    """Case 1: obs_times + obs_values (no predict_times), ODESimulator → error."""
-    with pytest.raises(ValueError, match="generation-only"):
-        _run_model(
+    """Case 1: obs_times + obs_values (no predict_times), ODESimulator → default inference."""
+    with pytest.warns(UserWarning, match="dynestyx selected"):
+        tr = _run_model(
             jumpy_controls_model_ode,
             obs_times=_TIMES,
             obs_values=_OBS_VALUES,
@@ -166,12 +168,13 @@ def test_case1_simulator_obs_times_obs_values_only_ode_runs():
             ctrl_values=_CTRL_VALUES,
             context=Simulator(),
         )
+    assert "f_joint_log_prob_factor" in tr or "f_marginal_loglik" in tr
 
 
-def test_case1_simulator_obs_times_obs_values_only_sde_errors():
-    """Case 1: obs_times + obs_values (no predict_times), SDESimulator → generation-only error."""
-    with pytest.raises(ValueError, match="generation-only"):
-        _run_model(
+def test_case1_simulator_obs_times_obs_values_only_sde_runs():
+    """Case 1: obs_times + obs_values (no predict_times), SDESimulator → default inference."""
+    with pytest.warns(UserWarning, match="dynestyx selected"):
+        tr = _run_model(
             jumpy_controls_model_sde,
             obs_times=_TIMES,
             obs_values=_OBS_VALUES,
@@ -179,6 +182,8 @@ def test_case1_simulator_obs_times_obs_values_only_sde_errors():
             ctrl_values=_CTRL_VALUES,
             context=SDESimulator(),
         )
+
+    assert "f_joint_log_prob_factor" in tr or "f_marginal_loglik" in tr
 
 
 # -----------------------------------------------------------------------------
@@ -250,7 +255,7 @@ def test_case2_simulator_filter_predict_times_only_runs():
 
 
 def test_case3_filter_all_three_runs():
-    """Case 3: obs_times + obs_values + predict_times → missing Simulator errors."""
+    """Case 3: obs_times + obs_values + predict_times → default Simulator runs."""
 
     def model():
         return jumpy_controls_model_sde(
@@ -261,10 +266,11 @@ def test_case3_filter_all_three_runs():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with pytest.raises(ValueError, match="predict_times requires a Simulator"):
+    with pytest.warns(UserWarning, match="Simulator"):
         with Filter(filter_config=ContinuousTimeEKFConfig()):
-            with trace(), seed(rng_seed=jr.PRNGKey(0)):
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
                 model()
+    assert "f_predicted_states" in tr or "f_states" in tr
 
 
 def test_case3_filter_obs_only_runs():
@@ -284,10 +290,10 @@ def test_case3_filter_obs_only_runs():
     assert "f_marginal_loglik" in tr
 
 
-def test_case3_filter_predict_times_only_noop():
-    """Case 3: predict_times only → missing Simulator errors."""
+def test_case3_filter_predict_times_only_runs():
+    """Case 3: predict_times only → default Simulator runs."""
 
-    # Filter with no obs adds nothing; falls through. No filter output expected.
+    # Filter with no observations passes through to automatic prior simulation.
     def model():
         return jumpy_controls_model(
             predict_times=_TIMES,
@@ -295,7 +301,8 @@ def test_case3_filter_predict_times_only_noop():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with pytest.raises(ValueError, match="predict_times requires a Simulator"):
+    with pytest.warns(UserWarning, match="Simulator"):
         with Filter(filter_config=EKFConfig()):
-            with trace(), seed(rng_seed=jr.PRNGKey(0)):
+            with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
                 model()
+    assert "f_predicted_states" in tr or "f_states" in tr
