@@ -6,7 +6,7 @@ extension to LTI factories, Neural SDEs, etc.
 
 import warnings
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import jax.numpy as jnp
 import numpyro.distributions as dist
@@ -14,6 +14,8 @@ from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
+from dynestyx.models.layout import Layouts
+from dynestyx.models.utils.distribution_utils import _dirac
 
 
 class AffineDrift(_AffineDrift):
@@ -294,3 +296,40 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
             cov = self.cov
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+
+
+class DiracStateEvolution(DiscreteTimeStateEvolution):
+    """Deterministic discrete-time transition with optional structured inputs."""
+
+    F: Callable[[Any, Any, Any, Any], Any]
+    layout: Layouts | None
+    event_dim: int | None
+
+    def __init__(
+        self,
+        F: Callable[[Any, Any, Any, Any], Any],
+        *,
+        layout: Layouts | None = None,
+        event_dim: int | None = None,
+    ):
+        self.F = F
+        self.layout = layout
+        self.event_dim = event_dim
+
+    def mean(self, x, u, t_now, t_next):
+        """Compute the transition location in flat coordinates."""
+        state_layout = None if self.layout is None else self.layout.state
+        control_layout = None if self.layout is None else self.layout.control
+        if state_layout is not None:
+            x = state_layout.unflatten(x)
+        if control_layout is not None and u is not None:
+            u = control_layout.unflatten(u)
+        next_state = self.F(x, u, t_now, t_next)
+        return (
+            jnp.asarray(next_state)
+            if state_layout is None
+            else state_layout.flatten(next_state)
+        )
+
+    def __call__(self, x, u, t_now, t_next):
+        return _dirac(self.mean(x, u, t_now, t_next), self.event_dim)
