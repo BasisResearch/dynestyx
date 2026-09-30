@@ -172,7 +172,13 @@ def test_condition_no_observations():
     dynamics = _make_lti_dynamics(0.5)
     obs_times, obs_values = _make_data()
 
-    with Filter(filter_config=KFConfig(filter_source="cuthbert")):
+    from numpyro.handlers import seed
+
+    with (
+        seed(rng_seed=0),
+        dsx.Simulator(),
+        Filter(filter_config=KFConfig(filter_source="cuthbert")),
+    ):
         # Reusing the handler must not leak the first call's cached likelihood.
         dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
         result = dsx.condition(

@@ -54,7 +54,6 @@ def test_infer_smoother_returns_infer_result():
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
-            predict_times=jnp.arange(obs_times[-1], obs_times[-1] + 3.0),
         )
 
     assert isinstance(result, ConditionedResult)
@@ -158,7 +157,13 @@ def test_condition_smoother_no_observations():
     dynamics = _make_lti_dynamics(0.5)
     obs_times, obs_values = _make_data()
 
-    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
+    from numpyro.handlers import seed
+
+    with (
+        seed(rng_seed=0),
+        dsx.Simulator(),
+        Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")),
+    ):
         # Reusing the handler must not leak the first call's cached likelihood.
         dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
         result = dsx.condition(

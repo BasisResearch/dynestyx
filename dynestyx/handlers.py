@@ -48,6 +48,55 @@ def _dynestyx_stack_kind() -> list[_DynestyxStackKind]:
     return []
 
 
+_INFERENCE_KINDS = {
+    _DynestyxStackKind.FILTER,
+    _DynestyxStackKind.SMOOTHER,
+    _DynestyxStackKind.LATENT_PATH_BUILDER,
+}
+_STACK_STAGES = {
+    _DynestyxStackKind.PLATE: 0,
+    _DynestyxStackKind.DISCRETIZER: 1,
+    **dict.fromkeys(_INFERENCE_KINDS, 2),
+    _DynestyxStackKind.SIMULATOR: 3,
+    _DynestyxStackKind.EVALUATION: 4,
+}
+
+
+def _validate_handler_stack(*, obs_values, predict_times) -> None:
+    kinds = _dynestyx_stack_kind()
+    stages = [_STACK_STAGES[kind] for kind in kinds]
+    order_hint = (
+        "Use the nesting order (outermost first): "
+        "with Evaluation(...), Simulator(), Filter(...), Discretizer(), "
+        "plate(...): dsx.sample(...) . Omit stages you do not need; "
+        "Smoother or LatentPathBuilder can replace Filter."
+    )
+    for left, right in zip(kinds, kinds[1:]):
+        if _STACK_STAGES[left] > _STACK_STAGES[right]:
+            raise ValueError(
+                f"Invalid handler order: {left.name} is inside {right.name}. "
+                + order_hint
+            )
+    for stage in set(stages) - {0}:
+        if stages.count(stage) > 1:
+            repeated = ", ".join(
+                kind.name for kind in kinds if _STACK_STAGES[kind] == stage
+            )
+            reason = (
+                "Cannot condition an already conditioned result. " if stage == 2 else ""
+            )
+            raise ValueError(
+                f"{reason}Use only one handler per stage; got {repeated}. " + order_hint
+            )
+    if obs_values is not None and not _INFERENCE_KINDS.intersection(kinds):
+        raise ValueError(
+            "Observations require Filter, Smoother, or LatentPathBuilder. "
+            "Simulator is generation-only. " + order_hint
+        )
+    if predict_times is not None and _DynestyxStackKind.SIMULATOR not in kinds:
+        raise ValueError("predict_times requires a Simulator. " + order_hint)
+
+
 def _validate_and_prepare(
     name: str,
     dynamics: DynamicalModel,
@@ -240,6 +289,7 @@ def condition(
         )
     )
 
+    _validate_handler_stack(obs_values=obs_values, predict_times=predict_times)
     return _condition_intp(
         name,
         dynamics_with_t0,
