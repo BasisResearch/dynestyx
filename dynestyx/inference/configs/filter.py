@@ -291,6 +291,10 @@ class EnKFConfig(BaseFilterConfig):
             localization provides built-in Gaussian and Gaspari-Cohn tapers or
             accepts a custom covariance callable. Advanced users can instead
             supply Cuthbert-compatible callbacks.
+        ensemble_subspace (bool | None): Perform the update in ensemble space.
+            `None` selects it when `n_particles < observation_dim` and
+            localization is absent. `True` forces it and `False` disables it.
+            Available only with the Cuthbert backend and without localization.
         recorded_filtered_states_cov_jitter (float): Nonnegative \(\epsilon\) added to
             the **recorded** filtered-state covariance as \(\epsilon I\).
             This only affects the covariance when converted to a `MultivariateNormal` or `LowRankMultivariateNormal`
@@ -357,8 +361,16 @@ class EnKFConfig(BaseFilterConfig):
         1e-5  # this is good for float32, may want to reduce for float64
     )
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+    ensemble_subspace: bool | None = None
 
     def __post_init__(self):
+        if self.ensemble_subspace and (
+            self.localization is not None or self.filter_source != "cuthbert"
+        ):
+            raise ValueError(
+                "ensemble_subspace=True requires the Cuthbert backend "
+                "and no localization."
+            )
         if self.localization is not None and not isinstance(
             self.localization,
             EnKFLocalizationConfig | EnKFLocalizationFunctions,
