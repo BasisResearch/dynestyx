@@ -1,14 +1,13 @@
 """Basic Model Predictive Path Integral (MPPI) controller.
 
-Samples candidate control sequences as Gaussian
-perturbations (white, AR(1), or power-law/colored across the horizon --
-see `MPPI.noise_config` and `WhiteNoise`/`AR1Noise`/`ColoredNoise`) around a
-nominal sequence, scores each with a user-supplied loss, and returns the
-softmax-weighted mean (the standard MPPI control law). The proposal, the
-weighting, and where rollouts start can be overridden by subclassing `MPPI`.
+Samples candidate control sequences as perturbations drawn from a noise
+distribution (by default AR(1) noise across the horizon -- see `MPPI.noise` and
+`dynestyx.control.utils.distribution_utils`) around a nominal sequence, scores
+each with a user-supplied loss, and returns the softmax-weighted mean (the
+standard MPPI control law). The proposal, the weighting, and where rollouts
+start can be overridden by subclassing `MPPI`.
 """
 
-import abc
 import warnings
 from collections.abc import Callable
 from typing import NamedTuple
@@ -17,13 +16,13 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import numpy as np
 import numpyro.distributions as dist
 from jax import Array
 from jaxtyping import PRNGKeyArray, Real
 from numpyro.distributions import Distribution
 
 import dynestyx as dsx
+from dynestyx.control.utils.distribution_utils import AR1Noise
 from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.types import SimulatedResult
 
@@ -47,141 +46,6 @@ class MPPIStepInfo(NamedTuple):
     candidates: Real[Array, "n_samples horizon control_dim"]
     losses: Real[Array, " n_samples"]
     results: SimulatedResult
-
-
-class NoiseConfig(eqx.Module):
-    """Base class for `MPPI.noise_config` variants (see `WhiteNoise`,
-    `AR1Noise`, `ColoredNoise`).
-    """
-
-    @abc.abstractmethod
-    def sample(
-        self,
-        key: PRNGKeyArray,
-        n_samples: int,
-        times: Real[Array, " horizon_plus_one"],
-        control_dim: int,
-    ) -> Real[Array, "n_samples horizon control_dim"]:
-        """Draw `(n_samples, horizon, control_dim)` perturbations with unit
-        marginal variance per timestep, correlated across the horizon (axis 1)
-        as the variant defines. `MPPI` scales them by `noise_std`.
-
-        `times` is the rollout grid relative to the current time,
-        `[0, t_1, ..., t_H]` (`MPPI.horizon`, so `H = times.shape[0] - 1`):
-        perturbation `k` is applied over `[times[k], times[k + 1])`."""
-        raise NotImplementedError()
-
-
-class WhiteNoise(NoiseConfig):
-    """i.i.d. Gaussian perturbations, uncorrelated across the horizon. Only the
-    number of planning steps matters, not their times."""
-
-    def sample(
-        self,
-        key: PRNGKeyArray,
-        n_samples: int,
-        times: Real[Array, " horizon_plus_one"],
-        control_dim: int,
-    ) -> Real[Array, "n_samples horizon control_dim"]:
-        return jr.normal(key, (n_samples, times.shape[0] - 1, control_dim))
-
-
-class AR1Noise(NoiseConfig):
-    r"""Ornstein-Uhlenbeck perturbations observed at the planning times,
-    correlated as `Cov(eps_h, eps_h') = rho ** |t_h - t_h'|`. Smoother than
-    `WhiteNoise`; `rho=0` is equivalent to `WhiteNoise`.
-
-    Attributes:
-        rho: Correlation between perturbations one time unit apart, in
-            `[0, 1]`. Defaults to `0.5`.
-    """
-
-    rho: float = 0.5
-
-    def __check_init__(self) -> None:
-        # Only a plain number can be checked here; a traced rho can't.
-        if isinstance(self.rho, (int, float)) and not 0.0 <= self.rho <= 1.0:
-            raise ValueError(f"rho must be in [0, 1], got {self.rho}.")
-
-    def sample(
-        self,
-        key: PRNGKeyArray,
-        n_samples: int,
-        times: Real[Array, " horizon_plus_one"],
-        control_dim: int,
-    ) -> Real[Array, "n_samples horizon control_dim"]:
-        # eps_h = rho_h * eps_{h-1} + sqrt(1 - rho_h**2) * xi_h with
-        # rho_h = rho ** (t_h - t_{h-1}).
-        horizon = times.shape[0] - 1
-        xi = jr.normal(key, (horizon, n_samples, control_dim))
-
-        rhos = self.rho ** jnp.diff(times[:-1])  # (horizon - 1,)
-
-        def step(eps_prev, inputs):
-            xi_h, rho_h, var_h = inputs
-            eps_h = rho_h * eps_prev + jnp.sqrt(var_h) * xi_h
-            return eps_h, eps_h
-
-        _, rest = jax.lax.scan(step, xi[0], (xi[1:], rhos, 1.0 - rhos**2))
-        return jnp.concatenate([xi[:1], rest], axis=0).transpose(1, 0, 2)
-
-
-class ColoredNoise(NoiseConfig):
-    r"""Power-law (`1/f**beta`) perturbations generated in the frequency
-    domain. Smoother, low-frequency-dominated perturbations for larger
-    `beta`. `beta=0` = `WhiteNoise`.
-
-    The FFT assumes equally spaced planning times. On an uneven grid the
-    spectrum is over the step index rather than time, and a warning is raised.
-
-    Attributes:
-        beta: Power-law exponent. `0` is white, `1` is "pink", `2` is
-            Brownian-like. Defaults to `2.0`.
-    """
-
-    beta: float = 2.0
-
-    def sample(
-        self,
-        key: PRNGKeyArray,
-        n_samples: int,
-        times: Real[Array, " horizon_plus_one"],
-        control_dim: int,
-    ) -> Real[Array, "n_samples horizon control_dim"]:
-        # NumPy, not jnp: a Python `if` can't branch on jnp results while the
-        # planning step is being compiled. Tolerant, so float round-off in the
-        # times doesn't trigger it.
-        steps = np.diff(times)
-        if not np.allclose(steps, steps.mean(), rtol=1e-3, atol=0.0):
-            warnings.warn(
-                "It seems that your planning time steps are not equally "
-                "spaced (steps "
-                f"{np.array2string(steps, precision=4, separator=', ')}). "
-                "ColoredNoise shapes its 1/f**beta "
-                "spectrum over the step index, so the resulting noise process "
-                "is power-law in steps, not in time: long and short steps get "
-                "the same correlation. Use AR1Noise for noise that adapts to "
-                "the actual times.",
-                UserWarning,
-                stacklevel=2,
-            )
-        horizon = times.shape[0] - 1
-        # Power-law (1/f**beta) noise: scale the rfft of white noise by
-        # freq**(-beta/2) along the horizon axis.
-        white = jr.normal(key, (n_samples, horizon, control_dim))
-        freqs = jnp.fft.rfftfreq(horizon)
-        freqs = jnp.maximum(freqs, 1.0 / horizon)
-        scale = freqs ** (-self.beta / 2.0)
-        n_freqs = scale.shape[0]
-        is_edge = (jnp.arange(n_freqs) == 0) | (
-            (horizon % 2 == 0) & (jnp.arange(n_freqs) == n_freqs - 1)
-        )
-        mult = jnp.where(is_edge, 1.0, 2.0)
-        sigma = jnp.sqrt(jnp.sum(scale**2 * mult) / horizon)
-        scale = scale / sigma
-
-        spectrum = jnp.fft.rfft(white, axis=1) * scale[None, :, None]
-        return jnp.fft.irfft(spectrum, n=horizon, axis=1)
 
 
 class MPPI(eqx.Module):
@@ -223,7 +87,7 @@ class MPPI(eqx.Module):
        rollout's $x_0$ is drawn from. Default: a `Delta` at `x_hat.mean`.
     2. `sample_controls(key, x_hat, t_now, s)`: the candidate control
        sequences (the proposal). Default: `s["nominal_sequence"]` plus
-       `noise_std`-scaled `noise_config` noise.
+       `noise_std`-scaled draws from `noise`.
     3. Rollouts and `loss_fn` (not overridable). Non-finite losses are clamped
        to the largest finite value.
     4. `combine_sequences(losses, candidates, x_hat, t_now, s)`: chooses the
@@ -266,21 +130,23 @@ class MPPI(eqx.Module):
             (starting at 0, strictly increasing), with the rollout run on
             `t_now + horizon` -- e.g. `jnp.linspace(0.0, 1.0, 11)` for 10
             steps of 0.1. `H` is the number of internal one-step `dynamics`
-            calls per rollout (see `horizon_length`). `noise_config` receives
-            the grid: `AR1Noise` adapts to uneven steps, `ColoredNoise` warns
-            about them. Required.
-        noise_std: Standard deviation of the Gaussian perturbations added to
-            the nominal sequence, scalar or shape `(control_dim,)`. Marginal
-            (per-timestep) standard deviation regardless of `noise_config`
-            -- every `NoiseConfig` variant has unit marginal variance per
-            timestep before this scaling is applied. Defaults to `1.0`.
-        noise_config: A `NoiseConfig` selecting how the perturbations are
-            correlated across the horizon: `WhiteNoise()` (i.i.d.),
-            `AR1Noise(rho=...)` (default, `rho=0.5`), or
-            `ColoredNoise(beta=...)` (power-law). See each class's
-            docstring; subclass `NoiseConfig` to add a noise type.
+            calls per rollout (see `horizon_length`). Required.
+        noise_std: Scale applied to the perturbations drawn from `noise`,
+            scalar or shape `(control_dim,)`. The noises in
+            `dynestyx.control.utils.distribution_utils` have unit marginal
+            variance per step, so for them this is the per-step standard
+            deviation. Defaults to `1.0`.
+        noise: Any NumPyro distribution whose samples have shape
+            `(horizon_length, control_dim)`, drawn `n_samples` times per call
+            as the perturbations around the nominal sequence. `None` (default)
+            is replaced by `AR1Noise(horizon, dynamics.control_dim, rho=0.5)`
+            at construction. The
+            built-in noises take the planning grid as `times`, e.g.
+            `WhiteNoise(horizon, control_dim)`, `AR1Noise(horizon,
+            control_dim, rho=...)` (adapts to uneven steps) or
+            `ColoredNoise(horizon, control_dim, beta=...)` (warns about them).
         n_samples: Number of sampled control sequences per call. Defaults to
-            `20`.
+            `10`.
         n_simulations: Number of rollouts drawn per candidate control
             sequence, forwarded to `dsx.simulate`. Each draws different noise,
             shared across candidates when `common_randomness` is `True`.
@@ -310,13 +176,18 @@ class MPPI(eqx.Module):
     noise_std: Real[Array, ""] | Real[Array, " control_dim"] = eqx.field(
         default_factory=lambda: jnp.array(1.0)
     )
-    noise_config: NoiseConfig = eqx.field(default_factory=AR1Noise)
+    noise: Distribution | None = None
     n_samples: int = eqx.field(static=True, default=10)
     n_simulations: int = eqx.field(static=True, default=1)
     common_randomness: bool = eqx.field(static=True, default=True)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
+
+    def __post_init__(self) -> None:
+        # Default noise. An invalid horizon is reported by __check_init__.
+        if self.noise is None and jnp.ndim(self.horizon) == 1:
+            self.noise = AR1Noise(self.horizon, self.dynamics.control_dim)
 
     def __check_init__(self) -> None:
         alignment = self.dynamics.observation_control_alignment
@@ -326,13 +197,6 @@ class MPPI(eqx.Module):
                 "MPPI plans its rollouts under 'previous_transition'.",
                 UserWarning,
                 stacklevel=3,
-            )
-
-        if not isinstance(self.noise_config, NoiseConfig):
-            raise TypeError(
-                "noise_config must be a NoiseConfig instance (WhiteNoise(), "
-                f"AR1Noise(rho=...), or ColoredNoise(beta=...)), got "
-                f"{self.noise_config!r}"
             )
 
         # Only a plain number can be checked here; a traced temperature can't.
@@ -348,6 +212,19 @@ class MPPI(eqx.Module):
                 "supported; for H uniform steps of size dt use "
                 f"jnp.arange(H + 1) * dt). Got {h}."
             )
+
+        if self.noise is not None:
+            if not isinstance(self.noise, Distribution):
+                raise TypeError(
+                    "noise must be a NumPyro distribution or None, got "
+                    f"{type(self.noise).__name__}."
+                )
+            expected = (self.horizon_length, self.dynamics.control_dim)
+            if tuple(self.noise.shape()) != expected:
+                raise ValueError(
+                    "noise samples must have shape (horizon_length, control_dim) "
+                    f"= {expected}, got {tuple(self.noise.shape())}."
+                )
 
     @property
     def horizon_length(self) -> int:
@@ -385,13 +262,21 @@ class MPPI(eqx.Module):
     ) -> Real[Array, "n_samples horizon control_dim"]:
         """Candidate control sequences to roll out and score (the proposal).
 
-        Default: `s["nominal_sequence"]` plus `noise_std`-scaled
-        `noise_config` perturbations."""
+        Default: `s["nominal_sequence"]` plus `n_samples` `noise_std`-scaled
+        draws from `noise`."""
         nominal = s["nominal_sequence"]
-        noise = self.noise_config.sample(
-            key, self.n_samples, self.horizon, nominal.shape[-1]
-        )
-        return nominal[None, :, :] + self.noise_std * noise
+        assert self.noise is not None  # set in __post_init__
+        eps = self.noise.sample(key, (self.n_samples,))
+
+        # Check the shape of the noise samples.
+        expected = (self.n_samples, *nominal.shape)
+        if eps.shape != expected:
+            raise ValueError(
+                f"noise.sample(key, ({self.n_samples},)) must return shape "
+                f"(n_samples, horizon_length, control_dim) = {expected}, got "
+                f"{eps.shape}."
+            )
+        return nominal[None, :, :] + self.noise_std * eps
 
     def combine_sequences(
         self,
@@ -570,8 +455,4 @@ __all__ = [
     "MPPI",
     "MPPILossFn",
     "MPPIStepInfo",
-    "NoiseConfig",
-    "WhiteNoise",
-    "AR1Noise",
-    "ColoredNoise",
 ]

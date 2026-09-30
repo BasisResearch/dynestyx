@@ -192,19 +192,15 @@ rather than inferring alignment from shapes. With state estimation,
     options:
       show_root_heading: true
 
-::: dynestyx.control.mppi.NoiseConfig
+::: dynestyx.control.utils.distribution_utils.WhiteNoise
     options:
       show_root_heading: true
 
-::: dynestyx.control.mppi.WhiteNoise
+::: dynestyx.control.utils.distribution_utils.AR1Noise
     options:
       show_root_heading: true
 
-::: dynestyx.control.mppi.AR1Noise
-    options:
-      show_root_heading: true
-
-::: dynestyx.control.mppi.ColoredNoise
+::: dynestyx.control.utils.distribution_utils.ColoredNoise
     options:
       show_root_heading: true
 
