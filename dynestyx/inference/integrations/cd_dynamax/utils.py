@@ -361,15 +361,7 @@ def dsx_to_cd_dynamax(
             f"State evolution of type {type(state_evo)} is not supported yet."
         )
 
-    uses_nonlinear_non_gaussian_api = isinstance(
-        cd_model, ContDiscreteNonlinearSSM
-    ) or (
-        cd_model is None
-        and not isinstance(
-            dsx_model.observation_model,
-            (LinearGaussianObservation, GaussianObservation),
-        )
-    )
+    uses_nonlinear_non_gaussian_api = isinstance(cd_model, ContDiscreteNonlinearSSM)
 
     ## Map initial condition ##
     ic = dsx_model.initial_condition
