@@ -38,7 +38,7 @@ We provide a more mathematical introduction in the [Introduction](docs/math_intr
 
 ## Third-party acknowledgements
 
-The diminishing adaptation rule used by `AdaptiveMetropolis` is inspired by [PFJAX's MCMC implementation](https://github.com/mlysy/pfjax/blob/97652aa1bdff73a92c0286549b010e99cc6f7264/src/pfjax/mcmc.py).
+The diminishing adaptation rule used by `AdaptiveMWG` is inspired by [PFJAX's MCMC implementation](https://github.com/mlysy/pfjax/blob/97652aa1bdff73a92c0286549b010e99cc6f7264/src/pfjax/mcmc.py).
 
 ## Contributing
 
