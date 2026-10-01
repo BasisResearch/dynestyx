@@ -18,6 +18,7 @@ from numpyro.optim import Adam
 
 import dynestyx as dsx
 from dynestyx._defaults import _default_handlers
+from dynestyx.control import ControlledSimulatedResult, DiscreteControlLoopSimulator
 from dynestyx.handlers import _condition_intp
 from dynestyx.handlers import _DynestyxStackKind as Kind
 from dynestyx.inference.configs.discretizer import DiffraxSampleConfig, ODEFlowConfig
@@ -328,6 +329,59 @@ def test_explicit_handlers_are_quiet():
             contexts=[dsx.Simulator(), dsx.Filter(KFConfig(filter_source="cuthbert"))],
         )
     assert not any("dynestyx selected" in str(w.message) for w in caught)
+
+
+@pytest.mark.parametrize("factory", [DiscreteControlLoopSimulator, dsx.Simulator])
+@pytest.mark.parametrize("observations", [False, True])
+def test_defaults_preserve_closed_loop_simulator(factory, observations):
+    dynamics = dsx.LTI_discrete(
+        A=jnp.eye(1) * 0.8,
+        B=jnp.eye(1),
+        Q=jnp.eye(1) * 0.1,
+        H=jnp.eye(1),
+        R=jnp.eye(1) * 0.2,
+        observation_control_alignment="same_time",
+    )
+
+    def simulator():
+        return factory(
+            control_policy=lambda x_hat, t_now, t_next, s: (-0.5 * x_hat.mean, s),
+            use_true_state=True,
+        )
+
+    with warnings.catch_warnings(record=True) as caught:
+        actual, actual_trace = _run(
+            dynamics,
+            contexts=[simulator()],
+            entry=dsx.condition,
+            observations=observations,
+        )
+    selected = [str(w.message) for w in caught if "dynestyx selected" in str(w.message)]
+    if observations:
+        assert len(selected) == 1
+        assert "Filter(KFConfig" in selected[0]
+        assert "Simulator" not in selected[0]
+    else:
+        assert selected == []
+        assert isinstance(actual, ControlledSimulatedResult)
+        assert actual.controls is not None
+        assert jnp.allclose(actual.controls[0, 0], -0.5 * actual.states[0, 0])
+
+    expected, expected_trace = _run(
+        dynamics,
+        contexts=[simulator()]
+        + ([dsx.Filter(KFConfig(filter_source="cuthbert"))] if observations else []),
+        entry=dsx.condition,
+        observations=observations,
+    )
+    _assert_traces_equal(actual_trace, expected_trace)
+    if observations:
+        assert jnp.allclose(actual.marginal_loglik, expected.marginal_loglik)
+        assert jnp.allclose(actual.states.mean, expected.states.mean)
+    else:
+        assert jnp.allclose(actual.states, expected.states)
+        assert jnp.allclose(actual.observations, expected.observations)
+        assert jnp.allclose(actual.controls, expected.controls)
 
 
 @pytest.mark.parametrize(
