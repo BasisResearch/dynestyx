@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
 import pytest
+from numpyro.handlers import seed
 
 import dynestyx as dsx
 
@@ -276,6 +277,89 @@ def test_result_all_layouts_round_trip_under_jit():
     assert structured.observations["measured"].shape == (1, 3, 2)
     assert flat.states.shape == (1, 3, 4)
     assert flat.controls.shape == (1, 3, 2)
+
+
+def test_plated_dynamics_match_explicit_flat_model():
+    layout = dsx.LayoutCollection.from_example(
+        state={"left": jnp.zeros(1), "right": jnp.zeros(1)},
+        control={"drive": jnp.zeros(1)},
+        observation=(jnp.zeros(1), jnp.zeros(1)),
+    )
+    state_layout = layout.state
+    control_layout = layout.control
+    observation_layout = layout.observation
+    assert state_layout is not None
+    assert control_layout is not None
+    assert observation_layout is not None
+
+    def structured_transition(x, u, t_now, t_next):
+        state = state_layout.unflatten(x)
+        drive = control_layout.unflatten(u)["drive"]
+        next_state = {
+            "left": 0.5 * state["left"] + jnp.sin(drive),
+            "right": 0.5 * state["right"] - jnp.sin(drive),
+        }
+        return dist.Normal(state_layout.flatten(next_state), 0.1).to_event(1)
+
+    def flat_transition(x, u, t_now, t_next):
+        loc = 0.5 * x + jnp.concatenate((jnp.sin(u), -jnp.sin(u)))
+        return dist.Normal(loc, 0.1).to_event(1)
+
+    def structured_observation(x, u, t):
+        state = state_layout.unflatten(x)
+        loc = observation_layout.flatten(
+            (jnp.logaddexp(0.0, state["left"]), jnp.sin(state["right"]))
+        )
+        return dist.Normal(loc, 0.2).to_event(1)
+
+    def flat_observation(x, u, t):
+        loc = jnp.concatenate((jnp.logaddexp(0.0, x[:1]), jnp.sin(x[1:])))
+        return dist.Normal(loc, 0.2).to_event(1)
+
+    initial = jnp.array([[0.0, 10.0], [5.0, 20.0]])
+    controls = jnp.array([[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]])
+    times = jnp.arange(3.0)
+
+    def simulate(transition, observation):
+        with dsx.DiscreteTimeSimulator(n_simulations=2), seed(rng_seed=jr.key(0)):
+            with dsx.plate("members", 2):
+                dynamics = dsx.DynamicalModel(
+                    control_dim=1,
+                    initial_condition=dist.Normal(initial, 0.05).to_event(1),
+                    state_evolution=transition,
+                    observation_model=observation,
+                )
+                return dsx.sample(
+                    "f",
+                    dynamics,
+                    predict_times=times,
+                    ctrl_times=times,
+                    ctrl_values=controls,
+                )
+
+    flat = simulate(structured_transition, structured_observation)
+    explicit_flat = simulate(flat_transition, flat_observation)
+    structured = flat.unflatten(layout)
+    restored = structured.flatten(layout)
+    assert flat.x_0 is not None
+    assert flat.states is not None
+    assert flat.controls is not None
+    assert flat.observations is not None
+    assert explicit_flat.x_0 is not None
+    assert explicit_flat.states is not None
+    assert explicit_flat.controls is not None
+    assert explicit_flat.observations is not None
+    assert structured.states is not None
+    assert structured.controls is not None
+    assert structured.observations is not None
+    assert flat.states.shape == (2, 2, 3, 2)
+    assert structured.states["left"].shape == (2, 2, 3, 1)
+    assert structured.controls["drive"].shape == (2, 2, 3, 1)
+    assert structured.observations[0].shape == (2, 2, 3, 1)
+    assert jnp.array_equal(structured.controls["drive"][:, 0], controls)
+    for name in ("x_0", "states", "controls", "observations"):
+        assert jnp.allclose(getattr(flat, name), getattr(explicit_flat, name))
+        assert jnp.array_equal(getattr(restored, name), getattr(flat, name))
 
 
 @pytest.mark.parametrize("scalar_initial_event", [True, False])
