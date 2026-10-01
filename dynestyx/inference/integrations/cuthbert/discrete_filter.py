@@ -165,6 +165,7 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
                 "EnKFLocalizationFunctions via EnKFConfig.localization instead."
             )
         kwargs["n_particles"] = config.n_particles
+        kwargs["ensemble_subspace"] = config.ensemble_subspace
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
         )
@@ -632,6 +633,10 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
     localization_kwargs = {}
     resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
+    n_particles = int(filter_kwargs.get("n_particles", 30))
+    ensemble_subspace = filter_kwargs.get("ensemble_subspace")
+    if ensemble_subspace is None:
+        ensemble_subspace = n_particles < obs_dim and resolved_localization is None
     if resolved_localization is not None:
         if resolved_localization.modify_cross_covariance is not None:
             localization_kwargs["modify_cross_covariance"] = (
@@ -726,7 +731,8 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         init_sample=init_sample,  # type: ignore
         get_dynamics=get_dynamics,  # type: ignore
         get_observations=get_observations,  # type: ignore
-        n_particles=int(filter_kwargs.get("n_particles", 30)),
+        n_particles=n_particles,
+        ensemble_subspace=bool(ensemble_subspace),
         inflation=filter_kwargs.get("inflation", jnp.array(0.0)),
         perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
         store_predicted_ensemble=bool(
