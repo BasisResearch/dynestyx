@@ -61,7 +61,7 @@ def test_jumpy_controls(filter_type, filter_source, mean_error_tol):
         filter_source=filter_source,
     )
     rng_key = jr.PRNGKey(0)
-    with trace() as tr, seed(rng_seed=rng_key):
+    with dsx.Simulator(), trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
     synthetic_observations = synthetic[
@@ -76,7 +76,7 @@ def test_jumpy_controls(filter_type, filter_source, mean_error_tol):
 def test_jumpy_controls_sde():
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_sde()
     rng_key = jr.PRNGKey(0)
-    with trace() as tr, seed(rng_seed=rng_key):
+    with dsx.Simulator(), trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
     synthetic_observations = synthetic[
@@ -91,7 +91,7 @@ def test_jumpy_controls_sde():
 def test_jumpy_controls_ode():
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_ode()
     rng_key = jr.PRNGKey(0)
-    with trace() as tr, seed(rng_seed=rng_key):
+    with dsx.Simulator(), trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
     synthetic_observations = synthetic[

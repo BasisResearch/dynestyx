@@ -957,7 +957,7 @@ def test_evaluation_composes_with_filter_and_simulator_registration():
 
 def test_evaluation_explains_handler_order():
     obs_times, obs_values, _, _ = _make_observations()
-    with pytest.raises(ValueError, match="Place Evaluation outside Filter"):
+    with pytest.raises(ValueError, match="Observations require"):
         with Evaluation(
             observation_scoring_config=ObservationScoringConfig(
                 rules=(GaussianLogProbScore(),)
