@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Int, PyTree, Real
 
 if TYPE_CHECKING:
-    from dynestyx.models.layout import Layouts
+    from dynestyx.models.layout import LayoutCollection
 
 
 @runtime_checkable
@@ -214,17 +214,17 @@ class SimulatedResult(eqx.Module):
             return False
         raise ValueError("x_0 batch axes do not match the simulation result.")
 
-    def unflatten(self, layout: "Layouts") -> "SimulatedResult":
+    def unflatten(self, layout: "LayoutCollection") -> "SimulatedResult":
         """Return a structured copy of populated fields selected by ``layout``.
 
         The receiver must contain flat simulation arrays. A scalar ``x_0`` has
         no event axis in simulator output; its original shape is remembered for
         the reverse conversion.
         """
-        from dynestyx.models.layout import Layouts
+        from dynestyx.models.layout import LayoutCollection
 
-        if not isinstance(layout, Layouts):
-            raise TypeError("layout must be a Layouts instance.")
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
 
         converted = {}
         for sublayout, names in (
@@ -249,16 +249,16 @@ class SimulatedResult(eqx.Module):
 
         return dataclasses.replace(self, **converted)
 
-    def flatten(self, layout: "Layouts") -> "SimulatedResult":
+    def flatten(self, layout: "LayoutCollection") -> "SimulatedResult":
         """Return a flat copy of fields selected by ``layout``.
 
         The receiver must contain structured values compatible with the
         supplied layouts. This reverses ``unflatten`` without changing times.
         """
-        from dynestyx.models.layout import Layouts
+        from dynestyx.models.layout import LayoutCollection
 
-        if not isinstance(layout, Layouts):
-            raise TypeError("layout must be a Layouts instance.")
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
 
         converted = {}
         for sublayout, names in (

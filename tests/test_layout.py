@@ -1,5 +1,6 @@
 """Standalone layouts and explicit simulation-result conversions."""
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -10,7 +11,7 @@ import dynestyx as dsx
 
 
 def _layouts():
-    return dsx.Layouts(
+    return dsx.LayoutCollection(
         state=dsx.Layout.from_example(
             {"position": jnp.zeros(2), "velocity": jnp.zeros(2)}
         ),
@@ -30,12 +31,12 @@ def _controlled_model():
     )
 
 
-def test_layouts_from_example_and_with_examples():
+def test_layout_collection_from_example_and_with_examples():
     state_example = {"position": jnp.zeros(2)}
     observation_example = jnp.zeros((2, 3))
     control_example = (jnp.zeros(1), jnp.zeros(2))
 
-    state_only = dsx.Layouts.from_example(state=state_example)
+    state_only = dsx.LayoutCollection.from_example(state=state_example)
     assert state_only.state is not None
     assert state_only.state.dim == 2
     assert state_only.control is None
@@ -52,6 +53,21 @@ def test_layouts_from_example_and_with_examples():
     assert extended.observation.dim == 6
     assert state_only.control is None
     assert state_only.observation is None
+
+
+def test_layout_collection_is_static_equinox_module():
+    layout = dsx.LayoutCollection.from_example(state=(jnp.zeros(2), jnp.zeros(1)))
+    assert isinstance(layout, eqx.Module)
+    assert isinstance(layout.state, eqx.Module)
+    assert jax.tree_util.tree_leaves(layout) == []
+
+    @jax.jit
+    def unflatten(collection, value):
+        return collection.state.unflatten(value)
+
+    restored = unflatten(layout, jnp.arange(3.0))
+    assert jnp.array_equal(restored[0], jnp.array([0.0, 1.0]))
+    assert jnp.array_equal(restored[1], jnp.array([2.0]))
 
 
 def test_layout_round_trip_with_scalar_leaf_and_batch_axes():
@@ -97,7 +113,7 @@ def test_dynamics_can_close_over_layout_without_a_new_model_contract():
         "observed": jnp.array([[1.0, 2.0], [3.0, 4.0]]),
     }
     initial_flat = jnp.array([0.5, -0.25, 1.0, 2.0, 3.0, 4.0])
-    layout = dsx.Layouts.from_example(
+    layout = dsx.LayoutCollection.from_example(
         state=initial_state, observation=jnp.zeros((2, 2))
     )
     state_layout = layout.state
@@ -186,7 +202,7 @@ def test_dynamics_can_close_over_layout_without_a_new_model_contract():
 @pytest.mark.parametrize("selected", ["state", "control", "observation"])
 def test_result_converts_only_selected_sublayout(selected):
     all_layouts = _layouts()
-    layout = dsx.Layouts(**{selected: getattr(all_layouts, selected)})
+    layout = dsx.LayoutCollection(**{selected: getattr(all_layouts, selected)})
     times = jnp.arange(3.0)
     flat = dsx.simulate(
         _controlled_model(),
@@ -274,7 +290,9 @@ def test_scalar_layout_preserves_initial_state_shape(scalar_initial_event, batch
         ),
         observation_model=lambda x, u, t: dist.Delta(x, event_dim=event_dim),
     )
-    layout = dsx.Layouts(state=dsx.Layout.from_example({"value": jnp.array(0.0)}))
+    layout = dsx.LayoutCollection(
+        state=dsx.Layout.from_example({"value": jnp.array(0.0)})
+    )
     times = jnp.arange(3.0)
     if batched:
         flat = jax.vmap(

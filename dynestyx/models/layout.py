@@ -1,28 +1,28 @@
 """Utilities for converting fixed array pytrees to flat vector events."""
 
-from dataclasses import dataclass
 from math import prod
 from typing import Any
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 
 
-@jax.tree_util.register_static
-@dataclass(frozen=True)
-class Layout:
-    """A fixed pytree structure and its corresponding flat vector shape.
+class Layout(eqx.Module):
+    """A Layout describes a fixed pytree structure and its leaf shapes.
+    Its flatten and unflatten methods can convert between a structured representation
+    and the flat vectors expected by Dynestyx.
 
     Leaf order follows JAX's pytree order. All leaves must be numeric arrays
     with the same dtype. Leading batch axes are preserved by both conversions;
     each scalar leaf contributes one coordinate to the vector.
     """
 
-    treedef: Any
-    shapes: tuple[tuple[int, ...], ...]
-    sizes: tuple[int, ...]
-    offsets: tuple[int, ...]
-    dim: int
+    treedef: Any = eqx.field(static=True)
+    shapes: tuple[tuple[int, ...], ...] = eqx.field(static=True)
+    sizes: tuple[int, ...] = eqx.field(static=True)
+    offsets: tuple[int, ...] = eqx.field(static=True)
+    dim: int = eqx.field(static=True)
 
     @classmethod
     def from_example(cls, example: Any) -> "Layout":
@@ -97,14 +97,16 @@ class Layout:
         return jax.tree_util.tree_unflatten(self.treedef, leaves)
 
 
-@jax.tree_util.register_static
-@dataclass(frozen=True)
-class Layouts:
-    """Optional layouts for state, control, and observation values."""
+class LayoutCollection(eqx.Module):
+    """
+    A LayoutCollection groups layouts for states, controls, and observations,
+    so each can be converted independently between a structured representation and flat vectors.
+    Each layout is optional and can be None if not applicable (i.e. when it already is represented as a flat vector or is not needed).
+    """
 
-    state: Layout | None = None
-    control: Layout | None = None
-    observation: Layout | None = None
+    state: Layout | None = eqx.field(default=None, static=True)
+    control: Layout | None = eqx.field(default=None, static=True)
+    observation: Layout | None = eqx.field(default=None, static=True)
 
     @classmethod
     def from_example(
@@ -113,7 +115,7 @@ class Layouts:
         state: Any = None,
         control: Any = None,
         observation: Any = None,
-    ) -> "Layouts":
+    ) -> "LayoutCollection":
         """Build layouts for the supplied example values."""
         return cls().with_examples(
             state=state, control=control, observation=observation
@@ -125,7 +127,7 @@ class Layouts:
         state: Any = None,
         control: Any = None,
         observation: Any = None,
-    ) -> "Layouts":
+    ) -> "LayoutCollection":
         """Return new layouts, retaining fields without a supplied example."""
         return type(self)(
             state=self.state if state is None else Layout.from_example(state),
@@ -141,4 +143,4 @@ class Layouts:
         for name in ("state", "control", "observation"):
             value = getattr(self, name)
             if value is not None and not isinstance(value, Layout):
-                raise TypeError(f"Layouts.{name} must be a Layout or None.")
+                raise TypeError(f"LayoutCollection.{name} must be a Layout or None.")
