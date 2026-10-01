@@ -62,14 +62,14 @@ def test_unused_simulator_warns(factory):
 def test_reversed_stage_order(inner, outer):
     with handler(inner()), handler(outer()):
         with pytest.raises(ValueError, match="Invalid handler order.*outermost"):
-            _validate_handler_stack()
+            _validate_handler_stack(obs_values=True, predict_times=True)
 
 
 @pytest.mark.parametrize("factory", _STAGES[1:])
 def test_duplicate_stages(factory):
     with handler(factory()), handler(factory()):
         with pytest.raises(ValueError, match="one handler per stage"):
-            _validate_handler_stack()
+            _validate_handler_stack(obs_values=True, predict_times=True)
 
 
 @pytest.mark.parametrize(
@@ -91,4 +91,4 @@ def test_valid_full_stack_with_nested_plates():
     with ExitStack() as stack:
         for factory in reversed([_STAGES[0], *_STAGES]):
             stack.enter_context(handler(factory()))
-        _validate_handler_stack()
+        _validate_handler_stack(obs_values=True, predict_times=True)

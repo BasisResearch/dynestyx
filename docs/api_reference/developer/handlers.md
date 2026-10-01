@@ -11,7 +11,8 @@ internal operation, not part of the package's public API.
 through discretization, inference, simulation, and evaluation. Plates may repeat;
 other stages may not. Filter, Smoother, and LatentPathBuilder share one inference
 stage. Observation inputs require inference, and prediction times require a
-simulator, including DiscreteControlLoopSimulator; missing stages are supplied by the private default interpretation.
+simulator, including DiscreteControlLoopSimulator; missing stages are supplied
+by the private default interpretation.
 Inference without observations and simulation without prediction times emit
 warnings. Existing model/backend compatibility checks still apply.
 
