@@ -432,9 +432,28 @@ def dsx_to_cd_dynamax(
                 "emission_function": emission_function,
                 "emission_cov": obs.R,  # type: ignore
             }
+    elif isinstance(obs, GaussianObservation):
+        if uses_nonlinear_non_gaussian_api:
+            model_params = {
+                **shared_params,
+                "initial_distribution": initial_distribution,
+                "emission_distribution": _as_emission_distribution(obs),
+            }
+        else:
+            model_params = {
+                **shared_params,
+                "initial_mean": initial_mean,
+                "initial_cov": initial_cov,
+                "emission_function": obs.h,
+                "emission_cov": obs.R,
+            }
     else:
-        # TODO: check for linear-gaussian observation models and extract H, R
-        # TODO: check for Gaussian observation and use CDNLGSSM
+        if not uses_nonlinear_non_gaussian_api:
+            raise TypeError(
+                "Continuous-time EKF/UKF/EnKF require LinearGaussianObservation "
+                "or GaussianObservation. Use ContinuousTimeDPFConfig for "
+                "other observation models."
+            )
         non_gaussian_flag = True
         model_params = {
             **shared_params,
