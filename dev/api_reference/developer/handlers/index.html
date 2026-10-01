@@ -5219,6 +5219,19 @@
 
 
 <h1 id="handlers">Handlers<a class="headerlink" href="#handlers" title="Permanent link">&para;</a></h1>
+<p>The private <code>dynestyx.handlers._dynestyx_stack_kind()</code> operation reports built-in
+interpretation kinds from innermost to outermost. Its default is <code>[]</code>; each
+interpretation prepends its <code>_DynestyxStackKind</code> member to <code>fwd()</code>. For example,
+<code>with Filter(), Discretizer():</code> reports <code>[DISCRETIZER, FILTER]</code>. Repeated kinds
+are preserved, and unrelated effects do not contribute entries. This is an
+internal operation, not part of the package's public API.</p>
+<p><code>condition</code> checks this stack before dispatch. Execution proceeds from plates
+through discretization, inference, simulation, and evaluation. Plates may repeat;
+other stages may not. Filter, Smoother, and LatentPathBuilder share one inference
+stage. Observation inputs require inference, and prediction times require a
+simulator, including DiscreteControlLoopSimulator. Inference without observations
+and simulation without prediction times emit warnings. Existing model/backend
+compatibility checks still apply.</p>
 
 
 <div class="doc doc-object doc-module">
