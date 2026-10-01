@@ -6742,6 +6742,24 @@ supply Cuthbert-compatible callbacks.</p>
             </td>
           </tr>
           <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.EnKFConfig.ensemble_subspace">ensemble_subspace</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Perform the update in ensemble space.
+<code>None</code> selects it when <code>n_particles &lt; observation_dim</code> and
+localization is absent. <code>True</code> forces it and <code>False</code> disables it.
+Available only with the Cuthbert backend and without localization.
+This may be more efficient when <code>n_particles</code> &lt; <code>state_dim</code>, and almost
+certainly more efficient if <code>n_particles</code> &lt;&lt; <code>state_dim</code>, but may interfere
+with localization. See <a href="https://state-space-models.github.io/cuthbert/api_cuthbert/ensemble_kalman/ensemble_kalman_filter/">the Cuthbert documentation</a>
+for more details.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
             <td><code><span title="dynestyx.inference.configs.filter.EnKFConfig.recorded_filtered_states_cov_jitter">recorded_filtered_states_cov_jitter</span></code></td>
             <td>
                   <code><span title="float">float</span></code>
