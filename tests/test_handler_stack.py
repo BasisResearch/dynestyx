@@ -7,6 +7,7 @@ from effectful.ops.semantics import coproduct, handler
 from effectful.ops.syntax import defop
 
 import dynestyx as dsx
+from dynestyx.control import DiscreteControlLoopSimulator
 from dynestyx.handlers import _dynestyx_stack_kind
 from dynestyx.handlers import _DynestyxStackKind as Kind
 
@@ -21,6 +22,12 @@ from dynestyx.handlers import _DynestyxStackKind as Kind
         (dsx.LatentPathBuilder(), Kind.LATENT_PATH_BUILDER),
         (dsx.Simulator(), Kind.SIMULATOR),
         (dsx.DiscreteTimeSimulator(), Kind.SIMULATOR),
+        (
+            DiscreteControlLoopSimulator(
+                control_policy=lambda x_hat, t_now, t_next, s: (x_hat.mean, s)
+            ),
+            Kind.SIMULATOR,
+        ),
         (dsx.ODESimulator(), Kind.SIMULATOR),
         (dsx.SDESimulator(), Kind.SIMULATOR),
         (dsx.Evaluation(dsx.ObservationScoringConfig()), Kind.EVALUATION),
