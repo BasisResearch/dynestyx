@@ -13,6 +13,7 @@ from numpyro.infer.util import initialize_model, potential_energy
 
 from dynestyx.inference.configs.mcmc import (
     AdaptiveMetropolisConfig,
+    AdaptiveMWGConfig,
     BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
@@ -21,6 +22,10 @@ from dynestyx.inference.configs.mcmc import (
 )
 from dynestyx.inference.integrations.blackjax.adaptive_metropolis import (
     adaptive_metropolis,
+    proposal_covariance,
+)
+from dynestyx.inference.integrations.blackjax.adaptive_mwg import (
+    adaptive_mwg,
     resolve_proposal_scale,
 )
 
@@ -82,15 +87,16 @@ def _run_blackjax(
     num_warmup: int = 0,
     info_fn: Callable | None = None,
     diagnostics_fn: Callable | None = None,
+    initial_states=None,
 ) -> tuple[dict, dict[str, jax.Array]]:
     mcmc_key, init_density_key = jr.split(mcmc_key)
-    algorithm = make_algorithm(init_density_key)
-
-    initial_states = (
-        jax.vmap(algorithm.init)(initial_positions)  # type: ignore[call-arg]
-        if has_chain_axis
-        else algorithm.init(initial_positions)  # type: ignore[call-arg]
-    )
+    if initial_states is None:
+        algorithm = make_algorithm(init_density_key)
+        initial_states = (
+            jax.vmap(algorithm.init)(initial_positions)  # type: ignore[call-arg]
+            if has_chain_axis
+            else algorithm.init(initial_positions)  # type: ignore[call-arg]
+        )
 
     chain_keys = jr.split(mcmc_key, num_chains)
     make_step = lambda dk: make_algorithm(dk).step
@@ -336,7 +342,7 @@ def run_blackjax_mcmc_with_diagnostics(
         )
         return samples, {}
 
-    if isinstance(mcmc_config, AdaptiveMetropolisConfig):
+    if isinstance(mcmc_config, AdaptiveMWGConfig | AdaptiveMetropolisConfig):
         reference_position = (
             jax.tree_util.tree_map(lambda x: x[0], initial_positions)
             if has_chain_axis
@@ -353,13 +359,21 @@ def run_blackjax_mcmc_with_diagnostics(
             reference_flat.size,
         ).astype(reference_flat.dtype)
 
-        def make_adaptive_metropolis(density_key):
+        def make_adaptive_algorithm(density_key):
             logdensity_fn = make_logdensity(density_key)
 
             def flat_logdensity(position):
                 return logdensity_fn(unravel_fn(position))
 
-            return adaptive_metropolis(
+            if isinstance(mcmc_config, AdaptiveMetropolisConfig):
+                return adaptive_metropolis(
+                    flat_logdensity,
+                    proposal_scale,
+                    target_acceptance_rate=mcmc_config.target_acceptance_rate,
+                    adaptation_rate=mcmc_config.adaptation_rate,
+                    num_warmup=mcmc_config.num_warmup,
+                )
+            return adaptive_mwg(
                 flat_logdensity,
                 proposal_scale,
                 target_acceptance_rate=mcmc_config.target_acceptance_rate,
@@ -376,17 +390,35 @@ def run_blackjax_mcmc_with_diagnostics(
             return info.is_accepted
 
         def adaptive_diagnostics(final_state, is_accepted):
-            return {
+            diagnostics = {
                 "mean_acceptance_rate": jnp.mean(
                     is_accepted[:, mcmc_config.num_warmup :], axis=1
                 ),
-                "final_proposal_scale": final_state.proposal_scale,
             }
+            if isinstance(mcmc_config, AdaptiveMetropolisConfig):
+                diagnostics.update(
+                    final_global_scale=jnp.exp(final_state.log_multiplier),
+                    final_proposal_covariance=jax.vmap(proposal_covariance)(
+                        final_state
+                    ),
+                )
+            else:
+                diagnostics["final_proposal_scale"] = final_state.proposal_scale
+            return diagnostics
 
         rng_key, mcmc_key = jr.split(rng_key)
+        adaptive_initial_states = None
+        if isinstance(mcmc_config, AdaptiveMetropolisConfig):
+            mcmc_key, init_density_key = jr.split(mcmc_key)
+            adaptive_initial_states = jax.vmap(
+                lambda position, key: make_adaptive_algorithm(key).init(position)  # type: ignore[call-arg]
+            )(
+                flat_initial_positions,
+                jr.split(init_density_key, mcmc_config.num_chains),
+            )
         return _run_blackjax(
             mcmc_key=mcmc_key,
-            make_algorithm=make_adaptive_metropolis,
+            make_algorithm=make_adaptive_algorithm,
             initial_positions=flat_initial_positions,
             has_chain_axis=True,
             num_chains=mcmc_config.num_chains,
@@ -395,6 +427,7 @@ def run_blackjax_mcmc_with_diagnostics(
             num_warmup=mcmc_config.num_warmup,
             info_fn=acceptance_info,
             diagnostics_fn=adaptive_diagnostics,
+            initial_states=adaptive_initial_states,
         )
 
     if isinstance(mcmc_config, MALAConfig):

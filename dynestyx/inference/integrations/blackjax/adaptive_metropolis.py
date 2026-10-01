@@ -1,65 +1,54 @@
-"""Adaptive random-walk Metropolis-within-Gibbs for BlackJAX."""
+"""Joint adaptive random-walk Metropolis for BlackJAX.
 
-# The diminishing adaptation rule is inspired by PFJAX:
-# https://github.com/mlysy/pfjax/blob/97652aa1bdff73a92c0286549b010e99cc6f7264/src/pfjax/mcmc.py
+Warmup follows Andrieu & Thoms (2008), Algorithm 4:
+https://people.eecs.berkeley.edu/~jordan/sail/readings/andrieu-thoms.pdf
+"""
 
 from collections.abc import Callable
 from typing import NamedTuple
 
-import blackjax
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 from blackjax.base import SamplingAlgorithm, build_sampling_algorithm
-
-
-def adapt_proposal_scale(
-    proposal_scale: jax.Array,
-    acceptance_rate: jax.Array,
-    n_iter: jax.Array,
-    *,
-    target_acceptance_rate: float,
-    adaptation_rate: float,
-    max_adaptation: float,
-) -> jax.Array:
-    """Apply PFJAX's diminishing proposal-scale adaptation rule."""
-    delta = jnp.minimum(n_iter**-adaptation_rate, max_adaptation)
-    return jnp.exp(
-        jnp.log(proposal_scale)
-        - delta * jnp.sign(target_acceptance_rate - acceptance_rate)
-    )
-
-
-def resolve_proposal_scale(
-    initial_proposal_scale: jax.Array,
-    latent_size: int,
-) -> jax.Array:
-    """Broadcast a scalar scale or validate a coordinatewise scale vector."""
-    proposal_scale = jnp.asarray(initial_proposal_scale)
-    if proposal_scale.ndim == 0:
-        return jnp.full((latent_size,), proposal_scale)
-    if proposal_scale.shape != (latent_size,):
-        raise ValueError(
-            "initial_proposal_scale must be scalar or have one value per "
-            f"flattened unconstrained coordinate; expected {(latent_size,)}, "
-            f"got {proposal_scale.shape}"
-        )
-    return proposal_scale
+from blackjax.mcmc.random_walk import RWState, build_rmh
 
 
 class AdaptiveMetropolisState(NamedTuple):
-    """State carried by the adaptive Metropolis-within-Gibbs kernel."""
+    """Position, cached density, and warmup adaptation statistics."""
 
     position: jax.Array
-    proposal_scale: jax.Array
-    n_accept: jax.Array
+    logdensity: jax.Array
+    mean: jax.Array
+    covariance: jax.Array
+    log_multiplier: jax.Array
     n_iter: jax.Array
 
 
 class AdaptiveMetropolisInfo(NamedTuple):
-    """Acceptance indicators for the coordinate updates in one transition."""
+    """Acceptance indicator and probability for one joint proposal."""
 
     is_accepted: jax.Array
+    acceptance_rate: jax.Array
+
+
+def proposal_covariance(state: AdaptiveMetropolisState) -> jax.Array:
+    """Return the symmetric, regularized covariance used for proposals."""
+    covariance = jnp.exp(state.log_multiplier) * state.covariance
+    covariance = (covariance + covariance.T) / 2
+    dimension = state.position.size
+    floor = jnp.maximum(
+        jnp.asarray(1e-12, dtype=covariance.dtype),
+        dimension
+        * jnp.finfo(covariance.dtype).eps
+        * jnp.max(jnp.abs(jnp.diag(covariance))),
+    )
+    return covariance + floor * jnp.eye(dimension, dtype=covariance.dtype)
+
+
+def _finite_logdensity(logdensity_fn: Callable, position: jax.Array) -> jax.Array:
+    value = logdensity_fn(position)
+    return jnp.where(jnp.isfinite(value), value, -jnp.inf)
 
 
 def init(
@@ -67,19 +56,25 @@ def init(
     logdensity_fn: Callable,
     proposal_scale: jax.Array,
 ) -> AdaptiveMetropolisState:
-    """Initialize the kernel state."""
-    del logdensity_fn
+    """Initialize a flat chain and evaluate its log density once."""
+    if position.ndim != 1 or position.size == 0:
+        raise ValueError("position must be a nonempty flattened parameter vector")
+    proposal_scale = jnp.broadcast_to(proposal_scale, position.shape).astype(
+        position.dtype
+    )
     return AdaptiveMetropolisState(
         position,
-        proposal_scale,
-        jnp.zeros_like(position),
-        jnp.array(0.0),
+        _finite_logdensity(logdensity_fn, position),
+        position,
+        jnp.diag(proposal_scale**2),
+        jnp.log(jnp.asarray(2.38**2 / position.size, dtype=position.dtype)),
+        jnp.array(0, dtype=jnp.int32),
     )
 
 
 def build_kernel() -> Callable:
-    """Build one complete random-walk Metropolis-within-Gibbs transition."""
-    rmh_step = blackjax.mcmc.random_walk.build_rmh()
+    """Build one joint Metropolis transition with optional warmup adaptation."""
+    rmh_step = build_rmh()
 
     def kernel(
         rng_key: jax.Array,
@@ -87,55 +82,50 @@ def build_kernel() -> Callable:
         logdensity_fn: Callable,
         target_acceptance_rate: float,
         adaptation_rate: float,
-        max_adaptation: float,
         num_warmup: int,
     ) -> tuple[AdaptiveMetropolisState, AdaptiveMetropolisInfo]:
-        rw_state = blackjax.mcmc.random_walk.init(state.position, logdensity_fn)
+        chol = jnp.linalg.cholesky(proposal_covariance(state))
 
-        def update_coordinate(rw_state, coordinate_and_key):
-            coordinate, coordinate_key = coordinate_and_key
-
-            def propose(key, position):
-                jump = state.proposal_scale[coordinate] * jr.normal(
-                    key, dtype=position.dtype
-                )
-                return position.at[coordinate].add(jump)
-
-            rw_state, info = rmh_step(
-                coordinate_key,
-                rw_state,
-                logdensity_fn,
-                propose,
+        def propose(key, position):
+            return position + chol @ jr.normal(
+                key, position.shape, dtype=position.dtype
             )
-            return rw_state, info.is_accepted
 
-        rw_state, is_accepted = jax.lax.scan(
-            update_coordinate,
-            rw_state,
-            (jnp.arange(state.position.size), jr.split(rng_key, state.position.size)),
+        rw_state, info = rmh_step(
+            rng_key,
+            RWState(state.position, state.logdensity),
+            lambda position: _finite_logdensity(logdensity_fn, position),
+            propose,
         )
-        n_iter = state.n_iter + 1.0
-        n_accept = state.n_accept + is_accepted
-        adapted_scale = adapt_proposal_scale(
-            state.proposal_scale,
-            n_accept / n_iter,
-            n_iter,
-            target_acceptance_rate=target_acceptance_rate,
-            adaptation_rate=adaptation_rate,
-            max_adaptation=max_adaptation,
-        )
-        proposal_scale = jnp.where(
+        n_iter = state.n_iter + 1
+
+        def adapt(_):
+            gain = n_iter.astype(state.position.dtype) ** -adaptation_rate
+            delta = rw_state.position - state.mean
+            return (
+                state.mean + gain * delta,
+                state.covariance + gain * (jnp.outer(delta, delta) - state.covariance),
+                state.log_multiplier
+                + gain * (info.acceptance_rate - target_acceptance_rate),
+            )
+
+        mean, covariance, log_multiplier = jax.lax.cond(
             state.n_iter < num_warmup,
-            adapted_scale,
-            state.proposal_scale,
+            adapt,
+            lambda _: (state.mean, state.covariance, state.log_multiplier),
+            operand=None,
         )
-        next_state = AdaptiveMetropolisState(
-            rw_state.position,
-            proposal_scale,
-            n_accept,
-            n_iter,
+        return (
+            AdaptiveMetropolisState(
+                rw_state.position,
+                rw_state.logdensity,
+                mean,
+                covariance,
+                log_multiplier,
+                n_iter,
+            ),
+            AdaptiveMetropolisInfo(info.is_accepted, info.acceptance_rate),
         )
-        return next_state, AdaptiveMetropolisInfo(is_accepted)
 
     return kernel
 
@@ -146,19 +136,13 @@ def adaptive_metropolis(
     *,
     target_acceptance_rate: float,
     adaptation_rate: float,
-    max_adaptation: float,
     num_warmup: int,
 ) -> SamplingAlgorithm:
-    """Return adaptive Metropolis-within-Gibbs as a BlackJAX algorithm."""
+    """Return joint adaptive Metropolis as a BlackJAX sampling algorithm."""
     return build_sampling_algorithm(
         build_kernel(),
         init,
         logdensity_fn,
         init_args=(proposal_scale,),
-        kernel_args=(
-            target_acceptance_rate,
-            adaptation_rate,
-            max_adaptation,
-            num_warmup,
-        ),
+        kernel_args=(target_acceptance_rate, adaptation_rate, num_warmup),
     )
