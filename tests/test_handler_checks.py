@@ -8,6 +8,7 @@ import pytest
 from effectful.ops.semantics import handler
 
 import dynestyx as dsx
+from dynestyx.control import DiscreteControlLoopSimulator
 from dynestyx.handlers import _validate_handler_stack
 
 _STAGES = [
@@ -17,6 +18,50 @@ _STAGES = [
     dsx.Simulator,
     lambda: dsx.Evaluation(dsx.ObservationScoringConfig()),
 ]
+
+
+def _closed_loop():
+    return DiscreteControlLoopSimulator(
+        control_policy=lambda x_hat, t_now, t_next, s: (x_hat.mean, s)
+    )
+
+
+@pytest.mark.parametrize("other", [dsx.Simulator, _closed_loop])
+def test_closed_loop_shares_simulation_stage(other):
+    with _closed_loop(), other():
+        with pytest.raises(ValueError, match="one handler per stage.*SIMULATOR"):
+            _validate_handler_stack(obs_values=None, predict_times=True)
+
+
+@pytest.mark.parametrize("inner", [dsx.Discretizer, dsx.Filter])
+def test_closed_loop_order(inner):
+    with inner(), _closed_loop():
+        with pytest.raises(ValueError, match="Invalid handler order.*SIMULATOR"):
+            _validate_handler_stack(obs_values=True, predict_times=True)
+    with _closed_loop(), inner():
+        _validate_handler_stack(
+            obs_values=inner is dsx.Filter or None, predict_times=True
+        )
+
+
+def test_closed_loop_is_not_external_observation_inference():
+    with _closed_loop():
+        with pytest.raises(ValueError, match="Observations require"):
+            _validate_handler_stack(obs_values=True, predict_times=True)
+
+
+@pytest.mark.parametrize("factory", [dsx.Filter, dsx.Smoother, dsx.LatentPathBuilder])
+def test_unused_inference_warns(factory):
+    with dsx.Simulator(), factory():
+        with pytest.warns(UserWarning, match="has no obs_values"):
+            _validate_handler_stack(obs_values=None, predict_times=True)
+
+
+@pytest.mark.parametrize("factory", [dsx.Simulator, _closed_loop])
+def test_unused_simulator_warns(factory):
+    with factory(), dsx.Filter():
+        with pytest.warns(UserWarning, match="has no predict_times"):
+            _validate_handler_stack(obs_values=True, predict_times=None)
 
 
 @pytest.mark.parametrize("inner,outer", list(itertools.combinations(_STAGES, 2)))

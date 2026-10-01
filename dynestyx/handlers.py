@@ -1,5 +1,6 @@
 """Contains the core dynestyx primitives and `effectful` handler utilities."""
 
+import warnings
 from enum import Enum, auto
 from typing import Any, TypeVar
 
@@ -95,6 +96,18 @@ def _validate_handler_stack(*, obs_values, predict_times) -> None:
         )
     if predict_times is not None and _DynestyxStackKind.SIMULATOR not in kinds:
         raise ValueError("predict_times requires a Simulator. " + order_hint)
+    if obs_values is None and _INFERENCE_KINDS.intersection(kinds):
+        warnings.warn(
+            "Filter, Smoother, or LatentPathBuilder has no obs_values to condition on.",
+            UserWarning,
+            stacklevel=3,
+        )
+    if predict_times is None and _DynestyxStackKind.SIMULATOR in kinds:
+        warnings.warn(
+            "Simulator has no predict_times to simulate at.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 def _validate_and_prepare(

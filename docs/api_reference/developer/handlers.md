@@ -11,7 +11,9 @@ internal operation, not part of the package's public API.
 through discretization, inference, simulation, and evaluation. Plates may repeat;
 other stages may not. Filter, Smoother, and LatentPathBuilder share one inference
 stage. Observation inputs require inference, and prediction times require a
-simulator. Existing model/backend compatibility checks still apply.
+simulator, including DiscreteControlLoopSimulator. Inference without observations
+and simulation without prediction times emit warnings. Existing model/backend
+compatibility checks still apply.
 
 ::: dynestyx.handlers
     options:

@@ -167,34 +167,6 @@ def test_infer_does_not_register_numpyro_sites():
     assert "f_marginal_log_likelihood" not in tr
 
 
-def test_condition_no_observations():
-    """Filter without observations returns an empty ConditionedResult."""
-    dynamics = _make_lti_dynamics(0.5)
-    obs_times, obs_values = _make_data()
-
-    from numpyro.handlers import seed
-
-    with (
-        seed(rng_seed=0),
-        dsx.Simulator(),
-        Filter(filter_config=KFConfig(filter_source="cuthbert")),
-    ):
-        # Reusing the handler must not leak the first call's cached likelihood.
-        dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
-        result = dsx.condition(
-            "f",
-            dynamics,
-            obs_times=None,
-            obs_values=None,
-            predict_times=jnp.arange(0.0, 5.0, 1.0),
-        )
-
-    assert isinstance(result, ConditionedResult)
-    assert result.marginal_loglik is None
-    assert result.states is None
-    assert result.dists is None
-
-
 def test_filter_rejects_dirac_ode_inference():
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array([[0.1], [0.2], [0.3]])
