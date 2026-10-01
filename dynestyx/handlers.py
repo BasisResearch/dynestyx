@@ -1,5 +1,6 @@
 """Contains the core dynestyx primitives and `effectful` handler utilities."""
 
+from enum import Enum, auto
 from typing import Any, TypeVar
 
 import numpyro
@@ -25,6 +26,26 @@ from dynestyx.utils import (
 )
 
 T = TypeVar("T")
+
+
+class _DynestyxStackKind(Enum):
+    PLATE = auto()
+    DISCRETIZER = auto()
+    FILTER = auto()
+    SMOOTHER = auto()
+    LATENT_PATH_BUILDER = auto()
+    SIMULATOR = auto()
+    EVALUATION = auto()
+
+
+@defop
+def _dynestyx_stack_kind() -> list[_DynestyxStackKind]:
+    """Return active dynestyx interpretation kinds, innermost first.
+
+    Implementations accept **kwargs so effectful saves an empty argument frame
+    when this query is called from inside another operation's implementation.
+    """
+    return []
 
 
 def _validate_and_prepare(
@@ -472,6 +493,10 @@ class plate(ObjectInterpretation):
         """Exit both numpyro.plate context and dynestyx plate interpretation."""
         self._cm.__exit__(exc_type, exc, tb)
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
+
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self, **kwargs):
+        return [_DynestyxStackKind.PLATE, *fwd()]
 
     @implements(_condition_intp)
     def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Any:

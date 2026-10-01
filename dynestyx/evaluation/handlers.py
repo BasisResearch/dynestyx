@@ -11,7 +11,12 @@ from jaxtyping import Array, Bool, Real
 
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.observation_scoring import build_evaluation_result
-from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
 from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.models import DynamicalModel
 from dynestyx.types import (
@@ -32,6 +37,10 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
     """Evaluate outputs forwarded by an inner conditioning handler."""
 
     observation_scoring_config: ObservationScoringConfig
+
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self, **kwargs):
+        return [_DynestyxStackKind.EVALUATION, *fwd()]
 
     @implements(_condition_intp)
     def _sample_ds(
