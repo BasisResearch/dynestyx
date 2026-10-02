@@ -45,6 +45,7 @@ from dynestyx.inference.configs.filter import (
     ModifyPredictedObservationCovariance,
     PFConfig,
     PFResamplingConfig,
+    RBPFConfig,
     TaperCovarianceFn,
     UKFConfig,
 )
@@ -402,6 +403,8 @@ class Filter(BaseLogFactorAdder):
                 key=key,
                 obs_times=obs_times,
                 obs_values=obs_values,
+                _obs_values_filled=_obs_values_filled,
+                _obs_mask=_obs_mask,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
                 resolved_localization=resolved_localization,
@@ -559,13 +562,17 @@ class Filter(BaseLogFactorAdder):
 
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
+                uses_preprocessed_obs = isinstance(config, RBPFConfig)
 
                 def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
+                        key=k,
                         obs_times=ot,
                         obs_values=ov,
+                        _obs_values_filled=ovf,
+                        _obs_mask=om,
                         ctrl_times=ct,
                         ctrl_values=cv,
                     )
@@ -695,8 +702,14 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
-        if output_kind in {"continuous", "cd_dynamax_discrete"}:
+        if output_kind == "continuous":
             marginal_logliks = outputs.marginal_loglik
+            states = outputs
+        elif output_kind == "cd_dynamax_discrete":
+            if isinstance(config, RBPFConfig):
+                marginal_logliks = outputs["marginal_loglik"]
+            else:
+                marginal_logliks = outputs.marginal_loglik
             states = outputs
         elif output_kind == "hmm":
             marginal_logliks, states = outputs
@@ -738,7 +751,7 @@ class Filter(BaseLogFactorAdder):
                 means_attr="filtered_means",
                 covariances_attr="filtered_covariances",
                 plate_shapes=plate_shapes,
-                particle_mode=False,
+                particle_mode=isinstance(config, RBPFConfig),
                 missing_message=(
                     "Filtered means/covariances were unavailable for a Gaussian rollout path."
                 ),
@@ -769,6 +782,8 @@ def _filter_discrete_time(
     *,
     obs_times: Real[Array, " obs_time"],
     obs_values: Real[Array, "obs_time observation_dim"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_times: Real[Array, " ctrl_time"] | None = None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     resolved_localization: ResolvedEnKFLocalization | None = None,
@@ -798,8 +813,11 @@ def _filter_discrete_time(
             name,
             dynamics,
             filter_config,
+            key=key,
             obs_times=obs_times,
             obs_values=obs_values,
+            _obs_values_filled=_obs_values_filled,
+            _obs_mask=_obs_mask,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,

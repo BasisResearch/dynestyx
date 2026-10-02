@@ -9,6 +9,8 @@ import numpyro
 from jaxtyping import Array, Int, Shaped
 
 from dynestyx.models import Diffusion, DynamicalModel
+from dynestyx.models.observations import SwitchingLinearGaussianObservation
+from dynestyx.models.state_evolution import SwitchingLinearGaussianStateEvolution
 from dynestyx.utils import (
     _array_has_plate_dims,
     _diffusion_coefficient_is_plate_batched,
@@ -48,6 +50,14 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     def _axis(path, leaf):
         if isinstance(leaf, numpyro.distributions.Distribution):
             return None
+        if isinstance(
+            leaf,
+            (
+                SwitchingLinearGaussianObservation,
+                SwitchingLinearGaussianStateEvolution,
+            ),
+        ):
+            return None
         # Only constant-coefficient diffusions are opaque leaves (see
         # ``_is_opaque_plate_leaf``); a callable coefficient is recursed into, so
         # its array fields are vmapped generically by the branch below.
@@ -62,7 +72,16 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     return jax.tree_util.tree_map_with_path(
         _axis,
         tree,
-        is_leaf=_is_opaque_plate_leaf,
+        is_leaf=lambda node: (
+            _is_opaque_plate_leaf(node)
+            or isinstance(
+                node,
+                (
+                    SwitchingLinearGaussianObservation,
+                    SwitchingLinearGaussianStateEvolution,
+                ),
+            )
+        ),
     )
 
 

@@ -20,6 +20,13 @@ from dynestyx.inference.utils.plate_utils import (
 MissingPolicy = Literal["raise", "empty"]
 
 
+def _posterior_field(posterior, field: str):
+    """Read a field from either a posterior object or a posterior mapping."""
+    if isinstance(posterior, dict):
+        return posterior.get(field)
+    return getattr(posterior, field)
+
+
 class _ForwardSimulationImproperUniform(dist.ImproperUniform):
     """An improper distribution sampled by dynamical forward simulation.
 
@@ -219,6 +226,8 @@ def _posterior_sequence_to_dists(
     means_attr: str,
     covariances_attr: str,
     particle_mode: bool,
+    particles_attr: str = "particles",
+    log_weights_attr: str = "log_weights",
     plate_shapes: tuple[int, ...] = (),
     missing: MissingPolicy = "raise",
     missing_message: str | None = None,
@@ -226,14 +235,14 @@ def _posterior_sequence_to_dists(
     """Convert a backend posterior object to per-time distributions."""
     if particle_mode:
         return _particle_sequence_to_dists(
-            posterior.particles,
-            posterior.log_weights,
+            _posterior_field(posterior, particles_attr),
+            _posterior_field(posterior, log_weights_attr),
             plate_shapes=plate_shapes,
         )
 
     return _gaussian_sequence_to_dists(
-        getattr(posterior, means_attr),
-        getattr(posterior, covariances_attr),
+        _posterior_field(posterior, means_attr),
+        _posterior_field(posterior, covariances_attr),
         plate_shapes=plate_shapes,
         missing=missing,
         missing_message=missing_message,
