@@ -314,6 +314,8 @@ class Filter(BaseLogFactorAdder):
                     key=key,
                     obs_times=obs_times,
                     obs_values=obs_values,
+                    _obs_values_filled=_obs_values_filled,
+                    _obs_mask=_obs_mask,
                     ctrl_times=ctrl_times,
                     ctrl_values=ctrl_values,
                     **kwargs,
@@ -404,6 +406,7 @@ class Filter(BaseLogFactorAdder):
 
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
+                uses_preprocessed_obs = isinstance(config, RBPFConfig)
 
                 def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
@@ -412,6 +415,8 @@ class Filter(BaseLogFactorAdder):
                         key=k,
                         obs_times=ot,
                         obs_values=ov,
+                        _obs_values_filled=ovf,
+                        _obs_mask=om,
                         ctrl_times=ct,
                         ctrl_values=cv,
                     )
@@ -614,6 +619,8 @@ def _filter_discrete_time(
     obs_times: Real[Array, "*obs_time_plate obs_time"],
     obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
     | Real[Array, "*obs_value_plate obs_time"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
     ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
@@ -643,6 +650,8 @@ def _filter_discrete_time(
             key=key,
             obs_times=obs_times,
             obs_values=obs_values,
+            _obs_values_filled=_obs_values_filled,
+            _obs_mask=_obs_mask,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
             **kwargs,

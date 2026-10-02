@@ -46,6 +46,7 @@ from dynestyx.models import (
     SwitchingLinearGaussianObservation,
     SwitchingLinearGaussianStateEvolution,
 )
+from dynestyx.observation_missingness import prepare_observation_views
 from dynestyx.utils import _should_record_field
 
 
@@ -125,6 +126,7 @@ def _call_slds_rbpfilter(
     key,
     emissions,
     inputs,
+    emission_mask,
 ):
     """Call cd-dynamax's SLDS RBPF implementation for particle histories."""
     if filter_config.proposal == "prior":
@@ -135,6 +137,7 @@ def _call_slds_rbpfilter(
             key,
             inputs=inputs,
             ess_threshold=filter_config.ess_threshold_ratio,
+            emission_mask=emission_mask,
         )
     if filter_config.proposal == "optimal":
         return rbpfilter_optimal(
@@ -143,6 +146,7 @@ def _call_slds_rbpfilter(
             emissions,
             key,
             inputs=inputs,
+            emission_mask=emission_mask,
         )
     raise ValueError(f"Unknown RBPF proposal: {filter_config.proposal!r}")
 
@@ -269,6 +273,8 @@ def compute_cd_dynamax_discrete_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    _obs_values_filled=None,
+    _obs_mask=None,
     ctrl_times=None,
     ctrl_values=None,
 ):
@@ -279,11 +285,27 @@ def compute_cd_dynamax_discrete_filter(
                 "compute_cd_dynamax_discrete_filter requires a PRNG key for RBPFConfig."
             )
         params = _slds_to_dynamax_params(dynamics)
+        if _obs_values_filled is None or _obs_mask is None:
+            _obs_values_filled, _obs_mask, _ = prepare_observation_views(
+                dynamics, obs_values
+            )
+        if _obs_values_filled is None or _obs_mask is None:
+            raise ValueError("RBPF filtering requires observed values and a mask.")
         rbpf_emissions, rbpf_inputs = _prepare_slds_rbpf_inputs(
-            dynamics, obs_values, obs_times, ctrl_times, ctrl_values
+            dynamics,
+            _obs_values_filled,
+            obs_times,
+            ctrl_times,
+            ctrl_values,
         )
+        rbpf_mask = _obs_mask[:, None] if _obs_mask.ndim == 1 else _obs_mask
         rbpf_output = _call_slds_rbpfilter(
-            params, filter_config, key, rbpf_emissions, rbpf_inputs
+            params,
+            filter_config,
+            key,
+            rbpf_emissions,
+            rbpf_inputs,
+            rbpf_mask,
         )
         return _slds_rbpfilter_output_to_filter_output(
             rbpf_output,
@@ -366,6 +388,8 @@ def run_discrete_filter(
     *,
     obs_times: jax.Array,
     obs_values: jax.Array,
+    _obs_values_filled=None,
+    _obs_mask=None,
     ctrl_times=None,
     ctrl_values=None,
     **kwargs,
@@ -377,6 +401,8 @@ def run_discrete_filter(
         key=key,
         obs_times=obs_times,
         obs_values=obs_values,
+        _obs_values_filled=_obs_values_filled,
+        _obs_mask=_obs_mask,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )

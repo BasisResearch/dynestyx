@@ -2,6 +2,7 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpyro
 import numpyro.distributions as dist
+import pytest
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
@@ -181,6 +182,57 @@ def test_slds_rbpf_batched_predictive_trace_sites_are_finite():
             num_samples=1,
             exclude_deterministic=False,
         )(jr.PRNGKey(2), obs_times=obs_times, obs_values=obs_values)
+
+    assert jnp.isfinite(out["f_marginal_loglik"]).all()
+    assert out["f_marginal_loglik"].shape[-1:] == (2,)
+
+
+@pytest.mark.parametrize("proposal", ["prior", "optimal"])
+def test_slds_rbpf_accepts_fully_missing_observation_rows(proposal):
+    obs_times, obs_values = _make_slds_observations()
+    obs_values = obs_values.at[2, 0].set(jnp.nan)
+    obs_values = obs_values.at[5, 0].set(jnp.nan)
+
+    with Filter(
+        RBPFConfig(
+            n_particles=64,
+            proposal=proposal,
+            record_filtered_states_mean=True,
+            record_filtered_regime_probs=True,
+            crn_seed=jr.PRNGKey(1),
+        )
+    ):
+        out = Predictive(
+            _small_slds_model,
+            num_samples=1,
+            exclude_deterministic=False,
+        )(jr.PRNGKey(2), obs_times=obs_times, obs_values=obs_values)
+
+    assert jnp.isfinite(out["f_marginal_loglik"]).all()
+    assert jnp.isfinite(out["f_filtered_states_mean"]).all()
+    assert jnp.isfinite(out["f_filtered_regime_probs"]).all()
+    assert out["f_filtered_states_mean"].shape[-2] == len(obs_times)
+
+
+def test_slds_rbpf_batched_missing_observations_are_finite():
+    obs_times, obs_values = _make_slds_observations()
+    batched_obs = jnp.stack([obs_values, obs_values], axis=0)
+    batched_obs = batched_obs.at[0, 1, 0].set(jnp.nan)
+    batched_obs = batched_obs.at[1, 4, 0].set(jnp.nan)
+
+    with Filter(
+        RBPFConfig(
+            n_particles=64,
+            proposal="optimal",
+            record_filtered_states_mean=True,
+            crn_seed=jr.PRNGKey(1),
+        )
+    ):
+        out = Predictive(
+            _batched_small_slds_model,
+            num_samples=1,
+            exclude_deterministic=False,
+        )(jr.PRNGKey(2), obs_times=obs_times, obs_values=batched_obs)
 
     assert jnp.isfinite(out["f_marginal_loglik"]).all()
     assert out["f_marginal_loglik"].shape[-1:] == (2,)

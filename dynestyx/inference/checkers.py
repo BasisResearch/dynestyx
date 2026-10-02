@@ -15,6 +15,7 @@ from dynestyx.inference.filter_configs import (
     HMMConfigs,
     KFConfig,
     PFConfig,
+    RBPFConfig,
 )
 from dynestyx.inference.smoother_configs import (
     BaseSmootherConfig,
@@ -120,9 +121,9 @@ def _validate_missing_observation_support(
             "cuthbert KFConfig and EnKFConfig filters."
         )
         cd_dynamax_msg = (
-            "CD-Dynamax filters do not support NaNs in obs_values. "
-            "Missing observations via NaNs currently require a cuthbert-backed "
-            "discrete-time filter."
+            "CD-Dynamax filters currently support NaNs in obs_values for "
+            "the discrete-time SLDS RBPFConfig path. Other filters require a "
+            "cuthbert-backed discrete-time configuration."
         )
         fallback_label = "filter"
     elif mode == "smoother":
@@ -154,6 +155,8 @@ def _validate_missing_observation_support(
     if isinstance(config, discrete_types):
         filter_source = getattr(config, "filter_source", None)
         if filter_source == "cd_dynamax":
+            if mode == "filter" and isinstance(config, RBPFConfig):
+                return
             _raise_now_or_error_if(obs_values, has_missing, cd_dynamax_msg)
             return
 
