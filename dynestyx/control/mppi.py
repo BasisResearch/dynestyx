@@ -51,11 +51,11 @@ class MPPIStepInfo(NamedTuple):
 class MPPIState(eqx.Module):
     """MPPI's internal policy state.
 
-    To modify the state, subclass it, adding fields, and override
-    `MPPI.initial_state` to return the subclass.
+    To add fields, subclass it and override `MPPI.initial_state` to return
+    the subclass.
 
-    To use your new fields, override any of the hooks used in MPPI.
-    Note that a key field is always required within MPPI.
+    To use them, override the MPPI hooks that need them.
+    A `key` field is always required: MPPI uses it for its own randomness.
 
     Update fields with `s.replace(nominal_sequence=...)`.
 
@@ -84,22 +84,25 @@ class MPPI(eqx.Module):
     r"""Model Predictive Path Integral (MPPI) controller.
 
     At each call: sample `n_samples` candidate control sequences of length
-    `horizon` as a perturbations around a nominal sequence:
+    `horizon_length` as perturbations around a nominal sequence:
+
     $$
-    u = \bar u + \epsilon
+    u = \bar u + \varepsilon
     $$
-    where $\varepsilon$ is a noise distribution (by default a Gaussian AR(1)). The nominal sequence $\bar{u}$ is the control sequence from the previous step (initially zero), shifted by one time step.
-    It is carried in the policy state `s`. Each control sequence is rolled out over `horizon` timesteps through the dynamics.
-    The resulting trajectories are scored with `loss_fn`,
-    and combined via the standard MPPI weighting
+
+    where $\varepsilon$ is drawn from a noise distribution (by default a
+    Gaussian AR(1)). The nominal sequence $\bar{u}$ is the control sequence
+    from the previous step (initially zero), shifted by one time step. It is
+    carried in the policy state `s`. Each control sequence is rolled out over
+    the `horizon` grid through the dynamics. The resulting trajectories are
+    scored with `loss_fn` and combined via the standard MPPI weighting
 
     $$w_i \propto \exp(-\mathrm{loss}_i / \lambda), \qquad
       u_{0:H-1} = \sum_i w_i\, u^{(i)}_{0:H-1}$$
 
     i.e. a softmax over the temperature-scaled negative losses.
     Only the first control of the resulting sequence is applied at each
-    step. The remainder becomes next step's nominal
-    sequence.
+    step. The remainder becomes the next step's nominal sequence.
 
     By default all candidates are rolled out with the same PRNG key (common
     random numbers), so they face the same process and observation noise. The `n_simulations` rollouts
@@ -121,14 +124,14 @@ class MPPI(eqx.Module):
        rollout's $x_0$ is drawn from. Default: a `Delta` at `x_hat.mean`.
     2. `sample_controls(key, x_hat, t_now, s)`: the candidate control
        sequences (the proposal). Default: `s.nominal_sequence` plus
-       `noise_std`-scaled draws from `noise`.
+       draws from `noise` (scaled by `noise_std`).
     3. Rollouts and `loss_fn` (not overridable). Non-finite losses are clamped
        to the largest finite value.
     4. `combine_sequences(losses, candidates, x_hat, t_now, s)`: chooses the
        weights and returns the plan, the combined sequence. Default: the
        softmax weighting above.
-    5. `update_state(plan, info, s)`: returns the next policy state, the only
-       hook that does. `info` is an `MPPIStepInfo` with the rest of the step:
+    5. `update_state(plan, info, s)`: returns the next policy state. `info`
+       is an `MPPIStepInfo` with the rest of the step:
        `x_hat`, `t_now`, `candidates`, `losses` and `results` (the rollouts).
        Default: `s` with `nominal_sequence` set to the plan shifted left by
        one (last entry repeated), other fields unchanged.
@@ -144,7 +147,7 @@ class MPPI(eqx.Module):
 
     Attributes:
         dynamics: a `DynamicalModel` (the same model used for the real simulation
-            or some approximate). Each candidate rollout is computed by calling `dsx.simulate`.
+            or an approximation). Each candidate rollout is computed by calling `dsx.simulate`.
         loss_fn: `MPPILossFn`, i.e. `(result: SimulatedResult) -> scalar`,
             called once per sample (vmapped). Every
             field carries a leading `n_simulations` axis -- e.g.
@@ -152,10 +155,14 @@ class MPPI(eqx.Module):
             `(1, horizon, state_dim)` by default. The
             starting state $x_0$ is not in `states`; it
             is available separately as `result.x_0`, shape
-            `(n_simulations, state_dim)`. `states/controls/observations` are aligned with `times/ctrl_times/obs_times`.
+            `(n_simulations, state_dim)`. `states`, `controls` and
+            `observations` correspond to `times`, `ctrl_times` and `obs_times`
+            respectively.
         horizon: The planning grid relative to `t_now`, `[0, t_1, ..., t_H]`
-            (starting at 0, strictly increasing): `t_now, t_now+ t_1..., t_now + t_H`. `H` is the number of internal one-step `dynamics`
-            calls per rollout (see `horizon_length`). Required.
+            (starting at 0, strictly increasing). The rollout runs on
+            `[t_now, t_now + t_1, ..., t_now + t_H]`. `H` is the number of
+            internal one-step `dynamics` calls per rollout (see
+            `horizon_length`). Required.
         noise_std: Scale applied to the perturbations drawn from `noise`,
             scalar or shape `(control_dim,)`. The noises in
             `dynestyx.control.utils.distribution_utils` have unit marginal
@@ -165,15 +172,14 @@ class MPPI(eqx.Module):
             `(horizon_length, control_dim)`, drawn `n_samples` times per call
             as the perturbations around the nominal sequence. `None` (default)
             is replaced by `AR1Noise(horizon, dynamics.control_dim, rho=0.5)`
-            at construction. The
-            built-in noises take the planning grid as `times`, e.g. `AR1Noise(horizon,
-            control_dim, rho=...)`.
+            at construction. The built-in noises take the planning grid as
+            `times`, e.g. `AR1Noise(horizon, control_dim, rho=...)`.
         n_samples: Number of sampled control sequences per call. Defaults to
             `10`.
         n_simulations: Number of rollouts per candidate control sequence
             (forwarded to `dsx.simulate`), each with its own noise draw.
             Defaults to `1`.
-        common_randomness: If `True` (default), each rollout uses the same
+        common_randomness: If `True` (default), the j-th rollout uses the same
             noise for every candidate, so candidates are compared under
             identical noise and their losses differ only through their
             controls. If `False`, every candidate draws its own noise.
@@ -182,10 +188,9 @@ class MPPI(eqx.Module):
             lowest-loss samples, and `0` applies the lowest-loss candidate
             alone. Defaults to `1.0`.
         batched: Whether the `n_samples` candidate rollouts are computed with
-            `jax.vmap` (requires `dynamics.state_evolution` to
-            be vmap-compatible) or `jax.lax.map` (slower,
-            but works for a `dynamics.state_evolution` that isn't
-            vmap-compatible).
+            `jax.vmap` (default; requires `dynamics.state_evolution` to be
+            vmap-compatible) or `jax.lax.map` (slower, but works for a
+            `dynamics.state_evolution` that isn't vmap-compatible).
         seed: Seeds MPPI's own PRNG key, carried inside the policy state `s`
             (as `s.key`) and split internally on every call.
     """
