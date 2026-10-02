@@ -1,5 +1,7 @@
 """Register NumPyro sites for filter and smoother outputs."""
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -56,7 +58,9 @@ def register_filter_sites(
     if isinstance(filter_config, tuple(ContinuousTimeConfigs)):
         _add_continuous_filter_sites(name, states, record_kwargs)
     elif isinstance(filter_config, RBPFConfig):
-        _add_cd_dynamax_rbpf_sites(name, states, record_kwargs)
+        if not isinstance(states, dict):
+            raise TypeError("RBPF filter results must be a dictionary.")
+        _add_cd_dynamax_rbpf_sites(name, cast(dict[str, Array], states), record_kwargs)
     elif isinstance(filter_config, PFConfig):
         _add_cuthbert_pf_sites(name, states, record_kwargs)
     else:
