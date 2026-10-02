@@ -78,6 +78,11 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# WIP PDE tutorial notebooks -- kept locally, not tracked/pushed
+/docs/tutorials/pde/pde_inference_setup_exponax_ks.ipynb
+/docs/tutorials/pde/pde_inference_setup_phiflow.ipynb
+/docs/tutorials/pde/grid_interpolator_examples.ipynb
+
 # IPython
 profile_default/
 ipython_config.py
