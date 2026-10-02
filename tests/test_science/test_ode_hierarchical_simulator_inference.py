@@ -2,7 +2,6 @@
 
 from typing import cast
 
-import arviz as az
 import equinox as eqx
 import jax.nn as jnn
 import jax.numpy as jnp
@@ -13,9 +12,10 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
+from dynestyx import ODESimulator, ODESimulatorConfig
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.models.observations import LinearGaussianObservation
-from dynestyx.simulators import ODESimulator
+from tests.arviz_utils import save_posterior_plot
 from tests.test_utils import get_output_dir
 
 SAVE_FIG = True
@@ -101,7 +101,7 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
         num_samples=1,
         exclude_deterministic=False,
     )
-    with ODESimulator(dt0=5e-2):
+    with ODESimulator(simulator_config=ODESimulatorConfig(dt0=5e-2)):
         synthetic = predictive(data_key, predict_times=obs_times, M=n_traj)
 
     output_dir = get_output_dir("test_ode_hierarchical_simulator_inference")
@@ -124,7 +124,7 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
     obs_values = synthetic["f_observations"][0, :, 0]
 
     def data_conditioned_model():
-        with ODESimulator(dt0=5e-2):
+        with ODESimulator(simulator_config=ODESimulatorConfig(dt0=5e-2)):
             return hierarchical_ode_model(
                 obs_times=obs_times,
                 obs_values=obs_values,
@@ -185,15 +185,19 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
     if SAVE_FIG and output_dir is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(mu_post, hdi_prob=0.95, ref_val=float(mu_true))
-        plt.savefig(output_dir / "posterior_mu_raw.png", dpi=150, bbox_inches="tight")
-        plt.close()
-
-        az.plot_posterior(sigma_post, hdi_prob=0.95, ref_val=float(sigma_true))
-        plt.savefig(
-            output_dir / "posterior_sigma_raw.png", dpi=150, bbox_inches="tight"
+        save_posterior_plot(
+            mu_post,
+            name="mu_raw",
+            output_path=output_dir / "posterior_mu_raw.png",
+            ref_val=float(mu_true),
         )
-        plt.close()
+
+        save_posterior_plot(
+            sigma_post,
+            name="sigma_raw",
+            output_path=output_dir / "posterior_sigma_raw.png",
+            ref_val=float(sigma_true),
+        )
 
         fig, ax = plt.subplots(figsize=(12, 4))
         traj_idx = jnp.arange(n_traj)

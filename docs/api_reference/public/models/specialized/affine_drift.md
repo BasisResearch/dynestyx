@@ -1,6 +1,6 @@
 # AffineDrift
 
-::: dynestyx.models.state_evolution.AffineDrift
+::: dynestyx.models.drifts.AffineDrift
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -14,8 +14,8 @@
 
     Structured filtering typically requires a full set of compatible structure
     (e.g., the full `LTI_continuous` setup pairing an affine drift with linear-Gaussian
-    emissions and appropriate noise assumptions); see [Filters](../../../inference/filters.md)
-    and [FilterConfigs](../../../inference/filter_configs.md).
+    observations and appropriate noise assumptions); see [Filters](../../inference/filters.md)
+    and [FilterConfigs](../../inference/configs/filter_configs.md).
 
     In the future, `AffineDrift` may become directly useful for structured inference
     if we add Rao–Blackwellized methods that can exploit partial linear/Gaussian

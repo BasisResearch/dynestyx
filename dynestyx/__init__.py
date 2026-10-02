@@ -4,11 +4,24 @@ from importlib.metadata import version
 
 __version__ = version("dynestyx")
 
-from dynestyx.discretizers import Discretizer, euler_maruyama
-from dynestyx.handlers import plate, sample
+from dynestyx.api import log_prob, simulate
+from dynestyx.discretizers import (
+    Discretizer,
+    discretize_dynamics,
+    discretize_state_evolution,
+)
+from dynestyx.evaluation import Evaluation, ObservationScoringConfig
+from dynestyx.handlers import condition, plate, sample
+from dynestyx.inference.configs.simulator import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+    SimulatorConfig,
+)
 from dynestyx.inference.filters import Filter
+from dynestyx.inference.latent.builder import LatentPathBuilder
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
+    AffineDrift,
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
     DiagonalDiffusion,
@@ -19,6 +32,7 @@ from dynestyx.models import (
     FullDiffusion,
     GaussianObservation,
     GaussianStateEvolution,
+    ImExDrift,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
     LinearGaussianParams,
@@ -26,18 +40,26 @@ from dynestyx.models import (
     LTI_continuous,
     LTI_discrete,
     MixedStateDistribution,
+    ObservationControlAlignment,
     ObservationModel,
     ScalarDiffusion,
     StochasticContinuousTimeStateEvolution,
     SwitchingLinearGaussianObservation,
     SwitchingLinearGaussianStateEvolution,
+    linearize_drift,
 )
-from dynestyx.simulators import (
+from dynestyx.observation_missingness import (
+    MissingObservationMetadata,
+    masked_observation_log_prob,
+    prepare_missing_observation_metadata,
+)
+from dynestyx.simulation import (
     DiscreteTimeSimulator,
     ODESimulator,
     SDESimulator,
     Simulator,
 )
+from dynestyx.types import ConditionedResult, EvaluationResult, SimulatedResult
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -52,6 +74,7 @@ __all__ = [
     "DiscreteTimeStateEvolution",
     "DynamicalModel",
     "AffineDrift",
+    "ImExDrift",
     "LTI_continuous",
     "LTI_discrete",
     "LinearGaussianParams",
@@ -59,21 +82,39 @@ __all__ = [
     "MixedStateDistribution",
     "GaussianStateEvolution",
     "Discretizer",
+    "ObservationControlAlignment",
     "ObservationModel",
     "Filter",
+    "Evaluation",
+    "LatentPathBuilder",
+    "MissingObservationMetadata",
     "Smoother",
     "flatten_draws",
+    "condition",
+    "masked_observation_log_prob",
+    "discretize_dynamics",
+    "discretize_state_evolution",
+    "linearize_drift",
+    "ConditionedResult",
+    "EvaluationResult",
+    "ObservationScoringConfig",
+    "SimulatedResult",
+    "log_prob",
     "plate",
+    "prepare_missing_observation_metadata",
     "sample",
+    "simulate",
     "DiracIdentityObservation",
     "LinearGaussianObservation",
     "LinearGaussianObservationParams",
     "SwitchingLinearGaussianObservation",
     "SwitchingLinearGaussianStateEvolution",
     "GaussianObservation",
+    "ODESimulatorConfig",
+    "SDESimulatorConfig",
+    "SimulatorConfig",
     "DiscreteTimeSimulator",
     "ODESimulator",
     "SDESimulator",
     "Simulator",
-    "euler_maruyama",
 ]

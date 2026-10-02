@@ -36,6 +36,10 @@ pip install dynestyx
 
 We provide a more mathematical introduction in the [Introduction](docs/math_intro.md) section. For a hands-on tutorial with code examples, check out the [Quickstart Tutorial](docs/tutorials/quickstart.ipynb).
 
+## Third-party acknowledgements
+
+The diminishing adaptation rule used by `AdaptiveMetropolis` is inspired by [PFJAX's MCMC implementation](https://github.com/mlysy/pfjax/blob/97652aa1bdff73a92c0286549b010e99cc6f7264/src/pfjax/mcmc.py).
+
 ## Contributing
 
 Contributions are welcome. See [Contributing Guidelines](CONTRIBUTING.md) for development setup, testing expectations, and the pull request workflow.

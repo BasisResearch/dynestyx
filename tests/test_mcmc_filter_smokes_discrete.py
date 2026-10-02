@@ -5,10 +5,10 @@ import jax.random as jr
 import pytest
 from numpyro.infer import Predictive
 
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.mcmc import NUTSConfig, SGLDConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import NUTSConfig, SGLDConfig
-from dynestyx.simulators import DiscreteTimeSimulator
 from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
 

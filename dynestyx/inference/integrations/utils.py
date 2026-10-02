@@ -114,6 +114,12 @@ class WeightedParticles(dist.Distribution):
     def log_prob(self, value):
         raise NotImplementedError("log_prob is not implemented for WeightedParticles.")
 
+    @property
+    def mean(self) -> jax.Array:
+        """Weighted mean of the particles."""
+        weights = jax.nn.softmax(self.log_weights, axis=-1)
+        return jnp.sum(weights[..., None] * self.particles, axis=-2)
+
 
 def particles_to_delta_mixtures(
     particles: Real[Array, "*plate time n_particles state_dim"]

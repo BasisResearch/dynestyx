@@ -8,10 +8,10 @@ Matrix of expected behavior across three handler contexts:
 
 | Input Provided | Case 1: Simulator | Case 2: Sim+Filter | Case 3: Filter |
 |----------------|-------------------|--------------------|-----------------|
-| obs_times, obs_values, predict_times | Solve on union | Filter consumes; Simulator runs | Runs |
-| obs_times, obs_values | ODE/Discrete: runs; SDE: Error | Filter consumes; Simulator no-ops | Runs |
+| obs_times, obs_values, predict_times | Error | Filter consumes; Simulator runs | Error |
+| obs_times, obs_values | Error | Filter consumes; Simulator no-ops | Runs |
 | obs_times, predict_times (no obs_values) | Error | Error | Error |
-| predict_times only | Runs | No-op → Case 1 | No-op |
+| predict_times only | Runs | No-op → Case 1 | Error |
 | obs_times only | Error | Error | Error |
 """
 
@@ -21,7 +21,7 @@ import pytest
 from numpyro.handlers import seed, trace
 
 from dynestyx import DiscreteTimeSimulator, Filter, SDESimulator, Simulator
-from dynestyx.inference.filter_configs import ContinuousTimeEKFConfig, EKFConfig
+from dynestyx.inference.configs.filter import ContinuousTimeEKFConfig, EKFConfig
 from tests.models import (
     jumpy_controls_model,
     jumpy_controls_model_ode,
@@ -117,18 +117,17 @@ def test_error_neither_obs_times_nor_predict_times():
 
 
 def test_case1_simulator_all_three_runs():
-    """Case 1: obs_times + obs_values + predict_times → Simulator runs on union of times."""
-    # Use DiscreteTimeSimulator (SDE rejects obs_times; ODE/Discrete accept)
-    tr = _run_model(
-        jumpy_controls_model,
-        obs_times=_TIMES,
-        obs_values=_OBS_VALUES,
-        predict_times=_TIMES,
-        ctrl_times=_CTRL_TIMES,
-        ctrl_values=_CTRL_VALUES,
-        context=DiscreteTimeSimulator(),
-    )
-    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
+    """Case 1: obs_times + obs_values + predict_times → Simulator errors."""
+    with pytest.raises(ValueError, match="generation-only"):
+        _run_model(
+            jumpy_controls_model,
+            obs_times=_TIMES,
+            obs_values=_OBS_VALUES,
+            predict_times=_TIMES,
+            ctrl_times=_CTRL_TIMES,
+            ctrl_values=_CTRL_VALUES,
+            context=DiscreteTimeSimulator(),
+        )
 
 
 def test_case1_simulator_predict_times_only_runs():
@@ -144,37 +143,34 @@ def test_case1_simulator_predict_times_only_runs():
 
 
 def test_case1_simulator_obs_times_obs_values_only_discrete_runs():
-    """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → runs."""
-    tr = _run_model(
-        jumpy_controls_model,
-        obs_times=_TIMES,
-        obs_values=_OBS_VALUES,
-        ctrl_times=_CTRL_TIMES,
-        ctrl_values=_CTRL_VALUES,
-        context=DiscreteTimeSimulator(),
-    )
-    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
+    """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → error."""
+    with pytest.raises(ValueError, match="generation-only"):
+        _run_model(
+            jumpy_controls_model,
+            obs_times=_TIMES,
+            obs_values=_OBS_VALUES,
+            ctrl_times=_CTRL_TIMES,
+            ctrl_values=_CTRL_VALUES,
+            context=DiscreteTimeSimulator(),
+        )
 
 
 def test_case1_simulator_obs_times_obs_values_only_ode_runs():
-    """Case 1: obs_times + obs_values (no predict_times), ODESimulator → runs."""
-    tr = _run_model(
-        jumpy_controls_model_ode,
-        obs_times=_TIMES,
-        obs_values=_OBS_VALUES,
-        ctrl_times=_CTRL_TIMES,
-        ctrl_values=_CTRL_VALUES,
-        context=Simulator(),
-    )
-    assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
+    """Case 1: obs_times + obs_values (no predict_times), ODESimulator → error."""
+    with pytest.raises(ValueError, match="generation-only"):
+        _run_model(
+            jumpy_controls_model_ode,
+            obs_times=_TIMES,
+            obs_values=_OBS_VALUES,
+            ctrl_times=_CTRL_TIMES,
+            ctrl_values=_CTRL_VALUES,
+            context=Simulator(),
+        )
 
 
 def test_case1_simulator_obs_times_obs_values_only_sde_errors():
-    """Case 1: obs_times + obs_values (no predict_times), SDESimulator → Error (per matrix)."""
-    # SDESimulator rejects obs_times; requires predict_times for SDE rollout
-    with pytest.raises(
-        ValueError, match="obs_times must not be provided|predict_times"
-    ):
+    """Case 1: obs_times + obs_values (no predict_times), SDESimulator → generation-only error."""
+    with pytest.raises(ValueError, match="generation-only"):
         _run_model(
             jumpy_controls_model_sde,
             obs_times=_TIMES,
@@ -254,7 +250,7 @@ def test_case2_simulator_filter_predict_times_only_runs():
 
 
 def test_case3_filter_all_three_runs():
-    """Case 3: obs_times + obs_values + predict_times → Filter runs."""
+    """Case 3: obs_times + obs_values + predict_times → missing Simulator errors."""
 
     def model():
         return jumpy_controls_model_sde(
@@ -265,10 +261,10 @@ def test_case3_filter_all_three_runs():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with Filter(filter_config=ContinuousTimeEKFConfig()):
-        with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-            model()
-    assert "f_marginal_loglik" in tr
+    with pytest.raises(ValueError, match="predict_times requires a Simulator"):
+        with Filter(filter_config=ContinuousTimeEKFConfig()):
+            with trace(), seed(rng_seed=jr.PRNGKey(0)):
+                model()
 
 
 def test_case3_filter_obs_only_runs():
@@ -289,7 +285,7 @@ def test_case3_filter_obs_only_runs():
 
 
 def test_case3_filter_predict_times_only_noop():
-    """Case 3: predict_times only → Filter no-op (no obs to condition on)."""
+    """Case 3: predict_times only → missing Simulator errors."""
 
     # Filter with no obs adds nothing; falls through. No filter output expected.
     def model():
@@ -299,8 +295,7 @@ def test_case3_filter_predict_times_only_noop():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with Filter(filter_config=EKFConfig()):
-        with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-            model()
-    # No obs → filter adds nothing; no f_marginal_loglik
-    assert "f_marginal_loglik" not in tr
+    with pytest.raises(ValueError, match="predict_times requires a Simulator"):
+        with Filter(filter_config=EKFConfig()):
+            with trace(), seed(rng_seed=jr.PRNGKey(0)):
+                model()

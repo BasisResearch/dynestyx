@@ -1,12 +1,13 @@
 import warnings
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
-import numpyro
+import jax.random as jr
 import numpyro.distributions as dist
 from cuthbert import filter as cuthbert_filter
-from cuthbert.enkf import ensemble_kalman_filter
+from cuthbert.ensemble_kalman import ensemble_kalman_filter
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import particle_filter
 from cuthbertlib.resampling import (
@@ -15,20 +16,25 @@ from cuthbertlib.resampling import (
     stop_gradient_decorator,
     systematic,
 )
-from numpyro.distributions import Distribution
+from jax.experimental import sparse as jax_sparse
+from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
-from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
     EnKFConfig,
     KFConfig,
     PFConfig,
-    _config_to_record_kwargs,
+)
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
 )
 from dynestyx.inference.integrations.utils import (
-    covariance_from_cholesky,
     squeeze_leading_singletons,
+)
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import (
     DynamicalModel,
@@ -36,21 +42,36 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import _should_record_field
 
 
 class CuthbertInputs(NamedTuple):
-    """Model inputs pytree for cuthbert; leading time dim must be T+1."""
+    """Model-input pytree before or after cuthbert slices its leading time axis.
 
-    y: jax.Array  # (T+1, emission_dim)
-    u: jax.Array  # (T+1, control_dim) or (T+1, 0)
-    u_prev: jax.Array  # (T+1, control_dim) or (T+1, 0)
-    time: jax.Array  # (T+1,)
-    time_prev: jax.Array  # (T+1,)
-    is_first_step: jax.Array  # (T+1,) bool — True only at index 1
+    As constructed, every leaf has a leading time dim of ``T+1``: one dummy step
+    is prepended so cuthbert's scan can carry an initial state.
+    """
+
+    y: (
+        Real[Array, "cuthbert_time observation_dim"]  # (T+1, emission_dim)
+        | Real[Array, " observation_dim"]
+    )
+    u: (
+        Real[Array, "cuthbert_time control_dim"]  # (T+1, control_dim) or (T+1, 0)
+        | Real[Array, " control_dim"]
+    )
+    u_prev: (
+        Real[Array, "cuthbert_time control_dim"]  # (T+1, control_dim) or (T+1, 0)
+        | Real[Array, " control_dim"]
+    )
+    time: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
+    time_prev: Real[Array, " cuthbert_time"] | Real[Array, ""]  # (T+1,)
+    # (T+1,) bool — True only at index 1.
+    is_first_step: Bool[Array, " cuthbert_time"] | Bool[Array, ""]
 
 
-def _extract_gaussian_chol(d: dist.Distribution, obs_dim: int) -> jax.Array:
+def _extract_gaussian_chol(
+    d: dist.Distribution, obs_dim: int
+) -> Float[Array, "observation_dim observation_dim"]:
     """Extract a Cholesky factor of the covariance from a Gaussian distribution."""
     if isinstance(d, dist.MultivariateNormal):
         return jnp.asarray(d.scale_tril)
@@ -71,7 +92,9 @@ def _extract_gaussian_chol(d: dist.Distribution, obs_dim: int) -> jax.Array:
 
 
 def _check_state_independent_noise(
-    chol_R_at_x0: jax.Array, probe_dist_at_x1: dist.Distribution, obs_dim: int
+    chol_R_at_x0: Float[Array, "observation_dim observation_dim"],
+    probe_dist_at_x1: dist.Distribution,
+    obs_dim: int,
 ) -> None:
     """Raise if the observation noise covariance varies with state."""
     chol_R_at_x1 = _extract_gaussian_chol(probe_dist_at_x1, obs_dim)
@@ -100,10 +123,10 @@ def _probe_state_independent_observation_noise(
     probe_u = jnp.zeros(())
     probe_t = jnp.zeros(())
     try:
-        probe_d0: Distribution | None = obs_model(
+        probe_d0: dist.Distribution | None = obs_model(
             jnp.zeros((state_dim,)), probe_u, probe_t
         )
-        probe_d1: Distribution | None = obs_model(
+        probe_d1: dist.Distribution | None = obs_model(
             jnp.ones((state_dim,)), probe_u, probe_t
         )
     except Exception:
@@ -129,7 +152,20 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
             config.resampling_method.differential_method
         )
     elif isinstance(config, EnKFConfig):
+        reserved_hooks = {
+            "modify_cross_covariance",
+            "construct_chol_innovation_covariance",
+            "modify_predicted_observation_covariance",
+        }
+        conflicts = sorted(reserved_hooks.intersection(kwargs))
+        if conflicts:
+            raise ValueError(
+                "EnKF localization callback names are reserved in "
+                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
+                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
+            )
         kwargs["n_particles"] = config.n_particles
+        kwargs["ensemble_subspace"] = config.ensemble_subspace
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
         )
@@ -154,25 +190,245 @@ def _drop_cuthbert_dummy_step(states, *, obs_len: int):
     return jax.tree.map(_drop_if_time_leaf, states)
 
 
+def build_cuthbert_filter(
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    key: PRNGKeyArray | None,
+    *,
+    want_parallel: bool,
+    extra_filter_kwargs: dict | None = None,
+) -> tuple[Any, bool]:
+    """Build the cuthbert Filter object for `(dynamics, filter_config)`.
+
+    `extra_filter_kwargs`, when given, is merged over (overriding) the kwargs
+    derived from `filter_config` -- e.g. `store_predicted_ensemble`, which
+    depends on why the caller is building the filter (a smoother's backward
+    pass needs it, a plain filter doesn't), not on the config itself.
+    """
+    filter_kwargs = _config_to_filter_kwargs(filter_config)
+    if extra_filter_kwargs:
+        filter_kwargs.update(extra_filter_kwargs)
+    if isinstance(filter_config, PFConfig):
+        if key is None:
+            raise ValueError(
+                "Particle filter requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, EnKFConfig):
+        if key is None:
+            raise ValueError(
+                "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
+                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
+            )
+        if (
+            filter_config.localization is not None
+            and "_resolved_enkf_localization" not in filter_kwargs
+        ):
+            filter_kwargs["_resolved_enkf_localization"] = resolve_enkf_localization(
+                filter_config.localization,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
+            )
+        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, KFConfig):
+        filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
+    elif isinstance(filter_config, EKFConfig):
+        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
+    else:
+        raise ValueError(
+            f"Unsupported cuthbert config: {type(filter_config).__name__}. "
+            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
+        )
+
+    parallel = bool(
+        want_parallel
+        and isinstance(filter_config, KFConfig)
+        and filter_config.associative
+    )
+    if parallel and not filter_obj.associative:
+        raise ValueError(
+            "Associative filtering was requested, but the constructed cuthbert "
+            f"filter is not associative: {type(filter_config).__name__}."
+        )
+    return filter_obj, parallel
+
+
+def compute_cuthbert_filter_update(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any | None,
+    key: PRNGKeyArray,
+    *,
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+    t_prev: Real[Array, ""],
+) -> Any:
+    r"""Perform one Cuthbert predict-and-update step for online filtering.
+
+    `u` is the control that drove the transition into the state being filtered:
+    $u_k$ for the transition from $x_k$ to $x_{k+1}$ and observation
+    $y_{k+1}$. For the initial observation update (`prev_state=None`), there is
+    no preceding state transition. Nevertheless, `t_prev` must precede `t`:
+    some Cuthbert filters evaluate the unused transition expression, so a
+    zero-width interval can create a degenerate covariance and leak NaNs through
+    differentiation.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Previous Cuthbert filter state, or `None` for the initial
+            observation update.
+        key: PRNG key for filter preparation.
+        y: Observation at `t`.
+        u: Control applied between `t_prev` and `t`, or `None` for no control.
+        t: Current observation time.
+        t_prev: Previous time. Must be strictly earlier than `t`.
+
+    Returns:
+        The updated Cuthbert filter state.
+    """
+
+    key_state, key_prep = jr.split(key)
+
+    control_dim = dynamics.control_dim
+    u_arr = jnp.zeros((control_dim,)) if u is None else jnp.asarray(u)
+    is_first_step = prev_state is None
+    t_arr = jnp.asarray(t)
+    t_prev_arr = jnp.asarray(t_prev)
+    if t_arr.shape != () or t_prev_arr.shape != ():
+        raise ValueError("t and t_prev must be scalar arrays.")
+    t_prev_arr = eqx.error_if(
+        t_prev_arr,
+        t_prev_arr >= t_arr,
+        "compute_cuthbert_filter_update requires t_prev < t.",
+    )
+
+    if is_first_step:
+        prev_state = filter_obj.init_prepare(key=key_state)
+
+    mi_t = CuthbertInputs(
+        y=jnp.asarray(y),
+        u=u_arr,
+        u_prev=u_arr,
+        time=t_arr,
+        time_prev=t_prev_arr,
+        is_first_step=jnp.asarray(is_first_step),
+    )
+    prep_state = filter_obj.filter_prepare(mi_t, key=key_prep)
+    return filter_obj.filter_combine(prev_state, prep_state)
+
+
+def compute_cuthbert_belief_prediction(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any,
+    key: PRNGKeyArray,
+    *,
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+    t_prev: Real[Array, ""],
+) -> Any:
+    r"""Prediction step alone: advance a belief without an observation.
+
+    Maps the filtered belief $\hat p_k$ at `t_prev` to the predicted belief
+    $\tilde p_{k+1}$ at `t`, through the transition driven by `u`:
+
+    $$\tilde p_{k+1}(x) = \int p(x \mid x', u)\, \hat p_k(x')\, dx'.$$
+
+    Not implemented yet. Cuthbert's `Filter` exposes only the fused
+    predict-and-update `filter_combine`, so this step has to be built from
+    cuthbertlib primitives per filter family; that is planned for a
+    follow-up. Closed-loop `"same_time"` control depends on it.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Filtered belief at `t_prev`.
+        key: PRNG key for the step.
+        u: Control driving the transition from `t_prev` to `t`, or `None`.
+        t: Time to predict to.
+        t_prev: Time the belief currently sits at.
+
+    Raises:
+        NotImplementedError: Always, for now.
+    """
+    raise NotImplementedError(
+        "compute_cuthbert_belief_prediction is not implemented yet: cuthbert's "
+        "Filter only exposes the fused predict-and-update filter_combine, so a "
+        "prediction-only step still has to be built from cuthbertlib primitives."
+    )
+
+
+def compute_cuthbert_belief_analysis(
+    dynamics: DynamicalModel,
+    filter_obj: Any,
+    prev_state: Any,
+    key: PRNGKeyArray,
+    *,
+    y: Real[Array, " observation_dim"] | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t: Real[Array, ""],
+) -> Any:
+    r"""Analysis step alone: condition a belief on one observation.
+
+    Maps the predicted belief $\tilde p_k$ at `t` to the filtered belief
+    $\hat p_k$ by conditioning on `y`, with the observation model evaluated
+    under control `u`:
+
+    $$\hat p_k(x) \propto p(y \mid x, u)\, \tilde p_k(x).$$
+
+    Not implemented yet, for the same reason as
+    `compute_cuthbert_belief_prediction`: cuthbert's `Filter` only exposes the
+    fused `filter_combine`. Closed-loop `"same_time"` control depends on it.
+
+    Args:
+        dynamics: Discrete-time model used by the filter.
+        filter_obj: Cuthbert filter constructed by `build_cuthbert_filter`.
+        prev_state: Predicted belief at `t`.
+        key: PRNG key for the step.
+        y: Observation at `t`.
+        u: Control the observation model sees at `t`, or `None`.
+        t: Observation time.
+
+    Raises:
+        NotImplementedError: Always, for now.
+    """
+    raise NotImplementedError(
+        "compute_cuthbert_belief_analysis is not implemented yet: cuthbert's "
+        "Filter only exposes the fused predict-and-update filter_combine, so an "
+        "analysis-only step still has to be built from cuthbertlib primitives."
+    )
+
+
 def compute_cuthbert_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     align_to_observations: bool = True,
-):
+    store_predicted_ensemble: bool | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
+) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert filter computation (no numpyro side-effects).
+
+    For an EnKF, ``store_predicted_ensemble=None`` follows
+    ``filter_config.include_predicted_observations``. Passing ``True`` or
+    ``False`` explicitly overrides that default; smoothers use the explicit
+    form when their backward pass requires forecast ensembles.
+
+    ``resolved_localization`` lets the caller share localization callbacks with
+    prediction extraction without storing fixed tapers in the state sequence.
 
     Returns:
         tuple: (marginal_loglik, states). By default states are aligned to
         obs_times; pass align_to_observations=False for raw cuthbert T+1 states.
     """
-    filter_kwargs = _config_to_filter_kwargs(filter_config)
-
     ys = obs_values
     obs_len = int(ys.shape[0])
     times = obs_times
@@ -194,51 +450,60 @@ def compute_cuthbert_filter(
     dummy_u = jnp.zeros_like(ctrl_values[:1])
     dummy_time = jnp.zeros_like(times[:1])
 
-    cuthbert_inputs = CuthbertInputs(
-        y=jnp.concatenate([dummy_y, ys], axis=0),
-        u=jnp.concatenate([dummy_u, ctrl_values], axis=0),
-        u_prev=jnp.concatenate([dummy_u, u_prev], axis=0),
-        time=jnp.concatenate([dummy_time, times], axis=0),
-        time_prev=jnp.concatenate([dummy_time, time_prev], axis=0),
-        is_first_step=jnp.arange(obs_len + 1) == 1,
+    input_kwargs = {
+        "y": jnp.concatenate([dummy_y, ys], axis=0),
+        "u": jnp.concatenate([dummy_u, ctrl_values], axis=0),
+        "u_prev": jnp.concatenate([dummy_u, u_prev], axis=0),
+        "time": jnp.concatenate([dummy_time, times], axis=0),
+        "time_prev": jnp.concatenate([dummy_time, time_prev], axis=0),
+        "is_first_step": jnp.arange(obs_len + 1) == 1,
+    }
+
+    if (
+        resolved_localization is None
+        and isinstance(filter_config, EnKFConfig)
+        and filter_config.localization is not None
+    ):
+        resolved_localization = resolve_enkf_localization(
+            filter_config.localization,
+            state_dim=dynamics.state_dim,
+            observation_dim=dynamics.observation_dim,
+        )
+
+    cuthbert_inputs = CuthbertInputs(**input_kwargs)
+
+    if store_predicted_ensemble is None:
+        store_predicted_ensemble = bool(
+            isinstance(filter_config, EnKFConfig)
+            and filter_config.include_predicted_observations
+        )
+
+    build_kwargs = {"store_predicted_ensemble": store_predicted_ensemble}
+    if resolved_localization is not None:
+        build_kwargs["_resolved_enkf_localization"] = resolved_localization
+
+    filter_obj, parallel = build_cuthbert_filter(
+        dynamics,
+        filter_config,
+        key,
+        want_parallel=True,
+        extra_filter_kwargs=build_kwargs,
     )
 
-    if isinstance(filter_config, PFConfig):
-        if key is None:
-            raise ValueError(
-                "Particle filter requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-            )
-        filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
-    elif isinstance(filter_config, EnKFConfig):
-        if key is None:
-            raise ValueError(
-                "Ensemble Kalman filter requires a PRNG key: set 'crn_seed' in the filter config, "
-                "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-            )
-        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
-    elif isinstance(filter_config, KFConfig):
-        filter_obj = _cuthbert_filter_kalman(dynamics, filter_kwargs)
-    elif isinstance(filter_config, EKFConfig):
-        filter_obj = _cuthbert_filter_taylor_kf(dynamics, filter_kwargs)
+    filter_inputs = jax.tree.map(lambda leaf: leaf[1:], cuthbert_inputs)
+    if key is None:
+        init_state = filter_obj.init_prepare()
+        filter_key = None
     else:
-        raise ValueError(
-            f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
-        )
-
-    parallel = isinstance(filter_config, KFConfig) and filter_config.associative
-    if parallel and not filter_obj.associative:
-        raise ValueError(
-            "Associative filtering was requested, but the constructed cuthbert "
-            f"filter is not associative: {type(filter_config).__name__}."
-        )
+        init_key, filter_key = jax.random.split(key)
+        init_state = filter_obj.init_prepare(key=init_key)
 
     raw_states = cuthbert_filter(
         filter_obj,
-        cuthbert_inputs,
-        parallel=cast(bool, parallel),
-        key=key,
+        filter_inputs,
+        init_state,
+        parallel=parallel,
+        key=filter_key,
     )
     marginal_loglik = raw_states.log_normalizing_constant[-1]
     states = (
@@ -253,22 +518,32 @@ def run_discrete_filter(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
     **kwargs,
-) -> list[dist.Distribution]:
+) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
     """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
 
+    Pure computation — no numpyro side-effects. Callers are responsible for
+    registering numpyro.factor / numpyro.deterministic if needed.
+
     Returns:
-        list[dist.Distribution]: Filtered state distributions at each obs time.
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}),
+              or None if obs_values is empty.
+            - raw_states: cuthbert filter state object (KalmanFilterState,
+              ParticleFilterState, etc.), or None if obs_values is empty.
+            - filtered_dists: list of distributions p(x_t | y_{1:t}) at each
+              obs time, for posterior rollout.
     """
     obs_len = int(obs_values.shape[0])
     if obs_len == 0:
-        return []
+        return None, None, []
 
     marginal_loglik, states = compute_cuthbert_filter(
         dynamics,
@@ -278,27 +553,23 @@ def run_discrete_filter(
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
+        resolved_localization=resolved_localization,
     )
-    record_kwargs = _config_to_record_kwargs(filter_config)
-
-    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
-
-    if isinstance(filter_config, PFConfig):
-        _add_sites_pf(name, states, record_kwargs)
-    else:
-        _add_sites_gaussian_filter(name, states, record_kwargs)
-    return _cholesky_state_sequence_to_dists(
+    filtered_dists = _cholesky_state_sequence_to_dists(
         states,
         particle_mode=isinstance(filter_config, PFConfig),
+        covariance_jitter=getattr(
+            filter_config, "recorded_filtered_states_cov_jitter", 0.0
+        ),
     )
+    return marginal_loglik, states, filtered_dists
 
 
 def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
     if filter_kwargs is None:
         filter_kwargs = {}
 
-    def init_sample(key, mi: CuthbertInputs):
+    def init_sample(key):
         return dynamics.initial_condition.sample(key)
 
     def propagate_sample(key, x_prev, mi: CuthbertInputs):
@@ -360,13 +631,29 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
+    localization_kwargs = {}
+    resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
+    n_particles = int(filter_kwargs.get("n_particles", 30))
+    ensemble_subspace = filter_kwargs.get("ensemble_subspace")
+    if ensemble_subspace is None:
+        ensemble_subspace = n_particles < obs_dim and resolved_localization is None
+    if resolved_localization is not None:
+        if resolved_localization.modify_cross_covariance is not None:
+            localization_kwargs["modify_cross_covariance"] = (
+                resolved_localization.modify_cross_covariance
+            )
+        if resolved_localization.construct_chol_innovation_covariance is not None:
+            localization_kwargs["construct_chol_innovation_covariance"] = (
+                resolved_localization.construct_chol_innovation_covariance
+            )
+
     obs_model = dynamics.observation_model
-    if not isinstance(obs_model, (LinearGaussianObservation, GaussianObservation)):
+    if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
         _probe_state_independent_observation_noise(
             obs_model, state_dim=state_dim, obs_dim=obs_dim
         )
 
-    def init_sample(key, mi: CuthbertInputs):
+    def init_sample(key):
         return jnp.atleast_1d(jnp.asarray(dynamics.initial_condition.sample(key)))
 
     def get_dynamics(mi: CuthbertInputs):
@@ -388,7 +675,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
         if isinstance(obs_model, LinearGaussianObservation):
             obs_params = obs_model.params_at(mi.time)
-            H = jnp.asarray(obs_params.H)
+
+            H = obs_params.H
+
             chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
@@ -423,7 +712,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             def observation_fn(x):
                 edist = obs_model(x, mi.u, mi.time)
                 if not (
-                    isinstance(edist, (dist.MultivariateNormal, dist.Normal))
+                    isinstance(edist, dist.MultivariateNormal | dist.Normal)
                     or (
                         isinstance(edist, dist.Independent)
                         and isinstance(edist.base_dist, dist.Normal)
@@ -442,9 +731,14 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         init_sample=init_sample,  # type: ignore
         get_dynamics=get_dynamics,  # type: ignore
         get_observations=get_observations,  # type: ignore
-        n_particles=int(filter_kwargs.get("n_particles", 30)),
-        inflation=float(filter_kwargs.get("inflation", 0.0)),
+        n_particles=n_particles,
+        ensemble_subspace=bool(ensemble_subspace),
+        inflation=filter_kwargs.get("inflation", jnp.array(0.0)),
         perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
+        store_predicted_ensemble=bool(
+            filter_kwargs.get("store_predicted_ensemble", False)
+        ),
+        **localization_kwargs,
     )
 
 
@@ -558,6 +852,15 @@ def _cuthbert_filter_kalman(
     obs = dynamics.observation_model
     ic = dynamics.initial_condition
 
+    if isinstance(obs.H, jax_sparse.JAXSparse):
+        raise ValueError(
+            "A sparse observation matrix H was passed to KFConfig(filter_source="
+            "'cuthbert'). This is not supported with  filter_source = 'cuthbert' due "
+            "to internal incompatibilities. Either pass a dense H, use KFConfig(filter_source="
+            "'cd_dynamax') (works, verified bit-identical to dense), or use another config such as"
+            "EnKFConfig/EKFConfig."
+        )
+
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
@@ -565,9 +868,6 @@ def _cuthbert_filter_kalman(
         jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1)), (state_dim,)
     )
     chol_P0 = jnp.linalg.cholesky(squeeze_leading_singletons(ic.covariance_matrix, 2))
-
-    def get_init_params(mi: CuthbertInputs):
-        return m0, chol_P0
 
     get_dynamics_params = _kalman_dynamics_params_builder(
         evo, state_dim=state_dim, dtype=m0.dtype
@@ -577,7 +877,8 @@ def _cuthbert_filter_kalman(
     )
 
     return kalman.build_filter(
-        get_init_params,  # type: ignore
+        m0,
+        chol_P0,
         get_dynamics_params,  # type: ignore
         get_observation_params,  # type: ignore
     )
@@ -589,17 +890,26 @@ def _cuthbert_filter_taylor_kf(
     if filter_kwargs is None:
         filter_kwargs = {}
 
+    obs_model = dynamics.observation_model
+    if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+        obs_model.H, jax_sparse.JAXSparse
+    ):
+        warnings.warn(
+            "A sparse observation matrix H was passed to EKFConfig. This works "
+            "correctly, but likely gives no efficiency gain due to internal"
+            "use of automatic differentiation.",
+            stacklevel=2,
+        )
+
     rtol = filter_kwargs.get("rtol", None)
 
-    def get_init_log_density(mi: CuthbertInputs):
-        dist0 = dynamics.initial_condition
-        state_dim = dynamics.state_dim
+    dist0 = dynamics.initial_condition
+    state_dim = dynamics.state_dim
 
-        def init_log_density(x):
-            return jnp.asarray(dist0.log_prob(x)).sum()
+    def init_log_density(x):
+        return jnp.asarray(dist0.log_prob(x)).sum()
 
-        x0_lin = jnp.reshape(jnp.atleast_1d(jnp.asarray(dist0.mean)), (state_dim,))
-        return init_log_density, x0_lin
+    x0_lin = jnp.reshape(jnp.atleast_1d(jnp.asarray(dist0.mean)), (state_dim,))
 
     def get_dynamics_log_density(
         state: taylor.LinearizedKalmanFilterState, mi: CuthbertInputs
@@ -641,7 +951,8 @@ def _cuthbert_filter_taylor_kf(
         return log_potential, jnp.atleast_1d(jnp.asarray(state.mean))
 
     kf = taylor.build_filter(
-        get_init_log_density,  # type: ignore
+        init_log_density,
+        x0_lin,
         get_dynamics_log_density,  # type: ignore
         get_observation_func,  # type: ignore
         associative=False,
@@ -649,104 +960,3 @@ def _cuthbert_filter_taylor_kf(
         ignore_nan_dims=True,
     )
     return kf
-
-
-def _add_sites_pf(
-    name: str, states: particle_filter.ParticleFilterState, record_kwargs: dict
-):
-    log_weights = states.log_weights
-    particles = states.particles
-    if particles.ndim == 2:
-        particles = particles[..., None]
-    max_elems = record_kwargs["record_max_elems"]
-    t_len, n_particles, state_dim = particles.shape
-
-    add_particles = _should_record_field(
-        record_kwargs["record_filtered_particles"], particles.shape, max_elems
-    )
-    add_log_weights = _should_record_field(
-        record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
-    )
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], (t_len, state_dim), max_elems
-    )
-    add_filtered_states_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"],
-        (t_len, state_dim, state_dim),
-        max_elems,
-    )
-    add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
-    )
-
-    need_filtered_means = (
-        add_mean or add_filtered_states_cov or add_filtered_states_cov_diag
-    )
-
-    if need_filtered_means:
-        w = jax.nn.softmax(log_weights, axis=1)[..., None]  # (T+1, n_particles, 1)
-        filtered_means = jnp.sum(particles * w, axis=1)  # (T+1, state_dim)
-
-    if add_filtered_states_cov or add_filtered_states_cov_diag:
-        second_mom = jnp.einsum(
-            "...tnj,...tnk,...tn->...tjk", particles, particles, w.squeeze(-1)
-        )
-        filtered_covariances = second_mom - jnp.einsum(
-            "...tj,...tk->...tjk", filtered_means, filtered_means
-        )
-
-    if add_particles:
-        numpyro.deterministic(f"{name}_filtered_particles", particles)
-    if add_log_weights:
-        numpyro.deterministic(f"{name}_filtered_log_weights", log_weights)
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", filtered_means)
-    if add_filtered_states_cov:
-        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_covariances)
-    if add_filtered_states_cov_diag:
-        diag_cov = jnp.diagonal(filtered_covariances, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
-
-
-def _add_sites_gaussian_filter(
-    name: str,
-    states: kalman.KalmanFilterState
-    | taylor.LinearizedKalmanFilterState
-    | ensemble_kalman_filter.EnKFState,
-    record_kwargs: dict,
-):
-    max_elems = record_kwargs["record_max_elems"]
-    mean = states.mean
-    chol_cov = states.chol_cov
-    t_len, state_dim, _ = chol_cov.shape
-
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], mean.shape, max_elems
-    )
-    add_chol_cov = _should_record_field(
-        record_kwargs["record_filtered_states_chol_cov"],
-        chol_cov.shape,
-        max_elems,
-    )
-    add_filtered_states_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"],
-        (t_len, state_dim, state_dim),
-        max_elems,
-    )
-    add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
-    )
-
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", mean)
-    if add_chol_cov:
-        numpyro.deterministic(f"{name}_filtered_states_chol_cov", chol_cov)
-
-    if add_filtered_states_cov or add_filtered_states_cov_diag:
-        filtered_cov = covariance_from_cholesky(chol_cov)
-
-    if add_filtered_states_cov:
-        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
-    if add_filtered_states_cov_diag:
-        diag_cov = jnp.diagonal(filtered_cov, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)

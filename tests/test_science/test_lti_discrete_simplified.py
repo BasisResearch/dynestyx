@@ -1,11 +1,11 @@
 """Science tests for LTI_discrete: exact KF and PF."""
 
-import arviz as az
 import jax.numpy as jnp
 import jax.random as jr
 import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH
 
+from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.fixtures import (
     data_conditioned_discrete_time_lti_simplified_science,  # noqa: F401
 )
@@ -89,20 +89,19 @@ def test_mcmc_inference(
     if SAVE_FIG and OUTPUT_DIR is not None:
         import matplotlib.pyplot as plt
 
-        az.plot_posterior(
-            posterior_alpha, hdi_prob=0.95, ref_val=true_params["alpha"].item()
+        save_posterior_plot(
+            posterior_alpha,
+            name="alpha",
+            output_path=OUTPUT_DIR / "posterior_alpha.png",
+            ref_val=true_params["alpha"].item(),
         )
-        plt.savefig(OUTPUT_DIR / "posterior_alpha.png", dpi=150, bbox_inches="tight")
-        plt.close()
 
     true_alpha = true_params["alpha"]
     # KF is exact; PF has more variance
     tol = 0.15 if filter_type == "kf" else 0.25
     assert jnp.abs(posterior_alpha.mean() - true_alpha) < tol
 
-    hdi_data = az.hdi(posterior_alpha, hdi_prob=0.95)
-    hdi_min = hdi_data["x"].sel(hdi="lower").item()
-    hdi_max = hdi_data["x"].sel(hdi="higher").item()
+    hdi_min, hdi_max = hdi_bounds(posterior_alpha)
     assert hdi_min <= true_alpha <= hdi_max, (
         f"True alpha {true_alpha} not in HDI {hdi_min}, {hdi_max}"
     )

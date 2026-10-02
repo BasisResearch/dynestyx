@@ -1,32 +1,39 @@
 """Continuous-time filters via CD-Dynamax: KF, EnKF, DPF, EKF, UKF."""
 
+from typing import Any
+
 import jax
 import jax.numpy as jnp
-import numpyro
+import numpyro.distributions as dist
 from cd_dynamax import (
     ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
 )
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.inference import (
+    KFHyperParams,
+)
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
+from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
-    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
 )
+from dynestyx.inference.observation_predictions import (
+    wants_observation_prediction_diagnostics,
+)
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import _should_record_field
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -41,18 +48,19 @@ ContinuousTimeFilterConfig = (
 
 def _config_to_cd_dynamax_filter_kwargs(
     config: ContinuousTimeFilterConfig,
-    params,
-    obs_values,
-    obs_times,
-    ctrl_values,
-    key,
-) -> dict:
+    params: Any,
+    obs_values: Real[Array, "obs_time observation_dim"],
+    obs_times: Real[Array, "obs_time 1"],
+    ctrl_values: Real[Array, "ctrl_time control_dim"],
+    key: PRNGKeyArray | None,
+    output_fields: list[str] | None,
+) -> dict[str, Any]:
     """Build the filter_kwargs dict passed to cd_dynamax_model.filter()."""
 
     # cd-dynamax uses the legacy PRNG key interface, but newer numpyro uses typed keys.
     # We should convert accordingly.
     # https://docs.jax.dev/en/latest/jax.random.html#module-jax.random
-    if jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
+    if key is not None and jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
         key = jax.random.key_data(key)
 
     base = {
@@ -70,13 +78,12 @@ def _config_to_cd_dynamax_filter_kwargs(
         "diffeqsolve_kwargs": config.diffeqsolve_kwargs,
         "extra_filter_kwargs": config.extra_filter_kwargs,
         "warn": config.warn,
+        "output_fields": output_fields,
     }
     if isinstance(config, ContinuousTimeEnKFConfig):
         base["filter_type"] = "EnKF"
         base["enkf_N_particles"] = config.n_particles
-        base["enkf_inflation_delta"] = (
-            config.inflation_delta if config.inflation_delta is not None else 0.0
-        )
+        base["enkf_inflation_delta"] = config.inflation_delta
         base["extra_filter_kwargs"] = {
             "perturb_measurements": config.perturb_measurements
             if config.perturb_measurements is not None
@@ -111,47 +118,42 @@ def _config_to_cd_dynamax_filter_kwargs(
     return base
 
 
-def _add_filter_sites(
-    name: str,
+def _continuous_filter_output_fields(
     filter_config: ContinuousTimeFilterConfig,
-    filtered,
-) -> None:
-    """Add marginal log-likelihood factor and filtered state deterministic sites."""
-    record_kwargs = _config_to_record_kwargs(filter_config)
-    numpyro.factor(f"{name}_marginal_log_likelihood", filtered.marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", filtered.marginal_loglik)
+) -> list[str] | None:
+    """Select the CD-Dynamax posterior fields required for this run."""
+    if isinstance(filter_config, ContinuousTimeDPFConfig):
+        return None
 
-    max_elems = record_kwargs["record_max_elems"]
-    means_shape = filtered.filtered_means.shape
-    cov_shape = filtered.filtered_covariances.shape
-    add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], means_shape, max_elems
+    output_fields = [
+        "marginal_loglik",
+        "filtered_means",
+        "filtered_covariances",
+    ]
+    if not wants_observation_prediction_diagnostics(filter_config):
+        return output_fields
+
+    output_fields.extend(
+        [
+            "y_pred_mean",
+            "y_pred_cov",
+            "y_obs_pred_mean",
+            "y_obs_pred_cov",
+        ]
     )
-    add_cov = _should_record_field(
-        record_kwargs["record_filtered_states_cov"], cov_shape, max_elems
-    )
-    add_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"],
-        (cov_shape[0], cov_shape[1]),
-        max_elems,
-    )
-    if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", filtered.filtered_means)
-    if add_cov:
-        numpyro.deterministic(
-            f"{name}_filtered_states_cov", filtered.filtered_covariances
-        )
-    if add_cov_diag:
-        diag_cov = jnp.diagonal(filtered.filtered_covariances, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+    if isinstance(filter_config, ContinuousTimeEnKFConfig):
+        output_fields.extend(["y_ens_pred", "y_obs_ens_pred"])
+    return output_fields
 
 
 def _run_linear_kf(
     dynamics: DynamicalModel,
-    obs_times,
-    obs_values,
-    ctrl_values,
+    obs_times: Real[Array, "obs_time 1"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_values: Real[Array, "ctrl_time control_dim"],
     filter_config: ContinuousTimeKFConfig,
+    *,
+    output_fields: list[str] | None,
 ) -> PosteriorGSSMFiltered:
     """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
     params = dsx_to_cdlgssm_params(dynamics)
@@ -160,11 +162,20 @@ def _run_linear_kf(
         emission_dim=dynamics.observation_dim,
         input_dim=dynamics.control_dim,
     )
+    filter_hyperparams = KFHyperParams(
+        diffeqsolve_settings={
+            "dt0": filter_config.diffeqsolve_dt0,
+            "max_steps": filter_config.diffeqsolve_max_steps,
+            **filter_config.diffeqsolve_kwargs,
+        }
+    )
     filtered = cd_model.filter(
         params=params,
         emissions=obs_values,
         t_emissions=obs_times,
+        filter_hyperparams=filter_hyperparams,
         inputs=ctrl_values,
+        output_fields=output_fields,
         warn=filter_config.warn,
     )
     return filtered
@@ -173,13 +184,13 @@ def _run_linear_kf(
 def compute_continuous_filter(
     dynamics: DynamicalModel,
     filter_config: ContinuousTimeFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX continuous-time filter computation (no numpyro side-effects)."""
     obs_times_arr = jnp.asarray(obs_times)
     if obs_times_arr.ndim == 1:
@@ -191,10 +202,16 @@ def compute_continuous_filter(
         if ctrl_values is not None
         else jnp.zeros((obs_times_arr.shape[0], control_dim))
     )
+    output_fields = _continuous_filter_output_fields(filter_config)
 
     if isinstance(filter_config, ContinuousTimeKFConfig):
         filtered = _run_linear_kf(
-            dynamics, obs_times_arr, obs_values, ctrl_vals, filter_config
+            dynamics,
+            obs_times_arr,
+            obs_values,
+            ctrl_vals,
+            filter_config,
+            output_fields=output_fields,
         )
     else:
         if isinstance(
@@ -221,7 +238,13 @@ def compute_continuous_filter(
 
         params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
         filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-            filter_config, params, obs_values, obs_times_arr, ctrl_vals, key
+            filter_config,
+            params,
+            obs_values,
+            obs_times_arr,
+            ctrl_vals,
+            key,
+            output_fields,
         )
 
         filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
@@ -233,15 +256,27 @@ def run_continuous_filter(
     name: str,
     dynamics: DynamicalModel,
     filter_config: ContinuousTimeFilterConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> list[numpyro.distributions.Distribution]:
-    """Run continuous-time filter via CD-Dynamax."""
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
+    """Run continuous-time filter via CD-Dynamax.
+
+    Pure computation — no numpyro side-effects. Callers are responsible for
+    registering numpyro.factor / numpyro.deterministic if needed.
+
+    Returns:
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - filtered_posterior: CD-Dynamax posterior object with filtered_means,
+              filtered_covariances, and marginal_loglik attributes.
+            - filtered_dists: list of MultivariateNormal distributions p(x_t | y_{1:t})
+              at each obs time, for posterior rollout.
+    """
     filtered = compute_continuous_filter(
         dynamics,
         filter_config,
@@ -252,15 +287,14 @@ def run_continuous_filter(
         ctrl_values=ctrl_values,
     )
 
-    _add_filter_sites(name, filter_config, filtered)
-
-    return _posterior_sequence_to_dists(
+    filtered_dists = _posterior_sequence_to_dists(
         filtered,
         means_attr="filtered_means",
         covariances_attr="filtered_covariances",
         particle_mode=isinstance(filter_config, ContinuousTimeDPFConfig),
         missing_message="Filtered means/covariances unexpectedly None for non-DPF config",
     )
+    return filtered.marginal_loglik, filtered, filtered_dists
 
 
 __all__ = [

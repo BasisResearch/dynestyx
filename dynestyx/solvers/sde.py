@@ -1,25 +1,34 @@
-"""SDE solver backends for SDESimulator."""
+"""SDE solver backends for full-path simulation and interval transitions."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import diffrax as dfx
 import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
-from jax import Array, lax, vmap
-from jaxtyping import Real
+from jax import lax, vmap
+from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.models.diffusions import EvaluatedDiffusion
 from dynestyx.types import as_scalar_time_array
+from dynestyx.utils import _build_control_path_eval
+
+
+class EulerMaruyamaMoments(TypedDict):
+    """One-step Euler-Maruyama Gaussian moments."""
+
+    loc: Real[Array, "*batch state_dim"]
+    cov: Real[Array, "*batch state_dim state_dim"]
 
 
 def _early_return_states(
-    x0: Real[Array, " state_dim"] | Real[Array, ""], saveat_times: Array
-) -> Array:
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
+    saveat_times: Real[Array, " path_time"],
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Build no-op solve output by repeating the initial state.
 
     Args:
@@ -35,10 +44,10 @@ def _early_return_states(
 def _em_local_terms(
     state_evolution: StochasticContinuousTimeStateEvolution,
     diffusion,
-    x: Array,
-    u: Array | None,
-    t_now: Array,
-) -> tuple[Array, EvaluatedDiffusion]:
+    x: Real[Array, " state_dim"],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
+    t_now: Real[Array, ""],
+) -> tuple[Real[Array, " state_dim"], EvaluatedDiffusion]:
     """Compute local EM drift and diffusion terms.
 
     Args:
@@ -55,8 +64,14 @@ def _em_local_terms(
 
 
 def _em_moments_from_terms(
-    x: Array, dt: Array, drift: Array, diffusion: EvaluatedDiffusion
-) -> tuple[Array, Array]:
+    x: Real[Array, " state_dim"],
+    dt: Real[Array, ""],
+    drift: Real[Array, " state_dim"],
+    diffusion: EvaluatedDiffusion,
+) -> tuple[
+    Real[Array, " state_dim"],
+    Real[Array, "state_dim state_dim"],
+]:
     """Convert local EM terms to one-step Gaussian moments.
 
     Args:
@@ -74,14 +89,14 @@ def _em_moments_from_terms(
 
 
 def _em_sample_from_terms(
-    x: Array,
-    dt: Array,
-    drift: Array,
+    x: Real[Array, " state_dim"],
+    dt: Real[Array, ""],
+    drift: Real[Array, " state_dim"],
     diffusion: EvaluatedDiffusion,
     *,
-    key: Array,
+    key: PRNGKeyArray,
     bm_dim: int,
-) -> tuple[Array, Array]:
+) -> tuple[Real[Array, " state_dim"], PRNGKeyArray]:
     """Sample one EM next-state from local drift/diffusion terms.
 
     Args:
@@ -104,14 +119,18 @@ def _em_sample_from_terms(
 
 def euler_maruyama_integrate_state_to_time(
     state_evolution: StochasticContinuousTimeStateEvolution,
-    x_init: Array,
+    x_init: Real[Array, " state_dim"],
     t_init: Real[Array, ""],
-    key_init: Array,
+    key_init: PRNGKeyArray,
     t_target: Real[Array, ""],
     *,
     dt0: Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None] | None = None,
-) -> tuple[Array, Array, Array]:
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ]
+    | None = None,
+) -> tuple[Real[Array, " state_dim"], Real[Array, ""], PRNGKeyArray]:
     """Integrate a sampled EM path from `t_init` to `t_target`.
 
     Args:
@@ -156,11 +175,11 @@ def euler_maruyama_integrate_state_to_time(
 
 def euler_maruyama_loc_cov(
     state_evolution: StochasticContinuousTimeStateEvolution,
-    x: Array,
-    u: Array | None,
-    t_now: Array,
-    t_next: Array,
-) -> dict[str, Array]:
+    x: Real[Array, "*batch state_dim"],
+    u: Real[Array, "*batch control_dim"] | None,
+    t_now: Real[Array, ""] | Real[Array, "*batch"],
+    t_next: Real[Array, ""] | Real[Array, "*batch"],
+) -> EulerMaruyamaMoments:
     """Compute one-step Euler-Maruyama transition moments.
 
     Args:
@@ -260,13 +279,16 @@ def euler_maruyama_loc_cov(
 def _solve_sde_scan(
     dynamics: DynamicalModel,
     t0: Real[Array, ""],
-    saveat_times: Array,
+    saveat_times: Real[Array, " path_time"],
     x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ],
     dt0: Real[Array, ""],
     *,
-    key: Array | None,
-) -> Array:
+    key: PRNGKeyArray | None,
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Solve an SDE with fixed-step Euler-Maruyama scan integration.
 
     Args:
@@ -325,14 +347,17 @@ def _solve_sde_scan(
 def _solve_sde_diffrax(
     dynamics: DynamicalModel,
     t0: Real[Array, ""],
-    saveat_times: Array,
+    saveat_times: Real[Array, " path_time"],
     x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ],
     diffeqsolve_settings: dict[str, Any],
     *,
-    key: Array | None,
+    key: PRNGKeyArray | None,
     tol_vbt: Real[Array, ""],
-) -> Array:
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
     """Solve an SDE with Diffrax and a VirtualBrownianTree control.
 
     Args:
@@ -356,7 +381,33 @@ def _solve_sde_diffrax(
             f"{type(dynamics.state_evolution)}"
         )
 
-    state_evolution = dynamics.state_evolution
+    return _solve_diffrax_sde_state_path(
+        dynamics.state_evolution,
+        t0,
+        saveat_times,
+        x0,
+        control_path_eval,
+        diffeqsolve_settings,
+        key=key,
+        tol_vbt=tol_vbt,
+    )
+
+
+def _solve_diffrax_sde_state_path(
+    state_evolution: StochasticContinuousTimeStateEvolution,
+    t0: Real[Array, ""],
+    saveat_times: Real[Array, " path_time"],
+    x0: Real[Array, " state_dim"] | Real[Array, ""],
+    control_path_eval: Callable[
+        [Real[Array, ""]],
+        Real[Array, " control_dim"] | Real[Array, ""] | None,
+    ],
+    diffeqsolve_settings: dict[str, Any],
+    *,
+    key: PRNGKeyArray,
+    tol_vbt: Real[Array, ""],
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
+    """Solve one state evolution over a path using one Brownian tree."""
     diffusion = state_evolution.diffusion
 
     def _drift(t, y, args):
@@ -366,6 +417,10 @@ def _solve_sde_diffrax(
     def _diffusion(t, y, args):
         u_t = args(t) if args is not None else None
         return diffusion.as_matrix(x=y, u=u_t, t=t, state_dim=y.shape[-1])
+
+    solver = diffeqsolve_settings.get("solver")
+    if solver is None:
+        raise ValueError("Diffrax SDE solves require a solver setting.")
 
     k_bm, _ = jr.split(key, 2)
     bm = dfx.VirtualBrownianTree(
@@ -387,49 +442,115 @@ def _solve_sde_diffrax(
     return sol.ys
 
 
-def solve_sde(
+def solve_diffrax_sde_interval(
+    state_evolution: StochasticContinuousTimeStateEvolution,
     *,
-    source: Literal["diffrax", "em_scan"],
-    dynamics: DynamicalModel,
-    t0: float | int | Array,
-    saveat_times: Array,
-    x0: Real[Array, " state_dim"] | Real[Array, ""],
-    control_path_eval: Callable[[Array], Array | None],
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    t0: float | int | Real[Array, ""],
+    t1: float | int | Real[Array, ""],
+    u: Real[Array, " control_dim"] | Real[Array, ""] | None,
     diffeqsolve_settings: dict[str, Any],
-    key: Array,
-    tol_vbt: float | int | Array | None = None,
-) -> Array:
-    """Dispatch between SDE solver backends.
+    key: PRNGKeyArray,
+    tol_vbt: float | int | Real[Array, ""],
+) -> Real[Array, " state_dim"] | Real[Array, ""]:
+    """Sample the final state of one Diffrax SDE interval.
+
+    A fresh virtual Brownian tree is constructed for the interval using
+    ordinary Brownian increments. The control ``u`` is held constant over
+    ``[t0, t1]``.
 
     Args:
-        source: Backend name (`"diffrax"` or `"em_scan"`).
+        state_evolution: Continuous-time stochastic state evolution.
+        initial_state: State at ``t0``.
+        t0: Interval start time.
+        t1: Interval end time. Must be strictly greater than ``t0``.
+        u: Optional control held constant throughout the interval.
+        diffeqsolve_settings: Keyword arguments for ``diffrax.diffeqsolve``.
+        key: PRNG key used to construct this interval's Brownian tree.
+        tol_vbt: Virtual-Brownian-tree tolerance.
+
+    Returns:
+        Sampled state at ``t1``.
+    """
+    state_dtype = jnp.result_type(jnp.asarray(initial_state), 0.0)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=state_dtype)
+    t1_arr = as_scalar_time_array(t1, name="t1", dtype=state_dtype)
+    t1_arr = eqx.error_if(
+        t1_arr,
+        t1_arr <= t0_arr,
+        "Diffrax SDE intervals require t1 > t0.",
+    )
+    tol_vbt_arr = as_scalar_time_array(tol_vbt, name="tol_vbt", dtype=state_dtype)
+    tol_vbt_arr = eqx.error_if(
+        tol_vbt_arr,
+        tol_vbt_arr <= 0,
+        "Diffrax SDE intervals require tol_vbt > 0.",
+    )
+
+    def _constant_control(_):
+        return u
+
+    states = _solve_diffrax_sde_state_path(
+        state_evolution,
+        t0_arr,
+        jnp.expand_dims(t1_arr, axis=0),
+        initial_state,
+        _constant_control,
+        diffeqsolve_settings,
+        key=key,
+        tol_vbt=tol_vbt_arr,
+    )
+    return states[0]
+
+
+def solve_sde_state_path(
+    dynamics: DynamicalModel,
+    *,
+    source: Literal["diffrax", "em_scan"],
+    initial_state: Real[Array, " state_dim"] | Real[Array, ""],
+    t0: float | int | Real[Array, ""],
+    path_times: Real[Array, " path_time"],
+    diffeqsolve_settings: dict[str, Any],
+    key: PRNGKeyArray,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"]
+    | Real[Array, " ctrl_time"]
+    | None = None,
+    tol_vbt: float | int | Real[Array, ""] | None = None,
+) -> Real[Array, "path_time state_dim"] | Real[Array, " path_time"]:
+    """Solve one SDE state path with the requested backend.
+
+    Args:
         dynamics: Dynamical model with continuous-time state evolution.
+        source: Backend name (`"diffrax"` or `"em_scan"`).
+        initial_state: Initial state.
         t0: Initial time.
-        saveat_times: Times at which to return states.
-        x0: Initial state.
-        control_path_eval: Optional control evaluator `u(t)`.
+        path_times: Times at which to return states.
         diffeqsolve_settings: Backend-specific solver settings.
         key: PRNG key for stochastic integration.
+        ctrl_times: Times at which controls are specified.
+        ctrl_values: Control values at `ctrl_times`.
         tol_vbt: VirtualBrownianTree tolerance for the diffrax backend.
 
     Returns:
-        Simulated state trajectory at `saveat_times`.
+        Simulated state trajectory at `path_times`.
     """
-    t0_arr = as_scalar_time_array(t0, name="t0", dtype=saveat_times.dtype)
-    needs_integration = t0_arr < saveat_times[-1]
+    control_path_eval = _build_control_path_eval(ctrl_times, ctrl_values, path_times)
+    t0_arr = as_scalar_time_array(t0, name="t0", dtype=path_times.dtype)
+    needs_integration = t0_arr < path_times[-1]
 
     def _do_solve(_: Array) -> Array:
         if source == "diffrax":
             if tol_vbt is None:
                 raise ValueError("tol_vbt is required when source='diffrax'.")
             tol_vbt_arr = as_scalar_time_array(
-                tol_vbt, name="tol_vbt", dtype=saveat_times.dtype
+                tol_vbt, name="tol_vbt", dtype=path_times.dtype
             )
             return _solve_sde_diffrax(
                 dynamics,
                 t0_arr,
-                saveat_times,
-                x0,
+                path_times,
+                initial_state,
                 control_path_eval,
                 diffeqsolve_settings,
                 key=key,
@@ -440,14 +561,12 @@ def solve_sde(
             dt0_like = diffeqsolve_settings.get("dt0")
             if dt0_like is None:
                 raise ValueError("dt0 is required when source='em_scan'.")
-            dt0_arr = as_scalar_time_array(
-                dt0_like, name="dt0", dtype=saveat_times.dtype
-            )
+            dt0_arr = as_scalar_time_array(dt0_like, name="dt0", dtype=path_times.dtype)
             return _solve_sde_scan(
                 dynamics,
                 t0_arr,
-                saveat_times,
-                x0,
+                path_times,
+                initial_state,
                 control_path_eval,
                 dt0_arr,
                 key=key,
@@ -456,6 +575,6 @@ def solve_sde(
         raise ValueError(f"Unknown SDE solver source: {source}")
 
     def _do_early_return(_: Array) -> Array:
-        return _early_return_states(x0, saveat_times)
+        return _early_return_states(initial_state, path_times)
 
     return lax.cond(needs_integration, _do_solve, _do_early_return, t0_arr)

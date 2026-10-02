@@ -1,5 +1,6 @@
 import math
 import warnings
+from collections.abc import Callable
 from typing import Literal
 
 import diffrax as dfx
@@ -9,7 +10,7 @@ import jax.numpy as jnp
 import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM as CDNLGSSM
 from cd_dynamax import ContDiscreteNonlinearSSM as CDNLSSM
-from jax import Array, lax
+from jax import Array
 from jaxtyping import Real, Shaped
 
 from dynestyx.models import Diffusion, DynamicalModel
@@ -43,27 +44,40 @@ type SSMType = CDNLGSSM | CDNLSSM
 _CONTROL_EXTEND_EPSILON = 1e-5
 
 
+def _ensure_trailing_event_axis(
+    values: Real[Array, "..."],
+) -> Real[Array, "..."]:
+    """Lift a scalar time series from ``(time,)`` to ``(time, 1)``."""
+    if values.ndim == 1:
+        return values[..., None]
+    return values
+
+
 def _raise_now_or_error_if(
-    anchor,
+    anchor: Array,
     predicate,
     message: str,
     *,
     action: Literal["raise", "warn"] = "raise",
-) -> None:
-    """Raise or warn when a predicate is true, handling traced predicates safely."""
+) -> Array:
+    """Raise or warn for a predicate, returning the anchor to preserve JIT checks.
+
+    Warnings are emitted only for eager predicates. A traced warning predicate
+    returns the anchor unchanged rather than introducing a JAX runtime callback.
+    """
     try:
         should_handle = bool(predicate)
     except jax.errors.TracerBoolConversionError:
         if action == "raise":
-            _ = eqx.error_if(anchor, predicate, message)
-        return
+            return eqx.error_if(anchor, predicate, message)
+        return anchor
 
     if not should_handle:
-        return
+        return anchor
 
     if action == "warn":
         warnings.warn(message, stacklevel=2)
-        return
+        return anchor
 
     if action == "raise":
         raise ValueError(message)
@@ -127,10 +141,10 @@ def _path_field_names(path) -> tuple[str, ...]:
 def _is_known_vector_field(path) -> bool:
     """Return True for built-in leaves whose final axis is a vector event axis."""
     names = _path_field_names(path)
-    # `Discretizer` wraps the original continuous-time evolution in a `cte` field
-    # of `EulerMaruyamaGaussianStateEvolution`, so a drift bias that lived at
-    # `state_evolution.drift.b` moves to `state_evolution.cte.drift.b`. Drop that
-    # internal wrapper segment so the same whitelist matches discretized models.
+    # Gaussian `Discretizer` implementations wrap the original continuous-time
+    # evolution in a `cte` field, so a drift bias that lived at
+    # `state_evolution.drift.b` moves to `state_evolution.cte.drift.b`. Drop the
+    # private wrapper segment so the same whitelist matches discretized models.
     names = tuple(name for name in names if name != "cte")
     if len(names) >= 2 and names[-2:] in {
         ("state_evolution", "bias"),
@@ -199,8 +213,9 @@ def _is_opaque_plate_leaf(node) -> bool:
     per-member array fields, so the tree must recurse into it and handle those
     fields generically. NumPyro distributions are always opaque. The three
     consumers (:func:`_has_any_batched_plate_source`,
-    ``inference.plate_utils._make_plate_in_axes``,
-    ``simulators._slice_tree_for_plate_member``) must share this one predicate so
+    ``inference.utils.plate_utils._make_plate_in_axes``,
+    ``simulation._slice_tree_for_plate_member``) must share this one
+    predicate so
     a callable diffusion is never seen as batched by the slicer/vmap while being
     invisible to the alignment guard.
     """
@@ -279,6 +294,24 @@ def _should_record_field(
     return math.prod(shape) <= max_elems
 
 
+def _validate_nonnegative_float(name: str, value: float) -> None:
+    """Validate a nonnegative, finite float-valued config field.
+
+    Shared by the jitter fields on the discretizer and filter configs, which
+    all have the same admissible range. ``name`` is the field's own name, so
+    the error message points at the attribute the user actually set.
+
+    Args:
+        name: Name of the field being validated, as it appears on the config.
+        value: Value to validate.
+
+    Raises:
+        ValueError: If ``value`` is not finite or is negative.
+    """
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError(f"{name} must be a finite, nonnegative float, got {value!r}.")
+
+
 def _validate_control_dim(
     dynamics: DynamicalModel,
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
@@ -319,6 +352,8 @@ def _validate_controls(
     ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
     | Real[Array, "*ctrl_value_plate ctrl_time"]
     | None,
+    *,
+    observation_control_alignment: str | None = None,
 ) -> None:
     """
     Validate control inputs against model time grids.
@@ -329,10 +364,21 @@ def _validate_controls(
     - If both obs_times and predict_times are present, ctrl_times must match their union.
     - Otherwise ctrl_times must match whichever single grid is provided.
     - Matching is set-like (order-insensitive) and length-preserving.
+    - When observation_control_alignment is "previous_transition", ctrl_times must
+      instead match predict_times[:-1] (one control per transition); obs_times-based
+      conditioning is not supported yet under this convention (see issue #312).
 
     Raises:
         ValueError: If controls are partially provided or no time grid is provided.
     """
+
+    if observation_control_alignment == "previous_transition" and obs_times is not None:
+        raise ValueError(
+            "observation_control_alignment='previous_transition' does not "
+            "support obs_times-based conditioning yet (Filter/Smoother/"
+            "LatentPathBuilder posterior rollout); only predict_times-only "
+            "generation is supported. See issue #312."
+        )
 
     if ctrl_times is None:
         if ctrl_values is not None:
@@ -350,7 +396,11 @@ def _validate_controls(
     if obs_times is None and predict_times is None:
         raise ValueError("At least one of obs_times or predict_times must be provided")
 
-    if obs_times is None:
+    if observation_control_alignment == "previous_transition":
+        # obs_times is None here -- already rejected above otherwise.
+        assert predict_times is not None
+        total_obs_pred_times = predict_times[..., :-1]
+    elif obs_times is None:
         total_obs_pred_times = predict_times
     elif predict_times is None:
         total_obs_pred_times = obs_times
@@ -362,39 +412,53 @@ def _validate_controls(
             return  # ConcretizationTypeError etc. when arrays are traced
     assert total_obs_pred_times is not None
 
-    # Use trace-safe check: same length and sorted arrays match.
-    # (Avoid jnp.setxor1d/jnp.unique which have data-dependent output shapes and fail under JIT.)
-    len_mismatch = ctrl_times.shape[0] != total_obs_pred_times.shape[0]
-    values_mismatch = lax.cond(
-        len_mismatch,
-        lambda: jnp.array(True),
-        lambda: ~jnp.allclose(jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)),
+    # Check that the number of control times matches the number of observation/prediction times.
+    ctrl_time_count = ctrl_times.shape[-1]
+    expected_time_count = total_obs_pred_times.shape[-1]
+    if ctrl_time_count != expected_time_count:
+        raise ValueError(
+            "Control times must match the required observation/prediction time "
+            f"grid; expected {expected_time_count} time points but got "
+            f"{ctrl_time_count}."
+        )
+
+    # Avoid jnp.setxor1d/jnp.unique because their data-dependent output shapes
+    # fail under JIT. Leading plate axes broadcast when one grid is shared.
+    values_mismatch = ~jnp.allclose(
+        jnp.sort(ctrl_times), jnp.sort(total_obs_pred_times)
     )
     _ = eqx.error_if(
         ctrl_times,
-        jnp.logical_or(len_mismatch, values_mismatch),
+        values_mismatch,
         "Control times and the union of obs_times and predict_times must be the same.",
     )
 
 
-def _build_control_path(
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"],
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"],
+def _build_control_path_eval(
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None,
+    ctrl_values: (
+        Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+        | Real[Array, "*ctrl_value_plate ctrl_time"]
+        | None
+    ),
     obs_times: Real[Array, "*obs_time_plate obs_time"],
-) -> dfx.LinearInterpolation:
+) -> Callable[[Real[Array, ""]], Real[Array, "..."] | None]:
     """
-    Build rectilinear control path for continuous-time simulators.
+    Build a right-continuous control evaluator for continuous-time paths.
 
     Extends the path past the final time so that evaluate(t_last, left=False)
     returns the last value instead of NaN (rectilinear path has no right piece
     at the boundary).
     """
+    if ctrl_times is None or ctrl_values is None:
+        return lambda t: None
+
     t_final = jnp.maximum(obs_times[-1], ctrl_times[-1]) + _CONTROL_EXTEND_EPSILON
     ctrl_times_ext = jnp.concatenate([ctrl_times, t_final[None]])
     ctrl_values_ext = jnp.concatenate([ctrl_values, ctrl_values[-1:]], axis=0)
     _ct, _cv = dfx.rectilinear_interpolation(ts=ctrl_times_ext, ys=ctrl_values_ext)
-    return dfx.LinearInterpolation(ts=_ct, ys=_cv)
+    control_path = dfx.LinearInterpolation(ts=_ct, ys=_cv)
+    return lambda t: control_path.evaluate(t, left=False)
 
 
 def _get_val_or_None(values: Array | None, t_idx: int | Array) -> Array | None:

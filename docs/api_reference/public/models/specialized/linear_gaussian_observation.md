@@ -9,9 +9,9 @@
     You can instantiate equivalent observation behavior without this class
     (for example, with a custom callable). However, this structured linear-Gaussian
     observation form is what lets filtering backends use fast Kalman-family
-    methods; see [Filters](../../../inference/filters.md), especially `KFConfig`
+    methods; see [Filters](../../inference/filters.md), especially `KFConfig`
     and `EnKFConfig` (or `ContinuousTimeKFConfig` / `ContinuousTimeEnKFConfig`)
-    in [FilterConfigs](../../../inference/filter_configs.md).
+    in [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without this exploitable structure, parameter inference that marginalizes
     latent trajectories often relies on particle filters (`PFConfig` and
@@ -61,4 +61,3 @@
     options:
       show_root_heading: false
       show_root_toc_entry: false
-

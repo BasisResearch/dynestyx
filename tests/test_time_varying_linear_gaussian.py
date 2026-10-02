@@ -23,7 +23,10 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
-from dynestyx.inference.filter_configs import EKFConfig, EnKFConfig, KFConfig
+from dynestyx import DiscreteTimeSimulator
+from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig
+from dynestyx.inference.configs.mcmc import NUTSConfig
+from dynestyx.inference.configs.smoother import EKFSmootherConfig, KFSmootherConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
@@ -38,8 +41,6 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
     compute_cuthbert_smoother,
 )
 from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import NUTSConfig
-from dynestyx.inference.smoother_configs import EKFSmootherConfig, KFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     AffineDrift,
@@ -49,7 +50,6 @@ from dynestyx.models import (
     LinearGaussianStateEvolution,
     StochasticContinuousTimeStateEvolution,
 )
-from dynestyx.simulators import DiscreteTimeSimulator
 
 A_C = jnp.array([[-0.5, 0.4], [0.0, -0.3]])
 A_CONST = jsp_linalg.expm(A_C)

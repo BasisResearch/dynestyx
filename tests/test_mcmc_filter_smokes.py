@@ -4,15 +4,16 @@ import jax.numpy as jnp
 import jax.random as jr
 from numpyro.infer import Predictive
 
-from dynestyx.inference.filters import Filter
-from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import (
+from dynestyx import Simulator
+from dynestyx.inference.configs.mcmc import (
+    AdaptiveMetropolisConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
     SGLDConfig,
 )
-from dynestyx.simulators import Simulator
+from dynestyx.inference.filters import Filter
+from dynestyx.inference.mcmc import MCMCInference
 from tests.fixtures import _squeeze_sim_dims
 from tests.models import (
     continuous_time_stochastic_l63_model,
@@ -120,6 +121,22 @@ def test_filter_based_sgmcmc_smoke():
             model=continuous_time_stochastic_l63_model,
         )
         posterior_samples = inference.run(jr.PRNGKey(2), obs_times, obs_values)
+    assert "rho" in posterior_samples
+
+
+def test_filter_based_adaptive_metropolis_smoke():
+    obs_times, obs_values = _make_data_continuous()
+    with Filter():
+        inference = MCMCInference(
+            mcmc_config=AdaptiveMetropolisConfig(
+                num_samples=SMOKE_NUM_SAMPLES,
+                num_warmup=SMOKE_NUM_WARMUP,
+                num_chains=1,
+                initial_proposal_scale=0.1,
+            ),
+            model=continuous_time_stochastic_l63_model,
+        )
+        posterior_samples = inference.run(jr.PRNGKey(4), obs_times, obs_values)
     assert "rho" in posterior_samples
 
 

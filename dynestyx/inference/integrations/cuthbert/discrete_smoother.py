@@ -1,20 +1,25 @@
-"""Discrete-time smoothers via cuthbert: Kalman, Taylor-KF, and PF backward sampling."""
+"""Discrete-time smoothers via cuthbert: Kalman, Taylor-KF, EnRTS, and PF."""
 
 from collections.abc import Callable
 from functools import partial
-from typing import cast
+from typing import Any, cast
 
-import jax
 import jax.numpy as jnp
-import numpyro
 import numpyro.distributions as dist
 from cuthbert import smoother as cuthbert_smoother
+from cuthbert.ensemble_kalman import ensemble_rts_smoother
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import backward_sampler
 from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
+from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.distribution_utils import _cholesky_state_sequence_to_dists
+from dynestyx.inference.configs.smoother import (
+    EKFSmootherConfig,
+    EnRTSSmootherConfig,
+    KFSmootherConfig,
+    PFSmootherConfig,
+)
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _config_to_filter_kwargs,
@@ -23,23 +28,20 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     compute_cuthbert_filter,
 )
 from dynestyx.inference.integrations.utils import (
-    covariance_from_cholesky,
     squeeze_leading_singletons,
 )
-from dynestyx.inference.smoother_configs import (
-    EKFSmootherConfig,
-    KFSmootherConfig,
-    PFSmootherConfig,
-    _config_to_smoother_record_kwargs,
+from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.utils import _should_record_field
 
-CuthbertSmootherConfig = KFSmootherConfig | EKFSmootherConfig | PFSmootherConfig
+CuthbertSmootherConfig = (
+    KFSmootherConfig | EKFSmootherConfig | EnRTSSmootherConfig | PFSmootherConfig
+)
 
 
 def _kalman_get_dynamics_params(dynamics: DynamicalModel):
@@ -68,7 +70,13 @@ def _kalman_get_dynamics_params(dynamics: DynamicalModel):
 def _taylor_get_dynamics_log_density(dynamics: DynamicalModel):
     transition = cast(
         Callable[
-            [jax.Array, jax.Array | None, jax.Array, jax.Array], dist.Distribution
+            [
+                Real[Array, " state_dim"],
+                Real[Array, " control_dim"] | Real[Array, ""] | None,
+                Real[Array, ""],
+                Real[Array, ""],
+            ],
+            dist.Distribution,
         ],
         dynamics.state_evolution,
     )
@@ -100,8 +108,19 @@ def _taylor_get_dynamics_log_density(dynamics: DynamicalModel):
 
 def _pf_log_potential(dynamics: DynamicalModel):
     def log_potential(x_prev, x, mi: CuthbertInputs):
+        # Unlike the forward bootstrap filter, cuthbert's backward sampler
+        # expects the joint transition-plus-observation potential.
+        transition = dynamics.state_evolution(
+            x_prev,
+            mi.u_prev,
+            mi.time_prev,
+            mi.time,
+        )
         edist = dynamics.observation_model(x, mi.u, mi.time)
-        return jnp.asarray(edist.log_prob(mi.y)).sum()
+        return (
+            jnp.asarray(transition.log_prob(x)).sum()
+            + jnp.asarray(edist.log_prob(mi.y)).sum()
+        )
 
     return log_potential
 
@@ -152,13 +171,13 @@ def _pf_backward_sampling_fn(config: PFSmootherConfig):
 def compute_cuthbert_smoother(
     dynamics: DynamicalModel,
     smoother_config: CuthbertSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert smoother computation (no numpyro side-effects)."""
     obs_len = int(obs_values.shape[0])
     marginal_loglik, filtered_states = compute_cuthbert_filter(
@@ -170,6 +189,7 @@ def compute_cuthbert_smoother(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
         align_to_observations=False,
+        store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
     )
 
     filter_kwargs = _config_to_filter_kwargs(smoother_config)
@@ -187,6 +207,11 @@ def compute_cuthbert_smoother(
             rtol=filter_kwargs.get("rtol", None),
             ignore_nan_dims=True,
         )
+        smoothed_states = cuthbert_smoother(
+            smoother_obj, filtered_states, model_inputs=None, parallel=False, key=key
+        )
+    elif isinstance(smoother_config, EnRTSSmootherConfig):
+        smoother_obj = ensemble_rts_smoother.build_smoother()
         smoothed_states = cuthbert_smoother(
             smoother_obj, filtered_states, model_inputs=None, parallel=False, key=key
         )
@@ -217,119 +242,40 @@ def compute_cuthbert_smoother(
     else:
         raise ValueError(
             f"Unsupported cuthbert smoother config: {type(smoother_config).__name__}. "
-            "Expected KFSmootherConfig, EKFSmootherConfig, PFSmootherConfig."
+            "Expected KFSmootherConfig, EKFSmootherConfig, "
+            "EnRTSSmootherConfig, PFSmootherConfig."
         )
 
     smoothed_states = _drop_cuthbert_dummy_step(smoothed_states, obs_len=obs_len)
     return marginal_loglik, smoothed_states
 
 
-def _add_sites_pf(name: str, states, record_kwargs: dict):
-    log_weights = states.log_weights
-    particles = states.particles
-    if particles.ndim == 2:
-        particles = particles[..., None]
-    max_elems = record_kwargs["record_max_elems"]
-    t1, _, state_dim = particles.shape
-
-    add_particles = _should_record_field(
-        record_kwargs["record_smoothed_particles"], particles.shape, max_elems
-    )
-    add_log_weights = _should_record_field(
-        record_kwargs["record_smoothed_log_weights"], log_weights.shape, max_elems
-    )
-    add_mean = _should_record_field(
-        record_kwargs["record_smoothed_states_mean"], (t1, state_dim), max_elems
-    )
-    add_smoothed_states_cov = _should_record_field(
-        record_kwargs["record_smoothed_states_cov"],
-        (t1, state_dim, state_dim),
-        max_elems,
-    )
-    add_smoothed_states_cov_diag = _should_record_field(
-        record_kwargs["record_smoothed_states_cov_diag"], (t1, state_dim), max_elems
-    )
-
-    need_means = add_mean or add_smoothed_states_cov or add_smoothed_states_cov_diag
-    if need_means:
-        w = jax.nn.softmax(log_weights, axis=1)[..., None]
-        smoothed_means = jnp.sum(particles * w, axis=1)
-
-    if add_smoothed_states_cov or add_smoothed_states_cov_diag:
-        second_mom = jnp.einsum(
-            "...tnj,...tnk,...tn->...tjk", particles, particles, w.squeeze(-1)
-        )
-        smoothed_cov = second_mom - jnp.einsum(
-            "...tj,...tk->...tjk", smoothed_means, smoothed_means
-        )
-
-    if add_particles:
-        numpyro.deterministic(f"{name}_smoothed_particles", particles)
-    if add_log_weights:
-        numpyro.deterministic(f"{name}_smoothed_log_weights", log_weights)
-    if add_mean:
-        numpyro.deterministic(f"{name}_smoothed_states_mean", smoothed_means)
-    if add_smoothed_states_cov:
-        numpyro.deterministic(f"{name}_smoothed_states_cov", smoothed_cov)
-    if add_smoothed_states_cov_diag:
-        diag_cov = jnp.diagonal(smoothed_cov, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_smoothed_states_cov_diag", diag_cov)
-
-
-def _add_sites_taylor_kf(name: str, states, record_kwargs: dict):
-    max_elems = record_kwargs["record_max_elems"]
-    mean = states.mean
-    chol_cov = states.chol_cov
-    t1, state_dim, _ = chol_cov.shape
-
-    add_mean = _should_record_field(
-        record_kwargs["record_smoothed_states_mean"], mean.shape, max_elems
-    )
-    add_chol_cov = _should_record_field(
-        record_kwargs["record_smoothed_states_chol_cov"],
-        chol_cov.shape,
-        max_elems,
-    )
-    add_smoothed_states_cov = _should_record_field(
-        record_kwargs["record_smoothed_states_cov"],
-        (t1, state_dim, state_dim),
-        max_elems,
-    )
-    add_smoothed_states_cov_diag = _should_record_field(
-        record_kwargs["record_smoothed_states_cov_diag"], (t1, state_dim), max_elems
-    )
-
-    if add_mean:
-        numpyro.deterministic(f"{name}_smoothed_states_mean", mean)
-    if add_chol_cov:
-        numpyro.deterministic(f"{name}_smoothed_states_chol_cov", chol_cov)
-
-    if add_smoothed_states_cov or add_smoothed_states_cov_diag:
-        smoothed_cov = covariance_from_cholesky(chol_cov)
-
-    if add_smoothed_states_cov:
-        numpyro.deterministic(f"{name}_smoothed_states_cov", smoothed_cov)
-    if add_smoothed_states_cov_diag:
-        diag_cov = jnp.diagonal(smoothed_cov, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_smoothed_states_cov_diag", diag_cov)
-
-
 def run_discrete_smoother(
     name: str,
     dynamics: DynamicalModel,
     smoother_config: CuthbertSmootherConfig,
-    key: jax.Array | None = None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> list[dist.Distribution]:
-    """Run discrete-time smoother via cuthbert."""
+) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
+    """Run discrete-time smoother via cuthbert.
+
+    Returns:
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}),
+              or None if obs_values is empty.
+            - raw_states: cuthbert smoother state object, or None if obs_values
+              is empty.
+            - smoothed_dists: list of distributions p(x_t | y_{1:T}) at each
+              obs time, for posterior rollout.
+    """
     t1 = int(obs_values.shape[0])
     if t1 == 0:
-        return []
+        return None, None, []
 
     marginal_loglik, states = compute_cuthbert_smoother(
         dynamics,
@@ -340,19 +286,14 @@ def run_discrete_smoother(
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
     )
-    record_kwargs = _config_to_smoother_record_kwargs(smoother_config)
-
-    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
-
-    if isinstance(smoother_config, PFSmootherConfig):
-        _add_sites_pf(name, states, record_kwargs)
-    else:
-        _add_sites_taylor_kf(name, states, record_kwargs)
-    return _cholesky_state_sequence_to_dists(
+    smoothed_dists = _cholesky_state_sequence_to_dists(
         states,
         particle_mode=isinstance(smoother_config, PFSmootherConfig),
+        covariance_jitter=getattr(
+            smoother_config, "recorded_filtered_states_cov_jitter", 0.0
+        ),
     )
+    return marginal_loglik, states, smoothed_dists
 
 
 __all__ = ["compute_cuthbert_smoother", "run_discrete_smoother"]

@@ -9,9 +9,9 @@
     You can represent the same transition dynamics without this class
     (for example, as a generic callable). However, this structured linear-Gaussian
     transition form is what enables fast Kalman-family filtering methods; see
-    [Filters](../../../inference/filters.md), especially `KFConfig` (and
+    [Filters](../../inference/filters.md), especially `KFConfig` (and
     `ContinuousTimeKFConfig` for continuous-time settings) in
-    [FilterConfigs](../../../inference/filter_configs.md).
+    [FilterConfigs](../../inference/configs/filter_configs.md).
 
     Without this exploitable structure, marginalizing latent trajectories
     during parameter inference typically falls back to particle filters
@@ -70,4 +70,3 @@
     options:
       show_root_heading: false
       show_root_toc_entry: false
-

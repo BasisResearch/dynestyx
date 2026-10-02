@@ -16,7 +16,6 @@
       members:
         - LinearGaussianStateEvolution
         - GaussianStateEvolution
-        - AffineDrift
 
 ## LTI model factories
 

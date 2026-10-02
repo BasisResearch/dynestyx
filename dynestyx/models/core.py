@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Protocol, cast, runtime_checkable
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array
-from jaxtyping import Real, Shaped
+from jaxtyping import Real
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
@@ -21,10 +22,12 @@ from dynestyx.models.checkers import (
     _validate_continuous_state_evolution,
     _validate_continuous_time_flag,
     _validate_discrete_state_evolution_output_shape,
+    _validate_imex_potential_conflict,
     _validate_observation_dim,
     _validate_state_dim,
 )
 from dynestyx.models.diffusions import Diffusion
+from dynestyx.models.drifts import Drift, Potential
 from dynestyx.types import as_scalar_time_array
 
 
@@ -55,6 +58,34 @@ type StateEvolutionLike = (
     ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | DiscreteStateTransition
 )
 type ObservationModelLike = ObservationModel | ObservationCallable
+
+
+class ObservationControlAlignment(StrEnum):
+    r"""Which control an observation sees in a discrete-time model.
+
+    - `SAME_TIME` (`"same_time"`): $y_k \sim p(y_k \mid x_k, u_k, t_k)$, so
+      $y_k$ is paired with the control $u_k$ applied at the same time.
+    - `PREVIOUS_TRANSITION` (`"previous_transition"`):
+      $y_{k+1} \sim p(y_{k+1} \mid x_{k+1}, u_k, t_{k+1})$, so $y_{k+1}$ is
+      paired with $u_k$, the control that produced $x_{k+1}$, and $y_0$ is
+      never sampled.
+
+    A `StrEnum`, so each member equals its string: `DynamicalModel` accepts
+    `ObservationControlAlignment.PREVIOUS_TRANSITION` and
+    `"previous_transition"` alike, and rejects any other value.
+
+    On a continuous-time model the convention is meant for its discretized
+    form: it takes full effect once a `Discretizer` turns the model into a
+    discrete-time one. The continuous-time simulators do not implement
+    `"previous_transition"` yet. They still sample $y_0$ and pair each $y_k$
+    with $u_k$, even though control validation already follows the
+    convention: `ctrl_times` must be `predict_times[:-1]`, and
+    `obs_times`-based inference is rejected. Consistent continuous-time
+    support is planned for a future PR.
+    """
+
+    SAME_TIME = "same_time"
+    PREVIOUS_TRANSITION = "previous_transition"
 
 
 class DynamicalModel(eqx.Module):
@@ -101,7 +132,21 @@ class DynamicalModel(eqx.Module):
             exactly; a mismatch raises a ``ValueError`` at simulation time.
         continuous_time (bool): Whether the model uses continuous-time state evolution (SDE) or discrete-time.
             Gets set automatically from the concrete type of `state_evolution`.
-    
+        observation_control_alignment (ObservationControlAlignment | str | None): Convention
+            for how observations pair with controls in discrete time; see
+            `ObservationControlAlignment`, whose members can also be given as their
+            strings (`"same_time"`, `"previous_transition"`). `"same_time"` pairs
+            $y_k$ with $u_k$. `"previous_transition"`
+            pairs $y_{k+1}$ with $u_k$ (the control that produced $x_{k+1}$); under this convention
+            $y_0$ is never sampled. `None` (default) leaves it unspecified: open-loop
+            simulation treats it as `"same_time"`, while closed-loop control
+            (`DiscreteControlLoopSimulator`) uses `"previous_transition"` with a warning.
+            Closed-loop control does not support an explicit `"same_time"` yet. Only
+            `"same_time"` is honored by Filter/Smoother/`LatentPathBuilder` posterior
+            rollout and `mppi.py`. A continuous-time model accepts either value, but
+            it only takes full effect once the model is discretized; see
+            `ObservationControlAlignment`.
+
     Note:
         - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
         - Logic for control_model is not implemented yet.
@@ -125,6 +170,7 @@ class DynamicalModel(eqx.Module):
     observation_dim: int
     categorical_state: bool
     continuous_time: bool
+    observation_control_alignment: ObservationControlAlignment | None
 
     def __init__(
         self,
@@ -139,12 +185,19 @@ class DynamicalModel(eqx.Module):
         observation_dim: int | None = None,
         categorical_state: bool | None = None,
         continuous_time: bool | None = None,
+        observation_control_alignment: ObservationControlAlignment | str | None = None,
     ):
         inferred_continuous_time = isinstance(
             state_evolution, ContinuousTimeStateEvolution
         )
         _validate_continuous_time_flag(continuous_time, inferred_continuous_time)
         self.continuous_time = inferred_continuous_time
+        if observation_control_alignment is not None:
+            # Accepts a member or its string; raises ValueError for anything else.
+            observation_control_alignment = ObservationControlAlignment(
+                observation_control_alignment
+            )
+        self.observation_control_alignment = observation_control_alignment
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
@@ -232,6 +285,12 @@ class DynamicalModel(eqx.Module):
                 diffusion=resolved_diffusion,
             )
 
+        if self.continuous_time:
+            # Needs no shape/probe data, so unlike the checks below it must
+            # run unconditionally -- including inside dsx.plate, where those
+            # shape checks are skipped.
+            _validate_imex_potential_conflict(state_evolution)
+
         if _inside_plate:
             # Cannot validate shapes with batched parameters; trust the user.
             # Infer observation_dim from observation model if not explicitly provided.
@@ -280,85 +339,6 @@ class DynamicalModel(eqx.Module):
         self.categorical_state = bool(inferred_categorical_state)
 
 
-class Drift(Protocol):
-    """
-    Drift vector field for continuous-time state evolution.
-
-    Mathematically, the drift is a mapping
-    $\\mu: \\mathbb{R}^{d_x} \\times \\mathbb{R}^{d_u} \\times \\mathbb{R}
-    \\to \\mathbb{R}^{d_x}$, i.e., $(x, u, t) \\mapsto \\mu(x, u, t)$.
-    In the SDE formulation used by `ContinuousTimeStateEvolution`,
-    $dx_t = \\mu(x_t, u_t, t) \\, dt + \\sigma(x_t, u_t, t) \\, dW_t$, this
-    mapping forms the $\\mu$ term.
-
-    Implementations should be compatible with JAX transformations (e.g., `jax.jit`,
-    `jax.vmap`, and `jax.grad` when differentiable).
-
-    Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
-        t (Time): Current time (scalar or array).
-
-    Returns:
-        dState: Drift vector $\\mu(x, u, t) \\in \\mathbb{R}^{d_x}$.
-
-    Note:
-        This is a protocol interface; implement this callable signature; do not instantiate.
-        We recommend simply using a plain Python function that matches this signature, e.g.:
-
-        ```python
-        def drift(x, u, t):
-            return - x + u
-        ```
-        or `lambda x, u, t: - x + u`
-    """
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Real[Array, " state_dim"] | Real[Array, ""]:
-        raise NotImplementedError()
-
-
-class Potential(Protocol):
-    """
-    Scalar potential energy for gradient-based drift.
-
-    A potential $V(x, u, t)$ maps state, control, and time to a scalar. Its
-    gradient contributes to the drift via $\\pm \\nabla_x V(x, u, t)$, enabling
-    Langevin-type dynamics. It is used in `ContinuousTimeStateEvolution` when
-    `potential` is set; the sign is controlled by `use_negative_gradient`.
-
-    Args:
-        x (State): Current state $x \\in \\mathbb{R}^{d_x}$.
-        u (Control | None): Current control input $u \\in \\mathbb{R}^{d_u}$ or None.
-        t (Time): Current time.
-
-    Returns:
-        jax.Array: Scalar potential value $V(x, u, t) \\in \\mathbb{R}$.
-
-    Note:
-        This is a protocol interface; implement this callable signature; do not instantiate.
-        We recommend simply using a plain Python function that matches this signature, e.g.:
-
-        ```python
-        def potential(x, u, t):
-            return x[0]**2 + x[1]**2 + x[2]**2
-        ```
-        or `lambda x, u, t: x[0]**2 + x[1]**2 + x[2]**2`
-    """
-
-    def __call__(
-        self,
-        x: Real[Array, " state_dim"] | Real[Array, ""],
-        u: Real[Array, " control_dim"] | Real[Array, ""] | None,
-        t: float | int | Real[Array, ""],
-    ) -> Shaped[Array, ""]:
-        raise NotImplementedError()
-
-
 class ContinuousTimeStateEvolution(eqx.Module):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
@@ -366,16 +346,16 @@ class ContinuousTimeStateEvolution(eqx.Module):
     The state evolves according to
 
     $$
-    dx_t = \\bigl[ \\mu(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
+    dx_t = \\bigl[ f(x_t, u_t, t) + s \\, \\nabla_x V(x_t, u_t, t) \\bigr] \\, dt
          + L(x_t, u_t, t) \\, dW_t
     $$
 
-    where $\\mu$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
+    where $f$ is the drift, $V$ is an optional potential, and $L$ is the diffusion
     coefficient. The sign $s$ is $-1$ when `use_negative_gradient` is True (e.g., for
     Langevin dynamics) and $+1$ otherwise.
 
     Attributes:
-        drift (Drift | None): Drift vector field $\\mu(x, u, t)$.
+        drift (Drift | None): Drift vector field $f(x, u, t)$.
             Defaults to zero if None.
             At least one of `drift` or `potential` must be non-None.
         potential (Potential | None): Scalar potential $V(x, u, t)$ whose gradient is added to the drift.
@@ -386,6 +366,11 @@ class ContinuousTimeStateEvolution(eqx.Module):
         diffusion (Diffusion | None): Diffusion coefficient object.
             Use `FullDiffusion`, `DiagonalDiffusion`, or `ScalarDiffusion` to define
             the stochastic part of the SDE. Pass `None` for deterministic dynamics.
+
+    Note:
+        For IMEX (implicit-explicit) diffrax solvers (e.g. `diffrax.KenCarp3/4/5`,
+        `diffrax.Sil3`), pass an `ImExDrift` instance as `drift` instead of a
+        plain callable; see `dynestyx.models.drifts.ImExDrift`.
     """
 
     drift: Drift | None = None
@@ -496,7 +481,11 @@ class DiscreteTimeStateEvolution(eqx.Module):
     $$
 
     Implementations must return a NumPyro-compatible distribution (e.g.,
-    `numpyro.distributions.Distribution`) that can be sampled and evaluated.
+    `numpyro.distributions.Distribution`). Most transitions provide sampling,
+    moments, and `log_prob`; explicitly sample-only transitions are also valid
+    for simulators, ensemble filters, and bootstrap particle filters that never
+    evaluate the transition density. Such transitions should raise a targeted
+    error when an unavailable moment or density is requested.
 
     Args:
         x (State): Current state $x \\in \\mathbb{R}^{d_x}$.

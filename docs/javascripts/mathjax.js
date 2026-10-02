@@ -15,9 +15,14 @@ window.MathJax = {
 
 if (typeof document$ !== 'undefined') {
     document$.subscribe(() => {
-        MathJax.startup.output.clearCache()
-        MathJax.typesetClear()
-        MathJax.texReset()
-        MathJax.typesetPromise()
+        if (typeof MathJax.typesetClear === 'function') {
+            MathJax.typesetClear()
+        }
+        if (typeof MathJax.texReset === 'function') {
+            MathJax.texReset()
+        }
+        if (typeof MathJax.typesetPromise === 'function') {
+            MathJax.typesetPromise()
+        }
     })
 }

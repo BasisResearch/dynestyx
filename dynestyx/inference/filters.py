@@ -1,5 +1,7 @@
 import dataclasses
 import math
+import warnings
+from abc import ABC, abstractmethod
 from typing import cast
 
 import equinox as eqx
@@ -9,20 +11,22 @@ import numpyro
 from cd_dynamax import ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
-from dynestyx.handlers import HandlesSelf, _sample_intp
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
 from dynestyx.inference.checkers import (
     _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.distribution_utils import (
-    _categorical_log_probs_to_dists,
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
-)
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
+    ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
@@ -32,13 +36,22 @@ from dynestyx.inference.filter_configs import (
     DiscreteTimeConfigs,
     EKFConfig,
     EnKFConfig,
+    EnKFLocalizationConfig,
+    EnKFLocalizationFunctions,
     HMMConfig,
     HMMConfigs,
     KFConfig,
+    ModifyCrossCovariance,
+    ModifyPredictedObservationCovariance,
     PFConfig,
     PFResamplingConfig,
     RBPFConfig,
+    TaperCovarianceFn,
     UKFConfig,
+)
+from dynestyx.inference.enkf_localization import (
+    ResolvedEnKFLocalization,
+    resolve_enkf_localization,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (
@@ -58,28 +71,50 @@ from dynestyx.inference.integrations.cuthbert.discrete import (
 from dynestyx.inference.integrations.cuthbert.discrete import (
     run_discrete_filter as run_cuthbert_discrete,
 )
-from dynestyx.inference.plate_utils import (
+from dynestyx.inference.observation_predictions import (
+    PredictedObservationOutputs,
+    add_observation_prediction_sites,
+    extract_filter_predictions,
+)
+from dynestyx.inference.utils.distribution_utils import (
+    _categorical_log_probs_to_dists,
+    _cholesky_state_sequence_to_dists,
+    _posterior_sequence_to_dists,
+)
+from dynestyx.inference.utils.numpyro_sites import (
+    register_filter_sites,
+    register_hmm_filter_sites,
+)
+from dynestyx.inference.utils.plate_utils import (
     _array_plate_axis,
     _make_plate_in_axes,
     _slice_dist_for_plate_member,
 )
 from dynestyx.models import DynamicalModel
-from dynestyx.types import FunctionOfTime
-from dynestyx.utils import _dist_has_plate_batch_dims, _should_record_field
+from dynestyx.types import (
+    ConditionedResult,
+    FunctionOfTime,
+    chain_numpyro_site_registrations,
+)
+from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
 
-class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
+class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
     """Base for filter handlers."""
 
-    @implements(_sample_intp)
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self, **kwargs):
+        return [_DynestyxStackKind.FILTER, *fwd()]
+
+    @implements(_condition_intp)
     def _sample_ds(
         self,
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -88,9 +123,19 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        filtered_result: ConditionedResult | None = None,
+        smoothed_result: ConditionedResult | None = None,
         **kwargs,
     ) -> FunctionOfTime:
+        if filtered_result is not None or smoothed_result is not None:
+            raise ValueError(
+                "Filter cannot condition an already conditioned result. Use only "
+                "one Filter or Smoother for a dsx.condition/dsx.sample operation."
+            )
+
         filtered_dists = None
+        self.marginal_loglik = self.filtered_states = self._filter_config_used = None
+        self.predicted_observations = None
         if not (obs_times is None or obs_values is None):
             filtered_dists = self._add_log_factors(
                 name,
@@ -103,26 +148,36 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
                 **kwargs,
             )
 
-        # Filter consumes obs_times and obs_values, so they are passed forward as None
-        return fwd(
+        result = self._build_infer_result(obs_times, filtered_dists)
+
+        # Observation inputs remain available to outer consumers such as Evaluation.
+        forwarded_result = fwd(
             name,
             dynamics,
             plate_shapes=plate_shapes,
-            obs_times=None,
-            obs_values=None,
+            obs_times=obs_times,
+            obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
-            filtered_times=obs_times,
-            filtered_dists=filtered_dists,
+            filtered_result=(result if filtered_dists is not None else None),
             **kwargs,
         )
 
+        forwarded_register = getattr(forwarded_result, "_register_numpyro_sites", None)
+        result._register_numpyro_sites = chain_numpyro_site_registrations(
+            result._register_numpyro_sites,
+            forwarded_register,
+        )
+
+        return result
+
+    @abstractmethod
     def _add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
@@ -132,12 +187,17 @@ class BaseLogFactorAdder(ObjectInterpretation, HandlesSelf):
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
         **kwargs,
-    ) -> list[numpyro.distributions.Distribution] | None:
-        # Inheritors should implement this method.
-        raise NotImplementedError()
+    ) -> list[numpyro.distributions.Distribution] | None: ...
+
+    @abstractmethod
+    def _build_infer_result(
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        filtered_dists: list | None,
+    ) -> ConditionedResult: ...
 
 
-def _default_filter_config(dynamics: DynamicalModel):
+def _default_filter_config(dynamics: DynamicalModel) -> BaseFilterConfig:
     """Return appropriate default filter config when none specified."""
     if dynamics.continuous_time:
         return ContinuousTimeEnKFConfig()
@@ -179,7 +239,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](../filter_configs.md).
+    [Available filter configurations](configs/filter_configs.md).
 
     Defaults
     --------
@@ -192,6 +252,9 @@ class Filter(BaseLogFactorAdder):
         - If your latent state is *discrete* (an HMM), you must use `HMMConfig`.
         - What gets recorded to the trace (means/covariances, particles/weights,
         etc.) depends on `filter_config.record_*` and the backend implementation.
+        - Supported one-step-ahead predictive-observation outputs are included
+        in `ConditionedResult` by default. The
+        `record_predicted_observations_*` fields control NumPyro trace sites.
 
     Attributes:
         filter_config: Selects the filtering algorithm and its hyperparameters.
@@ -200,19 +263,33 @@ class Filter(BaseLogFactorAdder):
     """
 
     filter_config: BaseFilterConfig | None = None
+    marginal_loglik: Real[Array, "*plate"] | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
+    filtered_states: object = dataclasses.field(default=None, repr=False, init=False)
+    _filter_config_used: BaseFilterConfig | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
+    predicted_observations: PredictedObservationOutputs | None = dataclasses.field(
+        default=None, repr=False, init=False
+    )
 
     def _add_log_factors(
         self,
         name: str,
         dynamics: DynamicalModel,
         *,
-        plate_shapes=(),
+        plate_shapes: tuple[int, ...] = (),
         obs_times: Real[Array, "*obs_time_plate obs_time"] | None = None,
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"]
         | None = None,
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
+        _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
@@ -220,27 +297,14 @@ class Filter(BaseLogFactorAdder):
         | None = None,
         **kwargs,
     ) -> list[numpyro.distributions.Distribution] | None:
-        """
-        Add the marginal log likelihood as a numpyro factor.
+        """Run filtering and store the marginal log-likelihood.
 
-        Args:
-            name: Name of the factor.
-            dynamics: Dynamical model to filter.
-            plate_shapes: Tuple of plate sizes from enclosing dsx.plate contexts.
-            obs_times: Observation times.
-            obs_values: Observed values.
-            _obs_values_filled: Internal mask-aware version of ``obs_values``
-                with missing entries replaced by neutral fillers while
-                preserving array shape for scoring.
-            _obs_mask: Internal boolean mask marking which observation entries
-                are actually observed.
-            _obs_has_missing: Internal precomputed flag for whether
-                ``obs_values`` contains any missing entries.
-            ctrl_times: Control times (optional).
-            ctrl_values: Control values (optional).
+        Pure computation — no numpyro side effects. Site registration
+        happens via the callback in ConditionedResult when called through dsx.sample.
         """
         if obs_times is None or obs_values is None:
             raise ValueError("obs_times and obs_values are required for filtering.")
+        _validate_inference_supported_model_classes(dynamics)
 
         config = (
             self.filter_config
@@ -248,13 +312,31 @@ class Filter(BaseLogFactorAdder):
             else _default_filter_config(dynamics)
         )
         if isinstance(config, BaseFilterConfig):
-            _validate_missing_observation_support(
+            obs_values = _validate_missing_observation_support(
                 config,
                 obs_values=obs_values,
                 mode="filter",
             )
+        # Resolve PRNG key: use explicit seed from config, fall back to numpyro
+        # context (inside a seeded model), or None (deterministic filters don't need one).
+        if config.crn_seed is not None:
+            key = config.crn_seed
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                key = numpyro.prng_key()  # returns None outside seed handler
 
-        key = numpyro.prng_key() if config.crn_seed is None else config.crn_seed
+        resolved_localization = None
+        if (
+            isinstance(config, EnKFConfig)
+            and config.filter_source == "cuthbert"
+            and config.localization is not None
+        ):
+            resolved_localization = resolve_enkf_localization(
+                config.localization,
+                state_dim=dynamics.state_dim,
+                observation_dim=dynamics.observation_dim,
+            )
 
         if plate_shapes:
             return self._add_log_factors_batched(
@@ -270,7 +352,13 @@ class Filter(BaseLogFactorAdder):
                 _obs_has_missing=_obs_has_missing,
                 ctrl_times=ctrl_times,
                 ctrl_values=ctrl_values,
+                resolved_localization=resolved_localization,
             )
+
+        if not isinstance(config, HMMConfigs):
+            obs_values = _ensure_trailing_event_axis(obs_values)
+            if ctrl_values is not None:
+                ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
@@ -281,7 +369,7 @@ class Filter(BaseLogFactorAdder):
                     "inside `Filter()`. "
                     f"Got {type(config).__name__}; valid continuous-time config types: {valid}."
                 )
-            return _filter_continuous_time(
+            marginal_loglik, states, filtered_dists = _filter_continuous_time(
                 name,
                 dynamics,
                 config,  # type: ignore[arg-type]
@@ -292,40 +380,102 @@ class Filter(BaseLogFactorAdder):
                 ctrl_values=ctrl_values,
                 **kwargs,
             )
+        elif isinstance(config, HMMConfigs):
+            loglik, log_filt_seq, filtered_dists = _filter_hmm(
+                name,
+                dynamics,
+                cast(HMMConfig, config),
+                obs_times=obs_times,
+                obs_values=obs_values,
+                _obs_values_filled=_obs_values_filled,
+                _obs_mask=_obs_mask,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                **kwargs,
+            )
+            marginal_loglik = loglik
+            states = log_filt_seq
+        elif isinstance(config, DiscreteTimeConfigs):
+            marginal_loglik, states, filtered_dists = _filter_discrete_time(
+                name,
+                dynamics,
+                config,  # type: ignore[arg-type]
+                key=key,
+                obs_times=obs_times,
+                obs_values=obs_values,
+                _obs_values_filled=_obs_values_filled,
+                _obs_mask=_obs_mask,
+                ctrl_times=ctrl_times,
+                ctrl_values=ctrl_values,
+                resolved_localization=resolved_localization,
+                **kwargs,
+            )
         else:
+            valid = [c.__name__ for c in HMMConfigs + DiscreteTimeConfigs]
+            raise ValueError(
+                f"Invalid filter config: {type(config).__name__}. "
+                f"Valid config types: {valid}"
+            )
+
+        self.predicted_observations = extract_filter_predictions(
+            states,
+            dynamics=dynamics,
+            filter_config=config,
+            obs_times=obs_times,
+            ctrl_values=ctrl_values,
+            resolved_localization=resolved_localization,
+        )
+
+        self.marginal_loglik = marginal_loglik
+        self.filtered_states = states
+        self._filter_config_used = config
+
+        return filtered_dists
+
+    def _build_infer_result(
+        self,
+        times: Real[Array, "*time_plate time"] | None,
+        filtered_dists: list | None,
+    ) -> ConditionedResult:
+        """Construct a ConditionedResult with deferred NumPyro registration."""
+        marginal_loglik = self.marginal_loglik
+        states = self.filtered_states
+        config = self._filter_config_used
+        predictions = self.predicted_observations
+        _is_batched = (
+            isinstance(marginal_loglik, jax.Array) and marginal_loglik.ndim > 0
+        )
+
+        def _register(site_name: str) -> None:
+            if marginal_loglik is None or config is None:
+                return
             if isinstance(config, HMMConfigs):
-                return _filter_hmm(
-                    name,
-                    dynamics,
+                register_hmm_filter_sites(
+                    site_name,
+                    marginal_loglik,
+                    cast(jax.Array, states),
                     cast(HMMConfig, config),
-                    obs_times=obs_times,
-                    obs_values=obs_values,
-                    _obs_values_filled=_obs_values_filled,
-                    _obs_mask=_obs_mask,
-                    ctrl_times=ctrl_times,
-                    ctrl_values=ctrl_values,
-                    **kwargs,
                 )
-            elif isinstance(config, DiscreteTimeConfigs):
-                return _filter_discrete_time(
-                    name,
-                    dynamics,
-                    config,  # type: ignore[arg-type]
-                    key=key,
-                    obs_times=obs_times,
-                    obs_values=obs_values,
-                    _obs_values_filled=_obs_values_filled,
-                    _obs_mask=_obs_mask,
-                    ctrl_times=ctrl_times,
-                    ctrl_values=ctrl_values,
-                    **kwargs,
-                )
+            elif _is_batched:
+                # TODO: support per-field recording for batched (plate) states
+                numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
+                numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             else:
-                valid = [c.__name__ for c in HMMConfigs + DiscreteTimeConfigs]
-                raise ValueError(
-                    f"Invalid filter config: {type(config).__name__}. "
-                    f"Valid config types: {valid}"
-                )
+                register_filter_sites(site_name, marginal_loglik, states, config)
+            add_observation_prediction_sites(
+                site_name,
+                filter_config=config,
+                predictions=predictions,
+            )
+
+        return ConditionedResult(
+            marginal_loglik=marginal_loglik,
+            times=times,
+            states=states,
+            dists=filtered_dists,
+            predicted_observations=predictions,
+            _register_numpyro_sites=_register,
+        )
 
     def _add_log_factors_batched(
         self,
@@ -338,13 +488,18 @@ class Filter(BaseLogFactorAdder):
         obs_times: Real[Array, "*obs_time_plate obs_time"],
         obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
         | Real[Array, "*obs_value_plate obs_time"],
-        _obs_values_filled: Array | None = None,
-        _obs_mask: Array | None = None,
+        _obs_values_filled: Real[Array, "*obs_value_plate obs_time observation_dim"]
+        | Real[Array, "*obs_value_plate obs_time"]
+        | None = None,
+        _obs_mask: Bool[Array, "*obs_value_plate obs_time observation_dim"]
+        | Bool[Array, "*obs_value_plate obs_time"]
+        | None = None,
         _obs_has_missing: bool | None = None,
         ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
         ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
         | Real[Array, "*ctrl_value_plate ctrl_time"]
         | None = None,
+        resolved_localization: ResolvedEnKFLocalization | None = None,
     ) -> list[numpyro.distributions.Distribution]:
         """Compute batched marginal log-likelihoods via vmap for plate contexts.
 
@@ -364,7 +519,7 @@ class Filter(BaseLogFactorAdder):
                 )
             output_kind = "continuous"
 
-            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_continuous_filter(
                     dyn,
                     cast(ContinuousTimeFilterConfig, config),
@@ -379,7 +534,7 @@ class Filter(BaseLogFactorAdder):
             output_kind = "hmm"
             uses_preprocessed_obs = True
 
-            def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                 return compute_hmm_filter(
                     dyn,
                     obs_times=ot,
@@ -393,7 +548,7 @@ class Filter(BaseLogFactorAdder):
             if config.filter_source == "cuthbert":
                 output_kind = "cuthbert"
 
-                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cuthbert_filter(
                         dyn,
                         config,
@@ -402,13 +557,14 @@ class Filter(BaseLogFactorAdder):
                         obs_values=ov,
                         ctrl_times=ct,
                         ctrl_values=cv,
+                        resolved_localization=resolved_localization,
                     )
 
             elif config.filter_source == "cd_dynamax":
                 output_kind = "cd_dynamax_discrete"
                 uses_preprocessed_obs = isinstance(config, RBPFConfig)
 
-                def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
                     return compute_cd_dynamax_discrete_filter(
                         dyn,
                         config,
@@ -427,6 +583,14 @@ class Filter(BaseLogFactorAdder):
             raise ValueError(
                 f"Unsupported filter config for plate: {type(config).__name__}"
             )
+
+        def compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+            # Add scalar event axes after vmap removes plate dimensions.
+            if not isinstance(config, HMMConfigs):
+                ov = _ensure_trailing_event_axis(ov)
+                if cv is not None:
+                    cv = _ensure_trailing_event_axis(cv)
+            return _compute_output(dyn, ot, ov, ovf, om, ct, cv, k)
 
         # Pre-split keys for all plate members (needed for stochastic filters).
         if key is not None:
@@ -540,20 +704,34 @@ class Filter(BaseLogFactorAdder):
 
         if output_kind == "continuous":
             marginal_logliks = outputs.marginal_loglik
+            states = outputs
         elif output_kind == "cd_dynamax_discrete":
             if isinstance(config, RBPFConfig):
                 marginal_logliks = outputs["marginal_loglik"]
             else:
                 marginal_logliks = outputs.marginal_loglik
+            states = outputs
         elif output_kind == "hmm":
-            marginal_logliks, log_filt_seq = outputs
+            marginal_logliks, states = outputs
+            log_filt_seq = states
         elif output_kind == "cuthbert":
             marginal_logliks, states = outputs
         else:
             raise ValueError(f"Unsupported batched output kind: {output_kind}")
 
-        numpyro.factor(f"{name}_marginal_log_likelihood", marginal_logliks)
-        numpyro.deterministic(f"{name}_marginal_loglik", marginal_logliks)
+        self.marginal_loglik = marginal_logliks
+        self.filtered_states = states
+        self._filter_config_used = config
+
+        self.predicted_observations = extract_filter_predictions(
+            states,
+            dynamics=dynamics,
+            filter_config=config,
+            obs_times=obs_times,
+            ctrl_values=ctrl_values,
+            plate_shapes=plate_shapes,
+            resolved_localization=resolved_localization,
+        )
 
         if output_kind == "continuous":
             particle_mode = isinstance(config, ContinuousTimeDPFConfig)
@@ -579,23 +757,6 @@ class Filter(BaseLogFactorAdder):
                 ),
             )
         if output_kind == "hmm":
-            hmm_config = cast(HMMConfig, config)
-            record_max_elems = hmm_config.record_max_elems
-            if _should_record_field(
-                hmm_config.record_log_filtered,
-                log_filt_seq.shape,
-                record_max_elems,
-            ):
-                numpyro.deterministic(f"{name}_log_filtered_states", log_filt_seq)
-            if _should_record_field(
-                hmm_config.record_filtered,
-                log_filt_seq.shape,
-                record_max_elems,
-            ):
-                numpyro.deterministic(
-                    f"{name}_filtered_states",
-                    jnp.exp(log_filt_seq),
-                )
             return _categorical_log_probs_to_dists(
                 log_filt_seq,
                 plate_shapes=plate_shapes,
@@ -605,6 +766,9 @@ class Filter(BaseLogFactorAdder):
                 states,
                 particle_mode=isinstance(config, PFConfig),
                 plate_shapes=plate_shapes,
+                covariance_jitter=getattr(
+                    config, "recorded_filtered_states_cov_jitter", 0.0
+                ),
             )
 
         raise ValueError(f"Unsupported batched output kind: {output_kind}")
@@ -616,17 +780,19 @@ def _filter_discrete_time(
     filter_config: BaseFilterConfig,
     key: PRNGKeyArray | None = None,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
     _obs_values_filled: Array | None = None,
     _obs_mask: Array | None = None,
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
-    | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
     **kwargs,
-) -> list[numpyro.distributions.Distribution]:
+) -> tuple[
+    Real[Array, ""] | None,
+    object | None,
+    list[numpyro.distributions.Distribution],
+]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
     Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
@@ -666,6 +832,7 @@ def _filter_discrete_time(
             obs_values=obs_values,
             ctrl_times=ctrl_times,
             ctrl_values=ctrl_values,
+            resolved_localization=resolved_localization,
             **kwargs,
         )
     else:
@@ -678,15 +845,16 @@ def _filter_continuous_time(
     filter_config: BaseFilterConfig,
     key: PRNGKeyArray | None = None,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
-    | Real[Array, "*ctrl_value_plate ctrl_time"]
-    | None = None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> list[numpyro.distributions.Distribution]:
+) -> tuple[
+    Real[Array, ""],
+    object,
+    list[numpyro.distributions.Distribution],
+]:
     """Continuous-time marginal likelihood via CD-Dynamax.
 
     Supports: EnKF, DPF, EKF, UKF (inferred from config type).
@@ -714,6 +882,7 @@ def _filter_continuous_time(
 
 
 __all__ = [
+    "ConstructCholInnovationCovariance",
     "ContinuousTimeKFConfig",
     "ContinuousTimeDPFConfig",
     "ContinuousTimeEnKFConfig",
@@ -721,11 +890,16 @@ __all__ = [
     "ContinuousTimeUKFConfig",
     "EKFConfig",
     "EnKFConfig",
+    "EnKFLocalizationConfig",
+    "EnKFLocalizationFunctions",
     "Filter",
     "HMMConfig",
     "HMMConfigs",
     "KFConfig",
+    "ModifyCrossCovariance",
+    "ModifyPredictedObservationCovariance",
     "PFConfig",
     "PFResamplingConfig",
+    "TaperCovarianceFn",
     "UKFConfig",
 ]

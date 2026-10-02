@@ -1,11 +1,12 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF, RBPF."""
 
+import warnings
+from typing import Any, cast
+
 import jax
 import jax.numpy as jnp
-import numpyro
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
-    PosteriorGSSMFiltered,
     lgssm_filter,
 )
 from cd_dynamax.dynamax.linear_gaussian_ssm.models import LinearGaussianSSM
@@ -23,21 +24,22 @@ from cd_dynamax.dynamax.slds.inference import (
     rbpfilter,
     rbpfilter_optimal,
 )
+from jax.experimental import sparse as jax_sparse
+from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
     KFConfig,
     RBPFConfig,
     UKFConfig,
-    _config_to_record_kwargs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
     gaussian_to_nlgssm_params,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
@@ -47,7 +49,6 @@ from dynestyx.models import (
     SwitchingLinearGaussianStateEvolution,
 )
 from dynestyx.observation_missingness import prepare_observation_views
-from dynestyx.utils import _should_record_field
 
 
 def _prepare_slds_rbpf_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
@@ -167,7 +168,7 @@ def _slds_rbpfilter_output_to_filter_output(
     rbpf_output,
     *,
     num_regimes: int,
-) -> dict[str, jax.Array]:
+) -> dict[str, Array]:
     """Convert cd-dynamax RBPF output to dynestyx's generic filter fields."""
     weights = _rbpfilter_field(rbpf_output, "weights")
     means = _rbpfilter_field(rbpf_output, "means")
@@ -251,7 +252,16 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
     )
 
 
-def _prepare_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
+def _prepare_inputs(
+    dynamics: DynamicalModel,
+    obs_values: Real[Array, "obs_time observation_dim"],
+    obs_times: Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None,
+) -> tuple[
+    Real[Array, "obs_time observation_dim"],
+    Real[Array, "obs_time control_dim"],
+]:
     """Prepare emissions and inputs arrays for cd-dynamax discrete filters."""
     emissions = obs_values
     t1 = emissions.shape[0]
@@ -259,7 +269,8 @@ def _prepare_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
     if ctrl_values is None:
         inputs = jnp.zeros((t1, control_dim))
     elif ctrl_values.shape[0] > t1:
-        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        aligned_ctrl_times = cast(Real[Array, " ctrl_time"], ctrl_times)
+        inds = jnp.searchsorted(aligned_ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
     else:
         inputs = ctrl_values
@@ -269,15 +280,15 @@ def _prepare_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
 def compute_cd_dynamax_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key=None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    _obs_values_filled=None,
-    _obs_mask=None,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects)."""
     if isinstance(filter_config, RBPFConfig):
         if key is None:
@@ -324,6 +335,16 @@ def compute_cd_dynamax_discrete_filter(
     params_nl = gaussian_to_nlgssm_params(dynamics)
 
     if isinstance(filter_config, EKFConfig):
+        obs_model = dynamics.observation_model
+        if isinstance(obs_model, LinearGaussianObservation) and isinstance(
+            obs_model.H, jax_sparse.JAXSparse
+        ):
+            warnings.warn(
+                "A sparse observation matrix H was passed to EKFConfig. This works "
+                "correctly, but likely gives no efficiency gain due to internal"
+                "use of automatic differentiation.",
+                stacklevel=2,
+            )
         return extended_kalman_filter(params_nl, emissions, inputs=inputs)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
@@ -336,65 +357,37 @@ def compute_cd_dynamax_discrete_filter(
         )
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
-        "Expected KFConfig, EKFConfig, or UKFConfig."
+        "Expected KFConfig, EKFConfig, UKFConfig, or RBPFConfig."
     )
-
-
-def _add_kf_sites(
-    name: str, posterior: PosteriorGSSMFiltered | dict, record_kwargs: dict
-) -> None:
-    """Add requested cd-dynamax filter summaries as deterministic sites."""
-    max_elems = record_kwargs["record_max_elems"]
-    means = _filter_output_field(posterior, "filtered_means")
-    covs = _filter_output_field(posterior, "filtered_covariances")
-    particles = _filter_output_field(posterior, "particles")
-    log_weights = _filter_output_field(posterior, "log_weights")
-    regime_probs = _filter_output_field(posterior, "filtered_regime_probs")
-
-    if means is not None and _should_record_field(
-        record_kwargs["record_filtered_states_mean"], means.shape, max_elems
-    ):
-        numpyro.deterministic(f"{name}_filtered_states_mean", means)
-    if covs is not None and _should_record_field(
-        record_kwargs["record_filtered_states_cov"], covs.shape, max_elems
-    ):
-        numpyro.deterministic(f"{name}_filtered_states_cov", covs)
-    if covs is not None and _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], covs.shape[:-1], max_elems
-    ):
-        diag_cov = jnp.diagonal(covs, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
-    if particles is not None and _should_record_field(
-        record_kwargs["record_filtered_particles"], particles.shape, max_elems
-    ):
-        numpyro.deterministic(f"{name}_filtered_particles", particles)
-    if log_weights is not None and _should_record_field(
-        record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
-    ):
-        numpyro.deterministic(f"{name}_filtered_log_weights", log_weights)
-    if regime_probs is not None and _should_record_field(
-        record_kwargs.get("record_filtered_regime_probs"),
-        regime_probs.shape,
-        max_elems,
-    ):
-        numpyro.deterministic(f"{name}_filtered_regime_probs", regime_probs)
 
 
 def run_discrete_filter(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    key=None,
+    key: PRNGKeyArray | None = None,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    _obs_values_filled=None,
-    _obs_mask=None,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    _obs_values_filled: Array | None = None,
+    _obs_mask: Array | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> list[dist.Distribution]:
-    """Run discrete-time filter via cd-dynamax (KF, EKF, UKF, RBPF)."""
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
+    """Run discrete-time filter via cd-dynamax (KF, EKF, UKF, RBPF).
+
+    Pure computation — no numpyro side-effects. Callers are responsible for
+    registering numpyro.factor / numpyro.deterministic if needed.
+
+    Returns:
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - posterior: CD-Dynamax posterior object with filtered_means and
+              filtered_covariances attributes.
+            - filtered_dists: list of MultivariateNormal distributions p(x_t | y_{1:t})
+              at each obs time, for posterior rollout.
+    """
     posterior = compute_cd_dynamax_discrete_filter(
         dynamics,
         filter_config,
@@ -407,19 +400,17 @@ def run_discrete_filter(
         ctrl_values=ctrl_values,
     )
 
-    record_kwargs = _config_to_record_kwargs(filter_config)
-    marginal_loglik = _filter_output_field(posterior, "marginal_loglik")
-    numpyro.factor(f"{name}_marginal_log_likelihood", marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", marginal_loglik)
-    _add_kf_sites(name, posterior, record_kwargs)
-
-    return _posterior_sequence_to_dists(
+    filtered_dists = _posterior_sequence_to_dists(
         posterior,
         means_attr="filtered_means",
         covariances_attr="filtered_covariances",
         particle_mode=isinstance(filter_config, RBPFConfig),
         missing="empty",
     )
+    marginal_loglik = _filter_output_field(posterior, "marginal_loglik")
+    if marginal_loglik is None:
+        raise AttributeError("cd-dynamax filter output is missing `marginal_loglik`.")
+    return marginal_loglik, posterior, filtered_dists
 
 
 __all__ = [

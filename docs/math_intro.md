@@ -9,7 +9,7 @@ If you want to jump directly into code, take a look at the [Quick Example](tutor
 For the purposes of `dynestyx`, a dynamical system is a generative model depending on time. These generally come in the form of *state space models* (SSMs), where some unobserved state \(x_t \in \mathbb{R}^{d_x}\) evolves over time[^1], with occasional observations \(y_t \in \mathbb{R}^{d_y}\). Dynestyx allows the process that evolves \(x_t\), as well as the process that generates observations \(y_t\), to both be extremely general, and, in particular, allows for \(x_t\) to be specified as a continuous-time or discrete-time process. That is, \(x_t\) may be specified by a *stochastic differential equation* (SDE)[^2],
 
 $$
-    dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{g_\theta(x, t) \, \mathrm{d}\beta_t}_\text{diffusion},
+    dx_t = \underbrace{f_\theta(x, t) \,\mathrm{d}t}_\text{drift} + \underbrace{L_\theta(x, t) \, \mathrm{d}W_t}_\text{diffusion},
 $$
 
 or as a discrete-time stochastic process,
@@ -18,7 +18,7 @@ $$
     x_t \sim \underbrace{p_\theta(x_t \,|\, x_{t-1})}_{\text{transition density}}.
 $$
 
-In either case, the dynamics are specified with a parameter $\theta$, as well as the parameters of the Brownian motion $\beta_t$ and the initial state distrbution $p(x_0)$. Various names for the process $x_t \mapsto x_{t+1}$ are used, including *transition model*, *dynamics*, *state transition*, and *transition kernel*, but we will collectively call this our *state evolution*.
+In either case, the dynamics are specified with a parameter $\theta$, as well as the parameters of the Brownian motion $W_t$ and the initial state distrbution $p(x_0)$. Various names for the process $x_t \mapsto x_{t+1}$ are used, including *transition model*, *dynamics*, *state transition*, and *transition kernel*, but we will collectively call this our *state evolution*.
 
 We also assume that observations are also generated probabilistically -- depending only on the state \(x_t\) -- via some process
 
@@ -66,29 +66,63 @@ In subsequent tutorials, we give concrete examples of defining many different ty
 
 ### Simulation of Dynamical Systems
 
-Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation. To specify how dynamical models are simulated, we must select a simulator from `dsx.simulators`. Pass observation times (and optionally controls) as kwargs to the model. For example, to simulate from a continuous-discrete model:
+Once a dynamical model is specified, we still require ways to *simulate* from it, i.e., to sample from the state evolution $x_t \mapsto x_{t+1}$. This is particularly the case for SDEs, where exact inference is intractable, and we must rely on numerical approximation.
+
+There are two entry points:
+
+- [`dsx.Simulator()`](api_reference/public/simulators/simulator_wrapper.md) is a
+  handler for models that use `dsx.sample(...)` inside a NumPyro or
+  `Predictive` workflow.
+- [`dsx.simulate(...)`](api_reference/public/handlers.md) performs standalone
+  pure-JAX generation from an already constructed `DynamicalModel`.
+
+Both inspect the model and automatically select discrete-time, ODE, or SDE
+simulation. For a differential equation, pass the corresponding
+[`dsx.ODESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+or
+[`dsx.SDESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+through `simulator_config` to control the numerical solver. Discrete-time
+models do not require a simulator configuration. In every case,
+`n_simulations` specifies how many independent trajectories to generate.
+
+For example, this draws ten SDE trajectories for each NumPyro model execution:
 
 ```python
-from dynestyx.simulators import SDESimulator
-
+import jax.numpy as jnp
 import jax.random as jr
+from numpyro.infer import Predictive
 
-obs_times = jnp.arange(0.0, 1.0, 0.1)
+predict_times = jnp.arange(0.0, 1.0, 0.1)
+simulator_config = dsx.SDESimulatorConfig(source="em_scan", dt0=1e-3)
 
-with SDESimulator():  # Specify how the SDE will be simulated/solved
-    sampled_trajectory = continuous_discrete_model(predict_times=obs_times)  # Obtain samples
+with dsx.Simulator(
+    simulator_config=simulator_config,
+    n_simulations=10,
+):
+    samples = Predictive(
+        continuous_discrete_model,
+        num_samples=1,
+        exclude_deterministic=False,
+    )(jr.PRNGKey(0), predict_times=predict_times)
 ```
 
-To instead simulate from a discrete-time system, we would write 
+The same `dsx.Simulator()` call auto-routes to the discrete-time or ODE backend
+when the model changes. If you do not need NumPyro sites, use the standalone
+API:
 
 ```python
-from dynestyx.simulators import DiscreteTimeSimulator
-
-with DiscreteTimeSimulator():  # Specify how the discrete-time system will be simulated
-    sampled_trajectory = discrete_time_model(predict_times=obs_times)  # Obtain samples
+simulation_result = dsx.simulate(
+    dynamics,
+    rng_key=jr.PRNGKey(0),
+    predict_times=predict_times,
+    n_simulations=10,
+    simulator_config=simulator_config,
+)
 ```
 
-Simulating from a dynamical model essentially "unrolls" it into a standard `numpyro` probabilistic program. For Bayesian inference of dynamical systems, however, this is a rather inefficient way to do things; in the next section, we review Bayesian inference of dynamical systems, and discuss the way we perform inference more efficiently in `dynestyx`.
+Both interfaces generate states and observations at `predict_times`: use
+`dsx.Simulator()` with NumPyro and `dsx.simulate(...)` otherwise. Next, we turn
+to inference methods that exploit the model's temporal structure.
 
 ## Bayesian Inference of Dynamical Systems
 
@@ -128,7 +162,7 @@ A comprehensive collection of tutorials is available to help you get started wit
 
 ## API Reference
 
-Detailed API documentation is available for all modules, classes, and functions in `dynestyx`. The API reference provides comprehensive information about function signatures, parameters, return values, and usage examples. Visit the [API reference page](api_reference.md) to browse the complete documentation.
+Detailed API documentation is available for all modules, classes, and functions in `dynestyx`. The API reference provides comprehensive information about function signatures, parameters, return values, and usage examples. Visit the [API reference page](api_reference/index.md) to browse the complete documentation.
 
 ## References
 

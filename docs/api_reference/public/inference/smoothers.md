@@ -6,7 +6,7 @@
 
 ```python
 from dynestyx import DiscreteTimeSimulator, Smoother
-from dynestyx.inference.smoother_configs import KFSmootherConfig
+from dynestyx.inference.configs.smoother import KFSmootherConfig
 
 with DiscreteTimeSimulator(n_simulations=4):
     with Smoother(
@@ -43,6 +43,7 @@ behavior.
 | --- | --- | --- |
 | Discrete linear-Gaussian | `KFSmootherConfig` | `cuthbert`, `cd_dynamax` |
 | Discrete nonlinear Gaussian | `EKFSmootherConfig` | `cuthbert`, `cd_dynamax` |
+| Discrete nonlinear Gaussian | `EnRTSSmootherConfig` | `cuthbert` |
 | Discrete nonlinear Gaussian | `UKFSmootherConfig` | `cd_dynamax` |
 | Discrete non-Gaussian/nonlinear | `PFSmootherConfig` | `cuthbert` |
 | Continuous-discrete linear-Gaussian | `ContinuousTimeKFSmootherConfig` | `cd_dynamax` |

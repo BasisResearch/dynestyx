@@ -2,10 +2,10 @@ import jax.numpy as jnp
 import jax.random as jr
 import pytest
 
-from dynestyx.inference.filter_configs import ContinuousTimeEnKFConfig, EKFConfig
+from dynestyx.inference.configs.filter import ContinuousTimeEnKFConfig, EKFConfig
+from dynestyx.inference.configs.mcmc import SGLDConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import SGLDConfig
 from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63_model
 
 SMOKE_NUM_SAMPLES = 1

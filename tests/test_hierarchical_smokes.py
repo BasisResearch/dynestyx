@@ -9,10 +9,10 @@ from numpyro.infer import Predictive, init_to_value
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator
-from dynestyx.inference.filter_configs import EKFConfig, KFConfig
+from dynestyx.inference.configs.filter import EKFConfig, KFConfig
+from dynestyx.inference.configs.mcmc import NUTSConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
-from dynestyx.inference.mcmc_configs import NUTSConfig
 from dynestyx.models.lti_dynamics import LTI_discrete
 
 

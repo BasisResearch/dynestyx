@@ -4,22 +4,22 @@ from typing import cast
 
 import jax
 import jax.numpy as jnp
-import numpyro
 import numpyro.distributions as dist
 from jax import lax
 from jax.scipy.special import logsumexp
 from jaxtyping import Array, Bool, Float, Int, Real, Shaped
 
-from dynestyx.inference.filter_configs import HMMConfig
+from dynestyx.inference.configs.filter import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.observation_missingness import (
+    _canonicalize_observation_distribution,
+    _check_observation_contract,
     masked_observation_log_prob,
     prepare_observation_views,
     probe_observation_distribution_contract,
     summarize_observation_mask,
 )
-from dynestyx.utils import _should_record_field
 
 
 def enumerate_latent_states(dynamics: DynamicalModel) -> Int[Array, " n_states"]:
@@ -75,7 +75,6 @@ def hmm_log_emission_probs_masked(
     xs: Int[Array, " n_states"],
     y: Shaped[Array, " observation_dim"],
     obs_mask: Bool[Array, " observation_dim"],
-    row_has_any_observed: Bool[Array, ""],
     t: float | int | Real[Array, ""],
     observation_dim: int,
     has_partial_missing: bool,
@@ -86,33 +85,38 @@ def hmm_log_emission_probs_masked(
     """log p(y_t, observed entries | x_t, u_t) for each latent state."""
 
     def lp(x):
-        obs_dist = dynamics.observation_model(x=x, u=u, t=t)
-        return masked_observation_log_prob(
-            obs_dist,
-            y=y,
-            obs_mask=obs_mask,
-            row_has_any_observed=row_has_any_observed,
+        obs_dist = _canonicalize_observation_distribution(
+            dynamics.observation_model(x=x, u=u, t=t),
             observation_dim=observation_dim,
-            has_partial_missing=has_partial_missing,
-            expected_mode=expected_mode,
-            expected_event_shape=expected_event_shape,
         )
+        if has_partial_missing:
+            _check_observation_contract(
+                obs_dist,
+                expected_mode=expected_mode,
+                expected_event_shape=expected_event_shape,
+            )
+        return masked_observation_log_prob(obs_dist, y=y, obs_mask=obs_mask)
 
     return jax.vmap(lp)(xs)
 
 
 def hmm_log_components(
     dynamics: DynamicalModel,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Array | None = None,
-    _obs_mask: Array | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    _obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+    _obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
+    | None = None,
+    ctrl_values: Real[Array, "obs_time control_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
 ) -> tuple[
     Float[Array, " n_states"],
-    Float[Array, "*plate time_minus_1 n_states n_states"],
-    Float[Array, "*plate time n_states"],
+    Float[Array, "time_minus_1 n_states n_states"],
+    Float[Array, "time n_states"],
 ]:
     """
     Returns:
@@ -139,7 +143,7 @@ def hmm_log_components(
     )
     obs_mask = _obs_mask[:, None] if obs_values.ndim == 1 else _obs_mask
     (
-        row_has_any_observed,
+        _row_has_any_observed,
         _has_missing,
         has_partial_missing,
         _has_fully_missing_rows,
@@ -152,12 +156,11 @@ def hmm_log_components(
     )
     if ctrl_values is not None:
         log_emit_seq = jax.vmap(
-            lambda y, obs_mask_t, row_has_any, t, u: hmm_log_emission_probs_masked(
+            lambda y, obs_mask_t, t, u: hmm_log_emission_probs_masked(
                 dynamics,
                 xs,
                 y,
                 obs_mask_t,
-                row_has_any,
                 t,
                 observation_dim,
                 has_partial_missing,
@@ -168,18 +171,16 @@ def hmm_log_components(
         )(
             obs_values_filled,
             obs_mask,
-            row_has_any_observed,
             obs_times,
             ctrl_values,
         )
     else:
         log_emit_seq = jax.vmap(
-            lambda y, obs_mask_t, row_has_any, t: hmm_log_emission_probs_masked(
+            lambda y, obs_mask_t, t: hmm_log_emission_probs_masked(
                 dynamics,
                 xs,
                 y,
                 obs_mask_t,
-                row_has_any,
                 t,
                 observation_dim,
                 has_partial_missing,
@@ -190,7 +191,6 @@ def hmm_log_components(
         )(
             obs_values_filled,
             obs_mask,
-            row_has_any_observed,
             obs_times,
         )
 
@@ -214,9 +214,9 @@ def hmm_log_components(
 
 def hmm_filter(
     log_pi: Float[Array, " n_states"],
-    log_A_seq: Float[Array, "*plate time_minus_1 n_states n_states"],
-    log_emit_seq: Float[Array, "*plate time n_states"],
-) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
+    log_A_seq: Float[Array, "time_minus_1 n_states n_states"],
+    log_emit_seq: Float[Array, "time n_states"],
+) -> tuple[Float[Array, ""], Float[Array, "time n_states"]]:
     """
     Exact HMM filtering.
 
@@ -263,13 +263,18 @@ def hmm_filter(
 def compute_hmm_filter(
     dynamics: DynamicalModel,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Array | None = None,
-    _obs_mask: Array | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
-) -> tuple[Shaped[Array, ""], Float[Array, "*plate time n_states"]]:
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    _obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+    _obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
+    | None = None,
+    ctrl_values: Real[Array, "obs_time control_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+) -> tuple[Float[Array, ""], Float[Array, "time n_states"]]:
     """Pure-JAX HMM filter computation (no numpyro side-effects).
 
     Returns:
@@ -297,15 +302,24 @@ def _filter_hmm(
     dynamics: DynamicalModel,
     filter_config: HMMConfig,
     *,
-    obs_times: Real[Array, "*obs_time_plate obs_time"],
-    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
-    | Real[Array, "*obs_value_plate obs_time"],
-    _obs_values_filled: Array | None = None,
-    _obs_mask: Array | None = None,
-    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "*ctrl_value_plate obs_time control_dim"] | None = None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    _obs_values_filled: Real[Array, "obs_time observation_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
+    _obs_mask: Bool[Array, "obs_time observation_dim"]
+    | Bool[Array, " obs_time"]
+    | None = None,
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "obs_time control_dim"]
+    | Real[Array, " obs_time"]
+    | None = None,
     **kwargs,
-) -> list[dist.Distribution]:
+) -> tuple[
+    Float[Array, ""],
+    Float[Array, "time n_states"],
+    list[dist.Distribution],
+]:
     """Exact HMM marginal likelihood via forward filtering.
 
     Args:
@@ -318,8 +332,12 @@ def _filter_hmm(
         ctrl_values: Control values (optional).
 
     Returns:
-        List of Categorical distributions p(x_t | y_{1:t}) at each obs time,
-        for use with Filter + DiscreteTimeSimulator rollout.
+        tuple of:
+            - loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - log_filt_seq: log filtering probabilities log p(x_t | y_{1:t}),
+              shape (time, n_states).
+            - filtered_dists: list of Categorical distributions p(x_t | y_{1:t})
+              at each obs time, for use with Filter + DiscreteTimeSimulator rollout.
     """
     loglik, log_filt_seq = compute_hmm_filter(
         dynamics,
@@ -330,29 +348,8 @@ def _filter_hmm(
         ctrl_values=ctrl_values,
     )
 
-    numpyro.factor(f"{name}_marginal_log_likelihood", loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", loglik)
-
-    record_max_elems = filter_config.record_max_elems
-
-    if _should_record_field(
-        filter_config.record_log_filtered, log_filt_seq.shape, record_max_elems
-    ):
-        numpyro.deterministic(
-            f"{name}_log_filtered_states",
-            log_filt_seq,  # (T, K)
-        )
-
-    if _should_record_field(
-        filter_config.record_filtered, log_filt_seq.shape, record_max_elems
-    ):
-        numpyro.deterministic(
-            f"{name}_filtered_states",
-            jnp.exp(log_filt_seq),  # (T, K)
-        )
-
-    # Return filtered distributions for Filter + DiscreteTimeSimulator rollout
-    return [
+    filtered_dists = [
         dist.Categorical(probs=jnp.exp(log_filt_seq[i]))
         for i in range(log_filt_seq.shape[0])
     ]
+    return loglik, log_filt_seq, filtered_dists

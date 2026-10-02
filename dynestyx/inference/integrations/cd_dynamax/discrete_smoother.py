@@ -1,8 +1,7 @@
 """Discrete-time smoothers via cd-dynamax (dynamax): KF, EKF, UKF."""
 
-import jax
-import jax.numpy as jnp
-import numpyro
+from typing import Any
+
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import lgssm_smoother
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
@@ -12,35 +11,34 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
     UKFHyperParams,
     unscented_kalman_smoother,
 )
+from jaxtyping import Array, Real
 
-from dynestyx.inference.distribution_utils import _posterior_sequence_to_dists
-from dynestyx.inference.filter_configs import (
+from dynestyx.inference.configs.filter import (
     EKFConfig,
     KFConfig,
     UKFConfig,
+)
+from dynestyx.inference.configs.smoother import (
+    BaseSmootherConfig,
 )
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
     _prepare_inputs,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
-from dynestyx.inference.smoother_configs import (
-    BaseSmootherConfig,
-    _config_to_smoother_record_kwargs,
-)
+from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
-from dynestyx.utils import _should_record_field
 
 
 def compute_cd_dynamax_discrete_smoother(
     dynamics: DynamicalModel,
     filter_config: BaseSmootherConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
-):
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
+) -> Any:
     """Pure-JAX cd-dynamax discrete smoother computation (no numpyro side-effects)."""
     emissions, inputs = _prepare_inputs(
         dynamics, obs_values, obs_times, ctrl_times, ctrl_values
@@ -68,46 +66,30 @@ def compute_cd_dynamax_discrete_smoother(
     )
 
 
-def _add_smoother_sites(name: str, posterior, record_kwargs: dict) -> None:
-    """Add smoothed means/covariances as deterministic sites."""
-    max_elems = record_kwargs["record_max_elems"]
-    means = posterior.smoothed_means
-    covs = posterior.smoothed_covariances
-    if means is None or covs is None:
-        return
-    t1, state_dim = means.shape
-    add_mean = _should_record_field(
-        record_kwargs["record_smoothed_states_mean"], means.shape, max_elems
-    )
-    add_cov = _should_record_field(
-        record_kwargs["record_smoothed_states_cov"],
-        (t1, state_dim, state_dim),
-        max_elems,
-    )
-    add_cov_diag = _should_record_field(
-        record_kwargs["record_smoothed_states_cov_diag"], (t1, state_dim), max_elems
-    )
-    if add_mean:
-        numpyro.deterministic(f"{name}_smoothed_states_mean", means)
-    if add_cov:
-        numpyro.deterministic(f"{name}_smoothed_states_cov", covs)
-    if add_cov_diag:
-        diag_cov = jnp.diagonal(covs, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_smoothed_states_cov_diag", diag_cov)
-
-
 def run_discrete_smoother(
     name: str,
     dynamics: DynamicalModel,
     filter_config: BaseSmootherConfig,
     *,
-    obs_times: jax.Array,
-    obs_values: jax.Array,
-    ctrl_times=None,
-    ctrl_values=None,
+    obs_times: Real[Array, " obs_time"],
+    obs_values: Real[Array, "obs_time observation_dim"],
+    ctrl_times: Real[Array, " ctrl_time"] | None = None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
-) -> list[dist.Distribution]:
-    """Run discrete-time smoother via cd-dynamax (KF, EKF, UKF)."""
+) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
+    """Run discrete-time smoother via cd-dynamax (KF, EKF, UKF).
+
+    Pure computation — no numpyro side-effects. Callers are responsible for
+    registering numpyro.factor / numpyro.deterministic if needed.
+
+    Returns:
+        tuple of:
+            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
+            - posterior: CD-Dynamax posterior object with smoothed_means and
+              smoothed_covariances attributes.
+            - smoothed_dists: list of MultivariateNormal distributions p(x_t | y_{1:T})
+              at each obs time, for posterior rollout.
+    """
     posterior = compute_cd_dynamax_discrete_smoother(
         dynamics,
         filter_config,
@@ -117,19 +99,14 @@ def run_discrete_smoother(
         ctrl_values=ctrl_values,
     )
 
-    numpyro.factor(f"{name}_marginal_log_likelihood", posterior.marginal_loglik)
-    numpyro.deterministic(f"{name}_marginal_loglik", posterior.marginal_loglik)
-    _add_smoother_sites(
-        name, posterior, _config_to_smoother_record_kwargs(filter_config)
-    )
-
-    return _posterior_sequence_to_dists(
+    smoothed_dists = _posterior_sequence_to_dists(
         posterior,
         means_attr="smoothed_means",
         covariances_attr="smoothed_covariances",
         particle_mode=False,
         missing="empty",
     )
+    return posterior.marginal_loglik, posterior, smoothed_dists
 
 
 __all__ = ["compute_cd_dynamax_discrete_smoother", "run_discrete_smoother"]
