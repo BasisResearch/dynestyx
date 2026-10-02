@@ -17,7 +17,7 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_dist,
     filter_state_mean,
 )
-from dynestyx.control.mppi import MPPI
+from dynestyx.control.mppi import MPPI, MPPIState
 from dynestyx.control.utils.distribution_utils import (
     AR1Noise,
     ColoredNoise,
@@ -1464,7 +1464,7 @@ def test_mppi_masks_non_finite_losses_before_softmax():
 
     u0, next_s = mppi(x_hat, jnp.array(0.0), jnp.array(1.0), mppi.initial_state())
     assert jnp.all(jnp.isfinite(u0))
-    assert jnp.all(jnp.isfinite(next_s["nominal_sequence"]))
+    assert jnp.all(jnp.isfinite(next_s.nominal_sequence))
 
 
 def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
@@ -1508,7 +1508,7 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     _, _, info = mppi.plan_step(
         dist.Delta(x_0).to_event(1),
         t_now,
-        {"nominal_sequence": nominal, "key": jr.PRNGKey(0)},
+        MPPIState(nominal_sequence=nominal, key=jr.PRNGKey(0)),
     )
     result = info.results
     assert result.times is not None

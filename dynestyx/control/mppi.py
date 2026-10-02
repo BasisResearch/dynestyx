@@ -10,7 +10,7 @@ start can be overridden by subclassing `MPPI`.
 
 import warnings
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import NamedTuple, Self
 
 import equinox as eqx
 import jax
@@ -48,6 +48,38 @@ class MPPIStepInfo(NamedTuple):
     results: SimulatedResult
 
 
+class MPPIState(eqx.Module):
+    """MPPI's internal policy state.
+
+    To modify the state, subclass it, adding fields, and override
+    `MPPI.initial_state` to return the subclass.
+
+    To use your new fields, override any of the hooks used in MPPI.
+    Note that a key field is always required within MPPI.
+
+    Update fields with `s.replace(nominal_sequence=...)`.
+
+    Attributes:
+        nominal_sequence: The sequence the candidates are sampled around,
+            `(horizon, control_dim)`.
+        key: MPPI's own PRNG key, advanced by `MPPI.plan_step` on every call.
+    """
+
+    nominal_sequence: Real[Array, "horizon control_dim"]
+    key: PRNGKeyArray
+
+    def replace(self, **changes) -> Self:
+        """A copy with the given fields replaced, e.g.
+        `s.replace(nominal_sequence=new_nominal)`. Works for subclasses too."""
+        names = tuple(changes)
+        return eqx.tree_at(
+            lambda st: tuple(getattr(st, name) for name in names),
+            self,
+            tuple(changes.values()),
+            is_leaf=lambda x: x is None,
+        )
+
+
 class MPPI(eqx.Module):
     r"""Model Predictive Path Integral (MPPI) controller.
 
@@ -82,15 +114,13 @@ class MPPI(eqx.Module):
     `plan_step` calls them in this order, and the defaults implement the
     standard MPPI above. Each hook takes its own inputs followed by the same
     context `(x_hat, t_now, s)`: the belief handed to the policy, the current
-    time, and the policy state `s`, a dict with entries `"nominal_sequence"`
-    (the sequence the candidates are sampled around) and `"key"` (MPPI's own
-    PRNG key). A subclass may add other entries (any pytrees) in
-    `initial_state`; after that the entries are fixed.
+    time, and the policy state `s`, an `MPPIState` (see there for carrying
+    more or different state).
 
     1. `rollout_initial_condition(x_hat, t_now, s)`: the distribution each
        rollout's $x_0$ is drawn from. Default: a `Delta` at `x_hat.mean`.
     2. `sample_controls(key, x_hat, t_now, s)`: the candidate control
-       sequences (the proposal). Default: `s["nominal_sequence"]` plus
+       sequences (the proposal). Default: `s.nominal_sequence` plus
        `noise_std`-scaled draws from `noise`.
     3. Rollouts and `loss_fn` (not overridable). Non-finite losses are clamped
        to the largest finite value.
@@ -100,15 +130,14 @@ class MPPI(eqx.Module):
     5. `update_state(plan, info, s)`: returns the next policy state, the only
        hook that does. `info` is an `MPPIStepInfo` with the rest of the step:
        `x_hat`, `t_now`, `candidates`, `losses` and `results` (the rollouts).
-       Default: `s` with `"nominal_sequence"` set to the plan shifted left by
-       one (last entry repeated), other entries unchanged.
+       Default: `s` with `nominal_sequence` set to the plan shifted left by
+       one (last entry repeated), other fields unchanged.
 
-    `plan_step` then applies `plan[0]` and advances the next state's `"key"`
-    entry.
+    `plan_step` then applies `plan[0]` and advances the next state's `key`.
 
 
     Hooks run inside `jax.lax.scan` (and possibly `jax.grad`), so they must be
-    pure and JAX-traceable and must not draw randomness from `s["key"]`
+    pure and JAX-traceable and must not draw randomness from `s.key`
     (`sample_controls` gets its own key). The state `update_state` returns
     must keep the structure, shapes and dtypes of the one it received. New fields on an `MPPI` subclass need a default (or
     `eqx.field(kw_only=True)`).
@@ -116,24 +145,16 @@ class MPPI(eqx.Module):
     Attributes:
         dynamics: a `DynamicalModel` (the same model used for the real simulation
             or some approximate). Each candidate rollout is computed by calling `dsx.simulate`.
-            If `dynamics` holds trainable parameters you're also
-            fitting via the outer simulation, they remain in the differentiable
-            pytree so gradients through planning are tracked too.
         loss_fn: `MPPILossFn`, i.e. `(result: SimulatedResult) -> scalar`,
-            called once per sample (vmapped) on that candidate's full rollout. Every
+            called once per sample (vmapped). Every
             field carries a leading `n_simulations` axis -- e.g.
             `result.states.shape == (n_simulations, horizon, state_dim)`, so
-            `(1, horizon, state_dim)` by default. `times`/`states`/`observations`/`controls` all
-            have length `horizon` and are index-aligned: at index `k`,
-            `states[k]` is $x_{k+1}$, `observations[k]` is $y_{k+1}$, and
-            `controls[k]` is $u_k$ -- the control that produced that state. The
-            starting state $x_0$ is not in `states` (no control produced it); it
+            `(1, horizon, state_dim)` by default. The
+            starting state $x_0$ is not in `states`; it
             is available separately as `result.x_0`, shape
-            `(n_simulations, state_dim)`.
+            `(n_simulations, state_dim)`. `states/controls/observations` are aligned with `times/ctrl_times/obs_times`.
         horizon: The planning grid relative to `t_now`, `[0, t_1, ..., t_H]`
-            (starting at 0, strictly increasing), with the rollout run on
-            `t_now + horizon` -- e.g. `jnp.linspace(0.0, 1.0, 11)` for 10
-            steps of 0.1. `H` is the number of internal one-step `dynamics`
+            (starting at 0, strictly increasing): `t_now, t_now+ t_1..., t_now + t_H`. `H` is the number of internal one-step `dynamics`
             calls per rollout (see `horizon_length`). Required.
         noise_std: Scale applied to the perturbations drawn from `noise`,
             scalar or shape `(control_dim,)`. The noises in
@@ -145,17 +166,14 @@ class MPPI(eqx.Module):
             as the perturbations around the nominal sequence. `None` (default)
             is replaced by `AR1Noise(horizon, dynamics.control_dim, rho=0.5)`
             at construction. The
-            built-in noises take the planning grid as `times`, e.g.
-            `WhiteNoise(horizon, control_dim)`, `AR1Noise(horizon,
-            control_dim, rho=...)` (adapts to uneven steps) or
-            `ColoredNoise(horizon, control_dim, beta=...)` (warns about them).
+            built-in noises take the planning grid as `times`, e.g. `AR1Noise(horizon,
+            control_dim, rho=...)`.
         n_samples: Number of sampled control sequences per call. Defaults to
             `10`.
         n_simulations: Number of rollouts per candidate control sequence
-            (forwarded to `dsx.simulate`), each with its own noise draw, so
-            `loss_fn` can score a candidate over several noise realizations.
+            (forwarded to `dsx.simulate`), each with its own noise draw.
             Defaults to `1`.
-        common_randomness: If `True` (default), the j-th rollout uses the same
+        common_randomness: If `True` (default), each rollout uses the same
             noise for every candidate, so candidates are compared under
             identical noise and their losses differ only through their
             controls. If `False`, every candidate draws its own noise.
@@ -164,13 +182,12 @@ class MPPI(eqx.Module):
             lowest-loss samples, and `0` applies the lowest-loss candidate
             alone. Defaults to `1.0`.
         batched: Whether the `n_samples` candidate rollouts are computed with
-            `jax.vmap` (default, fast, requires `dynamics.state_evolution` to
-            be vmap-compatible) or `jax.lax.map` (a sequential loop -- slower,
+            `jax.vmap` (requires `dynamics.state_evolution` to
+            be vmap-compatible) or `jax.lax.map` (slower,
             but works for a `dynamics.state_evolution` that isn't
-            vmap-compatible, e.g. wraps an external simulator via
-            `jax.pure_callback`).
+            vmap-compatible).
         seed: Seeds MPPI's own PRNG key, carried inside the policy state `s`
-            (as `s["key"]`) and split internally on every call.
+            (as `s.key`) and split internally on every call.
     """
 
     dynamics: DynamicalModel
@@ -235,26 +252,24 @@ class MPPI(eqx.Module):
         """Number of planning steps `H` in the grid `horizon`."""
         return self.horizon.shape[0] - 1
 
-    def initial_state(self) -> dict:
-        """Zero nominal control sequence plus MPPI's own seeded PRNG key, as
-        `{"nominal_sequence": ..., "key": ...}`. `DiscreteControlLoopSimulator`
-        never calls this automatically, so it must be supplied explicitly.
-        Override it to add extra entries to carry across steps."""
-        return {
-            "nominal_sequence": jnp.zeros(
+    def initial_state(self) -> MPPIState:
+        """Zero nominal control sequence plus MPPI's own seeded PRNG key.
+        Must be initialized explicitly. Override it to return an `MPPIState`
+        subclass carrying more state."""
+        return MPPIState(
+            nominal_sequence=jnp.zeros(
                 (self.horizon_length, self.dynamics.control_dim)
             ),
-            "key": jr.PRNGKey(self.seed),
-        }
+            key=jr.PRNGKey(self.seed),
+        )
 
     def rollout_initial_condition(
-        self, x_hat: Distribution, t_now: Real[Array, ""], s: dict
+        self, x_hat: Distribution, t_now: Real[Array, ""], s: MPPIState
     ) -> Distribution:
         """Distribution each candidate rollout's $x_0$ is drawn from.
 
         Default: a `Delta` at `x_hat.mean`, i.e. plan from the point estimate.
-        Return `x_hat` itself to plan over the whole belief instead: each of
-        the `n_simulations` rollouts then draws its own $x_0$."""
+        Return `x_hat` itself to plan over the whole belief instead."""
         return dist.Delta(x_hat.mean, event_dim=1)
 
     def sample_controls(
@@ -262,13 +277,13 @@ class MPPI(eqx.Module):
         key: PRNGKeyArray,
         x_hat: Distribution,
         t_now: Real[Array, ""],
-        s: dict,
+        s: MPPIState,
     ) -> Real[Array, "n_samples horizon control_dim"]:
         """Candidate control sequences to roll out and score (the proposal).
 
-        Default: `s["nominal_sequence"]` plus `n_samples` `noise_std`-scaled
+        Default: `s.nominal_sequence` plus `n_samples` `noise_std`-scaled
         draws from `noise`."""
-        nominal = s["nominal_sequence"]
+        nominal = s.nominal_sequence
         assert self.noise is not None  # set in __post_init__
         eps = self.noise.sample(key, (self.n_samples,))
 
@@ -288,7 +303,7 @@ class MPPI(eqx.Module):
         candidates: Real[Array, "n_samples horizon control_dim"],
         x_hat: Distribution,
         t_now: Real[Array, ""],
-        s: dict,
+        s: MPPIState,
     ) -> Real[Array, "horizon control_dim"]:
         """Weight the candidates and combine them into this step's plan, whose
         first entry is applied. `losses` are always finite.
@@ -310,17 +325,17 @@ class MPPI(eqx.Module):
         self,
         plan: Real[Array, "horizon control_dim"],
         info: MPPIStepInfo,
-        s: dict,
-    ) -> dict:
+        s: MPPIState,
+    ) -> MPPIState:
         """Next policy state, from this step's plan and `info` (an
         `MPPIStepInfo`: the belief, time, candidates, their finite losses and
-        rollouts). Must return the same entries as `s`.
+        rollouts). Must return the same fields as `s`.
 
-        Default: `s` with `"nominal_sequence"` set to the plan shifted left by
+        Default: `s` with `nominal_sequence` set to the plan shifted left by
         one with the last entry repeated (the receding-horizon warm start);
-        other entries unchanged."""
+        other fields unchanged."""
         next_nominal = jnp.concatenate([plan[1:], plan[-1:]], axis=0)
-        return {**s, "nominal_sequence": next_nominal}
+        return s.replace(nominal_sequence=next_nominal)
 
     def _rollout_and_score_one(
         self,
@@ -372,26 +387,18 @@ class MPPI(eqx.Module):
         self,
         x_hat: Distribution,
         t_now: Real[Array, ""],
-        s: dict,
-    ) -> tuple[Real[Array, " control_dim"], dict, MPPIStepInfo]:
+        s: MPPIState,
+    ) -> tuple[Real[Array, " control_dim"], MPPIState, MPPIStepInfo]:
         """Do MPPI's full planning step and also return what it computed, as
         the `MPPIStepInfo`, useful for debugging.
 
         `__call__` (used by `DiscreteControlLoopSimulator`) is a
-        thin wrapper around this that drops the info, since
-        `PolicyCallable`'s return signature can't carry a third value.
+        thin wrapper around this that drops the info.
 
         Every field of `info.results` is shaped
-        `(n_samples, n_simulations, horizon, ...)`. `predicted_*` are always
-        `None` (not meaningful for a planning rollout).
+        `(n_samples, n_simulations, horizon, ...)`.
         """
-        if not isinstance(s, dict) or "key" not in s:
-            got = f"entries {sorted(s)}" if isinstance(s, dict) else type(s).__name__
-            raise ValueError(
-                "MPPI's policy state must be a dict with a 'key' entry (MPPI's "
-                f"PRNG key), as returned by initial_state(); got {got}."
-            )
-        key, sample_key, rollout_key = jr.split(s["key"], 3)
+        key, sample_key, rollout_key = jr.split(s.key, 3)
 
         initial_condition = self.rollout_initial_condition(x_hat, t_now, s)
         candidates = self.sample_controls(sample_key, x_hat, t_now, s)
@@ -430,15 +437,8 @@ class MPPI(eqx.Module):
             results=results,
         )
         next_s = self.update_state(plan, info, s)
-        if not isinstance(next_s, dict) or set(next_s) != set(s):
-            got = set(next_s) if isinstance(next_s, dict) else set()
-            raise ValueError(
-                "update_state must return a dict with the same entries as the "
-                "state it received (those created by initial_state()); "
-                f"added {sorted(got - set(s))}, removed {sorted(set(s) - got)}."
-            )
         # MPPI owns its randomness: always advance the key.
-        next_s = {**next_s, "key": key}
+        next_s = next_s.replace(key=key)
 
         # Also return the step's info, for debugging/analysis.
         return plan[0], next_s, info
@@ -448,8 +448,8 @@ class MPPI(eqx.Module):
         x_hat: Distribution,
         t_now: Real[Array, ""],
         t_next: Real[Array, ""],
-        s: dict,
-    ) -> tuple[Real[Array, " control_dim"], dict]:
+        s: MPPIState,
+    ) -> tuple[Real[Array, " control_dim"], MPPIState]:
         del t_next
         u0, next_s, _ = self.plan_step(x_hat, t_now, s)
         return u0, next_s
@@ -458,5 +458,6 @@ class MPPI(eqx.Module):
 __all__ = [
     "MPPI",
     "MPPILossFn",
+    "MPPIState",
     "MPPIStepInfo",
 ]
