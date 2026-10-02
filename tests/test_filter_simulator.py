@@ -39,7 +39,7 @@ def test_filter_sdesimulator_known_params():
     """Filter + SDESimulator: filtered means track observations with known dynamics."""
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_sde()
     rng_key = jr.PRNGKey(0)
-    with trace() as tr, seed(rng_seed=rng_key):
+    with Simulator(), trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
     synthetic_obs = synthetic["observations"]
@@ -53,7 +53,7 @@ def test_filter_odesimulator_known_params():
     """Filter + ODESimulator: filtered means track observations with known dynamics."""
     data_conditioned_model, synthetic = data_conditioned_jumpy_controls_ode()
     rng_key = jr.PRNGKey(0)
-    with trace() as tr, seed(rng_seed=rng_key):
+    with Simulator(), trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
     synthetic_obs = synthetic["observations"]
@@ -71,7 +71,7 @@ def test_filter_discretetimesimulator_known_params(filter_type):
         filter_source="cuthbert",
     )
     rng_key = jr.PRNGKey(0)
-    with trace() as tr, seed(rng_seed=rng_key):
+    with Simulator(), trace() as tr, seed(rng_seed=rng_key):
         data_conditioned_model()
 
     synthetic_obs = synthetic["observations"]

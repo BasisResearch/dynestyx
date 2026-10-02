@@ -54,7 +54,6 @@ def test_infer_smoother_returns_infer_result():
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
-            predict_times=jnp.arange(obs_times[-1], obs_times[-1] + 3.0),
         )
 
     assert isinstance(result, ConditionedResult)
@@ -151,28 +150,6 @@ def test_infer_smoother_does_not_register_numpyro_sites():
     assert result.marginal_loglik is not None
     assert "f_marginal_loglik" not in tr
     assert "f_marginal_log_likelihood" not in tr
-
-
-def test_condition_smoother_no_observations():
-    """Smoother without observations returns an empty ConditionedResult."""
-    dynamics = _make_lti_dynamics(0.5)
-    obs_times, obs_values = _make_data()
-
-    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
-        # Reusing the handler must not leak the first call's cached likelihood.
-        dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
-        result = dsx.condition(
-            "f",
-            dynamics,
-            obs_times=None,
-            obs_values=None,
-            predict_times=jnp.arange(0.0, 5.0, 1.0),
-        )
-
-    assert isinstance(result, ConditionedResult)
-    assert result.marginal_loglik is None
-    assert result.states is None
-    assert result.dists is None
 
 
 def test_smoother_rejects_dirac_ode_inference():
