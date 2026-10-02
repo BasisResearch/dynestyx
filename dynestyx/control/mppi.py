@@ -52,18 +52,22 @@ class MPPI(eqx.Module):
     r"""Model Predictive Path Integral (MPPI) controller.
 
     At each call: sample `n_samples` candidate control sequences of length
-    `horizon` as Gaussian perturbations around a nominal sequence (carried in
-    the policy state `s`, warm-started from the previous call), roll each one
-    forward `horizon` steps through the dynamics, score the resulting trajectories with `loss_fn`,
-    and combine them via the standard MPPI weighting
+    `horizon` as a perturbations around a nominal sequence:
+    $$
+    u = \bar u + \epsilon
+    $$
+    where $\varepsilon$ is a noise distribution (by default a Gaussian AR(1)). The nominal sequence $\bar{u}$ is the control sequence from the previous step (initially zero), shifted by one time step.
+    It is carried in the policy state `s`. Each control sequence is rolled out over `horizon` timesteps through the dynamics.
+    The resulting trajectories are scored with `loss_fn`,
+    and combined via the standard MPPI weighting
 
     $$w_i \propto \exp(-\mathrm{loss}_i / \lambda), \qquad
       u_{0:H-1} = \sum_i w_i\, u^{(i)}_{0:H-1}$$
 
-    i.e. a softmax over the (negated, temperature-scaled) per-sample losses.
-    Only the first control of that weighted-mean sequence is applied this
+    i.e. a softmax over the temperature-scaled negative losses.
+    Only the first control of the resulting sequence is applied at each
     step. The remainder becomes next step's nominal
-    sequence, shifted left by one with the last entry repeated.
+    sequence.
 
     By default all candidates are rolled out with the same PRNG key (common
     random numbers), so they face the same process and observation noise. The `n_simulations` rollouts
