@@ -2,11 +2,14 @@
 
 import dataclasses
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import equinox as eqx
 import jax.numpy as jnp
-from jaxtyping import Array, Int, Real
+from jaxtyping import Array, Int, PyTree, Real
+
+if TYPE_CHECKING:
+    from dynestyx.models.layout import LayoutCollection
 
 
 @runtime_checkable
@@ -168,6 +171,10 @@ class SimulatedResult(eqx.Module):
 
     See
     [DiscreteTimeSimulator][dynestyx.simulation.discrete.DiscreteTimeSimulator].
+
+    ``unflatten(layout)`` and ``flatten(layout)`` explicitly convert populated
+    state, control, and observation fields. Simulation itself always returns
+    flat arrays, and time fields are never converted.
     """
 
     # observations/controls use their own axis names ("obs_time"/"ctrl_time")
@@ -175,42 +182,103 @@ class SimulatedResult(eqx.Module):
     # observation_control_alignment="previous_transition" they are one
     # shorter than times/states, so jaxtyping must not enforce equal length.
     times: Real[Array, "*plate n_simulations time"] | None = None
-    x_0: (
-        Real[Array, "*plate n_simulations state_dim"]
-        | Real[Array, "*plate n_simulations"]
-        | None
-    ) = None
-    states: (
-        Real[Array, "*plate n_simulations time state_dim"]
-        | Real[Array, "*plate n_simulations time"]
-        | None
-    ) = None
-    observations: (
-        Real[Array, "*plate n_simulations obs_time observation_dim"]
-        | Real[Array, "*plate n_simulations obs_time"]
-        | None
-    ) = None
+    x_0: PyTree[Array] | None = None
+    states: PyTree[Array] | None = None
+    observations: PyTree[Array] | None = None
     obs_times: Real[Array, "*plate n_simulations obs_time"] | None = None
-    controls: (
-        Real[Array, "*plate n_simulations ctrl_time control_dim"]
-        | Real[Array, "*plate n_simulations ctrl_time"]
-        | None
-    ) = None
+    controls: PyTree[Array] | None = None
     ctrl_times: Real[Array, "*plate n_simulations ctrl_time"] | None = None
     predicted_times: Real[Array, "*plate n_simulations predict_time"] | None = None
-    predicted_states: (
-        Real[Array, "*plate n_simulations predict_time state_dim"]
-        | Real[Array, "*plate n_simulations predict_time"]
-        | None
-    ) = None
-    predicted_observations: (
-        Real[Array, "*plate n_simulations predict_time observation_dim"]
-        | Real[Array, "*plate n_simulations predict_time"]
-        | None
-    ) = None
+    predicted_states: PyTree[Array] | None = None
+    predicted_observations: PyTree[Array] | None = None
     _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
         default=None, repr=False, static=True
     )
+    _scalar_x_0: bool = eqx.field(default=False, repr=False, static=True)
+
+    def _initial_state_has_no_event_axis(self) -> bool:
+        """Distinguish scalar samples from length-one vector samples."""
+        assert self.x_0 is not None
+        reference = self.times if self.times is not None else self.predicted_times
+        if reference is not None:
+            batch_shape = reference.shape[:-1]
+        elif self.states is not None:
+            batch_shape = self.states.shape[:-2]
+        else:
+            raise ValueError(
+                "Converting x_0 requires times or states to identify its batch axes."
+            )
+        if self.x_0.shape == batch_shape:
+            return True
+        if self.x_0.shape[:-1] == batch_shape:
+            return False
+        raise ValueError("x_0 batch axes do not match the simulation result.")
+
+    def unflatten(self, layout: "LayoutCollection") -> "SimulatedResult":
+        """Return a structured copy of populated fields selected by ``layout``.
+
+        The receiver must contain flat simulation arrays. A scalar ``x_0`` has
+        no event axis in simulator output; its original shape is remembered for
+        the reverse conversion.
+        """
+        from dynestyx.models.layout import LayoutCollection
+
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
+
+        converted = {}
+        for sublayout, names in (
+            (layout.state, ("states", "predicted_states")),
+            (layout.control, ("controls",)),
+            (layout.observation, ("observations", "predicted_observations")),
+        ):
+            if sublayout is None:
+                continue
+            for name in names:
+                value = getattr(self, name)
+                if value is not None:
+                    converted[name] = sublayout.unflatten(value)
+
+        if layout.state is not None and self.x_0 is not None:
+            scalar_x_0 = self._initial_state_has_no_event_axis()
+            if scalar_x_0 and layout.state.dim != 1:
+                raise ValueError("A scalar x_0 requires a state layout of dimension 1.")
+            x_0 = jnp.expand_dims(self.x_0, axis=-1) if scalar_x_0 else self.x_0
+            converted["x_0"] = layout.state.unflatten(x_0)
+            converted["_scalar_x_0"] = scalar_x_0
+
+        return dataclasses.replace(self, **converted)
+
+    def flatten(self, layout: "LayoutCollection") -> "SimulatedResult":
+        """Return a flat copy of fields selected by ``layout``.
+
+        The receiver must contain structured values compatible with the
+        supplied layouts. This reverses ``unflatten`` without changing times.
+        """
+        from dynestyx.models.layout import LayoutCollection
+
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
+
+        converted = {}
+        for sublayout, names in (
+            (layout.state, ("states", "predicted_states")),
+            (layout.control, ("controls",)),
+            (layout.observation, ("observations", "predicted_observations")),
+        ):
+            if sublayout is None:
+                continue
+            for name in names:
+                value = getattr(self, name)
+                if value is not None:
+                    converted[name] = sublayout.flatten(value)
+
+        if layout.state is not None and self.x_0 is not None:
+            x_0 = layout.state.flatten(self.x_0)
+            converted["x_0"] = jnp.squeeze(x_0, axis=-1) if self._scalar_x_0 else x_0
+            converted["_scalar_x_0"] = False
+
+        return dataclasses.replace(self, **converted)
 
 
 def as_scalar_time_array(
