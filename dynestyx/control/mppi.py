@@ -25,6 +25,7 @@ import dynestyx as dsx
 from dynestyx.control.utils.distribution_utils import AR1Noise
 from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.types import SimulatedResult
+from dynestyx.utils import _raise_now_or_error_if
 
 type MPPILossFn = Callable[[SimulatedResult], Real[Array, ""]]
 
@@ -127,7 +128,7 @@ class MPPI(eqx.Module):
             is available separately as `result.x_0`, shape
             `(n_simulations, state_dim)`.
         horizon: The planning grid relative to `t_now`, `[0, t_1, ..., t_H]`
-            (starting at 0, strictly increasing), with the rollout run on
+            (finite, starting at 0, strictly increasing), with the rollout run on
             `t_now + horizon` -- e.g. `jnp.linspace(0.0, 1.0, 11)` for 10
             steps of 0.1. `H` is the number of internal one-step `dynamics`
             calls per rollout (see `horizon_length`). Required.
@@ -185,8 +186,24 @@ class MPPI(eqx.Module):
     seed: int = eqx.field(static=True, default=0)
 
     def __post_init__(self) -> None:
-        # Default noise. An invalid horizon is reported by __check_init__.
-        if self.noise is None and jnp.ndim(self.horizon) == 1:
+        h = self.horizon
+        message = (
+            "horizon must be a 1-D array of finite planning times relative to "
+            "the current time, [0, t_1, ..., t_H]: starting at 0, strictly "
+            "increasing, with at least one step (an int horizon is not "
+            "supported; for H uniform steps of size dt use "
+            "jnp.arange(H + 1) * dt)."
+        )
+        # Shapes are known during tracing; values need a runtime check under JIT.
+        if jnp.ndim(h) != 1 or h.shape[0] < 2:
+            raise ValueError(message)
+        self.horizon = _raise_now_or_error_if(
+            h,
+            (h[0] != 0) | jnp.any(~jnp.isfinite(h)) | jnp.any(jnp.diff(h) <= 0),
+            message,
+        )
+        # Use the checked grid for both rollouts and the default noise.
+        if self.noise is None:
             self.noise = AR1Noise(self.horizon, self.dynamics.control_dim)
 
     def __check_init__(self) -> None:
@@ -202,16 +219,6 @@ class MPPI(eqx.Module):
         # Only a plain number can be checked here; a traced temperature can't.
         if isinstance(self.temperature, (int, float)) and self.temperature < 0:
             raise ValueError(f"temperature must be >= 0, got {self.temperature}.")
-
-        h = self.horizon
-        if jnp.ndim(h) != 1 or h.shape[0] < 2 or h[0] != 0 or jnp.any(jnp.diff(h) <= 0):
-            raise ValueError(
-                "horizon must be a 1-D array of planning times relative to the "
-                "current time, [0, t_1, ..., t_H]: starting at 0, strictly "
-                "increasing, with at least one step (an int horizon is not "
-                "supported; for H uniform steps of size dt use "
-                f"jnp.arange(H + 1) * dt). Got {h}."
-            )
 
         if self.noise is not None:
             if not isinstance(self.noise, Distribution):

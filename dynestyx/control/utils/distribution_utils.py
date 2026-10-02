@@ -15,6 +15,7 @@ import jax.random as jr
 import numpy as np
 import numpyro.distributions as dist
 from jax import Array
+from jax.core import Tracer
 from jaxtyping import PRNGKeyArray, Real
 from numpyro.distributions import constraints
 
@@ -111,7 +112,8 @@ class ColoredNoise(dist.Distribution):
     `beta`. `beta=0` = `WhiteNoise`.
 
     The FFT assumes equally spaced planning times. On an uneven grid the
-    spectrum is over the step index rather than time, and a warning is raised.
+    spectrum is over the step index rather than time. A warning is raised for
+    concrete uneven grids; the diagnostic is skipped when times are traced.
 
     Args:
         times: The planning grid `[0, t_1, ..., t_H]` (`MPPI.horizon`).
@@ -132,21 +134,23 @@ class ColoredNoise(dist.Distribution):
         *,
         validate_args: bool | None = None,
     ):
-        # Tolerant, so float round-off in the times doesn't trigger it.
-        steps = np.diff(times)
-        if not np.allclose(steps, steps.mean(), rtol=1e-3, atol=0.0):
-            warnings.warn(
-                "It seems that your planning time steps are not equally "
-                "spaced (steps "
-                f"{np.array2string(steps, precision=4, separator=', ')}). "
-                "ColoredNoise shapes its 1/f**beta "
-                "spectrum over the step index, so the resulting noise process "
-                "is power-law in steps, not in time: long and short steps get "
-                "the same correlation. Use AR1Noise for noise that adapts to "
-                "the actual times.",
-                UserWarning,
-                stacklevel=2,
-            )
+        # Host-side diagnostic only; sampling remains valid for traced grids.
+        if not isinstance(times, Tracer):
+            # Tolerant, so float round-off in the times doesn't trigger it.
+            steps = np.diff(times)
+            if not np.allclose(steps, steps.mean(), rtol=1e-3, atol=0.0):
+                warnings.warn(
+                    "It seems that your planning time steps are not equally "
+                    "spaced (steps "
+                    f"{np.array2string(steps, precision=4, separator=', ')}). "
+                    "ColoredNoise shapes its 1/f**beta "
+                    "spectrum over the step index, so the resulting noise process "
+                    "is power-law in steps, not in time: long and short steps get "
+                    "the same correlation. Use AR1Noise for noise that adapts to "
+                    "the actual times.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         self.times = times
         self.control_dim = control_dim
         self.beta = beta
