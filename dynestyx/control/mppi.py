@@ -16,6 +16,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import numpyro
 import numpyro.distributions as dist
 from jax import Array
 from jaxtyping import PRNGKeyArray, Real
@@ -192,8 +193,11 @@ class MPPI(eqx.Module):
             `jax.vmap` (default; requires `dynamics.state_evolution` to be
             vmap-compatible) or `jax.lax.map` (slower, but works for a
             `dynamics.state_evolution` that isn't vmap-compatible).
-        seed: Seeds MPPI's own PRNG key, carried inside the policy state `s`
-            (as `s.key`) and split internally on every call.
+        rng_key: MPPI's own PRNG key, put in the policy state by
+            `initial_state` (as `s.key`) and split internally on every call.
+            If `None` (default), `initial_state` takes a key from the
+            surrounding NumPyro seed handler (`numpyro.prng_key()`), and raises
+            if there is none.
     """
 
     dynamics: DynamicalModel
@@ -209,7 +213,7 @@ class MPPI(eqx.Module):
     common_rollout_randomness: bool = eqx.field(static=True, default=True)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
-    seed: int = eqx.field(static=True, default=0)
+    rng_key: PRNGKeyArray | None = None
 
     def __post_init__(self) -> None:
         h = self.horizon
@@ -265,14 +269,32 @@ class MPPI(eqx.Module):
         return self.horizon.shape[0] - 1
 
     def initial_state(self) -> MPPIState:
-        """Zero nominal control sequence plus MPPI's own seeded PRNG key.
+        """Zero nominal control sequence plus MPPI's own PRNG key.
         Must be initialized explicitly. Override it to return an `MPPIState`
-        subclass carrying more state."""
+        subclass carrying more state.
+
+        The key is `rng_key` if given, otherwise one drawn from the
+        surrounding NumPyro seed handler.
+
+        Raises:
+            ValueError: If `rng_key` is `None` and there is no seed handler.
+        """
+        rng_key = self.rng_key
+        if rng_key is None:
+            # numpyro.prng_key() returns None (and warns) outside a seed handler.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                rng_key = numpyro.prng_key()
+        if rng_key is None:
+            raise ValueError(
+                "MPPI needs a PRNG key: pass rng_key=... to MPPI, or call "
+                "initial_state() inside a NumPyro seed handler."
+            )
         return MPPIState(
             nominal_sequence=jnp.zeros(
                 (self.horizon_length, self.dynamics.control_dim)
             ),
-            key=jr.PRNGKey(self.seed),
+            key=rng_key,
         )
 
     def rollout_initial_condition(

@@ -1358,7 +1358,7 @@ def test_mppi_runs_end_to_end_without_a_key_argument():
         loss_fn=_mppi_loss,
         horizon=jnp.arange(11.0),
         noise_std=jnp.array(1.0),
-        seed=0,
+        rng_key=jr.PRNGKey(0),
     )
     predict_times = jnp.arange(0.0, 20.0)
 
@@ -1388,7 +1388,7 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
         loss_fn=_mppi_loss,
         horizon=jnp.arange(6.0),
         noise_std=jnp.array(1.0),
-        seed=0,
+        rng_key=jr.PRNGKey(0),
     )
     predict_times = jnp.arange(0.0, 5.0)
 
@@ -1407,28 +1407,32 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
     assert jnp.all(jnp.isfinite(result.states))
 
 
-def test_mppi_initial_state_and_call_depend_only_on_seed():
+def test_mppi_initial_state_and_call_depend_only_on_rng_key():
     """Unit-level check, isolated from the closed loop (where a different
     outer rng_key also changes x_hat via the real observed trajectory, so
     the chosen control legitimately differs downstream for reasons that have
-    nothing to do with MPPI's own randomness). `seed` alone determines the
+    nothing to do with MPPI's own randomness). `rng_key` alone determines the
     key baked into `initial_state()`'s output; `__call__` itself takes no
     key at all, so its output is a pure function of (x_hat, s)."""
     dynamics = _lti_1d(A=1.05, B=1.0)
 
     x_hat = dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1))
 
-    def make(seed):
+    def make(rng_key):
         return MPPI(
             dynamics=dynamics,
             loss_fn=_mppi_loss,
             horizon=jnp.arange(11.0),
             noise_std=jnp.array(1.0),
-            seed=seed,
+            rng_key=rng_key,
         )
 
     t0, t1 = jnp.array(0.0), jnp.array(1.0)
-    mppi_a1, mppi_a2, mppi_b = make(seed=0), make(seed=0), make(seed=1)
+    mppi_a1, mppi_a2, mppi_b = (
+        make(jr.PRNGKey(0)),
+        make(jr.PRNGKey(0)),
+        make(jr.PRNGKey(1)),
+    )
     u_a1, _ = mppi_a1(x_hat, t0, t1, mppi_a1.initial_state())
     u_a2, _ = mppi_a2(x_hat, t0, t1, mppi_a2.initial_state())
     u_b, _ = mppi_b(x_hat, t0, t1, mppi_b.initial_state())
@@ -1457,6 +1461,7 @@ def test_mppi_masks_non_finite_losses_before_softmax():
         loss_fn=flaky_loss,
         horizon=jnp.arange(4.0),
         n_samples=20,
+        rng_key=jr.PRNGKey(0),
         noise_std=jnp.array(1.0),
     )
 
@@ -1547,6 +1552,7 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
         horizon=jnp.arange(horizon + 1.0),
         n_samples=n_samples,
         n_simulations=n_simulations,
+        rng_key=jr.PRNGKey(0),
     )
 
     _, _, info = mppi.plan_step(
