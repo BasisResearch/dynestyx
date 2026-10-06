@@ -107,7 +107,7 @@ class MPPI(eqx.Module):
 
     By default all candidates are rolled out with the same PRNG key (common
     random numbers), so they face the same process and observation noise. The `n_simulations` rollouts
-    of one candidate draw different noise. Set `common_randomness=False` to
+    of one candidate draw different noise. Set `common_rollout_randomness=False` to
     give each candidate its own noise instead (increases variance).
 
     Each rollout is run under the `"previous_transition"` observation/
@@ -180,7 +180,7 @@ class MPPI(eqx.Module):
         n_simulations: Number of rollouts per candidate control sequence
             (forwarded to `dsx.simulate`), each with its own noise draw.
             Defaults to `1`.
-        common_randomness: If `True` (default), the j-th rollout uses the same
+        common_rollout_randomness: If `True` (default), the j-th rollout uses the same
             noise for every candidate, so candidates are compared under
             identical noise and their losses differ only through their
             controls. If `False`, every candidate draws its own noise.
@@ -206,7 +206,7 @@ class MPPI(eqx.Module):
     noise: Distribution | None = None
     n_samples: int = eqx.field(static=True, default=10)
     n_simulations: int = eqx.field(static=True, default=1)
-    common_randomness: bool = eqx.field(static=True, default=True)
+    common_rollout_randomness: bool = eqx.field(static=True, default=True)
     temperature: float = 1.0
     batched: bool = eqx.field(static=True, default=True)
     seed: int = eqx.field(static=True, default=0)
@@ -419,7 +419,7 @@ class MPPI(eqx.Module):
         # candidates face the same noise and their losses differ only through
         # their controls; otherwise each candidate gets its own key.
         n_candidates = candidates.shape[0]
-        if self.common_randomness:
+        if self.common_rollout_randomness:
             rollout_keys = jnp.broadcast_to(
                 rollout_key, (n_candidates, *rollout_key.shape)
             )
