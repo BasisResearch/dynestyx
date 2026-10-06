@@ -2,7 +2,7 @@
 
 import warnings
 from types import SimpleNamespace
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -23,10 +23,14 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
-from dynestyx.models import DynamicalModel, ObservationControlAlignment
+from dynestyx.models import (
+    DynamicalModel,
+    LayoutCollection,
+    ObservationControlAlignment,
+)
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
-from dynestyx.types import SimulatedResult
+from dynestyx.types import SimulatedResult, StructuredSimulatedResult
 from dynestyx.utils import _should_record_field
 
 
@@ -174,6 +178,43 @@ class ControlledSimulatedResult(SimulatedResult):
         Real[Array, "n_simulations filtered_time state_dim"] | None
     ) = None
     policy_states: PyTree | None = None
+
+    def unflatten(
+        self, layout: LayoutCollection
+    ) -> "StructuredControlledSimulatedResult":
+        """Return a structured copy of this result.
+
+        Converts fields as
+        [SimulatedResult.unflatten][dynestyx.types.SimulatedResult.unflatten]
+        does. ``filtered_states_mean`` is converted by ``layout.state``, and
+        ``policy_states`` is copied unchanged.
+        """
+        return StructuredControlledSimulatedResult._from_flat(self, layout)
+
+
+class StructuredControlledSimulatedResult(StructuredSimulatedResult):
+    """A `ControlledSimulatedResult` with structured values.
+
+    Returned by `ControlledSimulatedResult.unflatten`. `filtered_states_mean`
+    shares the structure of the state fields; `policy_states` is unchanged.
+    `flatten(layout)` converts back to a `ControlledSimulatedResult`.
+    """
+
+    filtered_states_mean: PyTree[Real[Array, "..."], " S"] | None = None
+    policy_states: PyTree | None = None
+
+    _field_sublayouts: ClassVar[dict[str, str]] = {
+        **StructuredSimulatedResult._field_sublayouts,
+        "filtered_states_mean": "state",
+    }
+
+    def flatten(self, layout: LayoutCollection) -> ControlledSimulatedResult:
+        """Return the flat result that ``unflatten(layout)`` converted.
+
+        ``layout`` must be the ``LayoutCollection`` passed to ``unflatten``.
+        Raises ``ValueError`` if a structured field has no sublayout.
+        """
+        return ControlledSimulatedResult(**self._flat_values(layout))
 
 
 class DiscreteControlLoopSimulator(BaseSimulator):
@@ -836,6 +877,7 @@ __all__ = [
     "ControlledSimulatedResult",
     "DiscreteControlLoopSimulator",
     "PolicyCallable",
+    "StructuredControlledSimulatedResult",
     "filter_state_dist",
     "filter_state_mean",
 ]

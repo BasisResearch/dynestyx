@@ -1,14 +1,23 @@
 """Standalone layouts and explicit simulation-result conversions."""
 
+import dataclasses
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
 import pytest
+from jaxtyping import TypeCheckError
 from numpyro.handlers import seed
 
 import dynestyx as dsx
+from dynestyx.control import (
+    ControlledSimulatedResult,
+    StructuredControlledSimulatedResult,
+    filter_state_mean,
+)
+from dynestyx.inference.configs.filter import EKFConfig
 
 
 def _layouts():
@@ -216,6 +225,9 @@ def test_result_converts_only_selected_sublayout(selected):
     structured = flat.unflatten(layout)
     restored = structured.flatten(layout)
 
+    assert isinstance(structured, dsx.StructuredSimulatedResult)
+    assert not isinstance(structured, dsx.SimulatedResult)
+    assert type(restored) is dsx.SimulatedResult
     assert flat.x_0 is not None
     assert flat.states is not None
     assert flat.observations is not None
@@ -431,3 +443,85 @@ def test_predicted_fields_round_trip_and_callback_is_retained():
     assert restored._register_numpyro_sites is callback
     assert jnp.array_equal(restored.predicted_states, flat.predicted_states)
     assert jnp.array_equal(restored.predicted_observations, flat.predicted_observations)
+
+
+def test_controlled_result_round_trip():
+    layout = _layouts()
+    dynamics = dsx.LTI_discrete(
+        A=0.9 * jnp.eye(4),
+        Q=0.05 * jnp.eye(4),
+        H=jnp.eye(2, 4),
+        R=0.1 * jnp.eye(2),
+        B=jnp.eye(4, 2),
+        observation_control_alignment="previous_transition",
+    )
+
+    def policy(x_hat, t_now, t_next, s):
+        return -0.5 * filter_state_mean(x_hat)[:2], s + 1.0
+
+    flat = dsx.simulate(
+        dynamics,
+        rng_key=jr.key(0),
+        predict_times=jnp.arange(4.0),
+        control_policy=policy,
+        initial_policy_state=jnp.array(0.0),
+        filter_config=EKFConfig(record_filtered_states_mean=True),
+    )
+    structured = flat.unflatten(layout)
+    restored = structured.flatten(layout)
+
+    assert isinstance(flat, ControlledSimulatedResult)
+    assert isinstance(structured, StructuredControlledSimulatedResult)
+    assert type(restored) is ControlledSimulatedResult
+    assert flat.filtered_states_mean is not None
+    assert structured.filtered_states_mean is not None
+    assert structured.controls is not None
+    assert structured.filtered_states_mean["velocity"].shape == (
+        *flat.filtered_states_mean.shape[:-1],
+        2,
+    )
+    assert structured.controls[1].shape == (1, 3, 1)
+    assert structured.policy_states is flat.policy_states
+    for name in ("x_0", "states", "observations", "controls", "filtered_states_mean"):
+        original = getattr(flat, name)
+        round_trip = getattr(restored, name)
+        assert original is not None
+        assert round_trip is not None
+        assert jnp.array_equal(round_trip, original)
+
+
+def test_result_conversion_rejects_mismatched_layouts():
+    layout = _layouts()
+    assert layout.state is not None
+    flat = dsx.SimulatedResult(
+        times=jnp.zeros((1, 3)),
+        states=jnp.ones((1, 3, 4)),
+        observations=jnp.ones((1, 3, 2)),
+    )
+    with pytest.raises(TypeError, match="LayoutCollection"):
+        flat.unflatten(layout.state)  # type: ignore[arg-type]
+
+    structured = flat.unflatten(layout)
+    with pytest.raises(ValueError, match="states is structured"):
+        structured.flatten(dsx.LayoutCollection(observation=layout.observation))
+
+
+@pytest.mark.parametrize(
+    ("flat_cls", "structured_cls"),
+    [
+        (dsx.SimulatedResult, dsx.StructuredSimulatedResult),
+        (ControlledSimulatedResult, StructuredControlledSimulatedResult),
+    ],
+)
+def test_structured_results_mirror_flat_fields(flat_cls, structured_cls):
+    flat = {field.name for field in dataclasses.fields(flat_cls)}
+    structured = {field.name for field in dataclasses.fields(structured_cls)}
+    assert structured - {"_scalar_x_0"} == flat
+
+
+def test_structured_result_checks_shared_structures():
+    with pytest.raises(TypeCheckError):
+        dsx.StructuredSimulatedResult(
+            x_0={"position": jnp.zeros((1, 2))},
+            states={"position": jnp.zeros((1, 3, 2)), "velocity": jnp.zeros((1, 3, 2))},
+        )

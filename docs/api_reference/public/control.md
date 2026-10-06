@@ -177,6 +177,10 @@ rather than inferring alignment from shapes. With state estimation,
     options:
       show_root_heading: true
 
+::: dynestyx.control.discrete_controller_simulators.StructuredControlledSimulatedResult
+    options:
+      show_root_heading: true
+
 ::: dynestyx.control.discrete_controller_simulators.PolicyCallable
     options:
       show_root_heading: true

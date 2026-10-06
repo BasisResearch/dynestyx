@@ -58,7 +58,12 @@ from dynestyx.simulation import (
     SDESimulator,
     Simulator,
 )
-from dynestyx.types import ConditionedResult, EvaluationResult, SimulatedResult
+from dynestyx.types import (
+    ConditionedResult,
+    EvaluationResult,
+    SimulatedResult,
+    StructuredSimulatedResult,
+)
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -99,6 +104,7 @@ __all__ = [
     "EvaluationResult",
     "ObservationScoringConfig",
     "SimulatedResult",
+    "StructuredSimulatedResult",
     "log_prob",
     "plate",
     "prepare_missing_observation_metadata",
