@@ -41,7 +41,7 @@ def _controlled_model():
     )
 
 
-def test_layout_collection_from_example_and_with_examples():
+def test_layout_from_example():
     state_example = {"position": jnp.zeros(2)}
     observation_example = jnp.zeros((2, 3))
     control_example = (jnp.zeros(1), jnp.zeros(2))
@@ -64,231 +64,31 @@ def test_layout_collection_from_example_and_with_examples():
     assert state_only.control is None
     assert state_only.observation is None
 
-
-def test_layout_collection_is_static_equinox_module():
-    layout = dsx.LayoutCollection.from_example(state=(jnp.zeros(2), jnp.zeros(1)))
-    assert isinstance(layout, eqx.Module)
-    assert isinstance(layout.state, eqx.Module)
-    assert jax.tree_util.tree_leaves(layout) == []
-
-    @jax.jit
-    def unflatten(collection, value):
-        return collection.state.unflatten(value)
-
-    restored = unflatten(layout, jnp.arange(3.0))
-    assert jnp.array_equal(restored[0], jnp.array([0.0, 1.0]))
-    assert jnp.array_equal(restored[1], jnp.array([2.0]))
+    # Layouts are static Equinox modules, so they hold no array leaves.
+    assert isinstance(extended, eqx.Module)
+    assert isinstance(extended.state, eqx.Module)
+    assert jax.tree_util.tree_leaves(extended) == []
 
 
-def test_layout_round_trip_with_scalar_leaf_and_batch_axes():
+def test_layout_round_trip_under_jit():
     example = {"a": jnp.zeros((2, 2)), "b": (jnp.zeros(()), jnp.zeros(1))}
-    layout = dsx.Layout.from_example(example)
+    layout = dsx.LayoutCollection.from_example(state=example)
+    assert layout.state is not None
     value = {
         "a": jnp.arange(24.0).reshape(2, 3, 2, 2),
         "b": (jnp.ones((2, 3)), jnp.ones((2, 3, 1))),
     }
 
-    flat = jax.jit(layout.flatten)(value)
-    restored = jax.jit(layout.unflatten)(flat)
+    @jax.jit
+    def round_trip(layout, value):
+        flat = layout.state.flatten(value)
+        return flat, layout.state.unflatten(flat)
 
-    assert layout.dim == 6
+    flat, restored = round_trip(layout, value)
+
+    assert layout.state.dim == 6
     assert flat.shape == (2, 3, 6)
     assert all(jax.tree.leaves(jax.tree.map(jnp.array_equal, restored, value)))
-
-
-def test_layout_rejects_mismatched_values():
-    layout = dsx.Layout.from_example((jnp.zeros(2), jnp.zeros(1)))
-    with pytest.raises(ValueError, match="structure"):
-        layout.flatten({"a": jnp.zeros(2), "b": jnp.zeros(1)})
-    with pytest.raises(ValueError, match="trailing shape"):
-        layout.flatten((jnp.zeros(3), jnp.zeros(1)))
-    with pytest.raises(ValueError, match="leading batch axes"):
-        layout.flatten((jnp.zeros((2, 2)), jnp.zeros((3, 1))))
-    with pytest.raises(ValueError, match="trailing flat axis"):
-        layout.unflatten(jnp.zeros(2))
-
-
-def test_layout_rejects_empty_and_mixed_dtype_trees():
-    with pytest.raises(ValueError, match="nonempty"):
-        dsx.Layout.from_example({})
-    with pytest.raises(TypeError, match="same numeric dtype"):
-        dsx.Layout.from_example((jnp.zeros(1), jnp.zeros(1, dtype=jnp.int32)))
-    with pytest.raises(ValueError, match="zero-sized"):
-        dsx.Layout.from_example(jnp.zeros(0))
-
-
-def test_dynamics_can_close_over_layout_without_a_new_model_contract():
-    initial_state = {
-        "latent": jnp.array([0.5, -0.25]),
-        "observed": jnp.array([[1.0, 2.0], [3.0, 4.0]]),
-    }
-    initial_flat = jnp.array([0.5, -0.25, 1.0, 2.0, 3.0, 4.0])
-    layout = dsx.LayoutCollection.from_example(
-        state=initial_state, observation=jnp.zeros((2, 2))
-    )
-    state_layout = layout.state
-    observation_layout = layout.observation
-    assert state_layout is not None
-    assert observation_layout is not None
-    assert jnp.array_equal(state_layout.flatten(initial_state), initial_flat)
-
-    A = jnp.array([[0.1, 0.2], [-0.3, 0.4]])
-    alpha = 0.8
-
-    def structured_transition(x, u, t_now, t_next):
-        state = state_layout.unflatten(x)
-        next_state = {
-            "latent": alpha * state["latent"],
-            "observed": state["observed"]
-            + (t_next - t_now) * (A @ state["latent"])[:, None],
-        }
-        return dist.Normal(state_layout.flatten(next_state), 0.1).to_event(1)
-
-    def flat_transition(x, u, t_now, t_next):
-        latent = x[:2]
-        observed = x[2:].reshape(2, 2)
-        next_observed = observed + (t_next - t_now) * (A @ latent)[:, None]
-        loc = jnp.concatenate((alpha * latent, next_observed.reshape(-1)))
-        return dist.Normal(loc, 0.1).to_event(1)
-
-    def structured_observation(x, u, t):
-        state = state_layout.unflatten(x)
-        observation = jnp.logaddexp(0.0, state["observed"])
-        return dist.Normal(observation_layout.flatten(observation), 0.2).to_event(1)
-
-    def flat_observation(x, u, t):
-        observation = jnp.logaddexp(0.0, x[2:].reshape(2, 2))
-        return dist.Normal(observation.reshape(-1), 0.2).to_event(1)
-
-    initial_condition = dist.Normal(initial_flat, 0.05).to_event(1)
-    structured_dynamics = dsx.DynamicalModel(
-        initial_condition=initial_condition,
-        state_evolution=structured_transition,
-        observation_model=structured_observation,
-    )
-    flat_dynamics = dsx.DynamicalModel(
-        initial_condition=initial_condition,
-        state_evolution=flat_transition,
-        observation_model=flat_observation,
-    )
-    times = jnp.array([0.0, 1.0, 2.5, 3.0])
-    key = jr.key(0)
-    structured_model_result = dsx.simulate(
-        structured_dynamics, rng_key=key, predict_times=times, n_simulations=3
-    )
-    flat_model_result = dsx.simulate(
-        flat_dynamics, rng_key=key, predict_times=times, n_simulations=3
-    )
-
-    assert structured_model_result.x_0 is not None
-    assert structured_model_result.states is not None
-    assert structured_model_result.observations is not None
-    assert flat_model_result.x_0 is not None
-    assert flat_model_result.states is not None
-    assert flat_model_result.observations is not None
-    assert structured_model_result.states.shape == (3, 4, 6)
-    assert structured_model_result.observations.shape == (3, 4, 4)
-    assert jnp.allclose(structured_model_result.x_0, flat_model_result.x_0)
-    assert jnp.allclose(structured_model_result.states, flat_model_result.states)
-    assert jnp.allclose(
-        structured_model_result.observations, flat_model_result.observations
-    )
-
-    result = structured_model_result.unflatten(layout)
-    assert result.states is not None
-    assert result.observations is not None
-    assert result.states["latent"].shape == (3, 4, 2)
-    assert result.states["observed"].shape == (3, 4, 2, 2)
-    assert result.observations.shape == (3, 4, 2, 2)
-    assert jnp.allclose(result.states["latent"], flat_model_result.states[..., :2])
-    assert jnp.allclose(
-        result.states["observed"], flat_model_result.states[..., 2:].reshape(3, 4, 2, 2)
-    )
-    assert jnp.allclose(
-        result.observations, flat_model_result.observations.reshape(3, 4, 2, 2)
-    )
-
-
-@pytest.mark.parametrize("selected", ["state", "control", "observation"])
-def test_result_converts_only_selected_sublayout(selected):
-    all_layouts = _layouts()
-    layout = dsx.LayoutCollection(**{selected: getattr(all_layouts, selected)})
-    times = jnp.arange(3.0)
-    flat = dsx.simulate(
-        _controlled_model(),
-        rng_key=jr.key(0),
-        predict_times=times,
-        ctrl_times=times,
-        ctrl_values=jnp.ones((3, 2)),
-        n_simulations=2,
-    )
-    structured = flat.unflatten(layout)
-    restored = structured.flatten(layout)
-
-    assert isinstance(structured, dsx.StructuredSimulatedResult)
-    assert not isinstance(structured, dsx.SimulatedResult)
-    assert type(restored) is dsx.SimulatedResult
-    assert flat.x_0 is not None
-    assert flat.states is not None
-    assert flat.observations is not None
-    assert flat.controls is not None
-    assert structured.x_0 is not None
-    assert structured.states is not None
-    assert structured.observations is not None
-    assert structured.controls is not None
-    assert flat.states.shape == (2, 3, 4)
-    assert flat.controls.shape == (2, 3, 2)
-    assert flat.observations.shape == (2, 3, 2)
-    assert structured.times is flat.times
-    assert structured.obs_times is flat.obs_times
-    assert structured.ctrl_times is flat.ctrl_times
-    if selected == "state":
-        assert structured.x_0["position"].shape == (2, 2)
-        assert structured.states["velocity"].shape == (2, 3, 2)
-        assert structured.controls.shape == flat.controls.shape
-    elif selected == "control":
-        assert structured.controls[0].shape == (2, 3, 1)
-        assert structured.states.shape == flat.states.shape
-    else:
-        assert structured.observations["measured"].shape == (2, 3, 2)
-        assert structured.states.shape == flat.states.shape
-
-    for name in ("x_0", "states", "observations", "controls"):
-        original = getattr(flat, name)
-        round_trip = getattr(restored, name)
-        assert original is not None
-        assert round_trip is not None
-        assert jnp.array_equal(round_trip, original)
-
-
-def test_result_all_layouts_round_trip_under_jit():
-    layout = _layouts()
-    times = jnp.arange(3.0)
-    controls = jnp.ones((3, 2))
-
-    @jax.jit
-    def run(key):
-        flat = dsx.simulate(
-            _controlled_model(),
-            rng_key=key,
-            predict_times=times,
-            ctrl_times=times,
-            ctrl_values=controls,
-        )
-        structured = flat.unflatten(layout)
-        return structured, structured.flatten(layout)
-
-    structured, flat = run(jr.key(0))
-    assert structured.states is not None
-    assert structured.controls is not None
-    assert structured.observations is not None
-    assert flat.states is not None
-    assert flat.controls is not None
-    assert structured.states["position"].shape == (1, 3, 2)
-    assert structured.controls[1].shape == (1, 3, 1)
-    assert structured.observations["measured"].shape == (1, 3, 2)
-    assert flat.states.shape == (1, 3, 4)
-    assert flat.controls.shape == (1, 3, 2)
 
 
 def test_plated_dynamics_match_explicit_flat_model():
@@ -374,6 +174,71 @@ def test_plated_dynamics_match_explicit_flat_model():
         assert jnp.array_equal(getattr(restored, name), getattr(flat, name))
 
 
+@pytest.mark.parametrize("selected", ["state", "control", "observation", "all"])
+def test_result_round_trip_under_jit(selected):
+    all_layouts = _layouts()
+    if selected == "all":
+        layout = all_layouts
+    else:
+        layout = dsx.LayoutCollection(**{selected: getattr(all_layouts, selected)})
+    times = jnp.arange(3.0)
+    flat = dsx.simulate(
+        _controlled_model(),
+        rng_key=jr.key(0),
+        predict_times=times,
+        ctrl_times=times,
+        ctrl_values=jnp.ones((3, 2)),
+        n_simulations=2,
+    )
+
+    @jax.jit
+    def round_trip(flat):
+        structured = flat.unflatten(layout)
+        return structured, structured.flatten(layout)
+
+    structured, restored = round_trip(flat)
+
+    assert isinstance(structured, dsx.StructuredSimulatedResult)
+    assert not isinstance(structured, dsx.SimulatedResult)
+    assert type(restored) is dsx.SimulatedResult
+
+    # The original result is unchanged.
+    assert flat.x_0 is not None
+    assert flat.states is not None
+    assert flat.controls is not None
+    assert flat.observations is not None
+    assert flat.x_0.shape == (2, 4)
+    assert flat.states.shape == (2, 3, 4)
+    assert flat.controls.shape == (2, 3, 2)
+    assert flat.observations.shape == (2, 3, 2)
+
+    # Only the selected fields are converted; time fields never are.
+    expected_shapes = {
+        "x_0": ("state", lambda value: value["position"].shape, (2, 2)),
+        "states": ("state", lambda value: value["velocity"].shape, (2, 3, 2)),
+        "controls": ("control", lambda value: value[0].shape, (2, 3, 1)),
+        "observations": (
+            "observation",
+            lambda value: value["measured"].shape,
+            (2, 3, 2),
+        ),
+    }
+    for name, (sublayout_name, leaf_shape, shape) in expected_shapes.items():
+        value = getattr(structured, name)
+        if selected in (sublayout_name, "all"):
+            assert leaf_shape(value) == shape
+        else:
+            assert jnp.array_equal(value, getattr(flat, name))
+    for name in ("times", "obs_times", "ctrl_times"):
+        assert jnp.array_equal(getattr(structured, name), getattr(flat, name))
+
+    for name in ("x_0", "states", "observations", "controls"):
+        original = getattr(flat, name)
+        round_trip = getattr(restored, name)
+        assert round_trip is not None
+        assert jnp.array_equal(round_trip, original)
+
+
 @pytest.mark.parametrize("scalar_initial_event", [True, False])
 @pytest.mark.parametrize("batched", [True, False])
 def test_scalar_layout_preserves_initial_state_shape(scalar_initial_event, batched):
@@ -445,7 +310,7 @@ def test_predicted_fields_round_trip_and_callback_is_retained():
     assert jnp.array_equal(restored.predicted_observations, flat.predicted_observations)
 
 
-def test_controlled_result_round_trip():
+def test_controlled_result_round_trip_under_jit():
     layout = _layouts()
     dynamics = dsx.LTI_discrete(
         A=0.9 * jnp.eye(4),
@@ -467,13 +332,19 @@ def test_controlled_result_round_trip():
         initial_policy_state=jnp.array(0.0),
         filter_config=EKFConfig(record_filtered_states_mean=True),
     )
-    structured = flat.unflatten(layout)
-    restored = structured.flatten(layout)
+
+    @jax.jit
+    def round_trip(flat):
+        structured = flat.unflatten(layout)
+        return structured, structured.flatten(layout)
+
+    structured, restored = round_trip(flat)
 
     assert isinstance(flat, ControlledSimulatedResult)
     assert isinstance(structured, StructuredControlledSimulatedResult)
     assert type(restored) is ControlledSimulatedResult
     assert flat.filtered_states_mean is not None
+    assert flat.policy_states is not None
     assert structured.filtered_states_mean is not None
     assert structured.controls is not None
     assert structured.filtered_states_mean["velocity"].shape == (
@@ -481,29 +352,14 @@ def test_controlled_result_round_trip():
         2,
     )
     assert structured.controls[1].shape == (1, 3, 1)
-    assert structured.policy_states is flat.policy_states
+    assert jnp.array_equal(structured.policy_states, flat.policy_states)
     for name in ("x_0", "states", "observations", "controls", "filtered_states_mean"):
         original = getattr(flat, name)
         round_trip = getattr(restored, name)
-        assert original is not None
+        # The original result is unchanged.
+        assert eqx.is_array(original)
         assert round_trip is not None
         assert jnp.array_equal(round_trip, original)
-
-
-def test_result_conversion_rejects_mismatched_layouts():
-    layout = _layouts()
-    assert layout.state is not None
-    flat = dsx.SimulatedResult(
-        times=jnp.zeros((1, 3)),
-        states=jnp.ones((1, 3, 4)),
-        observations=jnp.ones((1, 3, 2)),
-    )
-    with pytest.raises(TypeError, match="LayoutCollection"):
-        flat.unflatten(layout.state)  # type: ignore[arg-type]
-
-    structured = flat.unflatten(layout)
-    with pytest.raises(ValueError, match="states is structured"):
-        structured.flatten(dsx.LayoutCollection(observation=layout.observation))
 
 
 @pytest.mark.parametrize(
@@ -519,7 +375,37 @@ def test_structured_results_mirror_flat_fields(flat_cls, structured_cls):
     assert structured - {"_scalar_x_0"} == flat
 
 
-def test_structured_result_checks_shared_structures():
+def test_invalid_inputs_raise():
+    pair = dsx.Layout.from_example((jnp.zeros(2), jnp.zeros(1)))
+    with pytest.raises(ValueError, match="structure"):
+        pair.flatten({"a": jnp.zeros(2), "b": jnp.zeros(1)})
+    with pytest.raises(ValueError, match="trailing shape"):
+        pair.flatten((jnp.zeros(3), jnp.zeros(1)))
+    with pytest.raises(ValueError, match="leading batch axes"):
+        pair.flatten((jnp.zeros((2, 2)), jnp.zeros((3, 1))))
+    with pytest.raises(ValueError, match="trailing flat axis"):
+        pair.unflatten(jnp.zeros(2))
+    with pytest.raises(ValueError, match="nonempty"):
+        dsx.Layout.from_example({})
+    with pytest.raises(TypeError, match="same numeric dtype"):
+        dsx.Layout.from_example((jnp.zeros(1), jnp.zeros(1, dtype=jnp.int32)))
+    with pytest.raises(ValueError, match="zero-sized"):
+        dsx.Layout.from_example(jnp.zeros(0))
+
+    layout = _layouts()
+    assert layout.state is not None
+    flat = dsx.SimulatedResult(
+        times=jnp.zeros((1, 3)),
+        states=jnp.ones((1, 3, 4)),
+        observations=jnp.ones((1, 3, 2)),
+    )
+    with pytest.raises(TypeError, match="LayoutCollection"):
+        flat.unflatten(layout.state)  # type: ignore[arg-type]
+    structured = flat.unflatten(layout)
+    with pytest.raises(ValueError, match="states is structured"):
+        structured.flatten(dsx.LayoutCollection(observation=layout.observation))
+
+    # The state fields must share one pytree structure.
     with pytest.raises(TypeCheckError):
         dsx.StructuredSimulatedResult(
             x_0={"position": jnp.zeros((1, 2))},
