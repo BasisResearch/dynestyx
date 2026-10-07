@@ -9,6 +9,11 @@ from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
 from dynestyx.models.core import ObservationModel
+from dynestyx.models.covariances import (
+    Covariance,
+    _gaussian_distribution,
+    covariance_matrix,
+)
 
 
 class LinearGaussianObservationParams(NamedTuple):
@@ -70,7 +75,8 @@ class LinearGaussianObservation(ObservationModel):
         ]
     )
     R: (
-        Float[Array, "*r_plate observation_dim observation_dim"]
+        Covariance
+        | Float[Array, "*r_plate observation_dim observation_dim"]
         | Callable[
             [float | int | Real[Array, ""]],
             Float[Array, "*r_plate observation_dim observation_dim"],
@@ -101,7 +107,8 @@ class LinearGaussianObservation(ObservationModel):
             [float | int | Real[Array, ""]],
             Float[Array, "*h_plate observation_dim state_dim"],
         ],
-        R: Float[Array, "*r_plate observation_dim observation_dim"]
+        R: Covariance
+        | Float[Array, "*r_plate observation_dim observation_dim"]
         | Callable[
             [float | int | Real[Array, ""]],
             Float[Array, "*r_plate observation_dim observation_dim"],
@@ -163,11 +170,12 @@ class LinearGaussianObservation(ObservationModel):
             )
             return jnp.asarray(fn(t))
 
+        H = _resolve(self.H)
         return LinearGaussianObservationParams(
-            H=_resolve(self.H),
+            H=H,
             D=_resolve(self.D),
             bias=_resolve(self.bias),
-            R=_resolve(self.R),
+            R=covariance_matrix(_resolve(self.R), H.shape[-2]),
         )
 
     def __call__(self, x, u, t):
@@ -202,7 +210,7 @@ class GaussianObservation(ObservationModel):
         ],
         Real[Array, " observation_dim"] | Real[Array, ""],
     ]
-    R: Float[Array, "*plate observation_dim observation_dim"]
+    R: Covariance | Float[Array, "*plate observation_dim observation_dim"]
 
     def __init__(
         self,
@@ -214,7 +222,7 @@ class GaussianObservation(ObservationModel):
             ],
             Real[Array, " observation_dim"] | Real[Array, ""],
         ],
-        R: Float[Array, "*plate observation_dim observation_dim"],
+        R: Covariance | Float[Array, "*plate observation_dim observation_dim"],
     ):
         """
         Args:
@@ -227,11 +235,47 @@ class GaussianObservation(ObservationModel):
         self.R = R
 
     def __call__(self, x, u, t):
-        loc = self.h(x, u, t)
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=self.R)
+        loc = jnp.asarray(self.h(x, u, t))
+        return _gaussian_distribution(loc, self.R)
 
 
-class DiracIdentityObservation(ObservationModel):
+class DeterministicObservation(ObservationModel):
+    """Noise-free observations ``y = h(x, u, t)`` as Delta distributions.
+
+    Scalar outputs are scalar events; vector outputs use the trailing axis
+    as the event axis, preserving leading batch/plate axes.
+    """
+
+    h: Callable[
+        [
+            Real[Array, "*batch state_dim"] | Real[Array, ""],
+            Real[Array, "*control_batch control_dim"] | Real[Array, ""] | None,
+            float | int | Real[Array, ""],
+        ],
+        Real[Array, "*batch observation_dim"] | Real[Array, ""],
+    ]
+
+    def __call__(
+        self,
+        x: Real[Array, "*batch state_dim"] | Real[Array, ""],
+        u: Real[Array, "*control_batch control_dim"] | Real[Array, ""] | None,
+        t: float | int | Real[Array, ""],
+    ) -> dist.Delta:
+        """Evaluate ``h`` and preserve its scalar or trailing vector event shape."""
+        value = jnp.asarray(self.h(x, u, t))
+        return dist.Delta(value, event_dim=0 if value.ndim == 0 else 1)
+
+
+def _identity_observation(
+    x: Real[Array, "*shape"],
+    u: Real[Array, "*control_batch control_dim"] | Real[Array, ""] | None,
+    t: float | int | Real[Array, ""],
+) -> Real[Array, "*shape"]:
+    """Return the state unchanged for an exact identity observation."""
+    return x
+
+
+class DiracIdentityObservation(DeterministicObservation):
     """
     Noise-free identity observation model.
 
@@ -244,9 +288,6 @@ class DiracIdentityObservation(ObservationModel):
     i.e., the observation equals the latent state almost surely.
     """
 
-    def __call__(self, x, u, t):
-        # Treat scalar latent states as scalar events, and otherwise use only
-        # the trailing state axis as the event dimension so any leading batch
-        # or plate axes are preserved.
-        event_dim = 0 if jnp.ndim(x) == 0 else 1
-        return dist.Delta(x, event_dim=event_dim)
+    def __init__(self) -> None:
+        """Construct the argument-free deterministic identity observation."""
+        self.h = _identity_observation

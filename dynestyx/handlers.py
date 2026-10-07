@@ -29,6 +29,7 @@ T = TypeVar("T")
 class _DynestyxStackKind(Enum):
     PLATE = auto()
     DISCRETIZER = auto()
+    GAUSSIAN_RELAXATION = auto()
     FILTER = auto()
     SMOOTHER = auto()
     LATENT_PATH_BUILDER = auto()
@@ -54,9 +55,10 @@ _INFERENCE_KINDS = {
 _STACK_STAGES = {
     _DynestyxStackKind.PLATE: 0,
     _DynestyxStackKind.DISCRETIZER: 1,
-    **dict.fromkeys(_INFERENCE_KINDS, 2),
-    _DynestyxStackKind.SIMULATOR: 3,
-    _DynestyxStackKind.EVALUATION: 4,
+    _DynestyxStackKind.GAUSSIAN_RELAXATION: 2,
+    **dict.fromkeys(_INFERENCE_KINDS, 3),
+    _DynestyxStackKind.SIMULATOR: 4,
+    _DynestyxStackKind.EVALUATION: 5,
 }
 
 
@@ -65,7 +67,7 @@ def _validate_handler_stack(*, obs_values, predict_times) -> None:
     stages = [_STACK_STAGES[kind] for kind in kinds]
     order_hint = (
         "Use the nesting order (outermost first): "
-        "with Evaluation(...), Simulator(), Filter(...), Discretizer(), "
+        "with Evaluation(...), Simulator(), Filter(...), GaussianRelaxation(...), Discretizer(), "
         "plate(...): dsx.sample(...) . Omit stages you do not need; "
         "Smoother or LatentPathBuilder can replace Filter."
     )
@@ -81,7 +83,7 @@ def _validate_handler_stack(*, obs_values, predict_times) -> None:
                 kind.name for kind in kinds if _STACK_STAGES[kind] == stage
             )
             reason = (
-                "Cannot condition an already conditioned result. " if stage == 2 else ""
+                "Cannot condition an already conditioned result. " if stage == 3 else ""
             )
             raise ValueError(
                 f"{reason}Use only one handler per stage; got {repeated}. " + order_hint

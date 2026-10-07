@@ -8,6 +8,7 @@ from jax import Array
 from jaxtyping import Real
 
 from dynestyx.models.core import DynamicalModel
+from dynestyx.models.covariances import Covariance
 from dynestyx.models.diffusions import Diffusion
 from dynestyx.utils.plates import (
     _array_has_plate_dims,
@@ -61,10 +62,29 @@ def _is_opaque_plate_leaf(node) -> bool:
     predicate so
     a callable diffusion is never seen as batched by the slicer/vmap while being
     invisible to the alignment guard.
+
+    Covariance objects are also opaque units: their ``event_rank`` identifies
+    the trailing covariance axes independently of any leading plate axes.
     """
+    if isinstance(node, Covariance):
+        return True
     if isinstance(node, Diffusion):
         return not callable(node.coefficient)
     return isinstance(node, numpyro.distributions.Distribution)
+
+
+def _covariance_is_plate_batched(
+    covariance: Covariance, plate_shapes: tuple[int, ...]
+) -> bool:
+    """Check plate axes while reserving ``event_rank`` trailing covariance axes.
+
+    A shared diagonal vector or full matrix retains its event axes even when
+    their sizes match the active plates. Only leading axes exactly matching
+    ``plate_shapes`` are sliced or vmapped across members.
+    """
+    shape = covariance.value.shape
+    n = len(plate_shapes)
+    return len(shape) == n + covariance.event_rank and shape[:n] == plate_shapes
 
 
 def _has_any_batched_plate_source(
@@ -88,6 +108,10 @@ def _has_any_batched_plate_source(
         # generic ``_leaf_is_plate_batched`` branch below.
         if isinstance(leaf, Diffusion):
             if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
+                return True
+            continue
+        if isinstance(leaf, Covariance):
+            if _covariance_is_plate_batched(leaf, plate_shapes):
                 return True
             continue
         if _leaf_is_plate_batched(leaf, plate_shapes, path=path):

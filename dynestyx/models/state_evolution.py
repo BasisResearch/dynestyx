@@ -13,6 +13,11 @@ import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
 from dynestyx.models.core import DiscreteTimeStateEvolution
+from dynestyx.models.covariances import (
+    Covariance,
+    _gaussian_distribution,
+    covariance_matrix,
+)
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
 
 
@@ -49,6 +54,35 @@ class LinearGaussianParams(NamedTuple):
     B: Float[Array, "..."] | None
     bias: Float[Array, "..."] | None
     cov: Float[Array, "..."]
+
+
+class DeterministicStateEvolution(DiscreteTimeStateEvolution):
+    """Noise-free discrete transition ``x_next = F(x, u, t_now, t_next)``.
+
+    Returns a Delta distribution with scalar events or a trailing vector
+    event axis. Leading axes remain batch/plate dimensions.
+    """
+
+    F: Callable[
+        [
+            Real[Array, "*batch state_dim"] | Real[Array, ""],
+            Real[Array, "*control_batch control_dim"] | Real[Array, ""] | None,
+            float | int | Real[Array, ""],
+            float | int | Real[Array, ""],
+        ],
+        Real[Array, "*batch state_dim"] | Real[Array, ""],
+    ]
+
+    def __call__(
+        self,
+        x: Real[Array, "*batch state_dim"] | Real[Array, ""],
+        u: Real[Array, "*control_batch control_dim"] | Real[Array, ""] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> dist.Delta:
+        """Evaluate ``F`` and preserve its scalar or trailing vector event shape."""
+        value = jnp.asarray(self.F(x, u, t_now, t_next))
+        return dist.Delta(value, event_dim=0 if value.ndim == 0 else 1)
 
 
 class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
@@ -89,7 +123,8 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
         ]
     )
     cov: (
-        Float[Array, "*cov_plate state_dim state_dim"]
+        Covariance
+        | Float[Array, "*cov_plate state_dim state_dim"]
         | Callable[
             [float | int | Real[Array, ""], float | int | Real[Array, ""]],
             Float[Array, "*cov_plate state_dim state_dim"],
@@ -119,7 +154,8 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
             [float | int | Real[Array, ""], float | int | Real[Array, ""]],
             Float[Array, "*a_plate state_dim state_dim"],
         ],
-        cov: Float[Array, "*cov_plate state_dim state_dim"]
+        cov: Covariance
+        | Float[Array, "*cov_plate state_dim state_dim"]
         | Callable[
             [float | int | Real[Array, ""], float | int | Real[Array, ""]],
             Float[Array, "*cov_plate state_dim state_dim"],
@@ -187,11 +223,12 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
             )
             return jnp.asarray(fn(t_now, t_next))
 
+        A = _resolve(self.A)
         return LinearGaussianParams(
-            A=_resolve(self.A),
+            A=A,
             B=_resolve(self.B),
             bias=_resolve(self.bias),
-            cov=_resolve(self.cov),
+            cov=covariance_matrix(_resolve(self.cov), A.shape[-1]),
         )
 
     def __call__(self, x, u, t_now, t_next):
@@ -229,7 +266,8 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         Real[Array, " state_dim"] | Real[Array, ""],
     ]
     cov: (
-        Float[Array, "*plate state_dim state_dim"]
+        Covariance
+        | Float[Array, "*plate state_dim state_dim"]
         | Callable[
             [
                 Real[Array, " state_dim"] | Real[Array, ""],
@@ -252,7 +290,8 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
             ],
             Real[Array, " state_dim"] | Real[Array, ""],
         ],
-        cov: Float[Array, "*plate state_dim state_dim"]
+        cov: Covariance
+        | Float[Array, "*plate state_dim state_dim"]
         | Callable[
             [
                 Real[Array, " state_dim"] | Real[Array, ""],
@@ -275,7 +314,7 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         self.cov = cov
 
     def __call__(self, x, u, t_now, t_next):
-        loc = self.F(x, u, t_now, t_next)
+        loc = jnp.asarray(self.F(x, u, t_now, t_next))
         if callable(self.cov):
             cov_fn = cast(
                 Callable[
@@ -293,4 +332,4 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         else:
             cov = self.cov
 
-        return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+        return _gaussian_distribution(loc, cov)

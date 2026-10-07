@@ -42,6 +42,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
+from dynestyx.models.covariances import covariance_matrix
 
 
 class CuthbertInputs(NamedTuple):
@@ -694,7 +695,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             return observation_fn, chol_R, y
         elif isinstance(obs_model, GaussianObservation):
-            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+            chol_R = jnp.linalg.cholesky(
+                jnp.atleast_2d(covariance_matrix(obs_model.R, obs_dim))
+            )
 
             def observation_fn(x):
                 return jnp.atleast_1d(jnp.asarray(obs_model.h(x, mi.u, mi.time)))
@@ -753,7 +756,9 @@ def _kalman_dynamics_params_builder(
     ``lax.cond`` branches agree with the ``_noop`` branch.
     """
     chol_Q_const = (
-        None if callable(evo.cov) else jnp.linalg.cholesky(jnp.asarray(evo.cov))
+        None
+        if callable(evo.cov)
+        else jnp.linalg.cholesky(covariance_matrix(evo.cov, state_dim))
     )
 
     def get_dynamics_params(mi: CuthbertInputs):
@@ -803,7 +808,11 @@ def _kalman_observation_params_builder(
     step's ``mi.time``; the Cholesky of a constant covariance is hoisted out
     of the per-step path.
     """
-    chol_R_const = None if callable(obs.R) else jnp.linalg.cholesky(jnp.asarray(obs.R))
+    chol_R_const = (
+        None
+        if callable(obs.R)
+        else jnp.linalg.cholesky(covariance_matrix(obs.R, obs_dim))
+    )
 
     def get_observation_params(mi: CuthbertInputs):
         obs_params = obs.params_at(mi.time)

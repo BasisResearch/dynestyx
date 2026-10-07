@@ -7,6 +7,7 @@
       members:
         - LinearGaussianObservation
         - GaussianObservation
+        - DeterministicObservation
         - DiracIdentityObservation
 
 ## State evolution models
@@ -16,6 +17,22 @@
       members:
         - LinearGaussianStateEvolution
         - GaussianStateEvolution
+        - DeterministicStateEvolution
+
+## Covariance specifications
+
+Scalar, diagonal, and full covariance objects are reusable in Gaussian models
+and [Gaussian relaxation](../handlers.md#gaussian-relaxation). Scalar and diagonal
+objects require exactly one of `sd` or `variance`; full objects take a matrix.
+All three preserve leading batch/plate axes as Equinox pytrees.
+
+::: dynestyx.models.covariances
+    options:
+        members:
+            - Covariance
+            - ScalarCovariance
+            - DiagonalCovariance
+            - FullCovariance
 
 ## LTI model factories
 
@@ -24,4 +41,3 @@
       members:
         - LTI_continuous
         - LTI_discrete
-

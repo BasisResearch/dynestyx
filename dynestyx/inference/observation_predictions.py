@@ -29,6 +29,7 @@ from dynestyx.inference.enkf_localization import (
 )
 from dynestyx.inference.utils.plate_utils import _make_plate_in_axes
 from dynestyx.models import DynamicalModel
+from dynestyx.models.covariances import covariance_matrix
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.utils.plates import _array_has_plate_dims
 from dynestyx.utils.recording import _should_record_field
@@ -153,7 +154,7 @@ def _observation_noise_covariance_sequence(
     if isinstance(
         obs_model, (LinearGaussianObservation, GaussianObservation)
     ) and not callable(obs_model.R):
-        noise_cov = jnp.asarray(obs_model.R)
+        noise_cov = covariance_matrix(obs_model.R, dynamics.observation_dim)
         return jnp.broadcast_to(
             noise_cov[..., None, :, :],
             (*plate_shapes, t_len, *noise_cov.shape[-2:]),

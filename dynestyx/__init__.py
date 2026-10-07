@@ -23,12 +23,17 @@ from dynestyx.inference.smoothers import Smoother
 from dynestyx.models import (
     AffineDrift,
     ContinuousTimeStateEvolution,
+    Covariance,
     DeterministicContinuousTimeStateEvolution,
+    DeterministicObservation,
+    DeterministicStateEvolution,
+    DiagonalCovariance,
     DiagonalDiffusion,
     Diffusion,
     DiracIdentityObservation,
     DiscreteTimeStateEvolution,
     DynamicalModel,
+    FullCovariance,
     FullDiffusion,
     GaussianObservation,
     GaussianStateEvolution,
@@ -43,6 +48,7 @@ from dynestyx.models import (
     LTI_discrete,
     ObservationControlAlignment,
     ObservationModel,
+    ScalarCovariance,
     ScalarDiffusion,
     StochasticContinuousTimeStateEvolution,
     linearize_drift,
@@ -52,6 +58,7 @@ from dynestyx.observation_missingness import (
     masked_observation_log_prob,
     prepare_missing_observation_metadata,
 )
+from dynestyx.relaxations import GaussianRelaxation, relax_dynamics
 from dynestyx.simulation import (
     DiscreteTimeSimulator,
     ODESimulator,
@@ -67,6 +74,14 @@ from dynestyx.types import (
 from dynestyx.utils import flatten_draws
 
 __all__ = [
+    "Covariance",
+    "ScalarCovariance",
+    "DiagonalCovariance",
+    "FullCovariance",
+    "DeterministicStateEvolution",
+    "DeterministicObservation",
+    "GaussianRelaxation",
+    "relax_dynamics",
     "__version__",
     "ContinuousTimeStateEvolution",
     "DeterministicContinuousTimeStateEvolution",

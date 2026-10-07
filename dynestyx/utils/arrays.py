@@ -1,7 +1,9 @@
 """Array conversion, event-axis normalization, and indexing helpers."""
 
+import jax.numpy as jnp
 from jax import Array
-from jaxtyping import Real, Shaped
+from jax.typing import ArrayLike
+from jaxtyping import Float, Real, Shaped
 
 
 def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
@@ -34,6 +36,14 @@ def _ensure_trailing_event_axis(
     if values.ndim == 1:
         return values[..., None]
     return values
+
+
+def _real_array(value: Real[ArrayLike, "..."]) -> Float[Array, "..."]:
+    """Convert real numeric inputs to floating JAX arrays, preserving their shape."""
+    array = jnp.asarray(value)
+    if jnp.iscomplexobj(array):
+        raise ValueError("Values must be real.")
+    return array.astype(jnp.result_type(array, 1.0))
 
 
 def _get_val_or_None(values: Array | None, t_idx: int | Array) -> Array | None:
