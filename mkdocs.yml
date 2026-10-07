@@ -102,6 +102,8 @@ nav:
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
         - Discretizer Configurations: api_reference/public/inference/configs/discretizer_configs.md
+      - Relaxations:
+        - Gaussian relaxation: api_reference/public/relaxations/gaussian_relaxation.md
       - Handlers:
         - Sample, Simulate, and Plate: api_reference/public/handlers.md
       - Simulators:
@@ -144,6 +146,8 @@ nav:
         - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md
       - Discretizers:
         - Discretizer: api_reference/developer/discretizers/discretizer.md
+      - Relaxations:
+        - Gaussian relaxation: api_reference/developer/relaxations/gaussian_relaxation.md
       - Simulators:
         - Simulators: api_reference/developer/simulators.md
       - Handlers: api_reference/developer/handlers.md

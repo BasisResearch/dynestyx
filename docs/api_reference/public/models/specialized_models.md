@@ -22,7 +22,7 @@
 ## Covariance specifications
 
 Scalar, diagonal, and full covariance objects are reusable in Gaussian models
-and [Gaussian relaxation](../handlers.md#gaussian-relaxation). Scalar and diagonal
+and [Gaussian relaxation](../relaxations/gaussian_relaxation.md). Scalar and diagonal
 objects require exactly one of `sd` or `variance`; full objects take a matrix.
 All three preserve leading batch/plate axes as Equinox pytrees.
 
