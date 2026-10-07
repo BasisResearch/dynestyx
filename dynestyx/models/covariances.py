@@ -13,7 +13,7 @@ from dynestyx.utils.arrays import _real_array
 from dynestyx.utils.validation import _raise_now_or_error_if
 
 
-def _variance(
+def _resolve_variance(
     *,
     sd: Real[ArrayLike, "..."] | None,
     variance: Real[ArrayLike, "..."] | None,
@@ -74,7 +74,7 @@ class ScalarCovariance(Covariance):
         variance: Real[ArrayLike, "*batch"] | None = None,
     ) -> None:
         """Treat every input axis as a batch axis of isotropic variances."""
-        self.variance = _variance(sd=sd, variance=variance)
+        self.variance = _resolve_variance(sd=sd, variance=variance)
 
     @property
     def value(self) -> Float[Array, "*batch"]:
@@ -103,7 +103,7 @@ class DiagonalCovariance(Covariance):
         variance: Real[ArrayLike, "..."] | None = None,
     ) -> None:
         """Use the trailing input axis for event variances and leading axes for batches."""
-        self.variance = _variance(sd=sd, variance=variance)
+        self.variance = _resolve_variance(sd=sd, variance=variance)
         if self.variance.ndim < 1 or self.variance.shape[-1] == 0:
             raise ValueError(
                 "DiagonalCovariance requires a nonempty trailing vector axis."
