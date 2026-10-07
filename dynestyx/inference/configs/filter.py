@@ -17,6 +17,7 @@ ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
 FilterStateOrder = Literal["zeroth", "first", "second"]
+RBPFProposal = Literal["prior", "optimal"]
 
 CuthbertOnlyFilterSource = Literal["cuthbert"]
 CDDynamaxOnlyFilterSource = Literal["cd_dynamax"]
@@ -518,6 +519,33 @@ class PFConfig(BaseFilterConfig):
 
 
 @dataclasses.dataclass
+class RBPFConfig(BaseFilterConfig):
+    r"""Rao-Blackwellized particle filter for switching linear dynamical systems.
+
+    This filter samples particles over the discrete regime sequence and
+    analytically marginalizes the continuous linear-Gaussian state with
+    conditional Kalman updates.
+
+    Attributes:
+        n_particles (int): Number of particles over discrete regimes.
+        proposal ({"prior", "optimal"}): Proposal used for the discrete
+            regime particles. `"prior"` samples from the Markov transition;
+            `"optimal"` samples after conditioning on the current observation.
+        ess_threshold_ratio (float): Resampling threshold as a fraction of
+            `n_particles`. Used by the prior-proposal filter.
+        record_filtered_regime_probs (bool | None): Save filtered regime
+            probabilities \(p(z_t \mid y_{1:t})\).
+        filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
+    """
+
+    n_particles: int = 1_000
+    proposal: RBPFProposal = "optimal"
+    ess_threshold_ratio: float = 0.5
+    record_filtered_regime_probs: bool | None = None
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+
+@dataclasses.dataclass
 class EKFConfig(BaseFilterConfig):
     r"""Extended Kalman Filter (EKF) for discrete-time models.
 
@@ -920,6 +948,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 DiscreteTimeConfigs: tuple[type, ...] = (
     EnKFConfig,
     PFConfig,
+    RBPFConfig,
     EKFConfig,
     KFConfig,
     UKFConfig,
@@ -989,16 +1018,20 @@ def _config_to_record_kwargs(config: BaseFilterConfig) -> dict:
             "record_log_filtered": config.record_log_filtered,
             "record_max_elems": config.record_max_elems,
         }
-    else:
-        return {
-            "record_filtered_states_mean": config.record_filtered_states_mean,
-            "record_filtered_states_cov": config.record_filtered_states_cov,
-            "record_filtered_states_cov_diag": config.record_filtered_states_cov_diag,
-            "record_filtered_particles": config.record_filtered_particles,
-            "record_filtered_log_weights": config.record_filtered_log_weights,
-            "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
-            "record_predicted_observations_mean": config.record_predicted_observations_mean,
-            "record_predicted_observations_cov": config.record_predicted_observations_cov,
-            "record_predicted_observations_ensemble": config.record_predicted_observations_ensemble,
-            "record_max_elems": config.record_max_elems,
-        }
+    record_kwargs = {
+        "record_filtered_states_mean": config.record_filtered_states_mean,
+        "record_filtered_states_cov": config.record_filtered_states_cov,
+        "record_filtered_states_cov_diag": config.record_filtered_states_cov_diag,
+        "record_filtered_particles": config.record_filtered_particles,
+        "record_filtered_log_weights": config.record_filtered_log_weights,
+        "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
+        "record_predicted_observations_mean": config.record_predicted_observations_mean,
+        "record_predicted_observations_cov": config.record_predicted_observations_cov,
+        "record_predicted_observations_ensemble": config.record_predicted_observations_ensemble,
+        "record_max_elems": config.record_max_elems,
+    }
+    if isinstance(config, RBPFConfig):
+        record_kwargs["record_filtered_regime_probs"] = (
+            config.record_filtered_regime_probs
+        )
+    return record_kwargs
