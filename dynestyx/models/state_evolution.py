@@ -224,23 +224,23 @@ class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     """
 
     transition_matrix: Float[Array, "num_regimes num_regimes"]
-    A: Float[Array, "num_regimes state_dim state_dim"]
-    cov: Float[Array, "num_regimes state_dim state_dim"]
-    B: Float[Array, "num_regimes state_dim control_dim"] | None = None
-    bias: Float[Array, "num_regimes state_dim"] | None = None
+    A: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"]
+    cov: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"]
+    B: Float[Array, "num_regimes continuous_state_dim control_dim"] | None = None
+    bias: Float[Array, "num_regimes continuous_state_dim"] | None = None
 
     rounding: bool = False
 
     def __init__(
         self,
-        transition_matrix,
-        A,
-        cov,
-        B=None,
-        bias=None,
+        transition_matrix: Float[Array, "num_regimes num_regimes"],
+        A: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"],
+        cov: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"],
+        B: Float[Array, "num_regimes continuous_state_dim control_dim"] | None = None,
+        bias: Float[Array, "num_regimes continuous_state_dim"] | None = None,
         *,
         rounding: bool = False,
-    ):
+    ) -> None:
         """
         Args:
             transition_matrix: Regime transition matrix with shape `(K, K)`.
@@ -267,7 +267,13 @@ class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
     def continuous_state_dim(self) -> int:
         return int(self.A.shape[-1])
 
-    def __call__(self, x, u, t_now, t_next):
+    def __call__(
+        self,
+        x: Real[Array, " mixed_state_dim"],
+        u: Real[Array, " control_dim"] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> MixedStateDistribution:
         z, x_cont, valid = _extract_and_validate_mixed_state(
             x, self.num_regimes, rounding=self.rounding
         )

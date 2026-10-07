@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
-from jaxtyping import Array, Bool, Int, Real
+from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray, Real
 from numpyro.distributions import constraints
 
 
@@ -67,17 +67,26 @@ class MixedStateDistribution(dist.Distribution):
     support = constraints.real_vector
     pytree_data_fields = ("categorical_probs", "continuous_locs", "continuous_covs")
     pytree_aux_fields = ("num_categories", "continuous_state_dim", "rounding")
+    categorical_probs: Float[Array, " num_categories"]
+    continuous_locs: Float[Array, "num_categories continuous_state_dim"]
+    continuous_covs: Float[
+        Array, "num_categories continuous_state_dim continuous_state_dim"
+    ]
+    num_categories: int
+    continuous_state_dim: int
     rounding: bool
 
     def __init__(
         self,
-        categorical_probs,
-        continuous_locs,
-        continuous_covs,
-        validate_args=None,
+        categorical_probs: Float[Array, " num_categories"],
+        continuous_locs: Float[Array, "num_categories continuous_state_dim"],
+        continuous_covs: Float[
+            Array, "num_categories continuous_state_dim continuous_state_dim"
+        ],
+        validate_args: bool | None = None,
         *,
         rounding: bool = False,
-    ):
+    ) -> None:
         self.rounding = rounding
         self.categorical_probs = categorical_probs
         self.continuous_locs = continuous_locs
@@ -90,7 +99,9 @@ class MixedStateDistribution(dist.Distribution):
             validate_args=validate_args,
         )
 
-    def sample(self, key, sample_shape=()):
+    def sample(
+        self, key: PRNGKeyArray, sample_shape: tuple[int, ...] = ()
+    ) -> Float[Array, "*sample mixed_state_dim"]:
         key_z, key_x = jr.split(key)
         z = dist.Categorical(probs=self.categorical_probs).sample(key_z, sample_shape)
         means = self.continuous_locs[z]
@@ -98,7 +109,9 @@ class MixedStateDistribution(dist.Distribution):
         x = dist.MultivariateNormal(means, covariance_matrix=covs).sample(key_x)
         return jnp.concatenate([z[..., None].astype(x.dtype), x], axis=-1)
 
-    def log_prob(self, value):
+    def log_prob(
+        self, value: Real[Array, "*sample mixed_state_dim"]
+    ) -> Float[Array, "*sample"]:
         z, x, valid = _extract_and_validate_mixed_state(
             value, self.num_categories, rounding=self.rounding
         )

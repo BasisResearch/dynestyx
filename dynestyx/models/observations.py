@@ -192,14 +192,22 @@ class SwitchingLinearGaussianObservation(ObservationModel):
     y_t | x_t, z_t ~ Normal(H[z_t] x_t + D[z_t] u_t + bias[z_t], R[z_t])
     """
 
-    H: Float[Array, "num_regimes observation_dim state_dim"]
+    H: Float[Array, "num_regimes observation_dim continuous_state_dim"]
     R: Float[Array, "num_regimes observation_dim observation_dim"]
     D: Float[Array, "num_regimes observation_dim control_dim"] | None
     bias: Float[Array, "num_regimes observation_dim"] | None
 
     rounding: bool = False
 
-    def __init__(self, H, R, D=None, bias=None, *, rounding: bool = False):
+    def __init__(
+        self,
+        H: Float[Array, "num_regimes observation_dim continuous_state_dim"],
+        R: Float[Array, "num_regimes observation_dim observation_dim"],
+        D: Float[Array, "num_regimes observation_dim control_dim"] | None = None,
+        bias: Float[Array, "num_regimes observation_dim"] | None = None,
+        *,
+        rounding: bool = False,
+    ) -> None:
         """
         Args:
             H: Regime-specific observation matrices with shape `(K, N, D)`.
@@ -224,7 +232,12 @@ class SwitchingLinearGaussianObservation(ObservationModel):
     def continuous_state_dim(self) -> int:
         return int(self.H.shape[-1])
 
-    def __call__(self, x, u, t):
+    def __call__(
+        self,
+        x: Real[Array, " mixed_state_dim"],
+        u: Real[Array, " control_dim"] | None,
+        t: float | int | Real[Array, ""],
+    ) -> dist.MultivariateNormal:
         z, x_cont, valid = _extract_and_validate_mixed_state(
             x, self.num_regimes, rounding=self.rounding
         )

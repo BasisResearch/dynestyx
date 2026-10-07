@@ -21,11 +21,12 @@ from cd_dynamax.dynamax.slds.inference import (
     DiscreteParamsSLDS,
     LGParamsSLDS,
     ParamsSLDS,
+    RBPFiltered,
     rbpfilter,
     rbpfilter_optimal,
 )
 from jax.experimental import sparse as jax_sparse
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
@@ -51,7 +52,15 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import prepare_observation_views
 
 
-def _prepare_slds_rbpf_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_values):
+def _prepare_slds_rbpf_inputs(
+    dynamics: DynamicalModel,
+    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
+    obs_times: Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None,
+) -> tuple[
+    Real[Array, "obs_time observation_dim"], Real[Array, "obs_time control_dim"]
+]:
     emissions = obs_values[:, None] if obs_values.ndim == 1 else obs_values
     t_len = emissions.shape[0]
     if dynamics.control_dim == 0:
@@ -59,7 +68,9 @@ def _prepare_slds_rbpf_inputs(dynamics, obs_values, obs_times, ctrl_times, ctrl_
     elif ctrl_values is None:
         inputs = jnp.zeros((t_len, dynamics.control_dim))
     elif ctrl_values.shape[0] > t_len:
-        inds = jnp.searchsorted(ctrl_times, obs_times, side="left")
+        inds = jnp.searchsorted(
+            cast(Real[Array, " ctrl_time"], ctrl_times), obs_times, side="left"
+        )
         inputs = ctrl_values[inds]
     else:
         inputs = ctrl_values
@@ -124,11 +135,11 @@ def _slds_to_dynamax_params(dynamics: DynamicalModel) -> ParamsSLDS:
 def _call_slds_rbpfilter(
     params: ParamsSLDS,
     filter_config: RBPFConfig,
-    key,
-    emissions,
-    inputs,
-    emission_mask,
-):
+    key: PRNGKeyArray,
+    emissions: Real[Array, "obs_time observation_dim"],
+    inputs: Real[Array, "obs_time control_dim"],
+    emission_mask: Bool[Array, "obs_time observation_dim"],
+) -> RBPFiltered:
     """Call cd-dynamax's SLDS RBPF implementation for particle histories."""
     if filter_config.proposal == "prior":
         return rbpfilter(
@@ -165,7 +176,7 @@ def _filter_output_field(posterior, field: str, default=None):
 
 
 def _slds_rbpfilter_output_to_filter_output(
-    rbpf_output,
+    rbpf_output: RBPFiltered | dict[str, Array],
     *,
     num_regimes: int,
 ) -> dict[str, Array]:
