@@ -117,25 +117,11 @@ class LayoutCollection(eqx.Module):
         observation: Any = None,
     ) -> "LayoutCollection":
         """Build layouts for the supplied example values."""
-        return cls().with_examples(
-            state=state, control=control, observation=observation
-        )
-
-    def with_examples(
-        self,
-        *,
-        state: Any = None,
-        control: Any = None,
-        observation: Any = None,
-    ) -> "LayoutCollection":
-        """Return new layouts, retaining fields without a supplied example."""
-        return type(self)(
-            state=self.state if state is None else Layout.from_example(state),
-            control=self.control if control is None else Layout.from_example(control),
+        return cls(
+            state=None if state is None else Layout.from_example(state),
+            control=None if control is None else Layout.from_example(control),
             observation=(
-                self.observation
-                if observation is None
-                else Layout.from_example(observation)
+                None if observation is None else Layout.from_example(observation)
             ),
         )
 

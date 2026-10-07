@@ -52,22 +52,22 @@ def test_layout_from_example():
     assert state_only.control is None
     assert state_only.observation is None
 
-    extended = state_only.with_examples(
-        control=control_example, observation=observation_example
+    full = dsx.LayoutCollection.from_example(
+        state=state_example,
+        control=control_example,
+        observation=observation_example,
     )
-    assert extended is not state_only
-    assert extended.state is state_only.state
-    assert extended.control is not None
-    assert extended.control.dim == 3
-    assert extended.observation is not None
-    assert extended.observation.dim == 6
-    assert state_only.control is None
-    assert state_only.observation is None
+    assert full.state is not None
+    assert full.state.dim == 2
+    assert full.control is not None
+    assert full.control.dim == 3
+    assert full.observation is not None
+    assert full.observation.dim == 6
 
     # Layouts are static Equinox modules, so they hold no array leaves.
-    assert isinstance(extended, eqx.Module)
-    assert isinstance(extended.state, eqx.Module)
-    assert jax.tree_util.tree_leaves(extended) == []
+    assert isinstance(full, eqx.Module)
+    assert isinstance(full.state, eqx.Module)
+    assert jax.tree_util.tree_leaves(full) == []
 
 
 def test_layout_round_trip_under_jit():
