@@ -955,9 +955,9 @@ def test_evaluation_composes_with_filter_and_simulator_registration():
     assert "f_predicted_states" in tr
 
 
-def test_evaluation_explains_handler_order():
+def test_evaluation_supplies_default_filter():
     obs_times, obs_values, _, _ = _make_observations()
-    with pytest.raises(ValueError, match="Observations require"):
+    with pytest.warns(UserWarning, match="Filter"):
         with Evaluation(
             observation_scoring_config=ObservationScoringConfig(
                 rules=(GaussianLogProbScore(),)

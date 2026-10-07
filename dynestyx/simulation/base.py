@@ -16,6 +16,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 from numpyro.contrib.control_flow import scan as nscan
 
+from dynestyx._defaults import _complete_defaults
 from dynestyx.handlers import (
     HandlesSelf,
     _condition_intp,
@@ -412,6 +413,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         return [_DynestyxStackKind.SIMULATOR, *fwd()]
 
     @implements(_condition_intp)
+    @_complete_defaults(_DynestyxStackKind.SIMULATOR)
     def _sample_ds(
         self,
         name: str,
@@ -487,6 +489,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 **kwargs,
             )
 
+        kwargs["_dsx_prediction_done"] = need_simulation
         downstream_result = fwd(
             name,
             dynamics,

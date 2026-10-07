@@ -7,7 +7,6 @@ from typing import Any, TypeVar
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
-from effectful.ops.types import NotHandled
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Real
 
@@ -18,7 +17,6 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import (
     prepare_observation_views,
 )
-from dynestyx.types import FunctionOfTime
 from dynestyx.utils import (
     _get_dynamics_with_t0,
     _validate_control_dim,
@@ -63,7 +61,7 @@ _STACK_STAGES = {
 }
 
 
-def _validate_handler_stack(*, obs_values, predict_times) -> None:
+def _validate_handler_stack(*, obs_values=None, predict_times=None) -> None:
     kinds = _dynestyx_stack_kind()
     stages = [_STACK_STAGES[kind] for kind in kinds]
     order_hint = (
@@ -89,13 +87,6 @@ def _validate_handler_stack(*, obs_values, predict_times) -> None:
             raise ValueError(
                 f"{reason}Use only one handler per stage; got {repeated}. " + order_hint
             )
-    if obs_values is not None and not _INFERENCE_KINDS.intersection(kinds):
-        raise ValueError(
-            "Observations require Filter, Smoother, or LatentPathBuilder. "
-            "Simulator is generation-only. " + order_hint
-        )
-    if predict_times is not None and _DynestyxStackKind.SIMULATOR not in kinds:
-        raise ValueError("predict_times requires a Simulator. " + order_hint)
     if obs_values is None and _INFERENCE_KINDS.intersection(kinds):
         warnings.warn(
             "Filter, Smoother, or LatentPathBuilder has no obs_values to condition on.",
@@ -224,6 +215,12 @@ def sample(
     Internally, ``sample`` calls ``dsx.condition(...)`` and then registers the
     results as numpyro sites (``numpyro.factor``, ``numpyro.deterministic``).
 
+    Missing inference and prediction handlers are supplied automatically, with
+    a warning describing the chosen configuration. Small eligible models use
+    ``LatentPathBuilder``; other models use a compatible filter. Explicit
+    handler contexts override these defaults. See the handler API guide for
+    the selection rules and required nesting order.
+
     Shape note:
         Inside ``dsx.plate``, observation arrays use leading plate axes followed
         by time and event axes, e.g. ``(N, T, obs_dim)``. Model parameters follow
@@ -279,6 +276,11 @@ def condition(
     This is the NumPyro-free entry point. An active ``Filter`` or ``Smoother``
     returns a ``ConditionedResult`` carrying the inference times, marginal log
     likelihood, backend states, and per-time distributions.
+
+    Without an inference handler, observations select a compatible filter.
+    Prediction times add a simulator when needed. Unlike ``sample``, this entry
+    point never automatically selects ``LatentPathBuilder``. Randomized filters
+    and simulation retain their existing seed/key requirements.
 
     Parameters:
         name: Name of the inference site.
@@ -340,14 +342,13 @@ def _condition_intp(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-) -> FunctionOfTime:
+) -> object:
     """
     The functional version of `sample` to be interpreted at runtime.
 
-    This is implemented as a `defop` in `effectful`, meaning it is
-    an undefined function here, but "interpreted" at runtime. In other words,
-    the actual implementation of a `sample` operation is determined by the context
-    in which it is used, e.g., within a `Filter` or `Simulator` object.
+    Explicit interpretations dispatch through `effectful`. The default fills
+    missing inference and prediction stages using the model and supplied inputs;
+    it returns None when enclosing handlers have already consumed those inputs.
 
     Parameters:
         name: Name of the sample site.
@@ -366,9 +367,25 @@ def _condition_intp(
         **kwargs: Additional keyword arguments.
 
     Returns:
-        FunctionOfTime: A function of time that samples from the dynamical model.
+        The selected handler result, or None after all requested stages finish.
     """
-    raise NotHandled()
+    from dynestyx._defaults import _apply_defaults
+
+    return _apply_defaults(
+        lambda *args, **kwargs: None,
+        None,
+        name,
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        _obs_values_filled=_obs_values_filled,
+        _obs_mask=_obs_mask,
+        _obs_has_missing=_obs_has_missing,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        predict_times=predict_times,
+        **kwargs,
+    )
 
 
 class HandlesSelf:
