@@ -187,11 +187,16 @@ def test_slds_rbpf_batched_predictive_trace_sites_are_finite():
     assert out["f_marginal_loglik"].shape[-1:] == (2,)
 
 
+@pytest.mark.parametrize("scalar_observations", [False, True])
 @pytest.mark.parametrize("proposal", ["prior", "optimal"])
-def test_slds_rbpf_accepts_fully_missing_observation_rows(proposal):
+def test_slds_rbpf_accepts_fully_missing_observation_rows(
+    proposal, scalar_observations
+):
     obs_times, obs_values = _make_slds_observations()
     obs_values = obs_values.at[2, 0].set(jnp.nan)
     obs_values = obs_values.at[5, 0].set(jnp.nan)
+    if scalar_observations:
+        obs_values = obs_values[..., 0]
 
     with Filter(
         RBPFConfig(
@@ -214,11 +219,14 @@ def test_slds_rbpf_accepts_fully_missing_observation_rows(proposal):
     assert out["f_filtered_states_mean"].shape[-2] == len(obs_times)
 
 
-def test_slds_rbpf_batched_missing_observations_are_finite():
+@pytest.mark.parametrize("scalar_observations", [False, True])
+def test_slds_rbpf_batched_missing_observations_are_finite(scalar_observations):
     obs_times, obs_values = _make_slds_observations()
     batched_obs = jnp.stack([obs_values, obs_values], axis=0)
     batched_obs = batched_obs.at[0, 1, 0].set(jnp.nan)
     batched_obs = batched_obs.at[1, 4, 0].set(jnp.nan)
+    if scalar_observations:
+        batched_obs = batched_obs[..., 0]
 
     with Filter(
         RBPFConfig(

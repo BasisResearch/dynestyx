@@ -52,31 +52,6 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import prepare_observation_views
 
 
-def _prepare_slds_rbpf_inputs(
-    dynamics: DynamicalModel,
-    obs_values: Real[Array, "obs_time observation_dim"] | Real[Array, " obs_time"],
-    obs_times: Real[Array, " obs_time"],
-    ctrl_times: Real[Array, " ctrl_time"] | None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None,
-) -> tuple[
-    Real[Array, "obs_time observation_dim"], Real[Array, "obs_time control_dim"]
-]:
-    emissions = obs_values[:, None] if obs_values.ndim == 1 else obs_values
-    t_len = emissions.shape[0]
-    if dynamics.control_dim == 0:
-        inputs = jnp.zeros((t_len, 0))
-    elif ctrl_values is None:
-        inputs = jnp.zeros((t_len, dynamics.control_dim))
-    elif ctrl_values.shape[0] > t_len:
-        inds = jnp.searchsorted(
-            cast(Real[Array, " ctrl_time"], ctrl_times), obs_times, side="left"
-        )
-        inputs = ctrl_values[inds]
-    else:
-        inputs = ctrl_values
-    return emissions, inputs
-
-
 def _slds_to_dynamax_params(dynamics: DynamicalModel) -> ParamsSLDS:
     """Build cd-dynamax SLDS params from a structured dynestyx SLDS model."""
     state_dim = dynamics.state_dim - 1
@@ -287,11 +262,11 @@ def _prepare_inputs(
 ]:
     """Prepare emissions and inputs arrays for cd-dynamax discrete filters."""
     emissions = obs_values
-    t1 = emissions.shape[0]
+    num_times = emissions.shape[0]
     control_dim = dynamics.control_dim
-    if ctrl_values is None:
-        inputs = jnp.zeros((t1, control_dim))
-    elif ctrl_values.shape[0] > t1:
+    if control_dim == 0 or ctrl_values is None:
+        inputs = jnp.zeros((num_times, control_dim))
+    elif ctrl_values.shape[0] > num_times:
         aligned_ctrl_times = cast(Real[Array, " ctrl_time"], ctrl_times)
         inds = jnp.searchsorted(aligned_ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
@@ -325,21 +300,20 @@ def compute_cd_dynamax_discrete_filter(
             )
         if _obs_values_filled is None or _obs_mask is None:
             raise ValueError("RBPF filtering requires observed values and a mask.")
-        rbpf_emissions, rbpf_inputs = _prepare_slds_rbpf_inputs(
+        rbpf_emissions, rbpf_inputs = _prepare_inputs(
             dynamics,
             _obs_values_filled,
             obs_times,
             ctrl_times,
             ctrl_values,
         )
-        rbpf_mask = _obs_mask[:, None] if _obs_mask.ndim == 1 else _obs_mask
         rbpf_output = _call_slds_rbpfilter(
             params,
             filter_config,
             key,
             rbpf_emissions,
             rbpf_inputs,
-            rbpf_mask,
+            _obs_mask,
         )
         return _slds_rbpfilter_output_to_filter_output(
             rbpf_output,

@@ -357,6 +357,10 @@ class Filter(BaseLogFactorAdder):
 
         if not isinstance(config, HMMConfigs):
             obs_values = _ensure_trailing_event_axis(obs_values)
+            if _obs_values_filled is not None:
+                _obs_values_filled = _ensure_trailing_event_axis(_obs_values_filled)
+            if _obs_mask is not None:
+                _obs_mask = _ensure_trailing_event_axis(_obs_mask)
             if ctrl_values is not None:
                 ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
@@ -588,6 +592,10 @@ class Filter(BaseLogFactorAdder):
             # Add scalar event axes after vmap removes plate dimensions.
             if not isinstance(config, HMMConfigs):
                 ov = _ensure_trailing_event_axis(ov)
+                if ovf is not None:
+                    ovf = _ensure_trailing_event_axis(ovf)
+                if om is not None:
+                    om = _ensure_trailing_event_axis(om)
                 if cv is not None:
                     cv = _ensure_trailing_event_axis(cv)
             return _compute_output(dyn, ot, ov, ovf, om, ct, cv, k)
