@@ -172,8 +172,7 @@ class ControlledSimulatedResult(SimulatedResult):
     $[t_1, \dots, t_N]$ under `"previous_transition"`.
     """
 
-    # belief per state).
-    controls: Real[Array, "n_simulations ctrl_time control_dim"] | None = None
+    # Keep StructuredControlledSimulatedResult's fields in sync with these.
     filtered_states_mean: (
         Real[Array, "n_simulations filtered_time state_dim"] | None
     ) = None
