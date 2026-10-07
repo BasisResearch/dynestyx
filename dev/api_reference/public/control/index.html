@@ -18,7 +18,7 @@
         <link rel="prev" href="../simulators/simulator_configs/">
       
       
-        <link rel="next" href="../result_types/">
+        <link rel="next" href="discrete_control_loop_simulator/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Closed-loop Control - dynestyx documentation</title>
+        <title>Overview - dynestyx documentation</title>
       
     
     
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Closed-loop Control
+              Overview
             
           </span>
         </div>
@@ -1277,34 +1277,6 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../../../tutorials/control/observation_control_alignment.ipynb" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Observation-control alignment
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
     
     
     
@@ -1319,10 +1291,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_3" >
         
           
-          <label class="md-nav__link" for="__nav_3_2_4" id="__nav_3_2_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_2_3" id="__nav_3_2_3_label" tabindex="0">
             
   
   
@@ -1340,8 +1312,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_4">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3788,6 +3760,60 @@
   
   
   
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_2_7" id="__nav_4_2_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Closed-loop Control
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_2_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Closed-loop Control
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
     <li class="md-nav__item md-nav__item--active">
       
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
@@ -3803,7 +3829,7 @@
   <span class="md-ellipsis">
     
   
-    Closed-loop Control
+    Overview
   
 
     
@@ -3821,7 +3847,7 @@
   <span class="md-ellipsis">
     
   
-    Closed-loop Control
+    Overview
   
 
     
@@ -3936,143 +3962,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#simulator-and-policy-protocol" class="md-nav__link">
+  <a href="#api" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Simulator and policy protocol
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DiscreteControlLoopSimulator
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="DiscreteControlLoopSimulator">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        simulate
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ControlledSimulatedResult
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.control.discrete_controller_simulators.PolicyCallable" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PolicyCallable
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mppi-policy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MPPI policy
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.control.mppi.MPPI" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MPPI
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="MPPI">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#dynestyx.control.mppi.MPPI.initial_state" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        initial_state
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#dynestyx.control.mppi.MPPI.plan_step" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        plan_step
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#policy-helpers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Policy helpers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.control.discrete_controller_simulators.filter_state_mean" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        filter_state_mean
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.control.discrete_controller_simulators.filter_state_dist" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        filter_state_dist
+        API
       
     </span>
   </a>
@@ -4082,6 +3975,186 @@
     </ul>
   
 </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="discrete_control_loop_simulator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DiscreteControlLoopSimulator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="policy_callable/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PolicyCallable
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_7_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2_7_4" id="__nav_4_2_7_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Provided Policies
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_4_2_7_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2_7_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Provided Policies
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="provided_policies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="mppi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MPPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -5505,946 +5578,12 @@ produced a result. Read <code>obs_times</code> and <code>ctrl_times</code> off t
 rather than inferring alignment from shapes. With state estimation,
 <code>filtered_states_mean</code> also differs: <span class="arithmatex">\(N+1\)</span> beliefs under <code>"previous_transition"</code>
 (one per state), against <span class="arithmatex">\(N\)</span> under <code>"same_time"</code>. On the true state, it is <code>None</code>.</p>
-<h2 id="simulator-and-policy-protocol">Simulator and policy protocol<a class="headerlink" href="#simulator-and-policy-protocol" title="Permanent link">&para;</a></h2>
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" class="doc doc-heading">
-            <code>dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator</code>
-
-
-<a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="dynestyx.simulation.base.BaseSimulator">BaseSimulator</span></code></p>
-
-
-
-        <p>Closed-loop simulator: simulate, observe, filter, and decide controls online.</p>
-<p>Unlike <code>DiscreteTimeSimulator</code>, which requires the entire control
-trajectory as a pre-supplied <code>ctrl_values</code> array, <code>DiscreteControlLoopSimulator</code>
-computes each <span class="arithmatex">\(u_k\)</span> online from the current belief via <code>control_policy</code>.</p>
-<p>Which control an observation sees is set by the model's
-<code>dynamics.observation_control_alignment</code> -- the same field that governs
-open-loop simulation.</p>
-<p>With convention <code>"previous_transition"</code>, the control <span class="arithmatex">\(u_k\)</span> is chosen
-<em>after</em> seeing the observation <span class="arithmatex">\(y_k\)</span> (which uses the previous control). The
-policy therefore sees the filtered belief <span class="arithmatex">\(\hat p_k\)</span>. This is the only
-convention the filtered closed loop supports for now, and it is what an
-unspecified (<code>None</code>) field resolves to, with a warning.</p>
-<p>With convention <code>"same_time"</code>, the control <span class="arithmatex">\(u_k\)</span> would be chosen <em>before</em>
-seeing the observation <span class="arithmatex">\(y_k\)</span> it drives, so the policy would see the
-predicted belief <span class="arithmatex">\(\tilde p_k\)</span>. That needs separate prediction and analysis
-filter steps, which cuthbert does not expose; an explicit <code>"same_time"</code>
-raises <code>NotImplementedError</code> until they are built.</p>
-<p>Both loops are written out in full on the
-<a href="https://basisresearch.github.io/dynestyx/stable/api_reference/public/control/">Closed-loop control page</a>.</p>
-<p>With <code>use_true_state=True</code> the loop skips filtering altogether and hands
-the policy the true state <span class="arithmatex">\(x_k\)</span>. Both conventions run.</p>
-<p>The one-step filter update runs on the cuthbert backend
-(<code>filter_source="cuthbert"</code>). See the
-<a href="https://basisresearch.github.io/dynestyx/stable/api_reference/public/inference/filters/">filters page</a>
-for the available filters, and <code>build_cuthbert_filter</code> in
-<a href="https://github.com/BasisResearch/dynestyx/blob/main/dynestyx/inference/integrations/cuthbert/discrete_filter.py"><code>discrete_filter.py</code></a>
-for which of them the online update supports. Plated controlled simulation
-is not yet supported; see
-<a href="https://github.com/BasisResearch/dynestyx/issues/318">Issue #318</a>.</p>
-
-
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.control_policy">control_policy</span></code></td>
-            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Control policy <span class="arithmatex">\(\pi\)</span>; see <code>PolicyCallable</code>. Its initial
-state <span class="arithmatex">\(s_0\)</span> is exactly <code>simulate</code>'s <code>initial_policy_state</code> argument
-(default <code>None</code>, for a stateless policy) -- <code>control_policy</code> is
-never introspected for an <code>initial_state()</code> method; a stateful
-policy's initial state must always be passed explicitly.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.filter_config">filter_config</span></code></td>
-            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Selects the filtering algorithm; any config
-<code>build_cuthbert_filter</code> accepts (see above). Defaults to
-<code>_default_filter_config(dynamics)</code> when <code>None</code>. The online one-step
-update currently requires <code>filter_source="cuthbert"</code>. Its
-<code>record_filtered_states_mean</code>/<code>record_max_elems</code> fields gate
-whether the <code>filtered_states_mean</code> output is recorded, exactly
-as they do for <code>Filter</code> (see <code>dynestyx.utils._should_record_field</code>).
-Must not be given together with <code>use_true_state=True</code>, which
-filters nothing.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.use_true_state">use_true_state</span></code></td>
-            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Give the policy the true state <span class="arithmatex">\(x_k\)</span> instead of a
-filtered belief, and run no filter at all. Defaults to <code>False</code>.
-Observations are still emitted and returned, but nothing consumes
-them, and <code>filtered_states_mean</code> is always <code>None</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.n_simulations">n_simulations</span></code></td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Currently only <code>1</code> is supported.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="doc doc-heading">
-            <code class=" language-python"><span class="n">simulate</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rng_key</span><span class="p">:</span> <span class="n">PRNGKeyArray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'ctrl_time control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' ctrl_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">predict_times</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' predict_time'</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">initial_policy_state</span><span class="p">:</span> <span class="n">PyTree</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControlledSimulatedResult</span></code>
-
-<a href="#dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.simulate" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Simulate one online controlled trajectory.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>dynamics</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Discrete-time dynamical model.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>rng_key</code>
-            </td>
-            <td>
-                  <code><span title="jaxtyping.PRNGKeyArray">PRNGKeyArray</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Root key for environment and fallback filter randomness.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>ctrl_times</code>
-            </td>
-            <td>
-                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; ctrl_time&#39;] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Unsupported because controls are selected online.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>ctrl_values</code>
-            </td>
-            <td>
-                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;ctrl_time control_dim&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; ctrl_time&#39;] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Unsupported because controls are selected online.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>predict_times</code>
-            </td>
-            <td>
-                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; predict_time&#39;] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Strictly increasing simulation times.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>initial_policy_state</code>
-            </td>
-            <td>
-                  <code><span title="jaxtyping.PyTree">PyTree</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Initial state passed to <code>control_policy</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>**kwargs</code>
-            </td>
-            <td>
-                  <code><span title="typing.Any">Any</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Additional shared simulator-handler metadata, ignored here.</p>
-              </div>
-            </td>
-            <td>
-                  <code>{}</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult">ControlledSimulatedResult</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>States, observations, controls, filtered beliefs and policy states</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult">ControlledSimulatedResult</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>on all <code>predict_times</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult">ControlledSimulatedResult</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Under the <code>"same_time"</code> convention, the states are of length <code>len(predict_times)</code>, but the controls and observations are of length <code>len(predict_times) - 1</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult">ControlledSimulatedResult</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Under the <code>previous_transition</code> convention, the states are of length <code>len(predict_times)</code>, but the controls and observations are of length <code>len(predict_times) - 1</code>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="ValueError">ValueError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If inputs are incompatible with online discrete control.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="NotImplementedError">NotImplementedError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If the requested simulation mode is unsupported,
-including an explicit <code>observation_control_alignment="same_time"</code>
-while filtering (<code>use_true_state=False</code>).</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Warns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code>UserWarning</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If <code>dynamics.observation_control_alignment</code> is
-unspecified (<code>None</code>); <code>"previous_transition"</code> is used.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" class="doc doc-heading">
-            <code>dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult</code>
-
-
-<a href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-            <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.types.SimulatedResult" href="../../developer/result_types/#dynestyx.types.SimulatedResult">SimulatedResult</a></code></p>
-
-
-
-        <p><code>SimulatedResult</code> extended with the control loop's extra outputs.</p>
-<p>Registered as deterministic sites the same generic way as
-<code>SimulatedResult</code>'s own fields.</p>
-<p>Both conventions return <span class="arithmatex">\(N+1\)</span> states and <span class="arithmatex">\(N\)</span> controls, so the array
-lengths alone do not say which one ran: consult <code>obs_times</code>,
-which is <span class="arithmatex">\([t_0, \dots, t_{N-1}]\)</span> under <code>"same_time"</code> and
-<span class="arithmatex">\([t_1, \dots, t_N]\)</span> under <code>"previous_transition"</code>.</p>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="dynestyx.control.discrete_controller_simulators.PolicyCallable" class="doc doc-heading">
-            <code>dynestyx.control.discrete_controller_simulators.PolicyCallable</code>
-
-
-<a href="#dynestyx.control.discrete_controller_simulators.PolicyCallable" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
-
-
-
-        <p>Structural protocol for a control policy <span class="arithmatex">\(\pi\)</span>.</p>
-<div class="arithmatex">\[u_k, s_{k+1} = \pi(\tilde x_k, t_k, t_{k+1}, s_k)\]</div>
-<p><span class="arithmatex">\(\tilde x_k\)</span> is the loop's current state or state estimate. Which one it is
-depends on <code>use_true_state</code> and on the convention.</p>
-<p>When using <code>use_true_state=True</code>, <span class="arithmatex">\(\tilde x_k\)</span> is a <code>Delta</code> distribution centered on the true state <span class="arithmatex">\(x_k\)</span> (including at <span class="arithmatex">\(k=0\)</span>).</p>
-<p>When using <code>use_true_state=False</code> (default), this is a distribution depending on the filter configuration:</p>
+<h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h2>
 <ul>
-<li>under <code>same_time</code>, <span class="arithmatex">\(\tilde x_k\)</span> is the predicted state <span class="arithmatex">\(\hat{x}_{k|k-1}\)</span></li>
-<li>under <code>previous_transition</code>, <span class="arithmatex">\(\tilde x_k\)</span> is the filtered state <span class="arithmatex">\(\hat{x}_{k|k}\)</span></li>
+<li><a href="discrete_control_loop_simulator/"><code>DiscreteControlLoopSimulator</code></a>: the closed-loop simulator and its result type, <code>ControlledSimulatedResult</code>.</li>
+<li><a href="policy_callable/"><code>PolicyCallable</code></a>: the policy protocol, with the <code>filter_state_mean</code> and <code>filter_state_dist</code> helpers.</li>
+<li><a href="mppi/"><code>MPPI</code></a>: the MPPI policy, <code>MPPIStepInfo</code>, and the noise distributions.</li>
 </ul>
-<p>where <span class="arithmatex">\(\hat{x}_{k|j}\)</span> is the state estimate at time <span class="arithmatex">\(t_k\)</span> given observations up to time <span class="arithmatex">\(t_j\)</span>. At <span class="arithmatex">\(k=0\)</span>, this is the model's initial-state distribution <span class="arithmatex">\(p_0\)</span>.</p>
-<p>With <code>use_true_state=True</code> there is no filtering: <span class="arithmatex">\(\tilde x_k\)</span>
-is a <code>Delta</code> centered on the true state <span class="arithmatex">\(x_k\)</span>.</p>
-<p>It is always a NumPyro <code>Distribution</code>.
-Use <code>x_hat.mean</code> for a family-agnostic point estimate.
-<code>t_now</code>/<code>t_next</code> are the current and next
-time points. Any plain
-callable matching this signature works, including an <code>equinox.Module</code>
-with a matching <code>__call__</code>  or a plain Python function.
-<code>control_policy</code> must return a concrete
-value.</p>
-<p><code>s</code> is an internal state for the policy (such as a PRNG key), which is
-passed back to it on the next call. A stateless policy can ignore it and
-return <code>None</code> for the next state.</p>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div><h2 id="mppi-policy">MPPI policy<a class="headerlink" href="#mppi-policy" title="Permanent link">&para;</a></h2>
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="dynestyx.control.mppi.MPPI" class="doc doc-heading">
-            <code>dynestyx.control.mppi.MPPI</code>
-
-
-<a href="#dynestyx.control.mppi.MPPI" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="equinox.Module">Module</span></code></p>
-
-
-
-        <p>Model Predictive Path Integral (MPPI) controller.</p>
-<p>At each call: sample <code>n_samples</code> candidate control sequences of length
-<code>horizon</code> as Gaussian perturbations around a nominal sequence (the policy
-state <code>s</code>, warm-started from the previous call), roll each one forward
-<code>horizon</code> steps through <code>dynamics.state_evolution</code> (built internally --
-the caller only ever supplies the <em>one-step</em> dynamics, never a
-hand-written rollout), score the resulting trajectories with <code>loss_fn</code>,
-and combine them via the standard MPPI weighting</p>
-<div class="arithmatex">\[w_i \propto \exp(-\mathrm{loss}_i / \lambda), \qquad
-  u_{0:H-1} = \sum_i w_i\, u^{(i)}_{0:H-1}\]</div>
-<p>i.e. a softmax over the (negated, temperature-scaled) per-sample losses.
-Only the first control of that weighted-mean sequence is applied this
-step (receding horizon); the remainder becomes next step's nominal
-sequence, shifted left by one with the last entry repeated.</p>
-<p>Each rollout is run under the <code>"previous_transition"</code> observation/
-control convention, so a candidate's <span class="arithmatex">\(u_k\)</span> influences <span class="arithmatex">\(x_{k+1}\)</span> and
-<span class="arithmatex">\(y_{k+1}\)</span>. <code>dynamics</code> is copied (via <code>equinox.tree_at</code>).</p>
-
-
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.dynamics">dynamics</span></code></td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="DynamicalModel (dynestyx.models.DynamicalModel)" href="../models/core_models/#dynestyx.models.core.DynamicalModel">DynamicalModel</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>a <code>DynamicalModel</code> (the same model used for the real simulation
-or some approximate). Each candidate rollout is computed by calling <code>dsx.simulate</code>.
-If <code>dynamics</code> holds trainable parameters you're also
-fitting via the outer simulation, they remain in the differentiable
-pytree so gradients through planning are tracked too.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.loss_fn">loss_fn</span></code></td>
-            <td>
-                  <code><span title="dynestyx.control.mppi.MPPILossFn">MPPILossFn</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p><code>MPPILossFn</code>, i.e. <code>(result: SimulatedResult) -&gt; scalar</code>,
-called once per sample (vmapped) on that candidate's full rollout. Every
-field carries a leading <code>n_simulations</code> axis -- e.g.
-<code>result.states.shape == (n_simulations, horizon, state_dim)</code>, so
-<code>(1, horizon, state_dim)</code> by default. <code>times</code>/<code>states</code>/<code>observations</code>/<code>controls</code> all
-have length <code>horizon</code> and are index-aligned: at index <code>k</code>,
-<code>states[k]</code> is <span class="arithmatex">\(x_{k+1}\)</span>, <code>observations[k]</code> is <span class="arithmatex">\(y_{k+1}\)</span>, and
-<code>controls[k]</code> is <span class="arithmatex">\(u_k\)</span> -- the control that produced that state. The
-starting state <span class="arithmatex">\(x_0\)</span> is not in <code>states</code> (no control produced it); it
-is available separately as <code>result.x_0</code>, shape <code>(1, state_dim)</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.horizon">horizon</span></code></td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Planning horizon length <code>H</code> -- the number of internal
-one-step <code>dynamics</code> calls per rollout. Defaults to <code>10</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.noise_std">noise_std</span></code></td>
-            <td>
-                  <code><span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39;&#39;] | <span title="jaxtyping.Real">Real</span>[<span title="jax.Array">Array</span>, &#39; control_dim&#39;]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Standard deviation of the Gaussian perturbations added to
-the nominal sequence, scalar or shape <code>(control_dim,)</code>. Defaults
-to <code>1.0</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.n_samples">n_samples</span></code></td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Number of sampled control sequences per call. Defaults to
-<code>20</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.n_simulations">n_simulations</span></code></td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Number of independent rollouts drawn per candidate
-control sequence, forwarded to <code>dsx.simulate</code>. Defaults to <code>1</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.dt">dt</span></code></td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Fixed planning step size. Defaults to <code>1.0</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.temperature">temperature</span></code></td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>MPPI's <span class="arithmatex">\(\lambda\)</span>; higher values flatten the weights
-toward a uniform average, lower values concentrate weight on the
-lowest-loss samples.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.batched">batched</span></code></td>
-            <td>
-                  <code><span title="bool">bool</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Whether the <code>n_samples</code> candidate rollouts are computed with
-<code>jax.vmap</code> (default, fast, requires <code>dynamics.state_evolution</code> to
-be vmap-compatible) or <code>jax.lax.map</code> (a sequential loop -- slower,
-but works for a <code>dynamics.state_evolution</code> that isn't
-vmap-compatible, e.g. wraps an external simulator via
-<code>jax.pure_callback</code>).</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="dynestyx.control.mppi.MPPI.seed">seed</span></code></td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Seeds MPPI's own PRNG key, carried inside the policy state <code>s</code>
-(as <code>(nominal_sequence, key)</code>) and split internally on every
-call.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="dynestyx.control.mppi.MPPI.initial_state" class="doc doc-heading">
-            <code class=" language-python"><span class="n">initial_state</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'horizon control_dim'</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">]</span></code>
-
-<a href="#dynestyx.control.mppi.MPPI.initial_state" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Zero nominal control sequence plus MPPI's own seeded PRNG key.
-Pass this call's result as <code>initial_policy_state</code> to <code>simulate</code>/
-<code>dsx.simulate</code> -- <code>DiscreteControlLoopSimulator</code> never calls this
-automatically, so it must be supplied explicitly.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="dynestyx.control.mppi.MPPI.plan_step" class="doc doc-heading">
-            <code class=" language-python"><span class="n">plan_step</span><span class="p">(</span><span class="n">x_hat</span><span class="p">:</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">t_now</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="n">s</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'horizon control_dim'</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">' control_dim'</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'horizon control_dim'</span><span class="p">],</span> <span class="n">PRNGKeyArray</span><span class="p">],</span> <span class="n">SimulatedResult</span><span class="p">]</span></code>
-
-<a href="#dynestyx.control.mppi.MPPI.plan_step" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Do MPPI's full planning step and also return the batch of every
-candidate rollout considered (<code>n_samples</code>-wide <code>SimulatedResult</code>).
--- useful for debugging/plotting what MPPI weighed, or diagnosing a
-<code>loss_fn</code>.</p>
-<p><code>__call__</code> (used by <code>DiscreteControlLoopSimulator</code>) is a
-thin wrapper around this that drops the rollout batch, since
-<code>PolicyCallable</code>'s return signature can't carry a third value.</p>
-<p>Every field is shaped <code>(n_samples, n_simulations, horizon, ...)</code>.
-<code>predicted_*</code> are always <code>None</code> (not meaningful for a planning rollout).</p>
-
-
-    </div>
-
-</div>
-
-
-
-  </div>
-
-    </div>
-
-</div><h2 id="policy-helpers">Policy helpers<a class="headerlink" href="#policy-helpers" title="Permanent link">&para;</a></h2>
-
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.control.discrete_controller_simulators.filter_state_mean" class="doc doc-heading">
-            <code class=" language-python"><span class="n">dynestyx</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">discrete_controller_simulators</span><span class="o">.</span><span class="n">filter_state_mean</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span></code>
-
-<a href="#dynestyx.control.discrete_controller_simulators.filter_state_mean" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-
-        <p>Point-estimate summary of a cuthbert filter state, any family.</p>
-<p>Kalman-family states (<code>KFConfig</code>, <code>EKFConfig</code>, <code>EnKFConfig</code>) expose a
-<code>.mean</code> property directly. <code>PFConfig</code> states (<code>ParticleFilterState</code>) have
-no such property -- they represent the belief as a weighted particle
-cloud (<code>.particles</code>, <code>.log_weights</code>), so the point estimate is the
-weighted mean instead. Broadcasts over any leading batch/time axis, so it
-works on both a single belief and a whole scanned-out sequence of them.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="dynestyx.control.discrete_controller_simulators.filter_state_dist" class="doc doc-heading">
-            <code class=" language-python"><span class="n">dynestyx</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">discrete_controller_simulators</span><span class="o">.</span><span class="n">filter_state_dist</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">filter_config</span><span class="p">:</span> <span class="n">BaseFilterConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span></code>
-
-<a href="#dynestyx.control.discrete_controller_simulators.filter_state_dist" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-
-        <p>Full-belief NumPyro distribution for a filter state.</p>
-<p>Only <code>filter_source="cuthbert"</code> is supported today, matching
-<code>DiscreteControlLoopSimulator</code>'s own restriction. Converts the filter state to a NumPyro <code>Distribution</code>
-in the same way that <code>ConditionedResult.dists</code> does for the recorded filtered states.</p>
-<p>The shared conversion is time-indexed, so the state is given a leading axis of
-length one and the single distribution unwrapped.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>state</code>
-            </td>
-            <td>
-                  <code><span title="typing.Any">Any</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>A single, unbatched filter state produced by <code>filter_config</code>.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>filter_config</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
-
-
-  
-      dataclass
-   (dynestyx.inference.configs.filter.BaseFilterConfig)" href="../../developer/inference/configs/filter_configs/#dynestyx.inference.configs.filter.BaseFilterConfig">BaseFilterConfig</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The config that produced <code>state</code>. Selects the backend and
-carries <code>recorded_filtered_states_cov_jitter</code> for ensemble states.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="numpyro.distributions.Distribution">Distribution</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The belief as a NumPyro <code>Distribution</code>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="ValueError">ValueError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If <code>filter_config.filter_source</code> is not <code>"cuthbert"</code>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
 
 
 
