@@ -702,14 +702,8 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
-        if output_kind == "continuous":
+        if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
-            states = outputs
-        elif output_kind == "cd_dynamax_discrete":
-            if isinstance(config, RBPFConfig):
-                marginal_logliks = outputs["marginal_loglik"]
-            else:
-                marginal_logliks = outputs.marginal_loglik
             states = outputs
         elif output_kind == "hmm":
             marginal_logliks, states = outputs

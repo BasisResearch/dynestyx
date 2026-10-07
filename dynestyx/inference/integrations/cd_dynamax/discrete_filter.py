@@ -1,7 +1,7 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF, RBPF."""
 
 import warnings
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -26,7 +26,7 @@ from cd_dynamax.dynamax.slds.inference import (
     rbpfilter_optimal,
 )
 from jax.experimental import sparse as jax_sparse
-from jaxtyping import Array, Bool, PRNGKeyArray, Real
+from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
@@ -163,28 +163,47 @@ def _call_slds_rbpfilter(
     raise ValueError(f"Unknown RBPF proposal: {filter_config.proposal!r}")
 
 
-def _rbpfilter_field(rbpf_output, field: str):
-    if isinstance(rbpf_output, dict):
-        return rbpf_output.get(field)
-    return getattr(rbpf_output, field, None)
+class SLDSFilterPosterior(NamedTuple):
+    """Dynestyx summaries adapted from cd-dynamax's ``RBPFiltered``.
 
+    Means and covariances describe the continuous state. ``particles`` packs
+    each discrete state with its conditional continuous mean, not a Gaussian
+    draw. Leading batch axes are added by plate vmap. This internal result is
+    stored in ``ConditionedResult.states``; it is not a simulated trajectory.
+    """
 
-def _filter_output_field(posterior, field: str, default=None):
-    if isinstance(posterior, dict):
-        return posterior.get(field, default)
-    return getattr(posterior, field, default)
+    marginal_loglik: Float[Array, "*batch"]
+    filtered_means: Float[Array, "*batch time continuous_state_dim"]
+    filtered_covariances: Float[
+        Array, "*batch time continuous_state_dim continuous_state_dim"
+    ]
+    filtered_regime_probs: Float[Array, "*batch time num_categories"]
+    particles: Float[Array, "*batch time n_particles mixed_state_dim"]
+    log_weights: Float[Array, "*batch time n_particles"]
 
 
 def _slds_rbpfilter_output_to_filter_output(
-    rbpf_output: RBPFiltered | dict[str, Array],
+    rbpf_output: RBPFiltered,
     *,
     num_regimes: int,
-) -> dict[str, Array]:
+) -> SLDSFilterPosterior:
     """Convert cd-dynamax RBPF output to dynestyx's generic filter fields."""
-    weights = _rbpfilter_field(rbpf_output, "weights")
-    means = _rbpfilter_field(rbpf_output, "means")
-    covs = _rbpfilter_field(rbpf_output, "covariances")
-    states = _rbpfilter_field(rbpf_output, "states")
+    weights = rbpf_output.weights
+    means = rbpf_output.means
+    covs = rbpf_output.covariances
+    states = rbpf_output.states
+    marginal_loglik = rbpf_output.marginal_loglik
+    if marginal_loglik is None:
+        raise AttributeError(
+            "cd-dynamax SLDS RBPF output must include `marginal_loglik`. "
+            "Update cd_dynamax.dynamax.slds.inference.rbpfilter/"
+            "rbpfilter_optimal to return RBPFiltered(marginal_loglik=...)."
+        )
+    if weights is None or means is None or covs is None or states is None:
+        raise ValueError(
+            "cd-dynamax SLDS RBPF output must include weights, means, "
+            "covariances, and states."
+        )
     filtered_means = jnp.sum(weights[..., None] * means, axis=1)
     centered = means - filtered_means[:, None, :]
     filtered_covs = jnp.sum(
@@ -197,21 +216,14 @@ def _slds_rbpfilter_output_to_filter_output(
     )
     particles = jnp.concatenate([states[..., None].astype(means.dtype), means], axis=-1)
     log_weights = jnp.log(weights)
-    marginal_loglik = _rbpfilter_field(rbpf_output, "marginal_loglik")
-    if marginal_loglik is None:
-        raise AttributeError(
-            "cd-dynamax SLDS RBPF output must include `marginal_loglik`. "
-            "Update cd_dynamax.dynamax.slds.inference.rbpfilter/"
-            "rbpfilter_optimal to return RBPFiltered(marginal_loglik=...)."
-        )
-    return {
-        "marginal_loglik": marginal_loglik,
-        "filtered_means": filtered_means,
-        "filtered_covariances": filtered_covs,
-        "filtered_regime_probs": regime_probs,
-        "particles": particles,
-        "log_weights": log_weights,
-    }
+    return SLDSFilterPosterior(
+        marginal_loglik=marginal_loglik,
+        filtered_means=filtered_means,
+        filtered_covariances=filtered_covs,
+        filtered_regime_probs=regime_probs,
+        particles=particles,
+        log_weights=log_weights,
+    )
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
@@ -418,7 +430,7 @@ def run_discrete_filter(
         particle_mode=isinstance(filter_config, RBPFConfig),
         missing="empty",
     )
-    marginal_loglik = _filter_output_field(posterior, "marginal_loglik")
+    marginal_loglik = posterior.marginal_loglik
     if marginal_loglik is None:
         raise AttributeError("cd-dynamax filter output is missing `marginal_loglik`.")
     return marginal_loglik, posterior, filtered_dists
