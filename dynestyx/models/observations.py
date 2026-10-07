@@ -11,7 +11,7 @@ from numpyro import distributions as dist
 from dynestyx.models.core import ObservationModel
 from dynestyx.models.covariances import (
     Covariance,
-    _gaussian_distribution,
+    construct_gaussian,
     covariance_matrix,
 )
 
@@ -236,7 +236,7 @@ class GaussianObservation(ObservationModel):
 
     def __call__(self, x, u, t):
         loc = jnp.asarray(self.h(x, u, t))
-        return _gaussian_distribution(loc, self.R)
+        return construct_gaussian(loc, self.R)
 
 
 class DeterministicObservation(ObservationModel):

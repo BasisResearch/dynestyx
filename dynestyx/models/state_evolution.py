@@ -15,7 +15,7 @@ from jaxtyping import Array, Float, Real
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.covariances import (
     Covariance,
-    _gaussian_distribution,
+    construct_gaussian,
     covariance_matrix,
 )
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
@@ -332,4 +332,4 @@ class GaussianStateEvolution(DiscreteTimeStateEvolution):
         else:
             cov = self.cov
 
-        return _gaussian_distribution(loc, cov)
+        return construct_gaussian(loc, cov)

@@ -203,11 +203,14 @@ def _finite_symmetric_covariance(
     return matrix
 
 
-def _gaussian_distribution(
+def construct_gaussian(
     loc: Real[Array, "..."],
     covariance: Covariance | Real[ArrayLike, "*batch event_dim event_dim"],
 ) -> dist.Normal | dist.MultivariateNormal:
-    """Build a scalar Normal or a Gaussian with a trailing vector event axis."""
+    """Construct a Normal for scalar loc, otherwise a MultivariateNormal.
+
+    For array loc, the trailing axis is the event axis; leading axes are batches.
+    """
     dim = 1 if loc.ndim == 0 else loc.shape[-1]
     matrix = covariance_matrix(covariance, dim)
     if loc.ndim == 0:
