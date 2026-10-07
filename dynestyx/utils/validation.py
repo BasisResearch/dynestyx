@@ -43,6 +43,37 @@ def _raise_now_or_error_if(
     raise AssertionError(f"Unexpected action for _raise_now_or_error_if: {action!r}")
 
 
+def _validate_array(
+    value,
+    *,
+    expected_shape: tuple[int, ...] | None = None,
+    name: str,
+    symmetric: bool = False,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
+) -> Array:
+    """Check finite values, optional shape, and symmetry of trailing matrix axes."""
+    value = jnp.asarray(value)
+    if expected_shape is not None and value.shape != expected_shape:
+        raise ValueError(f"{name} must have shape {expected_shape}; got {value.shape}.")
+    value = _raise_now_or_error_if(
+        value,
+        ~jnp.all(jnp.isfinite(value)),
+        f"{name} must contain only finite values.",
+    )
+    if symmetric:
+        if value.ndim < 2 or value.shape[-2] != value.shape[-1]:
+            raise ValueError(
+                f"{name} must have square trailing matrix axes; got {value.shape}."
+            )
+        value = _raise_now_or_error_if(
+            value,
+            ~jnp.allclose(value, jnp.swapaxes(value, -1, -2), rtol=rtol, atol=atol),
+            f"{name} must be symmetric.",
+        )
+    return value
+
+
 def _validate_nonnegative_float(name: str, value: float) -> None:
     """Validate a nonnegative, finite float-valued config field.
 

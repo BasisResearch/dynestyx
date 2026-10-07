@@ -28,7 +28,6 @@ from dynestyx.models.covariances import (
     DiagonalCovariance,
     FullCovariance,
     ScalarCovariance,
-    _finite_symmetric_covariance,
     covariance_matrix,
 )
 from dynestyx.models.observations import (
@@ -42,6 +41,7 @@ from dynestyx.models.state_evolution import (
     LinearGaussianStateEvolution,
 )
 from dynestyx.types import ConditionedResult, LatentStateResult, SimulatedResult
+from dynestyx.utils.validation import _validate_array
 
 
 def _parse_covariance_setting(
@@ -84,8 +84,11 @@ class _AddedCovariance(eqx.Module):
     ) -> Float[Array, "*batch event_dim event_dim"]:
         """Evaluate the original model covariance and add the specified noise matrix."""
         base = covariance_matrix(self.original(*args), self.event_dim)
-        return _finite_symmetric_covariance(
-            base + self.addition.as_matrix(self.event_dim)
+        return _validate_array(
+            base + self.addition.as_matrix(self.event_dim),
+            name="Covariance",
+            symmetric=True,
+            atol=1e-7,
         )
 
 

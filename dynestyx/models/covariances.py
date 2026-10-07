@@ -11,7 +11,7 @@ from jax.typing import ArrayLike
 from jaxtyping import Float, Real
 
 from dynestyx.utils.arrays import _real_array
-from dynestyx.utils.validation import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if, _validate_array
 
 
 def _resolve_variance(
@@ -152,7 +152,9 @@ class FullCovariance(Covariance):
             raise ValueError(
                 "FullCovariance requires nonempty square trailing matrix axes."
             )
-        self.matrix = _finite_symmetric_covariance(self.matrix)
+        self.matrix = _validate_array(
+            self.matrix, name="Covariance", symmetric=True, atol=1e-7
+        )
 
     @property
     def value(self) -> Float[Array, "*batch event_dim event_dim"]:
@@ -185,25 +187,6 @@ def covariance_matrix(
         if isinstance(value, Covariance)
         else jnp.asarray(value)
     )
-
-
-def _finite_symmetric_covariance(
-    matrix: Float[Array, "*batch event_dim event_dim"],
-) -> Float[Array, "*batch event_dim event_dim"]:
-    """Check finite entries and symmetry while preserving the covariance matrix."""
-    matrix = _raise_now_or_error_if(
-        matrix,
-        jnp.any(~jnp.isfinite(matrix)),
-        "Covariance must be finite.",
-    )
-    matrix = _raise_now_or_error_if(
-        matrix,
-        ~jnp.all(
-            jnp.isclose(matrix, jnp.swapaxes(matrix, -1, -2), rtol=1e-5, atol=1e-7)
-        ),
-        "Covariance must be symmetric.",
-    )
-    return matrix
 
 
 def construct_gaussian(
