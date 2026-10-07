@@ -373,6 +373,15 @@ def dsx_to_cd_dynamax(
         if isinstance(ic, dist.MultivariateNormal):
             initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
             initial_cov = squeeze_leading_singletons(ic.covariance_matrix, 2)
+        elif (
+            isinstance(ic, dist.Independent)
+            and isinstance(ic.base_dist, dist.Normal)
+            and len(ic.event_shape) == 1
+        ):
+            initial_mean = squeeze_leading_singletons(ic.mean, 1)
+            initial_cov = squeeze_leading_singletons(
+                ic.variance[..., :, None] * jnp.eye(ic.event_shape[0]), 2
+            )
         elif isinstance(ic, dist.Normal):
             initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
             initial_cov = squeeze_leading_singletons(jnp.square(ic.scale), 2)
@@ -534,6 +543,15 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     if isinstance(ic, dist.MultivariateNormal):
         initial_mean = squeeze_leading_singletons(ic.loc, 1)
         initial_covariance = squeeze_leading_singletons(ic.covariance_matrix, 2)
+    elif (
+        isinstance(ic, dist.Independent)
+        and isinstance(ic.base_dist, dist.Normal)
+        and len(ic.event_shape) == 1
+    ):
+        initial_mean = squeeze_leading_singletons(ic.mean, 1)
+        initial_covariance = squeeze_leading_singletons(
+            ic.variance[..., :, None] * jnp.eye(ic.event_shape[0]), 2
+        )
     elif isinstance(ic, dist.Normal):
         # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
         initial_mean = jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1))
@@ -543,7 +561,8 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     else:
         raise TypeError(
             "KF, EKF, and UKF require a Gaussian initial condition "
-            "(MultivariateNormal or Normal) because they propagate mean and covariance. "
+            "(MultivariateNormal, Normal, or independent Normal) because they "
+            "propagate mean and covariance. "
             "For non-Gaussian initial conditions, use filter_type='pf' (particle filter)."
         )
 

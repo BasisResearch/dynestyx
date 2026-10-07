@@ -1,5 +1,6 @@
 """Validation and shape-inference helpers for dynamical models."""
 
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -38,6 +39,79 @@ def _is_categorical_distribution(distribution: Any) -> bool:
     # Fallback for compatibility with custom/aliased categorical classes.
     name = base.__class__.__name__
     return name.startswith("Categorical") and "OneHot" not in name
+
+
+def _coerce_initial_condition(
+    distribution: dist.Distribution, state_dim: int | None
+) -> dist.Distribution:
+    """Promote unambiguous ICs to vector events using existing distributions.
+
+    Only an explicitly supplied state_dim can disambiguate an eventless batch.
+    Plate axes are retained when adding a singleton event to a batched Normal.
+    """
+    if distribution.event_shape or _is_categorical_distribution(distribution):
+        return distribution
+
+    batch_shape = distribution.batch_shape
+    if not batch_shape:
+        if state_dim not in (None, 1):
+            raise ValueError(
+                f"Scalar initial_condition is incompatible with state_dim={state_dim}; "
+                "provide an initial distribution over that many coordinates."
+            )
+        if isinstance(distribution, dist.Normal):
+            return dist.Normal(
+                jnp.atleast_1d(distribution.loc),
+                jnp.atleast_1d(distribution.scale),
+            ).to_event(1)
+        return distribution.expand((1,)).to_event(1)
+
+    if state_dim is not None:
+        plate_ndim = max(
+            (
+                -frame.dim
+                for frame in numpyro.primitives._PYRO_STACK
+                if isinstance(frame, numpyro.primitives.plate)
+            ),
+            default=0,
+        )
+        # A matching trailing axis beyond the plate axes is already the event.
+        # state_dim > 1 also explicitly identifies a shared vector-valued IC.
+        if batch_shape[-1] == state_dim and (
+            state_dim > 1 or len(batch_shape) > plate_ndim
+        ):
+            return distribution.to_event(1)
+        if state_dim != 1:
+            raise ValueError(
+                f"initial_condition batch_shape={batch_shape} is incompatible "
+                f"with state_dim={state_dim}; the trailing coordinate axis "
+                "must match state_dim."
+            )
+        base = distribution
+        while isinstance(base, dist.ExpandedDistribution):
+            base = base.base_dist
+        if isinstance(base, dist.Normal):
+            return dist.Normal(
+                jnp.broadcast_to(base.loc, batch_shape)[..., None],
+                jnp.broadcast_to(base.scale, batch_shape)[..., None],
+            ).to_event(1)
+
+    reason = (
+        "Specify state_dim explicitly to distinguish state coordinates from "
+        "batch members."
+        if state_dim is None
+        else "Automatic insertion of an event axis is only supported for batched Normal ICs."
+    )
+    warnings.warn(
+        f"Leaving initial_condition unchanged: "
+        f"batch_shape={batch_shape}, event_shape=(). {reason} "
+        "Alternatively, construct a vector-event distribution explicitly "
+        "(for example dist.Normal(means[..., None], scale).to_event(1) "
+        "for batched scalar states).",
+        UserWarning,
+        stacklevel=3,
+    )
+    return distribution
 
 
 def _infer_vector_dim_from_distribution(

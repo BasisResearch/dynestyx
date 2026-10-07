@@ -250,7 +250,7 @@ def test_latent_path_builder_sample_ode_reconstructs_state_path():
     dynamics = _make_ode_dynamics()
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array([0.1, 0.1, 0.1])
-    state_path_params = jnp.array(0.1)
+    state_path_params = jnp.array([0.1])
     ode_simulator_config = dsx.ODESimulatorConfig(dt0=0.25, max_steps=100)
     latent_path_builder = dsx.LatentPathBuilder(
         ode_simulator_config=ode_simulator_config
@@ -271,7 +271,9 @@ def test_latent_path_builder_sample_ode_reconstructs_state_path():
     assert jnp.array_equal(
         tr["f_state_path_times"]["value"], jnp.array([0.0, 0.0, 1.0, 2.0])
     )
-    assert jnp.allclose(tr["f_state_path"]["value"], jnp.array([0.1, 0.1, 0.1, 0.1]))
+    assert jnp.allclose(
+        tr["f_state_path"]["value"], jnp.array([[0.1], [0.1], [0.1], [0.1]])
+    )
 
 
 def test_latent_path_builder_rejects_dirac_ode_inference():
@@ -288,7 +290,7 @@ def test_latent_path_builder_rejects_dirac_ode_inference():
                 _make_dirac_ode_dynamics(),
                 obs_times=obs_times,
                 obs_values=obs_values,
-                state_path_params=jnp.array(0.1),
+                state_path_params=jnp.array([0.1]),
             )
 
 
@@ -406,7 +408,7 @@ def test_latent_path_builder_future_only_rollout_ode_states():
                     obs_times=obs_times,
                     obs_values=obs_values,
                     predict_times=predict_times,
-                    state_path_params=jnp.array(0.1),
+                    state_path_params=jnp.array([0.1]),
                 )
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
@@ -740,10 +742,10 @@ def test_latent_path_builder_ode_prior_site_samples_initial_condition():
                 obs_values=jnp.full((3,), 2.5),
             )
 
-    assert tr["f_state_path_params"]["value"].shape == (1,)
-    assert jnp.array_equal(tr["f_state_path_params"]["value"], jnp.array([2.5]))
+    assert tr["f_state_path_params"]["value"].shape == (1, 1)
+    assert jnp.array_equal(tr["f_state_path_params"]["value"], jnp.array([[2.5]]))
     assert not isinstance(tr["f_state_path_params"]["fn"], dist.ImproperUniform)
-    assert tr["f_state_path_params"]["fn"].event_shape == (1,)
+    assert tr["f_state_path_params"]["fn"].event_shape == (1, 1)
     assert jnp.allclose(tr["f_state_path"]["value"], 2.5)
 
 
