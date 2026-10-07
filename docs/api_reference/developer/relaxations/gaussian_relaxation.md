@@ -3,7 +3,9 @@
 `GaussianRelaxation` transforms selected discrete-time model components before
 inference or simulation. `relax_dynamics` applies the same transformation directly.
 See the [public guide](../../public/relaxations/gaussian_relaxation.md) for examples,
-covariance settings, and handler order.
+the [model reference](../../public/models/specialized_models.md#covariance-specifications)
+for covariance specifications, and [handlers](../../public/handlers.md#handler-order)
+for nesting order.
 
 ::: dynestyx.relaxations
     options:
