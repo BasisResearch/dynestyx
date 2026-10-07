@@ -11,6 +11,7 @@ from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import (
+    _ensure_initial_state_dim,
     _ensure_trailing_dim,
     _sample_initial_states,
     _tile_times,
@@ -337,7 +338,7 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         return SimulatedResult(
             times=_tile_times(times, n_sim),
-            x_0=initial_state,
+            x_0=_ensure_initial_state_dim(initial_state),
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
             obs_times=_tile_times(obs_times, n_sim),
