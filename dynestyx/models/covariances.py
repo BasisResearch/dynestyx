@@ -1,5 +1,6 @@
 """Structured, sliceable covariance specifications for Gaussian models."""
 
+from abc import abstractmethod
 from typing import ClassVar
 
 import equinox as eqx
@@ -47,10 +48,12 @@ class Covariance(eqx.Module):
     event_rank: ClassVar[int]
 
     @property
+    @abstractmethod
     def value(self) -> Float[Array, "..."]:
         """Return the numeric leaf with ``event_rank`` trailing covariance axes."""
         raise NotImplementedError
 
+    @abstractmethod
     def as_matrix(
         self, event_dim: int
     ) -> Float[Array, "*batch {event_dim} {event_dim}"]:
