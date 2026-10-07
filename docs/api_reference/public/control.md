@@ -166,38 +166,8 @@ rather than inferring alignment from shapes. With state estimation,
 `filtered_states_mean` also differs: $N+1$ beliefs under `"previous_transition"`
 (one per state), against $N$ under `"same_time"`. On the true state, it is `None`.
 
+## API
 
-## Simulator and policy protocol
-
-::: dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator
-    options:
-      show_root_heading: true
-
-::: dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult
-    options:
-      show_root_heading: true
-
-::: dynestyx.control.discrete_controller_simulators.StructuredControlledSimulatedResult
-    options:
-      show_root_heading: true
-
-::: dynestyx.control.discrete_controller_simulators.PolicyCallable
-    options:
-      show_root_heading: true
-
-
-## MPPI policy
-
-::: dynestyx.control.mppi.MPPI
-    options:
-      show_root_heading: true
-
-## Policy helpers
-
-::: dynestyx.control.discrete_controller_simulators.filter_state_mean
-    options:
-      show_root_heading: true
-
-::: dynestyx.control.discrete_controller_simulators.filter_state_dist
-    options:
-      show_root_heading: true
+- [`DiscreteControlLoopSimulator`](control/discrete_control_loop_simulator.md): the closed-loop simulator and its result type, `ControlledSimulatedResult`.
+- [`PolicyCallable`](control/policy_callable.md): the policy protocol, with the `filter_state_mean` and `filter_state_dist` helpers.
+- [`MPPI`](control/mppi.md): the MPPI policy, `MPPIStepInfo`, and the noise distributions.
