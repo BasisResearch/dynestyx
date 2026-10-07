@@ -3,11 +3,13 @@
 from collections.abc import Callable
 from typing import NamedTuple, cast
 
+import equinox as eqx
 import jax.numpy as jnp
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
+from dynestyx.distributions import _extract_and_validate_mixed_state
 from dynestyx.models.core import ObservationModel
 
 
@@ -195,18 +197,24 @@ class SwitchingLinearGaussianObservation(ObservationModel):
     D: Float[Array, "num_regimes observation_dim control_dim"] | None
     bias: Float[Array, "num_regimes observation_dim"] | None
 
-    def __init__(self, H, R, D=None, bias=None):
+    rounding: bool = False
+
+    def __init__(self, H, R, D=None, bias=None, *, rounding: bool = False):
         """
         Args:
             H: Regime-specific observation matrices with shape `(K, N, D)`.
             R: Regime-specific observation covariances with shape `(K, N, N)`.
             D: Optional regime-specific control matrices with shape `(K, N, U)`.
             bias: Optional regime-specific observation biases with shape `(K, N)`.
+            rounding: Round the mixed state discrete component to the nearest
+                integer (ties to even) before validation. Defaults to False.
+                Nonfinite or out-of-range results raise an error.
         """
         self.H = H
         self.R = R
         self.D = D
         self.bias = bias
+        self.rounding = rounding
 
     @property
     def num_regimes(self) -> int:
@@ -217,8 +225,14 @@ class SwitchingLinearGaussianObservation(ObservationModel):
         return int(self.H.shape[-1])
 
     def __call__(self, x, u, t):
-        z = jnp.rint(x[..., 0]).astype(jnp.int32)
-        x_cont = x[..., 1:]
+        z, x_cont, valid = _extract_and_validate_mixed_state(
+            x, self.num_regimes, rounding=self.rounding
+        )
+        z = eqx.error_if(
+            z,
+            ~valid,
+            "Mixed state discrete component must be a finite integer in [0, num_categories).",
+        )
         return LinearGaussianObservation(
             H=self.H[z],
             R=self.R[z],
