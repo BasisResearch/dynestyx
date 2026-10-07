@@ -21,12 +21,9 @@ from dynestyx.observation_missingness import (
     MissingObservationStrategy,
 )
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import (
-    _get_dynamics_with_t0,
-    _validate_control_dim,
-    _validate_controls,
-    _validate_site_sorting,
-)
+from dynestyx.utils.controls import _validate_controls
+from dynestyx.utils.models import _get_dynamics_with_t0, _validate_control_dim
+from dynestyx.utils.validation import _validate_site_sorting
 
 if TYPE_CHECKING:
     from dynestyx.control.discrete_controller_simulators import PolicyCallable

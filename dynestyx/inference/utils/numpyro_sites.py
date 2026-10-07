@@ -18,7 +18,7 @@ from dynestyx.inference.configs.smoother import (
     _config_to_smoother_record_kwargs,
 )
 from dynestyx.inference.integrations.utils import covariance_from_cholesky
-from dynestyx.utils import _should_record_field
+from dynestyx.utils.recording import _should_record_field
 
 
 def register_filter_sites(

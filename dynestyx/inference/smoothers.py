@@ -71,7 +71,8 @@ from dynestyx.types import (
     FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
+from dynestyx.utils.arrays import _ensure_trailing_event_axis
+from dynestyx.utils.plates import _dist_has_plate_batch_dims
 
 DiscreteSmootherConfig = (
     KFSmootherConfig

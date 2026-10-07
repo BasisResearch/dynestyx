@@ -22,7 +22,7 @@ from dynestyx.observation_missingness import (
     validate_missing_obs_values,
 )
 from dynestyx.solvers import solve_ode_state_path
-from dynestyx.utils import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 
 def validate_state_path_params(
