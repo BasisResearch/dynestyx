@@ -1,4 +1,4 @@
-"""Gaussian relaxation of selected discrete-time model components."""
+"""Gaussian relaxation of selected model components."""
 
 import copy
 from collections.abc import Callable
@@ -205,7 +205,10 @@ def relax_dynamics(
     observation_model_cov: Covariance | Real[ArrayLike, "..."] | None = None,
     mode: Literal["replace", "add"] = "replace",
 ) -> DynamicalModel:
-    """Return a Gaussian relaxation of selected discrete-time components.
+    """Return a Gaussian relaxation of selected model components.
+
+    ``state_evolution_cov`` requires discrete-time dynamics; discretize
+    continuous-time dynamics first to relax transition covariance.
 
     ``None`` leaves a component unchanged. A scalar setting is a variance;
     a vector contains diagonal variances; a matrix is a covariance.
@@ -224,9 +227,9 @@ def relax_dynamics(
     """
     if mode not in ("replace", "add"):
         raise ValueError("GaussianRelaxation mode must be 'replace' or 'add'.")
-    if dynamics.continuous_time:
+    if dynamics.continuous_time and state_evolution_cov is not None:
         raise TypeError(
-            "GaussianRelaxation requires a discrete-time DynamicalModel; discretize continuous-time dynamics explicitly first."
+            "state_evolution_cov requires a discrete-time DynamicalModel; discretize continuous-time dynamics explicitly first. Initial conditions and observations can be relaxed without discretization."
         )
     ic_cov = _parse_covariance_setting(initial_condition_cov)
     state_cov = _parse_covariance_setting(state_evolution_cov)

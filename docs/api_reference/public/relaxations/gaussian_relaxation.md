@@ -2,9 +2,8 @@
 
 `GaussianRelaxation` adds Gaussian noise to a deterministic or Gaussian component of a `DynamicalModel`. In particular, `Delta`/`Normal`/`MultivariateNormal` initial conditions can be relaxed, as can a `DeterministicStateEvolution`/`GaussianStateEvolution` and `DeterministicObservation`/`DiracIdentityObservation`/`GaussianObservation`.
 
-Relaxation requires a discrete-time model. Selected transitions and observations
-must use the deterministic or Gaussian model classes; linear-Gaussian classes
-retain their structure and filter eligibility.
+Linear-Gaussian components retain their structure and filter eligibility.
+`state_evolution_cov` can only be applied to discrete-time dynamics; discretize continuous-time dynamics first to relax transition covariance.
 
 There are two ways to apply the same transformation:
 
