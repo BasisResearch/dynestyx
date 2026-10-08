@@ -41,6 +41,7 @@ from dynestyx.models.state_evolution import (
     LinearGaussianStateEvolution,
 )
 from dynestyx.types import ConditionedResult, LatentStateResult, SimulatedResult
+from dynestyx.utils.distributions import gaussian_moments
 from dynestyx.utils.validation import _validate_array
 
 
@@ -138,14 +139,7 @@ def _relax_initial_condition(
     scalar = not initial.event_shape and state_dim == 1
     original: Real[Array, "*batch state_dim state_dim"] | None = None
     if mode == "add" and not isinstance(base, dist.Delta):
-        if isinstance(base, dist.MultivariateNormal):
-            original = jnp.broadcast_to(
-                base.covariance_matrix, mean.shape[:-1] + (state_dim, state_dim)
-            )
-        elif scalar:
-            original = jnp.asarray(initial.variance)[..., None, None]
-        else:
-            original = jnp.asarray(initial.variance)[..., :, None] * jnp.eye(state_dim)
+        _, original = gaussian_moments(initial, state_dim)
     matrix = covariance_matrix(
         _apply_covariance_setting(original, covariance, state_dim, mode),
         state_dim,

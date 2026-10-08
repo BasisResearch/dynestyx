@@ -27,6 +27,7 @@ from dynestyx.models import (
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.covariances import covariance_matrix
+from dynestyx.utils.distributions import gaussian_moments
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -374,16 +375,9 @@ def dsx_to_cd_dynamax(
             _NumpyroDistributionAdapter(ic) if isinstance(ic, dist.Distribution) else ic
         )
     else:
-        if isinstance(ic, dist.MultivariateNormal):
-            initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
-            initial_cov = squeeze_leading_singletons(ic.covariance_matrix, 2)
-        elif isinstance(ic, dist.Normal):
-            initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
-            initial_cov = squeeze_leading_singletons(jnp.square(ic.scale), 2)
-        else:
-            raise NotImplementedError(
-                f"Initial condition of type {type(ic)} is not supported yet."
-            )
+        initial_mean, initial_cov = gaussian_moments(ic, dsx_model.state_dim)
+        initial_mean = squeeze_leading_singletons(initial_mean, 1)
+        initial_cov = squeeze_leading_singletons(initial_cov, 2)
 
     ## Map observation model ##
     obs = dsx_model.observation_model
@@ -538,21 +532,9 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             stacklevel=2,
         )
 
-    if isinstance(ic, dist.MultivariateNormal):
-        initial_mean = squeeze_leading_singletons(ic.loc, 1)
-        initial_covariance = squeeze_leading_singletons(ic.covariance_matrix, 2)
-    elif isinstance(ic, dist.Normal):
-        # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
-        initial_mean = jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1))
-        initial_covariance = jnp.atleast_2d(
-            squeeze_leading_singletons(jnp.square(ic.scale), 2)
-        )
-    else:
-        raise TypeError(
-            "KF, EKF, and UKF require a Gaussian initial condition "
-            "(MultivariateNormal or Normal) because they propagate mean and covariance. "
-            "For non-Gaussian initial conditions, use filter_type='pf' (particle filter)."
-        )
+    initial_mean, initial_covariance = gaussian_moments(ic, state_dim)
+    initial_mean = squeeze_leading_singletons(initial_mean, 1)
+    initial_covariance = squeeze_leading_singletons(initial_covariance, 2)
 
     # ----- Dynamics function -----
     if isinstance(evo, LinearGaussianStateEvolution):
