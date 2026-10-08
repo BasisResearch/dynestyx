@@ -69,8 +69,7 @@ selected components.
 
 For example, if a `GaussianStateEvolution` already defines a covariance function
 `cov(x, u, t_now, t_next)`, adding covariance `C` gives
-`cov(x, u, t_now, t_next) + C` at each transition. This preserves the original
-function's dependence on state, controls, and time. Time-varying linear-model
+`cov(x, u, t_now, t_next) + C` at each transition. Time-varying linear-model
 functions `cov(t_now, t_next)` and `R(t)` work the same way. The added noise
 settings accept constants or learned JAX/NumPyro arrays, not callables.
 
