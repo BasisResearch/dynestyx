@@ -1,11 +1,6 @@
 # Gaussian relaxation
 
-`GaussianRelaxation` converts selected discrete-time components into Gaussian
-models. Start with a NumPyro `Delta` initial condition,
-`DeterministicStateEvolution(F)`, and/or `DeterministicObservation(h)` (or
-`DiracIdentityObservation()`). Existing Gaussian components also support
-covariance replacement or addition. Deterministic components return Delta
-distributions with scalar events or trailing vector event axes.
+`GaussianRelaxation` adds Gaussian noise to a deterministic or Gaussian component of a `DynamicalModel`. In particular, `Delta`/`Normal`/`MultivariateNormal` initial conditions can be relaxed, as can a `DeterministicStateEvolution`/`GaussianStateEvolution` and `DeterministicObservation`/`DiracIdentityObservation`/`GaussianObservation`.
 
 Relaxation requires a discrete-time model. Selected transitions and observations
 must use the deterministic or Gaussian model classes; linear-Gaussian classes
