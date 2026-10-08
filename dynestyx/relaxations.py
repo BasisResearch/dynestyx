@@ -1,6 +1,5 @@
 """Gaussian relaxation of selected model components."""
 
-import copy
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -260,11 +259,15 @@ def relax_dynamics(
         obs = _relax_observation(obs, obs_cov, dynamics.observation_dim, mode)
     if ic_cov is None and state_cov is None and obs_cov is None:
         return dynamics
-    relaxed = copy.copy(dynamics)
-    object.__setattr__(relaxed, "initial_condition", ic)
-    object.__setattr__(relaxed, "state_evolution", evo)
-    object.__setattr__(relaxed, "observation_model", obs)
-    return relaxed
+    return eqx.tree_at(
+        lambda model: (
+            model.initial_condition,
+            model.state_evolution,
+            model.observation_model,
+        ),
+        dynamics,
+        replace=(ic, evo, obs),
+    )
 
 
 class GaussianRelaxation(ObjectInterpretation, HandlesSelf):

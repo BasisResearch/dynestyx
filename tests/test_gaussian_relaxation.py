@@ -104,8 +104,8 @@ def test_relax_deterministic_components(setting, expected, mode):
 def test_partial_relaxation_and_metadata():
     model = _deterministic_model()
     relaxed = dsx.relax_dynamics(model, observation_model_cov=0.1)
-    assert relaxed.initial_condition is model.initial_condition
-    assert relaxed.state_evolution is model.state_evolution
+    assert eqx.tree_equal(relaxed.initial_condition, model.initial_condition)
+    assert eqx.tree_equal(relaxed.state_evolution, model.state_evolution)
     assert isinstance(relaxed.observation_model, dsx.GaussianObservation)
     assert isinstance(model.observation_model, dsx.DeterministicObservation)
     assert relaxed.observation_model.h is model.observation_model.h
