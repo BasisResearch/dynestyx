@@ -11,7 +11,7 @@ import jax.random as jr
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
-from dynestyx.utils import _validate_nonnegative_float
+from dynestyx.utils.validation import _validate_nonnegative_float
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]

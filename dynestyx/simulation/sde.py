@@ -15,7 +15,7 @@ from dynestyx.simulation.utils import (
 )
 from dynestyx.solvers import solve_sde_state_path
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _build_control_path_eval
+from dynestyx.utils.controls import _build_control_path_eval
 
 
 class SDESimulator(BaseSimulator):

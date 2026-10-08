@@ -27,7 +27,7 @@ from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _should_record_field
+from dynestyx.utils.recording import _should_record_field
 
 
 def filter_state_mean(state: Any) -> Real[Array, "..."]:
@@ -226,7 +226,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             update currently requires `filter_source="cuthbert"`. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
-            as they do for `Filter` (see `dynestyx.utils._should_record_field`).
+            as they do for `Filter` (see `dynestyx.utils.recording._should_record_field`).
             Must not be given together with `use_true_state=True`, which
             filters nothing.
         use_true_state: Give the policy the true state $x_k$ instead of a
