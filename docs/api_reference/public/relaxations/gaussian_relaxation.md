@@ -32,16 +32,17 @@ dynamics = dsx.DynamicalModel(
     observation_model=dsx.DeterministicObservation(lambda x, u, t: x**2),
 )
 
-with dsx.Filter(EnKFConfig()), dsx.GaussianRelaxation(
-    initial_condition_cov=0.05,
-    state_evolution_cov=dsx.DiagonalCovariance(variance=jnp.array([0.01, 0.02])),
-    observation_model_cov=dsx.FullCovariance(0.1 * jnp.eye(2)),
-):
-    result = dsx.condition(
-        "trajectory", dynamics,
-        obs_times=jnp.arange(3.0),
-        obs_values=jnp.array([[1.0, 4.0], [3.4, 8.5], [7.9, 9.9]]),
-    )
+with dsx.Filter(EnKFConfig()):
+    with dsx.GaussianRelaxation(
+        initial_condition_cov=0.05,
+        state_evolution_cov=dsx.DiagonalCovariance(variance=jnp.array([0.01, 0.02])),
+        observation_model_cov=dsx.FullCovariance(0.1 * jnp.eye(2)),
+    ):
+        result = dsx.condition(
+            "trajectory", dynamics,
+            obs_times=jnp.arange(3.0),
+            obs_values=jnp.array([[1.0, 4.0], [3.4, 8.5], [7.9, 9.9]]),
+        )
 ```
 
 ## Direct form
