@@ -10,7 +10,7 @@ from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _sample_initial_states, _tile_times
 from dynestyx.solvers import solve_ode_state_path
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _build_control_path_eval
+from dynestyx.utils.controls import _build_control_path_eval
 
 
 class ODESimulator(BaseSimulator):

@@ -9,11 +9,13 @@ import numpyro
 from jaxtyping import Array, Int, Shaped
 
 from dynestyx.models import Diffusion, DynamicalModel
-from dynestyx.utils import (
-    _array_has_plate_dims,
+from dynestyx.utils.models import (
     _diffusion_coefficient_is_plate_batched,
-    _dist_has_plate_batch_dims,
     _is_opaque_plate_leaf,
+)
+from dynestyx.utils.plates import (
+    _array_has_plate_dims,
+    _dist_has_plate_batch_dims,
     _leaf_is_plate_batched,
 )
 
