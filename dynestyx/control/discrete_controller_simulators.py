@@ -576,7 +576,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -748,7 +748,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -821,7 +821,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
             obs_times=_tile_times(obs_times, 1),

@@ -144,6 +144,11 @@ class SimulatedResult(eqx.Module):
     ``predicted_times``, ``predicted_states``, and
     ``predicted_observations``.
 
+    Simulator outputs always retain a trailing coordinate axis: ``x_0`` has
+    shape ``(*plate, n_simulations, state_coordinates)``, and paths have shape
+    ``(*plate, n_simulations, time, coordinates)``. Scalar states, categorical
+    labels, and scalar observations use a singleton coordinate axis.
+
     ``obs_times`` and ``ctrl_times`` record where ``observations`` and
     ``controls`` actually sit -- the names match the ``obs_times`` /
     ``ctrl_times`` keywords used elsewhere in the API. They need not equal
