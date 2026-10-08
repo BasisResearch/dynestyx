@@ -620,7 +620,7 @@ def test_unsupported_and_continuous_inputs():
         model.observation_model,
     )
     with pytest.raises(TypeError, match="discrete-time"):
-        dsx.relax_dynamics(continuous, observation_model_cov=0.1)
+        dsx.relax_dynamics(continuous, state_evolution_cov=0.1)
 
 
 def test_jit_rejects_invalid_learned_noise():
