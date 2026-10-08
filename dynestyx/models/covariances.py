@@ -10,7 +10,6 @@ from jax import Array
 from jax.typing import ArrayLike
 from jaxtyping import Float, Real
 
-from dynestyx.utils.arrays import _real_array
 from dynestyx.utils.validation import _raise_now_or_error_if, _validate_array
 
 
@@ -24,7 +23,8 @@ def _resolve_variance(
         raise ValueError("Specify exactly one of sd or variance.")
     selected = sd if sd is not None else variance
     assert selected is not None
-    value = _real_array(selected)
+    value = jnp.asarray(selected)
+    value = value.astype(jnp.result_type(value, 1.0))
     value = _raise_now_or_error_if(
         value,
         jnp.any(~jnp.isfinite(value) | (value < 0)),
@@ -143,7 +143,8 @@ class FullCovariance(Covariance):
 
     def __init__(self, matrix: Real[ArrayLike, "..."]) -> None:
         """Validate square trailing event axes, finite values, and symmetry."""
-        self.matrix = _real_array(matrix)
+        matrix = jnp.asarray(matrix)
+        self.matrix = matrix.astype(jnp.result_type(matrix, 1.0))
         if (
             self.matrix.ndim < 2
             or self.matrix.shape[-1] == 0
