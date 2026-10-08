@@ -110,7 +110,9 @@ def _apply_covariance_setting(
     matrix = addition.as_matrix(event_dim)
     if mode == "add" and original is not None:
         if callable(original):
-            return _AddedCovariance(original, addition, event_dim)
+            return _AddedCovariance(
+                original=original, addition=addition, event_dim=event_dim
+            )
         matrix = covariance_matrix(original, event_dim) + matrix
     # Preserve explicit matrix event axes when plate sizes coincide with the
     # state dimension. Backend adapters materialize the matrix when needed.
@@ -141,12 +143,14 @@ def _relax_initial_condition(
     if mode == "add" and not isinstance(base, dist.Delta):
         _, original = gaussian_moments(initial, state_dim)
     matrix = covariance_matrix(
-        _apply_covariance_setting(original, covariance, state_dim, mode),
+        _apply_covariance_setting(
+            original=original, addition=covariance, event_dim=state_dim, mode=mode
+        ),
         state_dim,
     )
     if scalar:
-        return dist.Normal(mean, jnp.sqrt(matrix[..., 0, 0]))
-    return dist.MultivariateNormal(mean, covariance_matrix=matrix)
+        return dist.Normal(loc=mean, scale=jnp.sqrt(matrix[..., 0, 0]))
+    return dist.MultivariateNormal(loc=mean, covariance_matrix=matrix)
 
 
 def _relax_state_evolution(
@@ -158,11 +162,18 @@ def _relax_state_evolution(
     """Relax a transition while retaining its mean function and Gaussian class."""
     if isinstance(evolution, DeterministicStateEvolution):
         return GaussianStateEvolution(
-            evolution.F,
-            _apply_covariance_setting(None, covariance, state_dim, mode),
+            F=evolution.F,
+            cov=_apply_covariance_setting(
+                original=None, addition=covariance, event_dim=state_dim, mode=mode
+            ),
         )
     if isinstance(evolution, (GaussianStateEvolution, LinearGaussianStateEvolution)):
-        cov = _apply_covariance_setting(evolution.cov, covariance, state_dim, mode)
+        cov = _apply_covariance_setting(
+            original=evolution.cov,
+            addition=covariance,
+            event_dim=state_dim,
+            mode=mode,
+        )
         return eqx.tree_at(lambda component: component.cov, evolution, cov)
     raise TypeError(
         f"Cannot relax state_evolution of type {type(evolution).__name__}; expected a deterministic or Gaussian state evolution."
@@ -178,12 +189,20 @@ def _relax_observation(
     """Relax an observation while retaining its mean function and Gaussian class."""
     if isinstance(observation, DeterministicObservation):
         return GaussianObservation(
-            observation.h,
-            _apply_covariance_setting(None, covariance, observation_dim, mode),
+            h=observation.h,
+            R=_apply_covariance_setting(
+                original=None,
+                addition=covariance,
+                event_dim=observation_dim,
+                mode=mode,
+            ),
         )
     if isinstance(observation, (GaussianObservation, LinearGaussianObservation)):
         cov = _apply_covariance_setting(
-            observation.R, covariance, observation_dim, mode
+            original=observation.R,
+            addition=covariance,
+            event_dim=observation_dim,
+            mode=mode,
         )
         return eqx.tree_at(lambda component: component.R, observation, cov)
     raise TypeError(
