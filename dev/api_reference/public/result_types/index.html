@@ -5477,6 +5477,10 @@ suffixes. When a simulator is layered outside a Filter or Smoother for
 posterior rollout, the same result object instead carries
 <code>predicted_times</code>, <code>predicted_states</code>, and
 <code>predicted_observations</code>.</p>
+<p>Simulator outputs always retain a trailing coordinate axis: <code>x_0</code> has
+shape <code>(*plate, n_simulations, state_coordinates)</code>, and paths have shape
+<code>(*plate, n_simulations, time, coordinates)</code>. Scalar states, categorical
+labels, and scalar observations use a singleton coordinate axis.</p>
 <p><code>obs_times</code> and <code>ctrl_times</code> record where <code>observations</code> and
 <code>controls</code> actually sit -- the names match the <code>obs_times</code> /
 <code>ctrl_times</code> keywords used elsewhere in the API. They need not equal
