@@ -33,6 +33,8 @@ from dynestyx.models import (
     GaussianObservation,
     GaussianStateEvolution,
     ImExDrift,
+    Layout,
+    LayoutCollection,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
     LinearGaussianParams,
@@ -56,7 +58,12 @@ from dynestyx.simulation import (
     SDESimulator,
     Simulator,
 )
-from dynestyx.types import ConditionedResult, EvaluationResult, SimulatedResult
+from dynestyx.types import (
+    ConditionedResult,
+    EvaluationResult,
+    SimulatedResult,
+    StructuredSimulatedResult,
+)
 from dynestyx.utils import flatten_draws
 
 __all__ = [
@@ -72,6 +79,8 @@ __all__ = [
     "DynamicalModel",
     "AffineDrift",
     "ImExDrift",
+    "Layout",
+    "LayoutCollection",
     "LTI_continuous",
     "LTI_discrete",
     "LinearGaussianParams",
@@ -95,6 +104,7 @@ __all__ = [
     "EvaluationResult",
     "ObservationScoringConfig",
     "SimulatedResult",
+    "StructuredSimulatedResult",
     "log_prob",
     "plate",
     "prepare_missing_observation_metadata",

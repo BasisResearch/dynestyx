@@ -2,11 +2,13 @@
 
 import dataclasses
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, Self, runtime_checkable
 
 import equinox as eqx
 import jax.numpy as jnp
-from jaxtyping import Array, Int, Real
+from jaxtyping import Array, Int, PyTree, Real
+
+from dynestyx.models.layout import LayoutCollection
 
 
 @runtime_checkable
@@ -175,6 +177,7 @@ class SimulatedResult(eqx.Module):
     [DiscreteTimeSimulator][dynestyx.simulation.discrete.DiscreteTimeSimulator].
     """
 
+    # Keep StructuredSimulatedResult's fields in sync with these.
     # observations/controls use their own axis names ("obs_time"/"ctrl_time")
     # rather than sharing "time" with times/states: under
     # observation_control_alignment="previous_transition" they are one
@@ -216,6 +219,105 @@ class SimulatedResult(eqx.Module):
     _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
         default=None, repr=False, static=True
     )
+
+    def unflatten(self, layout: LayoutCollection) -> "StructuredSimulatedResult":
+        """Return a structured copy of this result.
+
+        Each populated state, control, and observation field (including
+        ``x_0`` and the ``predicted_*`` fields) is converted by the matching
+        sublayout of ``layout``. Fields whose sublayout is ``None`` and time
+        fields are copied unchanged.
+        [StructuredSimulatedResult.flatten][dynestyx.types.StructuredSimulatedResult.flatten]
+        undoes the conversion.
+        """
+        return StructuredSimulatedResult._from_flat(self, layout)
+
+
+class StructuredSimulatedResult(eqx.Module):
+    """A [SimulatedResult][dynestyx.types.SimulatedResult] with structured values.
+
+    Returned by
+    [SimulatedResult.unflatten][dynestyx.types.SimulatedResult.unflatten]. It
+    has the same fields, but ``x_0``, ``states``, ``controls``,
+    ``observations``, ``predicted_states``, and ``predicted_observations`` may
+    be pytrees of arrays, as described by the sublayouts of a
+    ``LayoutCollection``. Leaves keep the leading batch and time axes of the
+    flat field. Time fields are never converted.
+
+    This is a user-facing helper: Dynestyx itself only consumes flat results.
+    ``flatten(layout)`` converts back to a ``SimulatedResult``.
+    """
+
+    # The state fields must share one pytree structure ("S"), as must the
+    # observation fields ("O").
+    times: Real[Array, "*plate n_simulations time"] | None = None
+    x_0: PyTree[Real[Array, "..."], " S"] | None = None
+    states: PyTree[Real[Array, "..."], " S"] | None = None
+    observations: PyTree[Real[Array, "..."], " O"] | None = None
+    obs_times: Real[Array, "*plate n_simulations obs_time"] | None = None
+    controls: PyTree[Real[Array, "..."]] | None = None
+    ctrl_times: Real[Array, "*plate n_simulations ctrl_time"] | None = None
+    predicted_times: Real[Array, "*plate n_simulations predict_time"] | None = None
+    predicted_states: PyTree[Real[Array, "..."], " S"] | None = None
+    predicted_observations: PyTree[Real[Array, "..."], " O"] | None = None
+    _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
+        default=None, repr=False, static=True
+    )
+
+    # The ``LayoutCollection`` sublayout that converts each structured field.
+    _field_sublayouts: ClassVar[dict[str, str]] = {
+        "x_0": "state",
+        "states": "state",
+        "predicted_states": "state",
+        "controls": "control",
+        "observations": "observation",
+        "predicted_observations": "observation",
+    }
+
+    @classmethod
+    def _from_flat(cls, result: SimulatedResult, layout: LayoutCollection) -> Self:
+        """Unflatten the fields of ``result``; see ``SimulatedResult.unflatten``."""
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
+
+        values = {
+            field.name: getattr(result, field.name)
+            for field in dataclasses.fields(result)
+        }
+        for name, sublayout_name in cls._field_sublayouts.items():
+            sublayout = getattr(layout, sublayout_name)
+            if sublayout is not None and values[name] is not None:
+                values[name] = sublayout.unflatten(values[name])
+        return cls(**values)
+
+    def _flat_values(self, layout: LayoutCollection) -> dict[str, Any]:
+        """Flatten the structured fields into flat-result keyword arguments."""
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
+
+        values = {
+            field.name: getattr(self, field.name) for field in dataclasses.fields(self)
+        }
+        for name, sublayout_name in self._field_sublayouts.items():
+            sublayout = getattr(layout, sublayout_name)
+            value = values[name]
+            if value is None:
+                continue
+            if sublayout is not None:
+                values[name] = sublayout.flatten(value)
+            elif not eqx.is_array(value):
+                raise ValueError(
+                    f"{name} is structured, but layout.{sublayout_name} is None."
+                )
+        return values
+
+    def flatten(self, layout: LayoutCollection) -> SimulatedResult:
+        """Return the flat result that ``unflatten(layout)`` converted.
+
+        ``layout`` must be the ``LayoutCollection`` passed to ``unflatten``.
+        Raises ``ValueError`` if a structured field has no sublayout.
+        """
+        return SimulatedResult(**self._flat_values(layout))
 
 
 def as_scalar_time_array(

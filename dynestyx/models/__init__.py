@@ -19,6 +19,7 @@ from dynestyx.models.diffusions import (
     ScalarDiffusion,
 )
 from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift, linearize_drift
+from dynestyx.models.layout import Layout, LayoutCollection
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
     DiracIdentityObservation,
@@ -46,6 +47,8 @@ __all__ = [
     "GaussianObservation",
     "GaussianStateEvolution",
     "ImExDrift",
+    "Layout",
+    "LayoutCollection",
     "LinearGaussianObservation",
     "LinearGaussianObservationParams",
     "LinearGaussianParams",
