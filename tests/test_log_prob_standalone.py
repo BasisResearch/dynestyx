@@ -217,7 +217,7 @@ def test_log_prob_ode_uses_initial_condition_as_only_latent():
 
     actual = dsx.log_prob(
         dynamics,
-        state_path_params=jnp.array(0.2),
+        state_path_params=jnp.array([0.2]),
         state_path_param_times=jnp.array([0.0]),
         obs_times=obs_times,
         obs_values=obs_values,

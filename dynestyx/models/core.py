@@ -13,6 +13,7 @@ from jaxtyping import Real
 from numpyro.distributions import Distribution
 
 from dynestyx.models.checkers import (
+    _coerce_initial_condition,
     _infer_observation_dim_in_plate_context,
     _infer_vector_dim_from_distribution,
     _inside_numpyro_plate_context,
@@ -117,6 +118,9 @@ class DynamicalModel(eqx.Module):
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
             Pass a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
             [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
+            For ODE/SDE models, scalar ICs become length-one vector events. Use
+            `state_dim` to disambiguate eventless batches; ambiguous or unsupported
+            conversions warn and leave the IC unchanged.
         state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
             Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
             transitions. A callable is also accepted (e.g., `lambda x, u, t_now, t_next: ...`), but class-based
@@ -148,7 +152,7 @@ class DynamicalModel(eqx.Module):
             `ObservationControlAlignment`.
 
     Note:
-        - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically; do not pass them to the constructor.
+        - `continuous_time`, `state_dim`, `observation_dim`, and `categorical_state` are inferred automatically. Explicit values are checked against the inferred values.
         - Logic for control_model is not implemented yet.
         - `t0` different from `obs_times[0]` is not supported yet.
 
@@ -198,6 +202,8 @@ class DynamicalModel(eqx.Module):
                 observation_control_alignment
             )
         self.observation_control_alignment = observation_control_alignment
+        if inferred_continuous_time:
+            initial_condition = _coerce_initial_condition(initial_condition, state_dim)
         self.initial_condition = initial_condition
         self.state_evolution = state_evolution
         self.observation_model = observation_model
