@@ -3922,6 +3922,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult.unflatten" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unflatten
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structuredcontrolledsimulatedresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StructuredControlledSimulatedResult
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.control.discrete_controller_simulators.StructuredControlledSimulatedResult.flatten" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        flatten
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -5792,6 +5825,94 @@ which is <span class="arithmatex">\([t_0, \dots, t_{N-1}]\)</span> under <code>"
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult.unflatten" class="doc doc-heading">
+            <code class=" language-python"><span class="n">unflatten</span><span class="p">(</span><span class="n">layout</span><span class="p">:</span> <span class="n">LayoutCollection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StructuredControlledSimulatedResult</span></code>
+
+<a href="#dynestyx.control.discrete_controller_simulators.ControlledSimulatedResult.unflatten" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a structured copy of this result.</p>
+<p>Converts fields as
+<a class="autorefs autorefs-internal" title="unflatten(layout: LayoutCollection) -> StructuredSimulatedResult" href="../../../developer/result_types/#dynestyx.types.SimulatedResult.unflatten">SimulatedResult.unflatten</a>
+does. <code>filtered_states_mean</code> is converted by <code>layout.state</code>, and
+<code>policy_states</code> is copied unchanged.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="structuredcontrolledsimulatedresult">StructuredControlledSimulatedResult<a class="headerlink" href="#structuredcontrolledsimulatedresult" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.types.StructuredSimulatedResult" href="../../../developer/result_types/#dynestyx.types.StructuredSimulatedResult">StructuredSimulatedResult</a></code></p>
+
+
+
+        <p>A <code>ControlledSimulatedResult</code> with structured values.</p>
+<p>Returned by <code>ControlledSimulatedResult.unflatten</code>. <code>filtered_states_mean</code>
+shares the structure of the state fields; <code>policy_states</code> is unchanged.
+<code>flatten(layout)</code> converts back to a <code>ControlledSimulatedResult</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.control.discrete_controller_simulators.StructuredControlledSimulatedResult.flatten" class="doc doc-heading">
+            <code class=" language-python"><span class="n">flatten</span><span class="p">(</span><span class="n">layout</span><span class="p">:</span> <span class="n">LayoutCollection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControlledSimulatedResult</span></code>
+
+<a href="#dynestyx.control.discrete_controller_simulators.StructuredControlledSimulatedResult.flatten" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the flat result that <code>unflatten(layout)</code> converted.</p>
+<p><code>layout</code> must be the <code>LayoutCollection</code> passed to <code>unflatten</code>.
+Raises <code>ValueError</code> if a structured field has no sublayout.</p>
+
+
+    </div>
+
+</div>
 
 
 
