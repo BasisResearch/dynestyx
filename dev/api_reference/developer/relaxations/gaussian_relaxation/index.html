@@ -12,31 +12,31 @@
         <meta name="author" content="Basis Research Institute">
       
       
-        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/linear_gaussian_state_evolution/">
+        <link rel="canonical" href="https://basisresearch.github.io/dynestyx/dev/api_reference/developer/relaxations/gaussian_relaxation/">
       
       
-        <link rel="prev" href="../gaussian_observation/">
+        <link rel="prev" href="../../discretizers/discretizer/">
       
       
-        <link rel="next" href="../gaussian_state_evolution/">
+        <link rel="next" href="../../simulators/">
       
       
         
       
       
-      <link rel="icon" href="../../../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>LinearGaussianStateEvolution - dynestyx documentation</title>
+        <title>Gaussian relaxation - dynestyx documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="../../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#lineargaussianstateevolution" class="md-skip">
+        <a href="#gaussian-relaxation" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +98,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../../.." title="dynestyx documentation" class="md-header__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              LinearGaussianStateEvolution
+              Gaussian relaxation
             
           </span>
         </div>
@@ -208,7 +208,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../../.." class="md-tabs__link">
+      <a href="../../../.." class="md-tabs__link">
         
   
   
@@ -229,7 +229,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../../tutorials/quickstart/" class="md-tabs__link">
+        <a href="../../../../tutorials/quickstart/" class="md-tabs__link">
           
   
   
@@ -249,7 +249,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../../tutorials/" class="md-tabs__link">
+        <a href="../../../../tutorials/" class="md-tabs__link">
           
   
   
@@ -271,7 +271,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../../../" class="md-tabs__link">
+        <a href="../../../" class="md-tabs__link">
           
   
   
@@ -289,7 +289,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../../../faq/" class="md-tabs__link">
+      <a href="../../../../faq/" class="md-tabs__link">
         
   
   
@@ -326,7 +326,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
+    <a href="../../../.." title="dynestyx documentation" class="md-nav__button md-logo" aria-label="dynestyx documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -356,7 +356,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../.." class="md-nav__link">
+      <a href="../../../.." class="md-nav__link">
         
   
   
@@ -435,7 +435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/quickstart/" class="md-nav__link">
+      <a href="../../../../tutorials/quickstart/" class="md-nav__link">
         
   
   
@@ -463,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../math_intro/" class="md-nav__link">
+      <a href="../../../../math_intro/" class="md-nav__link">
         
   
   
@@ -543,7 +543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/00_index/" class="md-nav__link">
         
   
   
@@ -571,7 +571,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/01_numpyro_bayesian_workflow/" class="md-nav__link">
         
   
   
@@ -599,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/02_dynestyx_discrete_intro/" class="md-nav__link">
         
   
   
@@ -627,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/03_filtering_mll/" class="md-nav__link">
         
   
   
@@ -655,7 +655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/03_filtering_mll_no_numpyro/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/03_filtering_mll_no_numpyro/" class="md-nav__link">
         
   
   
@@ -683,7 +683,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/04_filtering_nuts_pseudomarginal/" class="md-nav__link">
         
   
   
@@ -711,7 +711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/05_svi/" class="md-nav__link">
         
   
   
@@ -739,7 +739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/05_svi_no_numpyro/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/05_svi_no_numpyro/" class="md-nav__link">
         
   
   
@@ -767,7 +767,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/06_continuous_time/" class="md-nav__link">
         
   
   
@@ -795,7 +795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/06b_odes/" class="md-nav__link">
         
   
   
@@ -823,7 +823,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/07_hmm/" class="md-nav__link">
         
   
   
@@ -851,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/08_hierarchical_inference/" class="md-nav__link">
         
   
   
@@ -879,7 +879,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/09_discrete_smoothing/" class="md-nav__link">
         
   
   
@@ -907,7 +907,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/10_continuous_smoothing/" class="md-nav__link">
         
   
   
@@ -935,7 +935,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/11_missing_observations/" class="md-nav__link">
         
   
   
@@ -963,7 +963,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/11b_missing_observations_latent_path_mcmc/" class="md-nav__link">
         
   
   
@@ -991,7 +991,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/11c_missing_observations_hmms/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/11c_missing_observations_hmms/" class="md-nav__link">
         
   
   
@@ -1019,7 +1019,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/12_observation_scoring_with_filters/" class="md-nav__link">
         
   
   
@@ -1047,7 +1047,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/gentle_intro/13_enkf_localization/" class="md-nav__link">
+      <a href="../../../../tutorials/gentle_intro/13_enkf_localization/" class="md-nav__link">
         
   
   
@@ -1142,7 +1142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/" class="md-nav__link">
+      <a href="../../../../tutorials/" class="md-nav__link">
         
   
   
@@ -1222,7 +1222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../quick_example/" class="md-nav__link">
+      <a href="../../../../quick_example/" class="md-nav__link">
         
   
   
@@ -1250,7 +1250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
+      <a href="../../../../tutorials/sde_non_gaussian_observations/" class="md-nav__link">
         
   
   
@@ -1330,7 +1330,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/control/controller_demo/" class="md-nav__link">
+      <a href="../../../../tutorials/control/controller_demo/" class="md-nav__link">
         
   
   
@@ -1358,7 +1358,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/control/control_optimization/" class="md-nav__link">
+      <a href="../../../../tutorials/control/control_optimization/" class="md-nav__link">
         
   
   
@@ -1386,7 +1386,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/control/mpc_demo/" class="md-nav__link">
+      <a href="../../../../tutorials/control/mpc_demo/" class="md-nav__link">
         
   
   
@@ -1534,7 +1534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/state_space_models/kf_tracking/" class="md-nav__link">
+      <a href="../../../../tutorials/state_space_models/kf_tracking/" class="md-nav__link">
         
   
   
@@ -1562,7 +1562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/state_space_models/kf_linreg/" class="md-nav__link">
+      <a href="../../../../tutorials/state_space_models/kf_linreg/" class="md-nav__link">
         
   
   
@@ -1590,7 +1590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/state_space_models/lgssm_learning/" class="md-nav__link">
+      <a href="../../../../tutorials/state_space_models/lgssm_learning/" class="md-nav__link">
         
   
   
@@ -1678,7 +1678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/state_space_models/ekf_spiral/" class="md-nav__link">
+      <a href="../../../../tutorials/state_space_models/ekf_spiral/" class="md-nav__link">
         
   
   
@@ -1706,7 +1706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../tutorials/state_space_models/ekf_mlp/" class="md-nav__link">
+      <a href="../../../../tutorials/state_space_models/ekf_mlp/" class="md-nav__link">
         
   
   
@@ -1802,7 +1802,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
+      <a href="../../../../deep_dives/l63_speedup_dirac_vs_enkf/" class="md-nav__link">
         
   
   
@@ -1830,7 +1830,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
+      <a href="../../../../deep_dives/discrete_time_kf_associative_scaling/" class="md-nav__link">
         
   
   
@@ -1858,7 +1858,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
+      <a href="../../../../deep_dives/mcmc_inference_algorithm_comparison/" class="md-nav__link">
         
   
   
@@ -1886,7 +1886,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/sde_discretization_comparison/" class="md-nav__link">
+      <a href="../../../../deep_dives/sde_discretization_comparison/" class="md-nav__link">
         
   
   
@@ -1914,7 +1914,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/filtering_deterministic_processes/" class="md-nav__link">
+      <a href="../../../../deep_dives/filtering_deterministic_processes/" class="md-nav__link">
         
   
   
@@ -1942,7 +1942,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/observation_scoring_with_cuthbert_enkf/" class="md-nav__link">
+      <a href="../../../../deep_dives/observation_scoring_with_cuthbert_enkf/" class="md-nav__link">
         
   
   
@@ -1970,7 +1970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/l63_covariance_inflation_scoring/" class="md-nav__link">
+      <a href="../../../../deep_dives/l63_covariance_inflation_scoring/" class="md-nav__link">
         
   
   
@@ -1998,7 +1998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/l96_localization_hyperparameter_scoring/" class="md-nav__link">
+      <a href="../../../../deep_dives/l96_localization_hyperparameter_scoring/" class="md-nav__link">
         
   
   
@@ -2026,7 +2026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
+      <a href="../../../../deep_dives/fhn_sparse_id/" class="md-nav__link">
         
   
   
@@ -2054,7 +2054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/lv_uode/" class="md-nav__link">
+      <a href="../../../../deep_dives/lv_uode/" class="md-nav__link">
         
   
   
@@ -2082,7 +2082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../../deep_dives/discrete_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -2110,7 +2110,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
+      <a href="../../../../deep_dives/continuous_time_lti_profile_likelihood/" class="md-nav__link">
         
   
   
@@ -2138,7 +2138,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/gp_drift/" class="md-nav__link">
+      <a href="../../../../deep_dives/gp_drift/" class="md-nav__link">
         
   
   
@@ -2218,7 +2218,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/pde/heat_equation_inference/" class="md-nav__link">
+      <a href="../../../../deep_dives/pde/heat_equation_inference/" class="md-nav__link">
         
   
   
@@ -2246,7 +2246,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../deep_dives/pde/reaction_diffusion_inference/" class="md-nav__link">
+      <a href="../../../../deep_dives/pde/reaction_diffusion_inference/" class="md-nav__link">
         
   
   
@@ -2354,7 +2354,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../" class="md-nav__link">
+      <a href="../../../" class="md-nav__link">
         
   
   
@@ -2379,8 +2379,6 @@
                 
   
   
-    
-  
   
   
     
@@ -2396,11 +2394,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
         
           
           <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="">
@@ -2421,7 +2419,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2439,7 +2437,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../" class="md-nav__link">
+      <a href="../../../public/" class="md-nav__link">
         
   
   
@@ -2464,8 +2462,6 @@
                 
   
   
-    
-  
   
   
     
@@ -2478,11 +2474,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2" >
         
           
           <label class="md-nav__link" for="__nav_4_2_2" id="__nav_4_2_2_label" tabindex="0">
@@ -2503,7 +2499,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_2_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_2_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2573,7 +2569,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../core/dynamical_model/" class="md-nav__link">
+      <a href="../../../public/models/core/dynamical_model/" class="md-nav__link">
         
   
   
@@ -2601,7 +2597,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../core/continuous_time_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/core/continuous_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -2629,7 +2625,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../core/discrete_time_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/core/discrete_time_state_evolution/" class="md-nav__link">
         
   
   
@@ -2657,7 +2653,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../core/observation_model/" class="md-nav__link">
+      <a href="../../../public/models/core/observation_model/" class="md-nav__link">
         
   
   
@@ -2685,7 +2681,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../core/drifts/" class="md-nav__link">
+      <a href="../../../public/models/core/drifts/" class="md-nav__link">
         
   
   
@@ -2713,7 +2709,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../core/diffusions/" class="md-nav__link">
+      <a href="../../../public/models/core/diffusions/" class="md-nav__link">
         
   
   
@@ -2746,8 +2742,6 @@
                 
   
   
-    
-  
   
   
     
@@ -2760,11 +2754,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2_2_2" >
         
           
           <label class="md-nav__link" for="__nav_4_2_2_2" id="__nav_4_2_2_2_label" tabindex="0">
@@ -2785,7 +2779,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_4_2_2_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_4_2_2_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_2_2_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2803,7 +2797,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../linear_gaussian_observation/" class="md-nav__link">
+      <a href="../../../public/models/specialized/linear_gaussian_observation/" class="md-nav__link">
         
   
   
@@ -2831,7 +2825,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../gaussian_observation/" class="md-nav__link">
+      <a href="../../../public/models/specialized/gaussian_observation/" class="md-nav__link">
         
   
   
@@ -2856,37 +2850,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    LinearGaussianStateEvolution
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../public/models/specialized/linear_gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -2902,81 +2869,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.is_time_invariant" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_time_invariant
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.__init__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __init__
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.params_at" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        params_at
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#lineargaussianparams" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LinearGaussianParams
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2989,7 +2881,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../gaussian_state_evolution/" class="md-nav__link">
+      <a href="../../../public/models/specialized/gaussian_state_evolution/" class="md-nav__link">
         
   
   
@@ -3017,7 +2909,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../affine_drift/" class="md-nav__link">
+      <a href="../../../public/models/specialized/affine_drift/" class="md-nav__link">
         
   
   
@@ -3045,7 +2937,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lti_continuous/" class="md-nav__link">
+      <a href="../../../public/models/specialized/lti_continuous/" class="md-nav__link">
         
   
   
@@ -3073,7 +2965,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lti_discrete/" class="md-nav__link">
+      <a href="../../../public/models/specialized/lti_discrete/" class="md-nav__link">
         
   
   
@@ -3169,7 +3061,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/filters/" class="md-nav__link">
+      <a href="../../../public/inference/filters/" class="md-nav__link">
         
   
   
@@ -3197,7 +3089,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/configs/filter_configs/" class="md-nav__link">
+      <a href="../../../public/inference/configs/filter_configs/" class="md-nav__link">
         
   
   
@@ -3225,7 +3117,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/latent_path_builder/" class="md-nav__link">
+      <a href="../../../public/inference/latent_path_builder/" class="md-nav__link">
         
   
   
@@ -3253,7 +3145,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/smoothers/" class="md-nav__link">
+      <a href="../../../public/inference/smoothers/" class="md-nav__link">
         
   
   
@@ -3281,7 +3173,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/configs/smoother_configs/" class="md-nav__link">
+      <a href="../../../public/inference/configs/smoother_configs/" class="md-nav__link">
         
   
   
@@ -3309,7 +3201,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/mcmc/" class="md-nav__link">
+      <a href="../../../public/inference/mcmc/" class="md-nav__link">
         
   
   
@@ -3337,7 +3229,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/configs/mcmc_configs/" class="md-nav__link">
+      <a href="../../../public/inference/configs/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -3425,7 +3317,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discretizers/discretizer/" class="md-nav__link">
+      <a href="../../../public/discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -3453,7 +3345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/configs/discretizer_configs/" class="md-nav__link">
+      <a href="../../../public/inference/configs/discretizer_configs/" class="md-nav__link">
         
   
   
@@ -3541,7 +3433,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../relaxations/gaussian_relaxation/" class="md-nav__link">
+      <a href="../../../public/relaxations/gaussian_relaxation/" class="md-nav__link">
         
   
   
@@ -3629,7 +3521,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../handlers/" class="md-nav__link">
+      <a href="../../../public/handlers/" class="md-nav__link">
         
   
   
@@ -3769,7 +3661,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/overview/" class="md-nav__link">
+      <a href="../../../public/simulators/overview/" class="md-nav__link">
         
   
   
@@ -3797,7 +3689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/simulator_wrapper/" class="md-nav__link">
+      <a href="../../../public/simulators/simulator_wrapper/" class="md-nav__link">
         
   
   
@@ -3825,7 +3717,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/discrete_time_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/discrete_time_simulator/" class="md-nav__link">
         
   
   
@@ -3853,7 +3745,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/ode_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/ode_simulator/" class="md-nav__link">
         
   
   
@@ -3881,7 +3773,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/sde_simulator/" class="md-nav__link">
+      <a href="../../../public/simulators/sde_simulator/" class="md-nav__link">
         
   
   
@@ -3909,7 +3801,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../simulators/simulator_configs/" class="md-nav__link">
+      <a href="../../../public/simulators/simulator_configs/" class="md-nav__link">
         
   
   
@@ -4005,7 +3897,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../control/" class="md-nav__link">
+      <a href="../../../public/control/" class="md-nav__link">
         
   
   
@@ -4033,7 +3925,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../control/discrete_control_loop_simulator/" class="md-nav__link">
+      <a href="../../../public/control/discrete_control_loop_simulator/" class="md-nav__link">
         
   
   
@@ -4061,7 +3953,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../control/policy_callable/" class="md-nav__link">
+      <a href="../../../public/control/policy_callable/" class="md-nav__link">
         
   
   
@@ -4141,7 +4033,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../control/provided_policies/" class="md-nav__link">
+      <a href="../../../public/control/provided_policies/" class="md-nav__link">
         
   
   
@@ -4169,7 +4061,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../control/mppi/" class="md-nav__link">
+      <a href="../../../public/control/mppi/" class="md-nav__link">
         
   
   
@@ -4213,7 +4105,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../result_types/" class="md-nav__link">
+      <a href="../../../public/result_types/" class="md-nav__link">
         
   
   
@@ -4293,7 +4185,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../evaluation/handlers/" class="md-nav__link">
+      <a href="../../../public/evaluation/handlers/" class="md-nav__link">
         
   
   
@@ -4321,7 +4213,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../inference/configs/scoring_configs/" class="md-nav__link">
+      <a href="../../../public/inference/configs/scoring_configs/" class="md-nav__link">
         
   
   
@@ -4349,7 +4241,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../evaluation/scoring/" class="md-nav__link">
+      <a href="../../../public/evaluation/scoring/" class="md-nav__link">
         
   
   
@@ -4377,7 +4269,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../evaluation/plotting_utils/" class="md-nav__link">
+      <a href="../../../public/evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -4418,6 +4310,8 @@
                 
   
   
+    
+  
   
   
     
@@ -4433,11 +4327,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" checked>
         
           
           <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="">
@@ -4458,7 +4352,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -4476,7 +4370,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -4556,7 +4450,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/core_models/" class="md-nav__link">
+      <a href="../../models/core_models/" class="md-nav__link">
         
   
   
@@ -4584,7 +4478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/diffusions/" class="md-nav__link">
+      <a href="../../models/diffusions/" class="md-nav__link">
         
   
   
@@ -4612,7 +4506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/specialized_models/" class="md-nav__link">
+      <a href="../../models/specialized_models/" class="md-nav__link">
         
   
   
@@ -4640,7 +4534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/models/checkers/" class="md-nav__link">
+      <a href="../../models/checkers/" class="md-nav__link">
         
   
   
@@ -4728,7 +4622,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/filters/" class="md-nav__link">
+      <a href="../../inference/filters/" class="md-nav__link">
         
   
   
@@ -4756,7 +4650,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/checkers/" class="md-nav__link">
+      <a href="../../inference/checkers/" class="md-nav__link">
         
   
   
@@ -4784,7 +4678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/configs/filter_configs/" class="md-nav__link">
+      <a href="../../inference/configs/filter_configs/" class="md-nav__link">
         
   
   
@@ -4812,7 +4706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/latent_path_builder/" class="md-nav__link">
+      <a href="../../inference/latent_path_builder/" class="md-nav__link">
         
   
   
@@ -4840,7 +4734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/smoothers/" class="md-nav__link">
+      <a href="../../inference/smoothers/" class="md-nav__link">
         
   
   
@@ -4868,7 +4762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/configs/smoother_configs/" class="md-nav__link">
+      <a href="../../inference/configs/smoother_configs/" class="md-nav__link">
         
   
   
@@ -4896,7 +4790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/mcmc/" class="md-nav__link">
+      <a href="../../inference/mcmc/" class="md-nav__link">
         
   
   
@@ -4924,7 +4818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/configs/mcmc_configs/" class="md-nav__link">
+      <a href="../../inference/configs/mcmc_configs/" class="md-nav__link">
         
   
   
@@ -4952,7 +4846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/blackjax_integration/" class="md-nav__link">
+      <a href="../../inference/blackjax_integration/" class="md-nav__link">
         
   
   
@@ -5040,7 +4934,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/discretizers/discretizer/" class="md-nav__link">
+      <a href="../../discretizers/discretizer/" class="md-nav__link">
         
   
   
@@ -5073,8 +4967,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -5085,11 +4981,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3_5" checked>
         
           
           <label class="md-nav__link" for="__nav_4_3_5" id="__nav_4_3_5_label" tabindex="0">
@@ -5110,7 +5006,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_3_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_3_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -5125,10 +5021,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../../developer/relaxations/gaussian_relaxation/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gaussian relaxation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -5144,6 +5067,170 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations.GaussianRelaxation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GaussianRelaxation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GaussianRelaxation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.relaxations.GaussianRelaxation.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.relaxations.GaussianRelaxation._condition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _condition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.relaxations.GaussianRelaxation._stack_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _stack_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._AddedCovariance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _AddedCovariance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_AddedCovariance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._AddedCovariance.__call__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __call__
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._apply_covariance_setting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _apply_covariance_setting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._parse_covariance_setting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _parse_covariance_setting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._relax_initial_condition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _relax_initial_condition
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._relax_observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _relax_observation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations._relax_state_evolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _relax_state_evolution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.relaxations.relax_dynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        relax_dynamics
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -5216,7 +5303,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/simulators/" class="md-nav__link">
+      <a href="../../simulators/" class="md-nav__link">
         
   
   
@@ -5252,7 +5339,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/handlers/" class="md-nav__link">
+      <a href="../../handlers/" class="md-nav__link">
         
   
   
@@ -5280,7 +5367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/utils/" class="md-nav__link">
+      <a href="../../utils/" class="md-nav__link">
         
   
   
@@ -5308,7 +5395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/result_types/" class="md-nav__link">
+      <a href="../../result_types/" class="md-nav__link">
         
   
   
@@ -5388,7 +5475,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/evaluation/handlers/" class="md-nav__link">
+      <a href="../../evaluation/handlers/" class="md-nav__link">
         
   
   
@@ -5416,7 +5503,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/inference/configs/scoring_configs/" class="md-nav__link">
+      <a href="../../inference/configs/scoring_configs/" class="md-nav__link">
         
   
   
@@ -5444,7 +5531,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/evaluation/scoring/" class="md-nav__link">
+      <a href="../../evaluation/scoring/" class="md-nav__link">
         
   
   
@@ -5472,7 +5559,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../developer/evaluation/plotting_utils/" class="md-nav__link">
+      <a href="../../evaluation/plotting_utils/" class="md-nav__link">
         
   
   
@@ -5523,7 +5610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../../faq/" class="md-nav__link">
+      <a href="../../../../faq/" class="md-nav__link">
         
   
   
@@ -5563,46 +5650,77 @@
   
 
 
-<h1 id="lineargaussianstateevolution">LinearGaussianStateEvolution<a class="headerlink" href="#lineargaussianstateevolution" title="Permanent link">&para;</a></h1>
+<h1 id="gaussian-relaxation">Gaussian relaxation<a class="headerlink" href="#gaussian-relaxation" title="Permanent link">&para;</a></h1>
+<p><code>GaussianRelaxation</code> transforms selected model components before inference or
+simulation. <code>relax_dynamics</code> applies the same transformation directly.
+<code>state_evolution_cov</code> can only be applied to discrete-time dynamics.
+See the <a href="../../../public/relaxations/gaussian_relaxation/">public guide</a> for examples,
+the <a href="../../../public/models/specialized_models/#covariance-specifications">model reference</a>
+for covariance specifications, and <a href="../../../public/handlers/#handler-order">handlers</a>
+for nesting order.</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Gaussian relaxation of selected model components.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
 
 
 <div class="doc doc-object doc-class">
 
 
 
+<h2 id="dynestyx.relaxations.GaussianRelaxation" class="doc doc-heading">
+            <code>GaussianRelaxation</code>
 
-    <div class="doc doc-contents first">
+
+<a href="#dynestyx.relaxations.GaussianRelaxation" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="DiscreteTimeStateEvolution (dynestyx.models.core.DiscreteTimeStateEvolution)" href="../../../../developer/models/core_models/#dynestyx.models.core.DiscreteTimeStateEvolution">DiscreteTimeStateEvolution</a></code></p>
+              Bases: <code><span title="effectful.ops.syntax.ObjectInterpretation">ObjectInterpretation</span></code>, <code><span title="dynestyx.handlers.HandlesSelf">HandlesSelf</span></code></p>
 
 
 
-        <p>Linear-Gaussian discrete-time state transition.</p>
-<p>The next state is modeled as</p>
-<div class="arithmatex">\[
-x_{t_{k+1}} \sim \mathcal{N}(A x_{t_k} + B u_{t_k} + b, Q),
-\]</div>
-<p>where <span class="arithmatex">\(A\)</span> is the state transition matrix, <span class="arithmatex">\(B\)</span> is an optional control-input
-matrix, <span class="arithmatex">\(b\)</span> is an optional transition bias, and <span class="arithmatex">\(Q\)</span> is the process-noise
-covariance.</p>
-<p>Each parameter may be a constant array (time-invariant) or a callable
-<code>(t_now, t_next) -&gt; value</code> evaluated per transition interval
-(time-varying); constant and callable parameters may be mixed freely.</p>
+        <p>Relax selected components before inference or simulation.</p>
+<p>Nest this inside Filter/Smoother/Simulator and outside plates and any
+Discretizer. Arguments and covariance units match :func:<code>relax_dynamics</code>.</p>
 
 
-<details class="note" open>
-  <summary>Note</summary>
-  <ul>
-<li>Callable parameters receive only the interval endpoints
-  <code>(t_now, t_next)</code>; they must not depend on state or controls (use
-  <code>GaussianStateEvolution</code> for nonlinear transitions).</li>
-<li>Callables must be pure, JAX-traceable functions returning a fixed
-  shape.</li>
-<li>Backend support: time-varying parameters work with the simulators
-  and the <code>filter_source="cuthbert"</code> filters/smoothers; the
-  cd_dynamax backend requires constant arrays and raises <code>TypeError</code>
-  otherwise.</li>
-</ul>
+<details class="example" open>
+  <summary>Example</summary>
+  <blockquote>
+<blockquote>
+<blockquote>
+<p>with Filter(config):
+...     with GaussianRelaxation(observation_model_cov=0.1):
+...         result = condition("trajectory", dynamics, obs_times=t, obs_values=y)</p>
+</blockquote>
+</blockquote>
+</blockquote>
 </details>
 
 
@@ -5622,126 +5740,21 @@ covariance.</p>
 
 
 
-<div class="doc doc-object doc-attribute">
-
-
-
-<h2 id="dynestyx.models.state_evolution.LinearGaussianStateEvolution.is_time_invariant" class="doc doc-heading">
-            <code class=" language-python"><span class="n">is_time_invariant</span><span class="p">:</span> <span class="nb">bool</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.is_time_invariant" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>True iff every parameter is a constant array (no callables).</p>
-
-    </div>
-
-</div>
-
 
 
 
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.state_evolution.LinearGaussianStateEvolution.__init__" class="doc doc-heading">
-            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*a_plate state_dim state_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*a_plate state_dim state_dim'</span><span class="p">]],</span> <span class="n">cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*cov_plate state_dim state_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*cov_plate state_dim state_dim'</span><span class="p">]],</span> <span class="n">B</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*b_matrix_plate state_dim control_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*b_matrix_plate state_dim control_dim'</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">bias</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*bias_plate state_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">]],</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*bias_plate state_dim'</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span></code>
+<h3 id="dynestyx.relaxations.GaussianRelaxation.__init__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">initial_condition_cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_evolution_cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_model_cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'replace'</span><span class="p">,</span> <span class="s1">'add'</span><span class="p">]</span> <span class="o">=</span> <span class="s1">'replace'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
 
-<a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.__init__" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.relaxations.GaussianRelaxation.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>A</code>
-            </td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>State transition matrix with shape
-<span class="arithmatex">\((d_x, d_x)\)</span>, or a callable <code>(t_now, t_next)</code> returning it.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>cov</code>
-            </td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Process-noise covariance with shape
-<span class="arithmatex">\((d_x, d_x)\)</span>, or a callable <code>(t_now, t_next)</code> returning it.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>B</code>
-            </td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional control matrix with
-shape <span class="arithmatex">\((d_x, d_u)\)</span>, or a callable <code>(t_now, t_next)</code>
-returning it.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>bias</code>
-            </td>
-            <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional additive bias with
-shape <span class="arithmatex">\((d_x,)\)</span>, or a callable <code>(t_now, t_next)</code> returning it.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Configure the components to relax and the replacement/addition mode.</p>
 
 
     </div>
@@ -5751,17 +5764,33 @@ shape <span class="arithmatex">\((d_x,)\)</span>, or a callable <code>(t_now, t_
 <div class="doc doc-object doc-function">
 
 
-<h2 id="dynestyx.models.state_evolution.LinearGaussianStateEvolution.params_at" class="doc doc-heading">
-            <code class=" language-python"><span class="n">params_at</span><span class="p">(</span><span class="n">t_now</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">],</span> <span class="n">t_next</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">''</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">LinearGaussianParams</span></code>
+<h3 id="dynestyx.relaxations.GaussianRelaxation._condition" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_condition</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ConditionedResult</span> <span class="o">|</span> <span class="n">LatentStateResult</span> <span class="o">|</span> <span class="n">SimulatedResult</span></code>
 
-<a href="#dynestyx.models.state_evolution.LinearGaussianStateEvolution.params_at" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#dynestyx.relaxations.GaussianRelaxation._condition" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Resolve <code>(A, B, bias, cov)</code> at one transition interval.</p>
-<p>Constant parameters are returned unchanged; callable parameters are
-evaluated at <code>(t_now, t_next)</code>.</p>
+        <p>Forward the relaxed model to the next handler with the original arguments.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.relaxations.GaussianRelaxation._stack_kind" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_stack_kind</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">_DynestyxStackKind</span><span class="p">]</span></code>
+
+<a href="#dynestyx.relaxations.GaussianRelaxation._stack_kind" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Register relaxation between discretization and inference.</p>
 
 
     </div>
@@ -5774,84 +5803,26 @@ evaluated at <code>(t_now, t_next)</code>.</p>
 
     </div>
 
-</div><div class="admonition note">
-<p class="admonition-title">Structured inference</p>
-<p>You can represent the same transition dynamics without this class
-(for example, as a generic callable). However, this structured linear-Gaussian
-transition form is what enables fast Kalman-family filtering methods; see
-<a href="../../../inference/filters/">Filters</a>, especially <code>KFConfig</code> (and
-<code>ContinuousTimeKFConfig</code> for continuous-time settings) in
-<a href="../../../inference/configs/filter_configs/">FilterConfigs</a>.</p>
-<p>Without this exploitable structure, marginalizing latent trajectories
-during parameter inference typically falls back to particle filters
-(<code>PFConfig</code> and related particle methods), which are usually slower.</p>
 </div>
-<h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
-<details class="example">
-<summary>Linear Gaussian transition model</summary>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearGaussianStateEvolution</span>
-
-<span class="n">transition</span> <span class="o">=</span> <span class="n">LinearGaussianStateEvolution</span><span class="p">(</span>
-    <span class="n">A</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]),</span>
-    <span class="n">cov</span><span class="o">=</span><span class="mf">0.05</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
-    <span class="n">B</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]]),</span>
-    <span class="n">bias</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
-<span class="p">)</span>
-
-<span class="n">x_t</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">])</span>
-<span class="n">u_t</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.3</span><span class="p">])</span>
-<span class="n">dist_next</span> <span class="o">=</span> <span class="n">transition</span><span class="p">(</span><span class="n">x_t</span><span class="p">,</span> <span class="n">u_t</span><span class="p">,</span> <span class="n">t_now</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">t_next</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># p(x_{t+1} | x_t, u_t, t)</span>
-</code></pre></div>
-</details>
-<details class="example">
-<summary>Time-varying transition model</summary>
-<p>Each parameter may instead be a callable <code>(t_now, t_next) -&gt; value</code>,
-e.g. the exact discretization of a continuous-time LTI SDE on an
-irregular time grid. Time-varying models are supported by the simulators
-and by <code>KFConfig(filter_source="cuthbert")</code> /
-<code>KFSmootherConfig(filter_source="cuthbert")</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">jax.scipy.linalg</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearGaussianStateEvolution</span>
-
-<span class="n">A_c</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.3</span><span class="p">]])</span>
-<span class="n">Q0</span> <span class="o">=</span> <span class="mf">0.05</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">transition_matrix</span><span class="p">(</span><span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">jax</span><span class="o">.</span><span class="n">scipy</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">expm</span><span class="p">(</span><span class="n">A_c</span> <span class="o">*</span> <span class="p">(</span><span class="n">t_next</span> <span class="o">-</span> <span class="n">t_now</span><span class="p">))</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">transition_cov</span><span class="p">(</span><span class="n">t_now</span><span class="p">,</span> <span class="n">t_next</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">Q0</span> <span class="o">*</span> <span class="p">(</span><span class="n">t_next</span> <span class="o">-</span> <span class="n">t_now</span><span class="p">)</span>
-
-
-<span class="n">transition</span> <span class="o">=</span> <span class="n">LinearGaussianStateEvolution</span><span class="p">(</span><span class="n">A</span><span class="o">=</span><span class="n">transition_matrix</span><span class="p">,</span> <span class="n">cov</span><span class="o">=</span><span class="n">transition_cov</span><span class="p">)</span>
-<span class="n">params</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">params_at</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">)</span>  <span class="c1"># LinearGaussianParams(A=..., ...)</span>
-</code></pre></div>
-</details>
-<h2 id="lineargaussianparams">LinearGaussianParams<a class="headerlink" href="#lineargaussianparams" title="Permanent link">&para;</a></h2>
-
 
 <div class="doc doc-object doc-class">
 
 
 
+<h2 id="dynestyx.relaxations._AddedCovariance" class="doc doc-heading">
+            <code>_AddedCovariance</code>
 
-    <div class="doc doc-contents first">
+
+<a href="#dynestyx.relaxations._AddedCovariance" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+              Bases: <code><span title="equinox.Module">Module</span></code></p>
 
 
 
-        <p>Linear-Gaussian transition parameters resolved at one time interval.</p>
-<p>Returned by <code>LinearGaussianStateEvolution.params_at</code>: any callable
-(time-varying) parameter has been evaluated at the requested interval, so
-every entry is a plain array (or <code>None</code> for an absent optional term).</p>
-<p>Expected shapes match the <code>LinearGaussianStateEvolution</code> fields; they are
-deliberately not enforced here because plate slicing can legally hand a
-member-sliced (reduced-rank) parameter to <code>__call__</code>.</p>
+        <p>Keep an existing covariance callable and added noise sliceable by plates.</p>
 
 
 
@@ -5873,6 +5844,162 @@ member-sliced (reduced-rank) parameter to <code>__call__</code>.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dynestyx.relaxations._AddedCovariance.__call__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Float</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*batch event_dim event_dim'</span><span class="p">]</span></code>
+
+<a href="#dynestyx.relaxations._AddedCovariance.__call__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate the original model covariance and add the specified noise matrix.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.relaxations._apply_covariance_setting" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_apply_covariance_setting</span><span class="p">(</span><span class="n">original</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="s1">'*batch event_dim event_dim'</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="s1">'*batch event_dim event_dim'</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">addition</span><span class="p">:</span> <span class="n">Covariance</span><span class="p">,</span> <span class="n">event_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'replace'</span><span class="p">,</span> <span class="s1">'add'</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">FullCovariance</span> <span class="o">|</span> <span class="n">_AddedCovariance</span></code>
+
+<a href="#dynestyx.relaxations._apply_covariance_setting" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply a parsed covariance setting by replacing or adding to the original.</p>
+<p>Expand the setting to <code>event_dim</code>. In add mode, keep existing covariance
+functions callable so the specified noise is added to each evaluated result.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.relaxations._parse_covariance_setting" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_parse_covariance_setting</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+<a href="#dynestyx.relaxations._parse_covariance_setting" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Interpret a relaxation setting as a covariance specification.</p>
+<p>Scalar shorthand specifies a variance, a vector specifies diagonal variances,
+and a matrix specifies a full covariance. Batched settings use explicit
+covariance objects to distinguish leading plate axes from event axes.
+<code>None</code> selects no change; callable settings are rejected.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.relaxations._relax_initial_condition" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_relax_initial_condition</span><span class="p">(</span><span class="n">initial</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Distribution</span><span class="p">,</span> <span class="n">covariance</span><span class="p">:</span> <span class="n">Covariance</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'replace'</span><span class="p">,</span> <span class="s1">'add'</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span> <span class="o">|</span> <span class="n">dist</span><span class="o">.</span><span class="n">MultivariateNormal</span></code>
+
+<a href="#dynestyx.relaxations._relax_initial_condition" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Relax a supported scalar/vector initial distribution while retaining its mean.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.relaxations._relax_observation" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_relax_observation</span><span class="p">(</span><span class="n">observation</span><span class="p">:</span> <span class="n">ObservationModelLike</span><span class="p">,</span> <span class="n">covariance</span><span class="p">:</span> <span class="n">Covariance</span><span class="p">,</span> <span class="n">observation_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'replace'</span><span class="p">,</span> <span class="s1">'add'</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">GaussianObservation</span> <span class="o">|</span> <span class="n">LinearGaussianObservation</span></code>
+
+<a href="#dynestyx.relaxations._relax_observation" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Relax an observation while retaining its mean function and Gaussian class.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.relaxations._relax_state_evolution" class="doc doc-heading">
+            <code class=" language-python"><span class="n">_relax_state_evolution</span><span class="p">(</span><span class="n">evolution</span><span class="p">:</span> <span class="n">StateEvolutionLike</span><span class="p">,</span> <span class="n">covariance</span><span class="p">:</span> <span class="n">Covariance</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'replace'</span><span class="p">,</span> <span class="s1">'add'</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">GaussianStateEvolution</span> <span class="o">|</span> <span class="n">LinearGaussianStateEvolution</span></code>
+
+<a href="#dynestyx.relaxations._relax_state_evolution" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Relax a transition while retaining its mean function and Gaussian class.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynestyx.relaxations.relax_dynamics" class="doc doc-heading">
+            <code class=" language-python"><span class="n">relax_dynamics</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">DynamicalModel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">initial_condition_cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state_evolution_cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">observation_model_cov</span><span class="p">:</span> <span class="n">Covariance</span> <span class="o">|</span> <span class="n">Real</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'replace'</span><span class="p">,</span> <span class="s1">'add'</span><span class="p">]</span> <span class="o">=</span> <span class="s1">'replace'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicalModel</span></code>
+
+<a href="#dynestyx.relaxations.relax_dynamics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a Gaussian relaxation of selected model components.</p>
+<p><code>state_evolution_cov</code> requires discrete-time dynamics; discretize
+continuous-time dynamics first to relax transition covariance.</p>
+<p><code>None</code> leaves a component unchanged. A scalar setting is a variance;
+a vector contains diagonal variances; a matrix is a covariance.
+Use explicit :class:<code>ScalarCovariance</code>, :class:<code>DiagonalCovariance</code>, or
+:class:<code>FullCovariance</code> objects for batched settings. Settings may be learned
+JAX arrays, but may not be callables.</p>
+<p><code>mode='replace'</code> sets the selected covariance. <code>mode='add'</code> adds it to
+the existing covariance (zero for deterministic components), preserving
+the state/control/time dependence of existing model covariance functions.
+Means and all model metadata are preserved;
+the input model is never mutated. Covariance objects check shape, finite
+values, and symmetry; callers supply the positive-definite effective
+covariance needed by ordinary Gaussian densities. Filter jitter settings
+retain their existing behavior.</p>
+
+
+    </div>
+
+</div>
 
 
 
@@ -5957,12 +6084,12 @@ member-sliced (reduced-rank) parameter to <code>__call__</code>.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="../../../../../javascripts/mathjax.js"></script>
+        <script src="../../../../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-svg.js"></script>
       

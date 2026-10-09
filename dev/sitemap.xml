@@ -117,6 +117,10 @@
          <lastmod>2026-10-09</lastmod>
     </url>
     <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/relaxations/gaussian_relaxation/</loc>
+         <lastmod>2026-10-09</lastmod>
+    </url>
+    <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/developer/simulators/discrete_time_simulator/</loc>
          <lastmod>2026-10-09</lastmod>
     </url>
@@ -286,6 +290,10 @@
     </url>
     <url>
          <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/models/specialized/lti_discrete/</loc>
+         <lastmod>2026-10-09</lastmod>
+    </url>
+    <url>
+         <loc>https://basisresearch.github.io/dynestyx/dev/api_reference/public/relaxations/gaussian_relaxation/</loc>
          <lastmod>2026-10-09</lastmod>
     </url>
     <url>
