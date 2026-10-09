@@ -239,49 +239,6 @@ def test_result_round_trip_under_jit(selected):
         assert jnp.array_equal(round_trip, original)
 
 
-@pytest.mark.parametrize("scalar_initial_event", [True, False])
-@pytest.mark.parametrize("batched", [True, False])
-def test_scalar_layout_preserves_initial_state_shape(scalar_initial_event, batched):
-    x0 = jnp.array(0.0) if scalar_initial_event else jnp.array([0.0])
-    event_dim = 0 if scalar_initial_event else 1
-    dynamics = dsx.DynamicalModel(
-        initial_condition=dist.Delta(x0, event_dim=event_dim),
-        state_evolution=lambda x, u, t_now, t_next: dist.Delta(
-            x + 1, event_dim=event_dim
-        ),
-        observation_model=lambda x, u, t: dist.Delta(x, event_dim=event_dim),
-    )
-    layout = dsx.LayoutCollection(
-        state=dsx.Layout.from_example({"value": jnp.array(0.0)})
-    )
-    times = jnp.arange(3.0)
-    if batched:
-        flat = jax.vmap(
-            lambda key: dsx.simulate(dynamics, rng_key=key, predict_times=times)
-        )(jr.split(jr.key(0), 2))
-    else:
-        flat = dsx.simulate(dynamics, rng_key=jr.key(0), predict_times=times)
-
-    structured = flat.unflatten(layout)
-    restored = structured.flatten(layout)
-
-    assert flat.x_0 is not None
-    assert flat.states is not None
-    assert structured.x_0 is not None
-    assert structured.states is not None
-    assert restored.x_0 is not None
-    assert restored.states is not None
-    leading = (2,) if batched else ()
-    assert flat.x_0.shape == (
-        (*leading, 1) if scalar_initial_event else (*leading, 1, 1)
-    )
-    assert structured.x_0["value"].shape == (*leading, 1)
-    assert structured.states["value"].shape == (*leading, 1, 3)
-    assert restored.x_0.shape == flat.x_0.shape
-    assert jnp.array_equal(restored.x_0, flat.x_0)
-    assert jnp.array_equal(restored.states, flat.states)
-
-
 def test_predicted_fields_round_trip_and_callback_is_retained():
     layout = _layouts()
     callback = lambda name: None
@@ -372,7 +329,7 @@ def test_controlled_result_round_trip_under_jit():
 def test_structured_results_mirror_flat_fields(flat_cls, structured_cls):
     flat = {field.name for field in dataclasses.fields(flat_cls)}
     structured = {field.name for field in dataclasses.fields(structured_cls)}
-    assert structured - {"_scalar_x_0"} == flat
+    assert structured == flat
 
 
 def test_invalid_inputs_raise():

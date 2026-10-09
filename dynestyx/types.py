@@ -233,25 +233,6 @@ class SimulatedResult(eqx.Module):
         return StructuredSimulatedResult._from_flat(self, layout)
 
 
-def _x_0_has_no_event_axis(result: SimulatedResult) -> bool:
-    """Distinguish a scalar initial state from a length-one vector state."""
-    assert result.x_0 is not None
-    reference = result.times if result.times is not None else result.predicted_times
-    if reference is not None:
-        batch_shape = reference.shape[:-1]
-    elif result.states is not None:
-        batch_shape = result.states.shape[:-2]
-    else:
-        raise ValueError(
-            "Converting x_0 requires times or states to identify its batch axes."
-        )
-    if result.x_0.shape == batch_shape:
-        return True
-    if result.x_0.shape[:-1] == batch_shape:
-        return False
-    raise ValueError("x_0 batch axes do not match the simulation result.")
-
-
 class StructuredSimulatedResult(eqx.Module):
     """A [SimulatedResult][dynestyx.types.SimulatedResult] with structured values.
 
@@ -282,9 +263,6 @@ class StructuredSimulatedResult(eqx.Module):
     _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
         default=None, repr=False, static=True
     )
-    # Simulators return a scalar initial state without an event axis; record
-    # this so ``flatten`` can restore the original shape.
-    _scalar_x_0: bool = eqx.field(default=False, repr=False, static=True)
 
     # The ``LayoutCollection`` sublayout that converts each structured field.
     _field_sublayouts: ClassVar[dict[str, str]] = {
@@ -306,11 +284,6 @@ class StructuredSimulatedResult(eqx.Module):
             field.name: getattr(result, field.name)
             for field in dataclasses.fields(result)
         }
-        if layout.state is not None and result.x_0 is not None:
-            scalar_x_0 = _x_0_has_no_event_axis(result)
-            if scalar_x_0:
-                values["x_0"] = jnp.expand_dims(result.x_0, axis=-1)
-            values["_scalar_x_0"] = scalar_x_0
         for name, sublayout_name in cls._field_sublayouts.items():
             sublayout = getattr(layout, sublayout_name)
             if sublayout is not None and values[name] is not None:
@@ -323,9 +296,7 @@ class StructuredSimulatedResult(eqx.Module):
             raise TypeError("layout must be a LayoutCollection instance.")
 
         values = {
-            field.name: getattr(self, field.name)
-            for field in dataclasses.fields(self)
-            if field.name != "_scalar_x_0"
+            field.name: getattr(self, field.name) for field in dataclasses.fields(self)
         }
         for name, sublayout_name in self._field_sublayouts.items():
             sublayout = getattr(layout, sublayout_name)
@@ -338,8 +309,6 @@ class StructuredSimulatedResult(eqx.Module):
                 raise ValueError(
                     f"{name} is structured, but layout.{sublayout_name} is None."
                 )
-        if self._scalar_x_0 and layout.state is not None and self.x_0 is not None:
-            values["x_0"] = jnp.squeeze(values["x_0"], axis=-1)
         return values
 
     def flatten(self, layout: LayoutCollection) -> SimulatedResult:
