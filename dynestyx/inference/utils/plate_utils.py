@@ -8,8 +8,9 @@ import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Int, Shaped
 
-from dynestyx.models import Diffusion, DynamicalModel
+from dynestyx.models import Covariance, Diffusion, DynamicalModel
 from dynestyx.utils.models import (
+    _covariance_is_plate_batched,
     _diffusion_coefficient_is_plate_batched,
     _is_opaque_plate_leaf,
 )
@@ -30,6 +31,7 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     by `_slice_dist_for_plate_member`.
     - Diffusion coefficients are marked batched based on a test by
     `_diffusion_coefficient_is_plate_batched`.
+    - Covariances are marked batched using their explicit event rank.
     - All other leaves are marked as batched based on a test by
     `_leaf_is_plate_batched`.
 
@@ -50,6 +52,8 @@ def _make_plate_in_axes(tree, plate_shapes: tuple[int, ...]):
     def _axis(path, leaf):
         if isinstance(leaf, numpyro.distributions.Distribution):
             return None
+        if isinstance(leaf, Covariance):
+            return 0 if _covariance_is_plate_batched(leaf, plate_shapes) else None
         # Only constant-coefficient diffusions are opaque leaves (see
         # ``_is_opaque_plate_leaf``); a callable coefficient is recursed into, so
         # its array fields are vmapped generically by the branch below.
@@ -216,6 +220,14 @@ def _slice_tree_for_plate_member(
     """
 
     def _slice_leaf(path, leaf):
+        if isinstance(leaf, Covariance):
+            if _covariance_is_plate_batched(leaf, plate_shapes):
+                # Slice the numeric pytree leaf after classifying the whole
+                # covariance by its explicit event rank. Accessing a typed
+                # property inside eqx.tree_at would expose Equinox's temporary
+                # leaf wrappers to the runtime array type checker.
+                return jax.tree_util.tree_map(lambda value: value[plate_idx], leaf)
+            return leaf
         if isinstance(leaf, Diffusion):
             if _diffusion_coefficient_is_plate_batched(leaf, plate_shapes):
                 return eqx.tree_at(

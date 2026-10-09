@@ -8,7 +8,7 @@ are preserved, and unrelated effects do not contribute entries. This is an
 internal operation, not part of the package's public API.
 
 `condition` checks this stack before dispatch. Execution proceeds from plates
-through discretization, inference, simulation, and evaluation. Plates may repeat;
+through discretization, Gaussian relaxation, inference, simulation, and evaluation. Plates may repeat;
 other stages may not. Filter, Smoother, and LatentPathBuilder share one inference
 stage. Observation inputs require inference, and prediction times require a
 simulator, including DiscreteControlLoopSimulator. Inference without observations

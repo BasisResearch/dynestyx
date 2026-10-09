@@ -12,6 +12,12 @@ from dynestyx.models.core import (
     ObservationModel,
     StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.models.covariances import (
+    Covariance,
+    DiagonalCovariance,
+    FullCovariance,
+    ScalarCovariance,
+)
 from dynestyx.models.diffusions import (
     DiagonalDiffusion,
     Diffusion,
@@ -22,18 +28,26 @@ from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift, linearize_drif
 from dynestyx.models.layout import Layout, LayoutCollection
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from dynestyx.models.observations import (
+    DeterministicObservation,
     DiracIdentityObservation,
     GaussianObservation,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
 )
 from dynestyx.models.state_evolution import (
+    DeterministicStateEvolution,
     GaussianStateEvolution,
     LinearGaussianParams,
     LinearGaussianStateEvolution,
 )
 
 __all__ = [
+    "Covariance",
+    "ScalarCovariance",
+    "DiagonalCovariance",
+    "FullCovariance",
+    "DeterministicStateEvolution",
+    "DeterministicObservation",
     "ContinuousTimeStateEvolution",
     "DeterministicContinuousTimeStateEvolution",
     "AffineDrift",

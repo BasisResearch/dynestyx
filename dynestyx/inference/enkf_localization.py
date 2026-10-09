@@ -20,7 +20,7 @@ from dynestyx.inference.configs.filter import (
     ModifyCrossCovariance,
     ModifyPredictedObservationCovariance,
 )
-from dynestyx.utils.validation import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if, _validate_array
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,30 +35,6 @@ class ResolvedEnKFLocalization:
         ModifyPredictedObservationCovariance | None
     ) = None
     observation_taper: Array | None = None
-
-
-def _validate_array(
-    value,
-    *,
-    expected_shape: tuple[int, ...],
-    name: str,
-    symmetric: bool = False,
-) -> Array:
-    value = jnp.asarray(value)
-    if value.shape != expected_shape:
-        raise ValueError(f"{name} must have shape {expected_shape}; got {value.shape}.")
-    value = _raise_now_or_error_if(
-        value,
-        ~jnp.all(jnp.isfinite(value)),
-        f"{name} must contain only finite values.",
-    )
-    if symmetric:
-        value = _raise_now_or_error_if(
-            value,
-            ~jnp.allclose(value, value.T),
-            f"{name} must be symmetric.",
-        )
-    return value
 
 
 def _validate_distances(

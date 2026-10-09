@@ -14,6 +14,7 @@ from dynestyx.handlers import _validate_handler_stack
 _STAGES = [
     lambda: dsx.plate("members", 2),
     dsx.Discretizer,
+    dsx.GaussianRelaxation,
     dsx.Filter,
     dsx.Simulator,
     lambda: dsx.Evaluation(dsx.ObservationScoringConfig()),
