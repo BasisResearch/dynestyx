@@ -123,8 +123,11 @@ def test_filter_dynamics_through_simulator_handler(simulator_class):
     np.testing.assert_array_equal(result.states[0, 0], [2.0])
     np.testing.assert_array_equal(result.controls[0, 0], [0.0])
     # The first observation is 2, predicted mean is 0, gain is .45/.65.
-    np.testing.assert_allclose(result.filtered_states_mean[0, 1], [2 * 0.45 / 0.65])
-    np.testing.assert_allclose(result.controls[0, 1], [-0.45 / 0.65])
+    # Float32 filter arithmetic can differ by a few ULPs across CPU backends.
+    np.testing.assert_allclose(
+        result.filtered_states_mean[0, 1], [2 * 0.45 / 0.65], rtol=1e-6
+    )
+    np.testing.assert_allclose(result.controls[0, 1], [-0.45 / 0.65], rtol=1e-6)
     np.testing.assert_array_equal(result.observations[0], result.states[0, 1:])
 
 
