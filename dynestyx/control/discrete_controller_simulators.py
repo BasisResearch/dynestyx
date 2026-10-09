@@ -31,7 +31,7 @@ from dynestyx.models import (
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
 from dynestyx.types import SimulatedResult, StructuredSimulatedResult
-from dynestyx.utils import _should_record_field
+from dynestyx.utils.recording import _should_record_field
 
 
 def filter_state_mean(state: Any) -> Real[Array, "..."]:
@@ -266,7 +266,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             update currently requires `filter_source="cuthbert"`. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
-            as they do for `Filter` (see `dynestyx.utils._should_record_field`).
+            as they do for `Filter` (see `dynestyx.utils.recording._should_record_field`).
             Must not be given together with `use_true_state=True`, which
             filters nothing.
         use_true_state: Give the policy the true state $x_k$ instead of a
@@ -616,7 +616,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -788,7 +788,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -861,7 +861,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
             obs_times=_tile_times(obs_times, 1),

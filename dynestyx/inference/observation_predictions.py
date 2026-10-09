@@ -30,7 +30,8 @@ from dynestyx.inference.enkf_localization import (
 from dynestyx.inference.utils.plate_utils import _make_plate_in_axes
 from dynestyx.models import DynamicalModel
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
-from dynestyx.utils import _array_has_plate_dims, _should_record_field
+from dynestyx.utils.plates import _array_has_plate_dims
+from dynestyx.utils.recording import _should_record_field
 
 type ContinuousObservationPredictionConfig = (
     ContinuousTimeKFConfig
