@@ -816,7 +816,7 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
             [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]  # ty: ignore[invalid-attribute-override]
 
     def __post_init__(self):
         super().__post_init__()
@@ -855,7 +855,7 @@ class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
         See `PFConfig` for more information.
     """
 
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]  # ty: ignore[invalid-attribute-override]
     resampling_method: PFResamplingConfig = dataclasses.field(
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
