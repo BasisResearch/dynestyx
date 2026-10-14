@@ -17,7 +17,12 @@ from dynestyx.control.discrete_controller_simulators import (
     filter_state_dist,
     filter_state_mean,
 )
-from dynestyx.control.mppi import MPPI
+from dynestyx.control.mppi import MPPI, MPPIState
+from dynestyx.control.utils.distribution_utils import (
+    AR1Noise,
+    ColoredNoise,
+    WhiteNoise,
+)
 from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaConfig,
@@ -1351,9 +1356,9 @@ def test_mppi_runs_end_to_end_without_a_key_argument():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=_mppi_loss,
-        horizon=10,
+        horizon=jnp.arange(11.0),
         noise_std=jnp.array(1.0),
-        seed=0,
+        rng_key=jr.PRNGKey(0),
     )
     predict_times = jnp.arange(0.0, 20.0)
 
@@ -1381,9 +1386,9 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=_mppi_loss,
-        horizon=5,
+        horizon=jnp.arange(6.0),
         noise_std=jnp.array(1.0),
-        seed=0,
+        rng_key=jr.PRNGKey(0),
     )
     predict_times = jnp.arange(0.0, 5.0)
 
@@ -1402,28 +1407,32 @@ def test_mppi_rollout_falls_back_to_sample_for_black_box_dynamics():
     assert jnp.all(jnp.isfinite(result.states))
 
 
-def test_mppi_initial_state_and_call_depend_only_on_seed():
+def test_mppi_initial_state_and_call_depend_only_on_rng_key():
     """Unit-level check, isolated from the closed loop (where a different
     outer rng_key also changes x_hat via the real observed trajectory, so
     the chosen control legitimately differs downstream for reasons that have
-    nothing to do with MPPI's own randomness). `seed` alone determines the
+    nothing to do with MPPI's own randomness). `rng_key` alone determines the
     key baked into `initial_state()`'s output; `__call__` itself takes no
     key at all, so its output is a pure function of (x_hat, s)."""
     dynamics = _lti_1d(A=1.05, B=1.0)
 
     x_hat = dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1))
 
-    def make(seed):
+    def make(rng_key):
         return MPPI(
             dynamics=dynamics,
             loss_fn=_mppi_loss,
-            horizon=10,
+            horizon=jnp.arange(11.0),
             noise_std=jnp.array(1.0),
-            seed=seed,
+            rng_key=rng_key,
         )
 
     t0, t1 = jnp.array(0.0), jnp.array(1.0)
-    mppi_a1, mppi_a2, mppi_b = make(seed=0), make(seed=0), make(seed=1)
+    mppi_a1, mppi_a2, mppi_b = (
+        make(jr.PRNGKey(0)),
+        make(jr.PRNGKey(0)),
+        make(jr.PRNGKey(1)),
+    )
     u_a1, _ = mppi_a1(x_hat, t0, t1, mppi_a1.initial_state())
     u_a2, _ = mppi_a2(x_hat, t0, t1, mppi_a2.initial_state())
     u_b, _ = mppi_b(x_hat, t0, t1, mppi_b.initial_state())
@@ -1450,18 +1459,17 @@ def test_mppi_masks_non_finite_losses_before_softmax():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=flaky_loss,
-        horizon=3,
+        horizon=jnp.arange(4.0),
         n_samples=20,
+        rng_key=jr.PRNGKey(0),
         noise_std=jnp.array(1.0),
     )
 
     x_hat = dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1))
 
-    u0, (next_nominal, _) = mppi(
-        x_hat, jnp.array(0.0), jnp.array(1.0), mppi.initial_state()
-    )
+    u0, next_s = mppi(x_hat, jnp.array(0.0), jnp.array(1.0), mppi.initial_state())
     assert jnp.all(jnp.isfinite(u0))
-    assert jnp.all(jnp.isfinite(next_nominal))
+    assert jnp.all(jnp.isfinite(next_s.nominal_sequence))
 
 
 def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
@@ -1496,17 +1504,18 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=lambda result: jnp.sum(result.states**2),
-        horizon=horizon,
+        horizon=jnp.arange(horizon + 1.0),
         n_samples=1,
         noise_std=jnp.array(0.0),  # candidate == nominal, so u is exactly known
     )
 
     nominal = jnp.array([[1.0], [2.0], [3.0]])
-    _, _, result = mppi.plan_step(
+    _, _, info = mppi.plan_step(
         dist.Delta(x_0).to_event(1),
         t_now,
-        (nominal, jr.PRNGKey(0)),
+        MPPIState(nominal_sequence=nominal, key=jr.PRNGKey(0)),
     )
+    result = info.results
     assert result.times is not None
     assert result.states is not None
     assert result.observations is not None
@@ -1520,7 +1529,7 @@ def test_mppi_rollout_arrays_are_horizon_length_and_causally_aligned():
     observations, controls = result.observations[0, 0], result.controls[0, 0]
     # The rollout runs on t_0..t_H = t_now + dt * [0..H], but t_0 is dropped:
     # times start at t_1.
-    assert jnp.allclose(times, t_now + mppi.dt * jnp.arange(1, horizon + 1))
+    assert jnp.allclose(times, t_now + 1.0 * jnp.arange(1, horizon + 1))  # dt = 1
     assert not jnp.any(times == t_now)
     # x_0 = 0 is dropped too: states start at x_1 = x_0 + u_0 = 1, and x_0 is
     # only available separately, as result.x_0.
@@ -1540,16 +1549,18 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
     mppi = MPPI(
         dynamics=dynamics,
         loss_fn=lambda result: jnp.mean(jnp.sum(result.states**2, axis=(-2, -1))),
-        horizon=horizon,
+        horizon=jnp.arange(horizon + 1.0),
         n_samples=n_samples,
         n_simulations=n_simulations,
+        rng_key=jr.PRNGKey(0),
     )
 
-    _, _, result = mppi.plan_step(
+    _, _, info = mppi.plan_step(
         dist.MultivariateNormal(jnp.array([2.0]), jnp.eye(1)),
         jnp.array(0.0),
         mppi.initial_state(),
     )
+    result = info.results
 
     assert result.states is not None
     assert result.controls is not None
@@ -1563,3 +1574,29 @@ def test_mppi_n_simulations_draws_independent_rollouts_per_candidate():
     )
     # ...while the transition noise differs from draw to draw.
     assert not jnp.allclose(result.states[:, 0], result.states[:, 1])
+
+
+# ---------------------------------------------------------------------------
+# Group 11: MPPI noise configs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("noise_cls", [WhiteNoise, AR1Noise, ColoredNoise])
+def test_mppi_noise_has_unit_marginal_variance(noise_cls):
+    """Every noise has unit variance per step, so noise_std alone sets
+    the perturbation size."""
+    times = jnp.arange(9) * 0.5
+    eps = noise_cls(times, 2).sample(jr.PRNGKey(0), (20_000,))
+    assert eps.shape == (20_000, 8, 2)
+    assert jnp.allclose(jnp.var(eps, axis=0), 1.0, atol=0.05)
+
+
+def test_ar1_noise_correlation_follows_the_planning_times():
+    """On an uneven grid, Cov(eps_h, eps_h') = rho ** |t_h - t_h'|, where t_h is
+    when perturbation h starts -- correlation decays with time, not steps."""
+    times = jnp.array([0.0, 0.1, 0.3, 1.0, 1.5, 3.5])
+    rho = 0.5
+    eps = AR1Noise(times, 1, rho=rho).sample(jr.PRNGKey(0), (50_000,))[..., 0]
+    starts = times[:-1]
+    expected = rho ** jnp.abs(starts[:, None] - starts[None, :])
+    assert jnp.allclose(jnp.cov(eps.T), expected, atol=0.03)

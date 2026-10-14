@@ -29,6 +29,13 @@ def _ensure_trailing_dim(
     return arr[..., jnp.newaxis] if arr.ndim == 2 else arr
 
 
+def _ensure_initial_state_dim(
+    arr: Real[Array, " n_simulations"] | Real[Array, "n_simulations state_dim"],
+) -> Real[Array, "n_simulations state_dim"]:
+    """Package scalar IC samples as vectors, without changing simulation inputs."""
+    return arr[..., jnp.newaxis] if arr.ndim == 1 else arr
+
+
 def _merge_segments(
     arr_list: list[Real[Array, "n_simulations _ dim"]],
     seg_masks: list[Bool[Array, " predict_time"]],

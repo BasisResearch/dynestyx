@@ -40,11 +40,9 @@ from dynestyx.types import (
     SimulatedResult,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import (
-    _get_val_or_None,
-    _has_any_batched_plate_source,
-    _validate_site_sorting,
-)
+from dynestyx.utils.arrays import _get_val_or_None
+from dynestyx.utils.models import _has_any_batched_plate_source
+from dynestyx.utils.validation import _validate_site_sorting
 
 
 def _slice_rollout_result_for_plate_member(

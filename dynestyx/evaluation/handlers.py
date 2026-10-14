@@ -24,7 +24,7 @@ from dynestyx.types import (
     EvaluationResult,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 _MISSING_OBSERVATIONS_ERROR = (
     "Observation scoring does not yet support missing obs_values. "

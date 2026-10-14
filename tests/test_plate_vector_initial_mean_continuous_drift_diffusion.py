@@ -30,7 +30,7 @@ from dynestyx.models import (
     ScalarDiffusion,
 )
 from dynestyx.simulation import _slice_tree_for_plate_member
-from dynestyx.utils import _has_any_batched_plate_source
+from dynestyx.utils.models import _has_any_batched_plate_source
 
 
 class _AlphaDrift(eqx.Module):
