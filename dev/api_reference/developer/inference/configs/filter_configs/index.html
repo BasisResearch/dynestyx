@@ -5901,6 +5901,9 @@
         <p>Shared configuration options inherited by all filter configs.</p>
 <p>You do not instantiate this class directly; use one of the concrete
 subclasses (e.g. <code>KFConfig</code>, <code>PFConfig</code>).</p>
+<p>Config fields are immutable after construction. Use <code>dataclasses.replace</code>
+to create an updated config; nested objects such as dictionaries are not
+recursively frozen.</p>
 <p>The <code>record_*</code> fields let you save intermediate filtering outputs into the
 NumPyro trace as <code>numpyro.deterministic</code> sites, making them accessible
 after inference (e.g. for plotting filtered trajectories).  <code>None</code> defers

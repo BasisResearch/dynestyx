@@ -5845,6 +5845,17 @@
 
 <h1 id="filter-configurations">Filter Configurations<a class="headerlink" href="#filter-configurations" title="Permanent link">&para;</a></h1>
 <p>The single <code>Filter()</code> handler is directed to the appropriate filtering algorithm via the provided <code>FilterConfig</code>. We provide a summary below, as well as an exhaustive list of classes.</p>
+<p>Filter configs, including localization and resampling options, are frozen dataclasses.
+Create an updated config with <code>dataclasses.replace</code> instead of assigning to its fields:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">replace</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.inference.configs.filter</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnKFConfig</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">EnKFConfig</span><span class="p">(</span><span class="n">n_particles</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<span class="n">larger_ensemble</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</code></pre></div>
+<p>Replacement reruns configuration validation and leaves the original unchanged.
+Nested objects such as <code>extra_filter_kwargs</code> dictionaries are not recursively frozen.</p>
 <p><code>include_predicted_observations</code> controls whether supported backend predictive-observation outputs are collected into <code>ConditionedResult</code> and defaults to <code>True</code>. The shared <code>record_predicted_observations_*</code> fields independently control whether available means, covariances, or ensembles are recorded to the NumPyro trace; they also default to <code>True</code>. Observation scoring is configured on the separate <code>Evaluation</code> handler.</p>
 <h2 id="available-filter-configurations">Available filter configurations<a class="headerlink" href="#available-filter-configurations" title="Permanent link">&para;</a></h2>
 <table>
@@ -6035,6 +6046,9 @@
         <p>Shared configuration options inherited by all filter configs.</p>
 <p>You do not instantiate this class directly; use one of the concrete
 subclasses (e.g. <code>KFConfig</code>, <code>PFConfig</code>).</p>
+<p>Config fields are immutable after construction. Use <code>dataclasses.replace</code>
+to create an updated config; nested objects such as dictionaries are not
+recursively frozen.</p>
 <p>The <code>record_*</code> fields let you save intermediate filtering outputs into the
 NumPyro trace as <code>numpyro.deterministic</code> sites, making them accessible
 after inference (e.g. for plotting filtered trajectories).  <code>None</code> defers

@@ -5634,6 +5634,9 @@ handler. The classes inherit the familiar filtering options, plus smoother
 recording fields such as <code>record_smoothed_states_mean</code>,
 <code>record_smoothed_states_cov_diag</code>, <code>record_smoothed_particles</code>, and
 <code>record_smoothed_log_weights</code>.</p>
+<p>Smoother configs are frozen dataclasses, like filter configs. Use
+<code>dataclasses.replace(config, n_particles=100)</code> to create an updated config
+instead of assigning to its fields.</p>
 <h2 id="common-choices">Common Choices<a class="headerlink" href="#common-choices" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.inference.configs.smoother</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">ContinuousTimeKFSmootherConfig</span><span class="p">,</span>
@@ -5706,6 +5709,8 @@ subclasses (e.g. <code>KFSmootherConfig</code>, <code>PFSmootherConfig</code>).<
 so backend selection, filter tuning, continuous-time solver options, and
 filter recording fields follow the same conventions as
 <code>dynestyx.inference.configs.filter</code>.</p>
+<p>Config fields are immutable after construction. Use <code>dataclasses.replace</code>
+to create an updated config.</p>
 <p>The <code>record_smoothed_*</code> fields let you save intermediate smoothing outputs
 into the NumPyro trace as <code>numpyro.deterministic</code> sites, making them
 accessible after inference (e.g. for plotting smoothed trajectories).

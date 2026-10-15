@@ -5746,6 +5746,8 @@ subclasses (e.g. <code>KFSmootherConfig</code>, <code>PFSmootherConfig</code>).<
 so backend selection, filter tuning, continuous-time solver options, and
 filter recording fields follow the same conventions as
 <code>dynestyx.inference.configs.filter</code>.</p>
+<p>Config fields are immutable after construction. Use <code>dataclasses.replace</code>
+to create an updated config.</p>
 <p>The <code>record_smoothed_*</code> fields let you save intermediate smoothing outputs
 into the NumPyro trace as <code>numpyro.deterministic</code> sites, making them
 accessible after inference (e.g. for plotting smoothed trajectories).
