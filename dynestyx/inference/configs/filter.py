@@ -66,7 +66,7 @@ class ModifyPredictedObservationCovariance(Protocol):
         ...
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnKFLocalizationConfig:
     r"""Distance-based covariance localization for a discrete-time EnKF.
 
@@ -128,7 +128,7 @@ class EnKFLocalizationConfig:
             raise ValueError("EnKF localization taper_scale must be a scalar.")
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnKFLocalizationFunctions:
     """Advanced callback-based localization for a discrete-time EnKF.
 
@@ -174,12 +174,16 @@ class EnKFLocalizationFunctions:
             )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class BaseFilterConfig(abc.ABC):
     r"""Shared configuration options inherited by all filter configs.
 
     You do not instantiate this class directly; use one of the concrete
     subclasses (e.g. `KFConfig`, `PFConfig`).
+
+    Config fields are immutable after construction. Use `dataclasses.replace`
+    to create an updated config; nested objects such as dictionaries are not
+    recursively frozen.
 
     The `record_*` fields let you save intermediate filtering outputs into the
     NumPyro trace as `numpyro.deterministic` sites, making them accessible
@@ -250,7 +254,7 @@ class BaseFilterConfig(abc.ABC):
     crn_seed: PRNGKeyArray | None = None
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnKFBaseConfig(BaseFilterConfig):
     """Shared options for discrete- and continuous-time EnKF configs."""
 
@@ -302,7 +306,7 @@ class EnKFBaseConfig(BaseFilterConfig):
         )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnKFConfig(EnKFBaseConfig):
     r"""Ensemble Kalman Filter (EnKF) for discrete-time models.
 
@@ -409,7 +413,7 @@ class EnKFConfig(EnKFBaseConfig):
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PFResamplingConfig:
     """Resampling strategy for particle-based filters.
 
@@ -456,7 +460,7 @@ class PFResamplingConfig:
     softness: float = 0.7
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PFBaseConfig(BaseFilterConfig):
     """Shared options for discrete- and continuous-time PF configs."""
 
@@ -467,7 +471,7 @@ class PFBaseConfig(BaseFilterConfig):
     ess_threshold_ratio: float = 0.7
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PFConfig(PFBaseConfig):
     r"""Bootstrap Particle Filter (PF) for discrete-time models.
 
@@ -529,7 +533,7 @@ class PFConfig(PFBaseConfig):
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EKFConfig(BaseFilterConfig):
     r"""Extended Kalman Filter (EKF) for discrete-time models.
 
@@ -583,7 +587,7 @@ class EKFConfig(BaseFilterConfig):
     filter_emission_order: FilterEmissionOrder = "first"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class KFConfig(BaseFilterConfig):
     r"""Kalman Filter (KF) for discrete-time linear-Gaussian models.
 
@@ -657,10 +661,7 @@ class KFConfig(BaseFilterConfig):
 
     def __post_init__(self):
         if self.associative is None:
-            if self.filter_source == "cuthbert":
-                self.associative = True
-            else:
-                self.associative = False
+            object.__setattr__(self, "associative", self.filter_source == "cuthbert")
 
         if self.associative and self.filter_source != "cuthbert":
             raise ValueError(
@@ -669,7 +670,7 @@ class KFConfig(BaseFilterConfig):
             )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UKFConfig(BaseFilterConfig):
     r"""Unscented Kalman Filter (UKF) for discrete-time models.
 
@@ -725,7 +726,7 @@ class UKFConfig(BaseFilterConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeConfig:
     """Solver options shared by all continuous-discrete filter configs.
 
@@ -757,7 +758,7 @@ class ContinuousTimeConfig:
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Kalman Filter (CD-KF).
 
@@ -795,7 +796,7 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Ensemble Kalman Filter (CD-EnKF).
 
@@ -840,7 +841,7 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
             )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Differentiable Particle Filter (CD-DPF).
 
@@ -873,7 +874,7 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
     )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Extended Kalman Filter (CD-EKF).
 
@@ -901,7 +902,7 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     """Continuous-discrete Unscented Kalman Filter (CD-UKF).
 
@@ -946,7 +947,7 @@ ContinuousTimeConfigs: tuple[type, ...] = (
 )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class HMMConfig(BaseFilterConfig):
     r"""Exact filter for Hidden Markov Models (finite discrete state space).
 
