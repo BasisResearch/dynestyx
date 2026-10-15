@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, dataclass_transform, runtime_checkable
 
 import equinox as eqx
 import jax
@@ -346,7 +346,12 @@ class DynamicalModel(eqx.Module):
         self.categorical_state = bool(inferred_categorical_state)
 
 
-class ContinuousTimeStateEvolution(eqx.Module):
+@dataclass_transform(frozen_default=True, field_specifiers=(eqx.field,))
+class _FrozenModule(eqx.Module):
+    """Expose Equinox's runtime immutability to static type checkers."""
+
+
+class ContinuousTimeStateEvolution(_FrozenModule):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
 
@@ -433,10 +438,10 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
             raise ValueError(
                 "DeterministicContinuousTimeStateEvolution does not accept diffusion."
             )
-        self.drift = drift
-        self.potential = potential
-        self.use_negative_gradient = use_negative_gradient
-        self.diffusion = None
+        object.__setattr__(self, "drift", drift)
+        object.__setattr__(self, "potential", potential)
+        object.__setattr__(self, "use_negative_gradient", use_negative_gradient)
+        object.__setattr__(self, "diffusion", None)
 
 
 class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
@@ -464,10 +469,10 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
                 "StochasticContinuousTimeStateEvolution requires diffusion with "
                 "resolved bm_dim."
             )
-        self.drift = drift
-        self.potential = potential
-        self.use_negative_gradient = use_negative_gradient
-        self.diffusion = diffusion
+        object.__setattr__(self, "drift", drift)
+        object.__setattr__(self, "potential", potential)
+        object.__setattr__(self, "use_negative_gradient", use_negative_gradient)
+        object.__setattr__(self, "diffusion", diffusion)
 
     @property
     def bm_dim(self) -> int:
