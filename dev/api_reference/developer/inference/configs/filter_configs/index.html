@@ -4867,6 +4867,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.inference.configs.filter.EnKFBaseConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EnKFBaseConfig
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.inference.configs.filter.EnKFConfig" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5008,6 +5019,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.inference.configs.filter.PFBaseConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PFBaseConfig
+      
+    </span>
+  </a>
   
 </li>
       
@@ -6335,12 +6357,12 @@ use it as the constant step. Defaults to <code>0.01</code>.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="PFConfig
+              Bases: <code><a class="autorefs autorefs-internal" title="PFBaseConfig
 
 
   
       dataclass
-   (dynestyx.inference.configs.filter.PFConfig)" href="#dynestyx.inference.configs.filter.PFConfig">PFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="ContinuousTimeConfig
+   (dynestyx.inference.configs.filter.PFBaseConfig)" href="#dynestyx.inference.configs.filter.PFBaseConfig">PFBaseConfig</a></code>, <code><a class="autorefs autorefs-internal" title="ContinuousTimeConfig
 
 
   
@@ -6556,12 +6578,12 @@ for solver options.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="EnKFConfig
+              Bases: <code><a class="autorefs autorefs-internal" title="EnKFBaseConfig
 
 
   
       dataclass
-   (dynestyx.inference.configs.filter.EnKFConfig)" href="#dynestyx.inference.configs.filter.EnKFConfig">EnKFConfig</a></code>, <code><a class="autorefs autorefs-internal" title="ContinuousTimeConfig
+   (dynestyx.inference.configs.filter.EnKFBaseConfig)" href="#dynestyx.inference.configs.filter.EnKFBaseConfig">EnKFBaseConfig</a></code>, <code><a class="autorefs autorefs-internal" title="ContinuousTimeConfig
 
 
   
@@ -6995,6 +7017,63 @@ and proceeds via the typical Kalman update.</p>
 
 
 
+<h2 id="dynestyx.inference.configs.filter.EnKFBaseConfig" class="doc doc-heading">
+            <code>EnKFBaseConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.configs.filter.EnKFBaseConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.filter.BaseFilterConfig)" href="#dynestyx.inference.configs.filter.BaseFilterConfig">BaseFilterConfig</a></code></p>
+
+
+
+        <p>Shared options for discrete- and continuous-time EnKF configs.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h2 id="dynestyx.inference.configs.filter.EnKFConfig" class="doc doc-heading">
             <code>EnKFConfig</code>
 
@@ -7008,12 +7087,12 @@ and proceeds via the typical Kalman update.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
+              Bases: <code><a class="autorefs autorefs-internal" title="EnKFBaseConfig
 
 
   
       dataclass
-   (dynestyx.inference.configs.filter.BaseFilterConfig)" href="#dynestyx.inference.configs.filter.BaseFilterConfig">BaseFilterConfig</a></code></p>
+   (dynestyx.inference.configs.filter.EnKFBaseConfig)" href="#dynestyx.inference.configs.filter.EnKFBaseConfig">EnKFBaseConfig</a></code></p>
 
 
 
@@ -7859,6 +7938,63 @@ This provides a more numerically stable implementation of the Kalman filter.</p>
 
 
 
+<h2 id="dynestyx.inference.configs.filter.PFBaseConfig" class="doc doc-heading">
+            <code>PFBaseConfig</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#dynestyx.inference.configs.filter.PFBaseConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
+
+
+  
+      dataclass
+   (dynestyx.inference.configs.filter.BaseFilterConfig)" href="#dynestyx.inference.configs.filter.BaseFilterConfig">BaseFilterConfig</a></code></p>
+
+
+
+        <p>Shared options for discrete- and continuous-time PF configs.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h2 id="dynestyx.inference.configs.filter.PFConfig" class="doc doc-heading">
             <code>PFConfig</code>
 
@@ -7872,12 +8008,12 @@ This provides a more numerically stable implementation of the Kalman filter.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="BaseFilterConfig
+              Bases: <code><a class="autorefs autorefs-internal" title="PFBaseConfig
 
 
   
       dataclass
-   (dynestyx.inference.configs.filter.BaseFilterConfig)" href="#dynestyx.inference.configs.filter.BaseFilterConfig">BaseFilterConfig</a></code></p>
+   (dynestyx.inference.configs.filter.PFBaseConfig)" href="#dynestyx.inference.configs.filter.PFBaseConfig">PFBaseConfig</a></code></p>
 
 
 
