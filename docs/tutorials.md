@@ -19,4 +19,5 @@ Welcome to the `dynestyx` examples page
 - [HUGE speedups if you assume perfect observations](deep_dives/l63_speedup_dirac_vs_enkf.ipynb)
 - [SINDy (Sparse identification of non-linear dynamics)](deep_dives/fhn_sparse_id.ipynb)
 - [Continuous-time LTI profile likelihood](deep_dives/continuous_time_lti_profile_likelihood.ipynb)
+- [LTI identifiability and canonical parameterization](deep_dives/lti_identifiability_canonicalization.ipynb)
 - [GP prior on drift: learning FitzHugh–Nagumo dynamics](deep_dives/gp_drift.ipynb)
