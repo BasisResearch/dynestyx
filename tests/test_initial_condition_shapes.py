@@ -1,5 +1,7 @@
 """Simulation results retain a trailing coordinate axis."""
 
+import warnings
+
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
@@ -86,3 +88,56 @@ def test_plated_simulation_result_shapes():
     assert result.x_0.shape == (3, 2, 1)
     assert result.states.shape == (3, 2, 2, 1)
     assert result.observations.shape == (3, 2, 2, 1)
+
+
+def test_scalar_initial_condition_without_plate_warns():
+    initial = dist.Normal(0.0, 1.0)
+    with pytest.warns(
+        FutureWarning, match="Scalar initial conditions.*future release"
+    ) as caught:
+        model = dsx.DynamicalModel(
+            initial_condition=initial,
+            state_evolution=lambda x, u, t_now, t_next: initial,
+            observation_model=lambda x, u, t: dist.Normal(0.0, 1.0),
+        )
+    assert len(caught) == 1
+    assert model.state_dim == 1
+    assert model.initial_condition is initial
+
+
+@pytest.mark.parametrize("vector_event", [False, True])
+def test_initial_condition_inside_plate_warning_uses_event_shape(vector_event):
+    initial = dist.Normal(0.0, 1.0)
+    if vector_event:
+        initial = initial.expand((1,)).to_event(1)
+    initial = initial.expand((3,))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with seed(rng_seed=0), dsx.plate("members", 3):
+            model = dsx.DynamicalModel(
+                initial_condition=initial,
+                state_evolution=lambda x, u, t_now, t_next: initial,
+                observation_model=lambda x, u, t: dist.Normal(0.0, 1.0),
+            )
+    assert model.state_dim == 1
+    if vector_event:
+        assert not caught
+    else:
+        assert len(caught) == 1
+        assert caught[0].category is FutureWarning
+        assert "Scalar initial conditions" in str(caught[0].message)
+
+
+def test_categorical_initial_condition_does_not_warn():
+    initial = dist.Categorical(probs=jnp.array([0.4, 0.6]))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        model = dsx.DynamicalModel(
+            initial_condition=initial,
+            state_evolution=lambda x, u, t_now, t_next: initial,
+            observation_model=lambda x, u, t: dist.Normal(0.0, 1.0),
+        )
+    assert not caught
+    assert model.categorical_state
+    assert model.state_dim == 2
