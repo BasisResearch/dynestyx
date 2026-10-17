@@ -42,6 +42,7 @@ def simulate(
     simulator_config: SimulatorConfig | None = None,
     control_policy: PolicyCallable | None = None,
     filter_config: BaseFilterConfig | None = None,
+    filter_dynamics: DynamicalModel | None = None,
     use_true_state: bool = False,
     initial_policy_state: PyTree | None = None,
 ) -> SimulatedResult:
@@ -78,11 +79,17 @@ def simulate(
             conventions run.
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
-            ignored otherwise.
+            ignored otherwise or when `use_true_state=True`.
+        filter_dynamics: Optional discrete-time model used only for closed-loop
+            filtering. Defaults to `dynamics`. Requires `control_policy` and
+            compatible state/observation/control dimensions, initial state shape,
+            start time, and observation-control alignment. Simulated states and
+            observations always come from `dynamics`. Ignored when
+            `use_true_state=True`.
         use_true_state: Run the closed loop on the true state instead of a
             filtered belief, forwarded to `DiscreteControlLoopSimulator` when
-            `control_policy` is given; ignored otherwise. `filter_config` must be left
-            unset. Defaults to `False`.
+            `control_policy` is given; ignored otherwise. Both `filter_config`
+            and `filter_dynamics` are unused in this mode. Defaults to `False`.
         initial_policy_state: Initial policy state $s_0$, forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise. Defaults to `None` (a stateless policy) --
@@ -125,6 +132,7 @@ def simulate(
         simulator_config=simulator_config,
         control_policy=control_policy,
         filter_config=filter_config,
+        filter_dynamics=filter_dynamics,
         use_true_state=use_true_state,
     )
     _, simulation_key = jr.split(rng_key)

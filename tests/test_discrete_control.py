@@ -725,18 +725,32 @@ def test_true_state_policy_sees_the_exact_state_not_an_estimate():
     assert jnp.array_equal(seen, states[:-1])
 
 
-def test_use_true_state_rejects_a_filter_config():
-    """use_true_state=True builds no filter, so a filter config passed with it
-    would be silently ignored."""
-    with pytest.raises(ValueError, match="use_true_state"):
-        dsx.simulate(
-            _lti_1d(),
-            rng_key=jr.PRNGKey(0),
-            predict_times=jnp.arange(4.0),
-            control_policy=_simple_policy(),
-            filter_config=KFConfig(filter_source="cuthbert"),
-            use_true_state=True,
-        )
+def test_use_true_state_ignores_filter_settings():
+    """Toggle true-state control without removing the unused filter settings."""
+    dynamics = _lti_1d()
+    expected = dsx.simulate(
+        dynamics,
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(4.0),
+        control_policy=_simple_policy(),
+        use_true_state=True,
+    )
+    result = dsx.simulate(
+        dynamics,
+        # Neither the unsupported backend nor the incompatible filter model
+        # should be validated or used when filtering is disabled.
+        filter_config=KFConfig(filter_source="cd_dynamax"),
+        filter_dynamics=eqx.tree_at(
+            lambda m: m.t0, dynamics, 100.0, is_leaf=lambda x: x is None
+        ),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(4.0),
+        control_policy=_simple_policy(),
+        use_true_state=True,
+    )
+    assert result.filtered_states_mean is None
+    for name in ("states", "observations", "controls"):
+        assert jnp.array_equal(getattr(result, name), getattr(expected, name))
 
 
 def test_discretizer_carries_an_explicit_same_time_through():

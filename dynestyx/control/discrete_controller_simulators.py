@@ -4,6 +4,7 @@ import warnings
 from types import SimpleNamespace
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -245,6 +246,11 @@ class DiscreteControlLoopSimulator(BaseSimulator):
     With `use_true_state=True` the loop skips filtering altogether and hands
     the policy the true state $x_k$. Both conventions run.
 
+    `dynamics` always generates the true initial state, transitions, and
+    observations. Supply `filter_dynamics` to use a different model for state
+    estimation, for example `dsx.relax_dynamics(dynamics, ...)`. The policy's
+    own planning model, if any, is configured separately.
+
     The one-step filter update runs on the cuthbert backend
     (`filter_source="cuthbert"`). See the
     [filters page](https://basisresearch.github.io/dynestyx/stable/api_reference/public/inference/filters/)
@@ -262,13 +268,20 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             policy's initial state must always be passed explicitly.
         filter_config: Selects the filtering algorithm; any config
             `build_cuthbert_filter` accepts (see above). Defaults to
-            `_default_filter_config(dynamics)` when `None`. The online one-step
+            `_default_filter_config(filter_dynamics)` when `None`, using the
+            simulation dynamics if no filter model is supplied. The online one-step
             update currently requires `filter_source="cuthbert"`. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
             as they do for `Filter` (see `dynestyx.utils.recording._should_record_field`).
-            Must not be given together with `use_true_state=True`, which
-            filters nothing.
+            Ignored when `use_true_state=True`.
+        filter_dynamics: Optional discrete-time model used to construct and
+            update the filter, including its initial belief. Defaults to the
+            simulation dynamics. Both models must have the same state,
+            observation, and control dimensions and initial state sample shape.
+            An explicit `t0` must match the simulation start; an unspecified
+            observation-control alignment resolves to `"previous_transition"`.
+            The resolved alignments must match. Ignored when `use_true_state=True`.
         use_true_state: Give the policy the true state $x_k$ instead of a
             filtered belief, and run no filter at all. Defaults to `False`.
             Observations are still emitted and returned, but nothing consumes
@@ -281,18 +294,14 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         *,
         control_policy: PolicyCallable,
         filter_config: BaseFilterConfig | None = None,
+        filter_dynamics: DynamicalModel | None = None,
         use_true_state: bool = False,
         n_simulations: int = 1,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
-        if use_true_state and filter_config is not None:
-            raise ValueError(
-                "use_true_state=True runs the closed loop on the true state and "
-                "builds no filter, so filter_config has no effect; pass one or "
-                "the other."
-            )
         self.control_policy = control_policy
         self.filter_config = filter_config
+        self.filter_dynamics = filter_dynamics
         self.use_true_state = use_true_state
 
     def _validate_plate_support(self) -> None:
@@ -390,10 +399,46 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                 initial_policy_state=initial_policy_state,
             )
 
+        filter_dynamics = self.filter_dynamics
+        if filter_dynamics is None:
+            filter_dynamics = dynamics
+        else:
+            if filter_dynamics.continuous_time:
+                raise ValueError("filter_dynamics must be a discrete-time model.")
+            for name in ("state_dim", "observation_dim", "control_dim"):
+                if getattr(filter_dynamics, name) != getattr(dynamics, name):
+                    raise ValueError(
+                        f"filter_dynamics.{name} must match dynamics.{name}."
+                    )
+            if (
+                filter_dynamics.initial_condition.shape()
+                != dynamics.initial_condition.shape()
+            ):
+                raise ValueError(
+                    "filter_dynamics initial state sample shape must match dynamics."
+                )
+            filter_alignment = (
+                filter_dynamics.observation_control_alignment
+                or ObservationControlAlignment.PREVIOUS_TRANSITION
+            )
+            if filter_alignment != alignment:
+                raise ValueError(
+                    "filter_dynamics.observation_control_alignment must match the "
+                    "resolved simulation alignment."
+                )
+            if filter_dynamics.t0 is not None:
+                # Anchor the check to model arrays as well as times so it
+                # survives JIT even when the model ignores its time inputs.
+                dynamics, filter_dynamics, times = eqx.error_if(
+                    (dynamics, filter_dynamics, times),
+                    jnp.any(jnp.asarray(filter_dynamics.t0) != times[0]),
+                    "filter_dynamics.t0 must match predict_times[0].",
+                )
+
         filter_config = (
             self.filter_config
             if self.filter_config is not None
-            else _default_filter_config(dynamics)
+            else _default_filter_config(filter_dynamics)
         )
         if filter_config.filter_source != "cuthbert":
             # TODO: lift this restriction once cd-dynamax filter sources support
@@ -417,6 +462,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             )
         return self._online_control_loop_previous_transition(
             dynamics,
+            filter_dynamics=filter_dynamics,
             rng_key=rng_key,
             times=times,
             filter_config=filter_config,
@@ -427,6 +473,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         self,
         dynamics: DynamicalModel,
         *,
+        filter_dynamics: DynamicalModel,
         rng_key: PRNGKeyArray,
         times: Real[Array, " predict_time"],
         filter_config: BaseFilterConfig,
@@ -477,7 +524,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         here. Called directly, `times` and `filter_config` are taken as given.
 
         Args:
-            dynamics: Discrete-time dynamical model.
+            dynamics: Discrete-time model generating states and observations.
+            filter_dynamics: Compatible discrete-time model used for filtering.
             rng_key: Root key for environment and fallback filter randomness.
             times: Strictly increasing simulation times, at least one. A single
                 time yields one state and nothing else, there being no $t_1$
@@ -500,7 +548,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
         online_filter_key, initial_filter_state_key = jr.split(online_filter_key)
         filter_obj, _ = build_cuthbert_filter(
-            dynamics, filter_config, key=online_filter_key, want_parallel=False
+            filter_dynamics, filter_config, key=online_filter_key, want_parallel=False
         )
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
@@ -544,7 +592,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
             # p_hat_k = FilterAnalysis(y_k, p_tilde_k, u_k). Stub for now.
             p_hat_k = compute_cuthbert_belief_analysis(
-                dynamics,
+                filter_dynamics,
                 filter_obj=filter_obj,
                 prev_state=p_tilde_k,
                 key=filter_update_key,
@@ -560,7 +608,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
             # p_tilde_{k+1} = PredictionUpdate(p_hat_k, u_k). Stub for now.
             p_tilde_next = compute_cuthbert_belief_prediction(
-                dynamics,
+                filter_dynamics,
                 filter_obj=filter_obj,
                 prev_state=p_hat_k,
                 key=predict_key,
@@ -630,6 +678,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         self,
         dynamics: DynamicalModel,
         *,
+        filter_dynamics: DynamicalModel,
         rng_key: PRNGKeyArray,
         times: Real[Array, " predict_time"],
         filter_config: BaseFilterConfig,
@@ -672,7 +721,8 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         `obs_times` is what distinguishes the two results.
 
         Args:
-            dynamics: Discrete-time dynamical model.
+            dynamics: Discrete-time model generating states and observations.
+            filter_dynamics: Compatible discrete-time model used for filtering.
             rng_key: Root key for environment and fallback filter randomness.
             times: Strictly increasing simulation times, at least one. A single
                 time yields one state and nothing else.
@@ -694,7 +744,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         )
         online_filter_key, initial_filter_state_key = jr.split(online_filter_key)
         filter_obj, _ = build_cuthbert_filter(
-            dynamics, filter_config, key=online_filter_key, want_parallel=False
+            filter_dynamics, filter_config, key=online_filter_key, want_parallel=False
         )
 
         x_0 = dynamics.initial_condition.sample(initial_state_key)
@@ -739,7 +789,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
             # This filtered update: uses the observation.
             p_hat_next = compute_cuthbert_filter_update(
-                dynamics,
+                filter_dynamics,
                 filter_obj=filter_obj,
                 prev_state=p_hat_k,
                 key=filter_update_key,
