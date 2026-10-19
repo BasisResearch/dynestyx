@@ -13,6 +13,7 @@ import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from effectful.ops.types import Term
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 from numpyro.contrib.control_flow import scan as nscan
 
@@ -436,7 +437,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_result: ConditionedResult | None = None,
         smoothed_result: ConditionedResult | None = None,
         **kwargs,
-    ) -> Result | None:
+    ) -> Result | Term[Result] | None:
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
@@ -504,6 +505,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         )
 
         if results is None:
+            # A no-op handler can forward an unhandled symbolic operation;
+            # an inner Filter/Smoother still returns the concrete Result.
             return downstream_result
 
         def _register_self(site_name: str) -> None:
