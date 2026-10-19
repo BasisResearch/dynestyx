@@ -16,6 +16,19 @@ _LATENT_PATH_SIZE_CUTOFF = 1_000
 
 
 def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds):
+    """Choose handlers for missing inference and prediction stages.
+
+    ``infer`` and ``predict`` identify stages to supply; ``kinds`` describes
+    the active handler stack. For ``sample_mode``, small models with matching
+    state/observation dimensions and a known transition density (or a native
+    ODE path) use LatentPathBuilder, unless Evaluation requires filtering.
+    Other inference requests select a structurally compatible filter.
+
+    ``obs_times`` supplies the per-trajectory observation count for the size
+    heuristic and is required when ``infer`` is true. Returned handlers are
+    ordered from innermost to outermost: discretization when needed, inference,
+    then simulation. The caller composes them with the existing continuation.
+    """
     # Imports stay local: these interpretations themselves import this module.
     import numpyro.distributions as dist
 
@@ -43,8 +56,12 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
 
     handlers = []
     if infer:
+        # Reject unsupported model classes before choosing an inference algorithm.
         _validate_inference_supported_model_classes(dynamics)
         evolution = dynamics.state_evolution
+        # Check for known structured transition classes that LPB can score.
+        # Native ODEs are also eligible: LPB samples their initial state and
+        # integrates the path instead of scoring stochastic transitions.
         density_known = isinstance(
             evolution,
             (
@@ -54,9 +71,14 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
                 DeterministicContinuousTimeStateEvolution,
             ),
         ) or (
+            # An already-discretized ODE flow has a transition density only
+            # when its configured jitter adds nonzero process noise.
             isinstance(evolution, _ODEFlowStateEvolution)
             and evolution.config.jitter_scale > 0
         )
+        # Choose LPB only for small sample sites with matching dimensions.
+        # Count observations per trajectory, without multiplying by plate sizes.
+        # condition() defaults and Evaluation use filtering instead.
         if (
             sample_mode
             and _DynestyxStackKind.EVALUATION not in kinds
@@ -67,6 +89,9 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
         ):
             handlers.append(LatentPathBuilder())
         else:
+            # Inspect the discrete representation to determine KF compatibility.
+            # This probe does not replace the model; any required Discretizer
+            # is added to the returned handler list below.
             discrete = (
                 discretize_dynamics(dynamics) if dynamics.continuous_time else dynamics
             )
@@ -78,13 +103,18 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
                 and isinstance(discrete.observation_model, LinearGaussianObservation)
                 and isinstance(discrete.initial_condition, dist.MultivariateNormal)
             ):
+                # Exact Kalman filtering needs linear Gaussian transitions and
+                # observations, with a multivariate Gaussian initial condition.
                 config = KFConfig(filter_source="cuthbert")
             elif isinstance(
                 dynamics.observation_model,
                 (LinearGaussianObservation, GaussianObservation),
             ):
+                # Gaussian observations permit EnKF when exact KF is unavailable.
                 config = EnKFConfig()
             else:
+                # General observations fall back to particle filtering, unless
+                # Evaluation needs predictive diagnostics it cannot provide.
                 if _DynestyxStackKind.EVALUATION in kinds:
                     raise ValueError(
                         "Automatic Evaluation requires a supported Gaussian "
@@ -93,6 +123,8 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
                     )
                 config = PFConfig()
             if dynamics.continuous_time:
+                # Ensemble/particle SDE filters need sampled transitions. KF and
+                # ODE models use the discretizer selected for their evolution.
                 discretizer_config = (
                     DiffraxSampleConfig()
                     if isinstance(evolution, StochasticContinuousTimeStateEvolution)
@@ -111,6 +143,7 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
             Discretizer(_automatic_discretizer_config(dynamics.state_evolution))
         )
     if predict:
+        # Append generation after any inference so it can simulate posterior paths.
         handlers.append(Simulator())
     return handlers
 
