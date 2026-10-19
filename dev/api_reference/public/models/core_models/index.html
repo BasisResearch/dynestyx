@@ -5566,7 +5566,9 @@ Gets inferred automatically from the type of <code>initial_condition</code>.</p>
               <div class="doc-md-description">
                 <p>Distribution over the initial state <span class="arithmatex">\(p(x_0)\)</span>.
 Pass a NumPyro distribution instance (i.e., a <code>numpyro.distributions.Distribution</code> subclass). See the
-<a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distributions API</a>.</p>
+<a href="https://num.pyro.ai/en/stable/distributions.html">NumPyro distributions API</a>.
+Non-categorical scalar initial conditions emit a <code>FutureWarning</code>;
+use a trailing coordinate axis even for a one-dimensional state.</p>
               </div>
             </td>
           </tr>
