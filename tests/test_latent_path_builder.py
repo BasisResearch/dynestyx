@@ -25,6 +25,7 @@ from dynestyx.inference.utils.plate_utils import (
     _stack_or_list_optional_member_values,
 )
 from dynestyx.observation_missingness import prepare_missing_observation_metadata
+from dynestyx.types import LatentStateResult
 
 
 def _make_discrete_dynamics():
@@ -838,7 +839,11 @@ def test_latent_path_builder_plated_odes_use_member_initial_condition_sites():
                     obs_values=obs_values,
                 )
 
+    assert isinstance(result, LatentStateResult)
+    assert not isinstance(result.state_path_params, list)
+    assert result.state_path_params is not None
     assert result.state_path_params.shape == (2, 1, 2)
+    assert result.joint_log_prob is not None
     assert result.joint_log_prob.shape == (2,)
     for member_name in ("f_p0_state_path_params", "f_p1_state_path_params"):
         assert tr[member_name]["value"].shape == (1, 2)
@@ -1026,6 +1031,7 @@ def test_latent_path_builder_ragged_plate_metadata_is_not_broadcast():
                     obs_values=obs_values,
                 )
 
+    assert isinstance(result, LatentStateResult)
     assert isinstance(result.state_path_params, list)
     assert isinstance(result.state_path_param_times, list)
     assert isinstance(result.state_path_param_coordinate_indices, list)
@@ -1046,8 +1052,11 @@ def test_latent_path_builder_ragged_plate_metadata_is_not_broadcast():
         result.state_path_param_coordinate_indices[1],
         jnp.array([1]),
     )
+    assert result.state_path is not None
     assert result.state_path.shape == (2, 2, 2)
+    assert result.state_path_times is not None
     assert result.state_path_times.shape == (2, 2)
+    assert result.joint_log_prob is not None
     assert result.joint_log_prob.shape == (2,)
     assert tr["f_p0_state_path_params"]["value"].shape == (2,)
     assert tr["f_p1_state_path_params"]["value"].shape == (1,)

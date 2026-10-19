@@ -68,6 +68,8 @@ from dynestyx.simulation import (
 from dynestyx.types import (
     ConditionedResult,
     EvaluationResult,
+    LatentStateResult,
+    Result,
     SimulatedResult,
     StructuredSimulatedResult,
 )
@@ -117,6 +119,8 @@ __all__ = [
     "linearize_drift",
     "ConditionedResult",
     "EvaluationResult",
+    "LatentStateResult",
+    "Result",
     "ObservationScoringConfig",
     "SimulatedResult",
     "StructuredSimulatedResult",

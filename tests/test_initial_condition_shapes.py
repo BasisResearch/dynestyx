@@ -68,9 +68,14 @@ def test_control_loop_simulation_result_shapes(state_dim):
         result = dsx.sample("f", model, predict_times=jnp.array([0.0, 0.1, 0.2]))
 
     coordinate_dim = state_dim or 1
+    assert isinstance(result, dsx.SimulatedResult)
+    assert result.x_0 is not None
     assert result.x_0.shape == (1, coordinate_dim)
+    assert result.states is not None
     assert result.states.shape == (1, 3, coordinate_dim)
+    assert result.observations is not None
     assert result.observations.shape == (1, 2, 1)
+    assert result.controls is not None
     assert result.controls.shape == (1, 2, 1)
 
 
@@ -83,6 +88,10 @@ def test_plated_simulation_result_shapes():
             observation_model=lambda x, u, t: dist.Normal(x, 0.2),
         )
         result = dsx.sample("f", model, predict_times=jnp.array([0.0, 0.1]))
+    assert isinstance(result, dsx.SimulatedResult)
+    assert result.x_0 is not None
     assert result.x_0.shape == (3, 2, 1)
+    assert result.states is not None
     assert result.states.shape == (3, 2, 2, 1)
+    assert result.observations is not None
     assert result.observations.shape == (3, 2, 2, 1)

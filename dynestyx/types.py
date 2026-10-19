@@ -19,8 +19,15 @@ class FunctionOfTime(Protocol):
         raise NotImplementedError()
 
 
+class Result:
+    """Common base for outputs produced by dynestyx handlers.
+
+    Narrow to a concrete result class with ``isinstance`` to access its fields.
+    """
+
+
 @dataclasses.dataclass
-class EvaluationResult:
+class EvaluationResult(Result):
     """Outputs computed by an evaluation handler.
 
     Evaluation handlers attach this object to the ``ConditionedResult`` they
@@ -37,7 +44,7 @@ class EvaluationResult:
 
 
 @dataclasses.dataclass
-class ConditionedResult:
+class ConditionedResult(Result):
     """Common base for results from the NumPyro-free conditioning primitive.
 
     ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
@@ -71,7 +78,7 @@ class ConditionedResult:
 
 
 @dataclasses.dataclass
-class LatentStateResult:
+class LatentStateResult(Result):
     """Result of latent-state construction / scoring without NumPyro side effects.
 
     Let ``z = state_path_params`` denote the free variables used to
@@ -133,7 +140,7 @@ class LatentStateResult:
     state_dists: list | None = None
 
 
-class SimulatedResult(eqx.Module):
+class SimulatedResult(eqx.Module, Result):
     """Result of simulation without eager NumPyro side effects.
 
     This result therefore stores the realized state path ``x`` and observation path ``y``
