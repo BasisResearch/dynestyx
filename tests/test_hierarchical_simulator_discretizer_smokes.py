@@ -79,7 +79,8 @@ def _nested_plate_discrete_lti_model(
     M=2,
 ):
     state_dim = 2
-    Q = 0.1 * jnp.eye(state_dim)
+    # Explicit plate axes disambiguate the shared 2 x 2 covariance.
+    Q = jnp.broadcast_to(0.1 * jnp.eye(state_dim), (M, G, state_dim, state_dim))
     H = jnp.array([[1.0, 0.0]])
     R = jnp.array([[0.25]])
 
@@ -340,26 +341,26 @@ def test_plate_conditioning_discrete_single_and_nested():
     obs_single = _make_obs_values((2, len(t), 1))
     obs_nested = _make_obs_values((2, 2, len(t), 1))
 
-    with DiscreteTimeSimulator():
-        with pytest.raises(ValueError, match="generation-only"):
-            with trace(), seed(rng_seed=jr.PRNGKey(3)):
-                _plate_discrete_lti_model(obs_times=t, obs_values=obs_single, M=2)
+    with DiscreteTimeSimulator(), pytest.warns(UserWarning, match="KFConfig"):
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(3)):
+            _plate_discrete_lti_model(obs_times=t, obs_values=obs_single, M=2)
+    assert_finite(tr["f_marginal_loglik"]["value"], (2,))
 
-    with DiscreteTimeSimulator():
-        with pytest.raises(ValueError, match="generation-only"):
-            with trace(), seed(rng_seed=jr.PRNGKey(4)):
-                _nested_plate_discrete_lti_model(
-                    obs_times=t, obs_values=obs_nested, G=2, M=2
-                )
+    with DiscreteTimeSimulator(), pytest.warns(UserWarning, match="KFConfig"):
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(4)):
+            _nested_plate_discrete_lti_model(
+                obs_times=t, obs_values=obs_nested, G=2, M=2
+            )
+    assert_finite(tr["f_marginal_loglik"]["value"], (2, 2))
 
 
 def test_plate_conditioning_ode_single():
     t = jnp.linspace(0.0, 0.4, 5)
     obs = _make_obs_values((2, len(t), 1))
-    with ODESimulator():
-        with pytest.raises(ValueError, match="generation-only"):
-            with trace(), seed(rng_seed=jr.PRNGKey(5)):
-                _plate_continuous_ode_model(obs_times=t, obs_values=obs, M=2)
+    with ODESimulator(), pytest.warns(UserWarning, match="ODEFlowConfig"):
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(5)):
+            _plate_continuous_ode_model(obs_times=t, obs_values=obs, M=2)
+    assert_finite(tr["f_marginal_loglik"]["value"], (2,))
 
 
 def test_plate_nonlinear_discrete_single_sample_under_plate():
@@ -399,13 +400,13 @@ def test_plate_nonlinear_discrete_single_sample_under_plate():
     assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(t))
 
 
-def test_plate_sde_conditioning_policy_unchanged():
+def test_plate_sde_conditioning_supplies_default_filter():
     t = jnp.linspace(0.0, 0.4, 5)
     obs = _make_obs_values((2, len(t), 1))
-    with SDESimulator():
-        with pytest.raises(ValueError, match="generation-only"):
-            with trace(), seed(rng_seed=jr.PRNGKey(6)):
-                _plate_continuous_sde_model(obs_times=t, obs_values=obs, M=2)
+    with SDESimulator(), pytest.warns(UserWarning, match="KFConfig"):
+        with trace() as tr, seed(rng_seed=jr.PRNGKey(6)):
+            _plate_continuous_sde_model(obs_times=t, obs_values=obs, M=2)
+    assert_finite(tr["f_marginal_loglik"]["value"], (2,))
 
 
 def test_plate_rollout_discrete_gaussian_pf_hmm():
