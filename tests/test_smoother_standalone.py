@@ -61,6 +61,7 @@ def test_infer_smoother_returns_infer_result():
     assert jnp.isfinite(result.marginal_loglik)
     assert result.states is not None
     assert result.dists is not None
+    assert result.times is not None
     assert jnp.array_equal(result.times, obs_times)
 
 
@@ -100,6 +101,7 @@ def test_plated_condition_returns_backend_smoother_states():
                 obs_values=jnp.stack([obs_values, obs_values]),
             )
 
+    assert result.marginal_loglik is not None
     assert result.marginal_loglik.shape == (2,)
     assert type(result.states) is type(unplated_result.states)
     assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
@@ -115,6 +117,7 @@ def test_infer_smoother_optax_mle():
             result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
+        assert result.marginal_loglik is not None
         return -result.marginal_loglik
 
     optimizer = optax.adam(1e-2)

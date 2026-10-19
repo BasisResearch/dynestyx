@@ -173,6 +173,8 @@ def test_automatic_sde_ensemble_filter_matches_explicit():
         dsx.Discretizer(DiffraxSampleConfig()),
     ):
         expected = dsx.condition("f", dynamics, **kwargs)
+    assert actual.marginal_loglik is not None
+    assert expected.marginal_loglik is not None
     assert jnp.allclose(actual.marginal_loglik, expected.marginal_loglik)
 
 

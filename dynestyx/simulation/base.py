@@ -38,6 +38,7 @@ from dynestyx.simulation.utils import (
 )
 from dynestyx.types import (
     ConditionedResult,
+    Result,
     SimulatedResult,
     chain_numpyro_site_registrations,
 )
@@ -437,7 +438,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_result: ConditionedResult | None = None,
         smoothed_result: ConditionedResult | None = None,
         **kwargs,
-    ) -> object:
+    ) -> Result | None:
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )

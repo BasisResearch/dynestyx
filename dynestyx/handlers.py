@@ -2,7 +2,7 @@
 
 import warnings
 from enum import Enum, auto
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import numpyro
 from effectful.ops.semantics import fwd, handler
@@ -17,6 +17,7 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import (
     prepare_observation_views,
 )
+from dynestyx.types import Result
 from dynestyx.utils.controls import _validate_controls
 from dynestyx.utils.models import _get_dynamics_with_t0, _validate_control_dim
 from dynestyx.utils.validation import _validate_site_sorting
@@ -204,7 +205,7 @@ def sample(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-):
+) -> Result:
     """
     Samples from a dynamical model. This is the main primitive of dynestyx.
 
@@ -269,7 +270,7 @@ def condition(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-):
+) -> Result:
     """Run inference on a dynamical model without registering numpyro sites.
 
     This is the NumPyro-free entry point. An active ``Filter`` or ``Smoother``
@@ -341,7 +342,7 @@ def _condition_intp(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-) -> object:
+) -> Result | None:
     """
     The functional version of `sample` to be interpreted at runtime.
 
@@ -578,7 +579,7 @@ class plate(ObjectInterpretation):
         return [_DynestyxStackKind.PLATE, *fwd()]
 
     @implements(_condition_intp)
-    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Any:
+    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Result:
         """Effectful interpretation for the `sample` primitive in a plate.
 
         Appends metadata to the argument stack and passes forward.
@@ -590,9 +591,7 @@ class plate(ObjectInterpretation):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            The downstream handler result, such as ``FunctionOfTime`` for
-            simulators/filters or ``LatentStateResult`` for
-            ``LatentPathBuilder``.
+            The downstream ``Result``, or None when no result is produced.
         """
         obs_model = dynamics.observation_model
         if isinstance(obs_model, LinearGaussianObservation) and isinstance(

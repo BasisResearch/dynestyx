@@ -2,7 +2,7 @@
 
 import dataclasses
 from collections.abc import Callable
-from typing import Any, ClassVar, Protocol, Self, runtime_checkable
+from typing import Any, ClassVar, Protocol, Self, cast, overload, runtime_checkable
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -19,8 +19,181 @@ class FunctionOfTime(Protocol):
         raise NotImplementedError()
 
 
+class FilterModelInputs(Protocol):
+    """Observation-aligned model inputs retained by a filter backend."""
+
+    @property
+    def time(self) -> Real[Array, "..."]:
+        """Times at which observations are assimilated."""
+        ...
+
+    @property
+    def u(self) -> Real[Array, "..."]:
+        """Controls used to evaluate the observation model."""
+        ...
+
+
+class _Unsupported[T]:
+    """Typed, non-data descriptor that lets concrete results store field values."""
+
+    def __init__(self, doc: str):
+        self.__doc__ = doc
+        self.name = ""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.name = name
+
+    @overload
+    def __get__(self, instance: None, owner: type | None = None) -> Self: ...
+
+    @overload
+    def __get__(self, instance: object, owner: type | None = None) -> T: ...
+
+    def __get__(self, instance: object | None, owner: type | None = None) -> Self | T:
+        if instance is None:
+            return self
+        raise NotImplementedError(
+            f"{type(instance).__name__} does not support {self.name!r}."
+        )
+
+
+class Result:
+    """Typed interface for outputs produced by dynestyx handlers.
+
+    Unsupported properties raise ``NotImplementedError``. Supported fields may
+    be ``None`` when their handler did not record a value. Concrete results
+    retain their constructor arguments and stored dataclass fields.
+    """
+
+    observation_scores = _Unsupported[dict[str, Real[Array, "..."]]](
+        "Scores computed by an evaluation handler."
+    )
+
+    marginal_loglik = _Unsupported[Real[Array, "*plate"] | None](
+        "Marginal observation log likelihood."
+    )
+
+    times = _Unsupported[Real[Array, "..."] | None]("Inference or simulation times.")
+
+    states = _Unsupported[object](
+        "Raw backend inference states or simulated state arrays."
+    )
+
+    dists = _Unsupported[list | None]("Time-major posterior distributions.")
+
+    predicted_observations = _Unsupported[object](
+        "Observation predictions produced by the selected handler."
+    )
+
+    evaluation_result = _Unsupported["EvaluationResult | None"](
+        "Evaluation outputs attached to a conditioning result."
+    )
+
+    joint_log_prob = _Unsupported[Real[Array, "*plate"] | None](
+        "Joint log density of a reconstructed latent path and observations."
+    )
+
+    state_path_params = _Unsupported[
+        Real[Array, "*state_path_param_shape"] | list[Real[Array, "..."]] | None
+    ]("Free parameters used to construct a latent state path.")
+
+    state_path_param_times = _Unsupported[
+        Real[Array, "*state_path_param_time_plate state_path_param_time"]
+        | list[Real[Array, "..."]]
+        | None
+    ]("Times associated with latent path parameters.")
+
+    state_path_param_coordinate_indices = _Unsupported[
+        Int[Array, "*state_path_param_plate n_state_path_params"]
+        | list[Int[Array, "..."]]
+        | None
+    ]("State coordinates associated with latent path parameters.")
+
+    state_path = _Unsupported[Real[Array, "*state_path_shape"] | None](
+        "Reconstructed latent state path."
+    )
+
+    state_path_times = _Unsupported[
+        Real[Array, "*state_path_time_plate state_path_time"] | None
+    ]("Times of the reconstructed latent state path.")
+
+    missing_obs_values = _Unsupported[
+        Real[Array, "*missing_obs_shape"] | list[Real[Array, "..."]] | None
+    ]("Latent values used to fill missing observation entries.")
+
+    missing_obs_times = _Unsupported[
+        Real[Array, "*missing_obs_time_plate n_missing_obs"]
+        | list[Real[Array, "..."]]
+        | None
+    ]("Times associated with missing observation entries.")
+
+    missing_obs_coordinate_indices = _Unsupported[
+        Int[Array, "*missing_obs_plate n_missing_obs"] | list[Int[Array, "..."]] | None
+    ]("Observation coordinates associated with missing entries.")
+
+    completed_obs_values = _Unsupported[Real[Array, "*completed_obs_shape"] | None](
+        "Observation array after missing entries have been filled."
+    )
+
+    state_dists = _Unsupported[list | None](
+        "Distributions along a reconstructed latent state path."
+    )
+
+    x_0 = _Unsupported[
+        Real[Array, "*plate n_simulations state_dim"]
+        | Real[Array, "*plate n_simulations"]
+        | None
+    ]("Simulated initial states.")
+
+    observations = _Unsupported[
+        Real[Array, "*plate n_simulations obs_time observation_dim"]
+        | Real[Array, "*plate n_simulations obs_time"]
+        | None
+    ]("Simulated observation paths.")
+
+    obs_times = _Unsupported[Real[Array, "*plate n_simulations obs_time"] | None](
+        "Times of simulated observations."
+    )
+
+    controls = _Unsupported[
+        Real[Array, "*plate n_simulations ctrl_time control_dim"]
+        | Real[Array, "*plate n_simulations ctrl_time"]
+        | None
+    ]("Controls recorded during simulation.")
+
+    ctrl_times = _Unsupported[Real[Array, "*plate n_simulations ctrl_time"] | None](
+        "Times of recorded controls."
+    )
+
+    predicted_times = _Unsupported[
+        Real[Array, "*plate n_simulations predict_time"] | None
+    ]("Times used for posterior predictive simulation.")
+
+    predicted_states = _Unsupported[
+        Real[Array, "*plate n_simulations predict_time state_dim"]
+        | Real[Array, "*plate n_simulations predict_time"]
+        | None
+    ]("Posterior predictive state paths.")
+
+    log_normalizing_constant = _Unsupported[Real[Array, "*plate time"]](
+        "Cumulative log normalizing constants at the observation times."
+    )
+
+    predicted_ensemble = _Unsupported[Real[Array, "*plate time n_members state_dim"]](
+        "State ensembles before assimilating each observation."
+    )
+
+    ensemble = _Unsupported[Real[Array, "*plate time n_members state_dim"]](
+        "Filtered state ensembles after assimilating each observation."
+    )
+
+    model_inputs = _Unsupported[FilterModelInputs](
+        "Observation-aligned inputs retained by the filter backend."
+    )
+
+
 @dataclasses.dataclass
-class EvaluationResult:
+class EvaluationResult(Result):
     """Outputs computed by an evaluation handler.
 
     Evaluation handlers attach this object to the ``ConditionedResult`` they
@@ -37,7 +210,7 @@ class EvaluationResult:
 
 
 @dataclasses.dataclass
-class ConditionedResult:
+class ConditionedResult(Result):
     """Common base for results from the NumPyro-free conditioning primitive.
 
     ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
@@ -61,6 +234,43 @@ class ConditionedResult:
         default=None, repr=False
     )
 
+    def _backend_value(self, name: str) -> object:
+        value = getattr(self.states, name, None)
+        if value is None:
+            raise NotImplementedError(
+                f"{type(self).__name__}.{name} is unavailable: the backend "
+                "does not provide it or did not record it."
+            )
+        return value
+
+    @property
+    def log_normalizing_constant(self) -> Real[Array, "*plate time"]:
+        """Cumulative log normalizing constants recorded by the filter backend."""
+        return cast(
+            Real[Array, "*plate time"], self._backend_value("log_normalizing_constant")
+        )
+
+    @property
+    def predicted_ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """State ensembles before assimilating each observation, when recorded."""
+        return cast(
+            Real[Array, "*plate time n_members state_dim"],
+            self._backend_value("predicted_ensemble"),
+        )
+
+    @property
+    def ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """Filtered state ensembles after assimilating each observation."""
+        return cast(
+            Real[Array, "*plate time n_members state_dim"],
+            self._backend_value("ensemble"),
+        )
+
+    @property
+    def model_inputs(self) -> FilterModelInputs:
+        """Observation-aligned inputs recorded by the filter backend."""
+        return cast(FilterModelInputs, self._backend_value("model_inputs"))
+
     def __call__(
         self, t: float | int | Real[Array, ""]
     ) -> Real[Array, " state_dim"] | Real[Array, ""]:
@@ -71,7 +281,7 @@ class ConditionedResult:
 
 
 @dataclasses.dataclass
-class LatentStateResult:
+class LatentStateResult(Result):
     """Result of latent-state construction / scoring without NumPyro side effects.
 
     Let ``z = state_path_params`` denote the free variables used to
@@ -133,7 +343,7 @@ class LatentStateResult:
     state_dists: list | None = None
 
 
-class SimulatedResult(eqx.Module):
+class SimulatedResult(eqx.Module, Result):
     """Result of simulation without eager NumPyro side effects.
 
     This result therefore stores the realized state path ``x`` and observation path ``y``

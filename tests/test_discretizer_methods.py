@@ -27,6 +27,7 @@ from dynestyx.inference.configs.simulator import (
     SDESimulatorConfig,
 )
 from dynestyx.inference.filters import Filter
+from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
@@ -293,8 +294,12 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
                     )
 
     predictions = result.predicted_observations
+    assert result.evaluation_result is not None
     scores = result.evaluation_result.observation_scores
-    assert predictions is not None
+    assert isinstance(predictions, PredictedObservationOutputs)
+    assert predictions.ensemble is not None
+    assert predictions.mean is not None
+    assert predictions.cov is not None
     assert predictions.ensemble.shape == (
         len(obs_times),
         n_particles,
@@ -307,7 +312,7 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
     assert jnp.all(jnp.isfinite(scores["gaussian_log_prob"]))
     assert jnp.all(jnp.isfinite(scores["energy_score"]))
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
     )
@@ -317,6 +322,7 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
         rtol=2e-5,
         atol=2e-5,
     )
+    assert result.marginal_loglik is not None
     assert jnp.allclose(
         jnp.sum(scores["gaussian_log_prob"]),
         result.marginal_loglik,
