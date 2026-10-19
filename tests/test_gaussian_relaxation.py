@@ -223,9 +223,12 @@ def test_linear_filter_matches_manual_model(backend, mode):
     with dsx.Filter(config):
         expected = dsx.condition("expected", manual, **arguments)
         direct = dsx.condition("direct", relaxed, **arguments)
+    assert actual.marginal_loglik is not None
+    assert expected.marginal_loglik is not None
     np.testing.assert_allclose(
         actual.marginal_loglik, expected.marginal_loglik, rtol=1e-5
     )
+    assert direct.marginal_loglik is not None
     np.testing.assert_allclose(
         direct.marginal_loglik, expected.marginal_loglik, rtol=1e-5
     )
@@ -289,6 +292,8 @@ def test_relaxed_nonlinear_ekf_matches_manual_model(backend):
         actual = dsx.condition("actual", model, **arguments)
     with dsx.Filter(config):
         expected = dsx.condition("expected", manual, **arguments)
+    assert actual.marginal_loglik is not None
+    assert expected.marginal_loglik is not None
     np.testing.assert_allclose(
         actual.marginal_loglik, expected.marginal_loglik, rtol=1e-5
     )
@@ -424,12 +429,15 @@ def test_member_specific_relaxation_simulation_matches_direct():
         dsx.plate("members", 2),
     ):
         result = dsx.sample("trajectory", model, predict_times=jnp.arange(3.0))
+    assert isinstance(result, dsx.SimulatedResult)
+    assert result.states is not None
     assert result.states.shape == (2, 1, 3, 2)
     relaxed = dsx.relax_dynamics(
         model, state_evolution_cov=covariance, observation_model_cov=covariance
     )
     with seed(rng_seed=0), dsx.Simulator(), dsx.plate("members", 2):
         direct = dsx.sample("trajectory", relaxed, predict_times=jnp.arange(3.0))
+    assert isinstance(direct, dsx.SimulatedResult)
     np.testing.assert_array_equal(result.states, direct.states)
     np.testing.assert_array_equal(result.observations, direct.observations)
 

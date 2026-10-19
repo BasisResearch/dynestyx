@@ -31,6 +31,7 @@ from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
     compute_continuous_filter,
 )
 from dynestyx.inference.observation_predictions import (
+    PredictedObservationOutputs,
     _observation_noise_covariance_sequence,
     extract_filter_predictions,
 )
@@ -1140,7 +1141,7 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
                 )
 
     predictions = result.predicted_observations
-    assert predictions is not None
+    assert isinstance(predictions, PredictedObservationOutputs)
     assert predictions.ensemble is not None
     assert predictions.mean is not None
     assert predictions.cov is not None
@@ -1151,8 +1152,8 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
     assert predictions.mean.shape == (len(obs_times), 1)
     assert predictions.cov.shape == (len(obs_times), 1, 1)
 
-    state_forecasts = result.states.predicted_ensemble
-    model_inputs = result.states.model_inputs
+    state_forecasts = result.predicted_ensemble
+    model_inputs = result.model_inputs
     expected_ensemble = jax.vmap(
         lambda ensemble_t, control_t, time_t: jax.vmap(
             lambda state: dynamics.observation_model(state, control_t, time_t).mean
@@ -1191,6 +1192,7 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
         for rule in scoring_config.rules
         if not isinstance(rule, EnergyScore)
     }
+    assert result.evaluation_result is not None
     scores = result.evaluation_result.observation_scores
     for score_name, expected_score in expected_scores.items():
         assert jnp.allclose(scores[score_name], expected_score)
@@ -1201,7 +1203,7 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
     assert scores["observation_wise_crps"].shape == (len(obs_times), 1)
     assert scores["energy_score"].shape == (len(obs_times), 1)
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
     )
@@ -1211,6 +1213,7 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
         rtol=2e-5,
         atol=2e-5,
     )
+    assert result.marginal_loglik is not None
     assert jnp.allclose(
         jnp.sum(scores["gaussian_log_prob"]),
         result.marginal_loglik,
@@ -1248,7 +1251,7 @@ def test_cuthbert_enkf_energy_auto_samples_seeded_observation_noise():
             )
 
     predictions = result.predicted_observations
-    assert predictions is not None
+    assert isinstance(predictions, PredictedObservationOutputs)
     assert predictions.ensemble is not None
     assert predictions.noise_cov is not None
     assert predictions.obs_ensemble is None
@@ -1262,6 +1265,7 @@ def test_cuthbert_enkf_energy_auto_samples_seeded_observation_noise():
         obs_values=obs_values[:, None],
         pred_ensemble=noisy_ensemble,
     )
+    assert result.evaluation_result is not None
     auto_score = result.evaluation_result.observation_scores["energy_score"]
     assert jnp.allclose(auto_score, expected_score)
 
@@ -1371,7 +1375,7 @@ def test_cuthbert_enkf_plate_batched_scores_preserve_member_and_time_axes():
     )
     assert_tree_all_finite(scores, where="plate-batched Cuthbert EnKF scores")
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate(
             [jnp.zeros_like(cumulative_loglik[..., :1]), cumulative_loglik],
