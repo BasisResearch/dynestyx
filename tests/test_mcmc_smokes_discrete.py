@@ -16,6 +16,7 @@ from tests.fixtures import (
     data_conditioned_discrete_time_lti_kf,  # noqa: F401
     data_conditioned_discrete_time_lti_simplified,  # noqa: F401
 )
+from tests.test_utils import assert_finite
 
 NUM_SAMPLES = 1
 NUM_WARMUP = 1
@@ -42,6 +43,7 @@ def test_discrete_time_l63_taylor_kf_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_discrete_time_l63_pf_mcmc_smoke(
@@ -64,6 +66,7 @@ def test_discrete_time_l63_pf_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_discrete_time_lti_kf_mcmc_smoke(
@@ -80,6 +83,7 @@ def test_discrete_time_lti_kf_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "alpha" in posterior_samples
+    assert_finite(posterior_samples["alpha"], (NUM_SAMPLES,), where="alpha")
 
 
 def test_discrete_time_lti_simplified_kf_mcmc_smoke(
@@ -96,3 +100,4 @@ def test_discrete_time_lti_simplified_kf_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "alpha" in posterior_samples
+    assert_finite(posterior_samples["alpha"], (NUM_SAMPLES,), where="alpha")
