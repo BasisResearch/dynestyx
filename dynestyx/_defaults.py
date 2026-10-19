@@ -220,7 +220,21 @@ def _apply_defaults(continuation, before, name, dynamics, *, _consumer=None, **k
 
 
 def _complete_defaults(before):
-    """Supply missing earlier stages before a simulator/evaluation consumes them."""
+    """Decorate a handler method to complete stages needed by its consumer.
+
+    ``before`` identifies the consuming handler's ``_DynestyxStackKind``:
+    SIMULATOR needs inference completed before posterior simulation, while
+    EVALUATION needs filtered outputs and any requested simulation completed.
+    Apply this decorator beneath ``@implements(_condition_intp)`` on methods
+    accepting ``self, name, dynamics, **kwargs``.
+
+    The wrapper binds the original method to ``self`` as the continuation and
+    lets ``_apply_defaults`` supply only missing stages before calling it.
+    Passing ``self`` as the consumer also lets default completion check whether
+    automatic discretization is compatible with an explicit simulator config.
+    Existing handlers and forwarded results are respected, so completed work
+    is not repeated. If no stages are missing, the original method runs directly.
+    """
 
     def decorate(implementation):
         @functools.wraps(implementation)
