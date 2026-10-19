@@ -41,8 +41,8 @@ from tests.models import (
     jumpy_controls_model_ode,
 )
 from tests.test_utils import (
+    assert_finite,
     assert_trace_sites_exist_and_field_all_finite,
-    assert_tree_all_finite,
 )
 
 
@@ -122,40 +122,28 @@ def test_compute_cuthbert_smoother_returns_observation_aligned_states(
         obs_values=obs_values,
     )
 
-    assert jnp.ndim(marginal_loglik) == 0
-    assert_tree_all_finite(
-        {"marginal_loglik": marginal_loglik}, where="smoother output"
-    )
+    assert_finite(marginal_loglik, (), where="smoother marginal_loglik")
     if isinstance(smoother_config, PFSmootherConfig):
-        assert_tree_all_finite(
-            {
-                "particles": states.particles,
-                "log_weights": states.log_weights,
-            },
-            where="PF smoother states",
-        )
+        assert states.particles is not None, "states.particles is None"
         assert states.particles.shape[0] == len(obs_times)
+        assert_finite(states.particles, where="states.particles")
+        assert states.log_weights is not None, "states.log_weights is None"
         assert states.log_weights.shape[0] == len(obs_times)
+        assert_finite(states.log_weights, where="states.log_weights")
     else:
-        assert_tree_all_finite(
-            {"mean": states.mean, "chol_cov": states.chol_cov},
-            where="Gaussian smoother states",
-        )
+        assert states.mean is not None, "states.mean is None"
         assert states.mean.shape[0] == len(obs_times)
+        assert_finite(states.mean, where="states.mean")
+        assert states.chol_cov is not None, "states.chol_cov is None"
         assert states.chol_cov.shape[0] == len(obs_times)
+        assert_finite(states.chol_cov, where="states.chol_cov")
         if isinstance(smoother_config, EnRTSSmootherConfig):
-            assert_tree_all_finite(
-                {
-                    "ensemble": states.ensemble,
-                    "predicted_ensemble": states.predicted_ensemble,
-                },
-                where="EnRTS smoother states",
+            assert_finite(
+                states.ensemble,
+                (len(obs_times), smoother_config.n_particles, dynamics.state_dim),
+                where="states.ensemble",
             )
-            assert states.ensemble.shape == (
-                len(obs_times),
-                smoother_config.n_particles,
-                dynamics.state_dim,
-            )
+            assert_finite(states.predicted_ensemble, where="EnRTS predicted_ensemble")
 
 
 def test_enrts_smoother_handler_records_gaussian_outputs():
@@ -182,13 +170,11 @@ def test_enrts_smoother_handler_records_gaussian_outputs():
         "f_smoothed_states_cov_diag",
         "f_smoothed_states_chol_cov",
         where="EnRTS smoother trace",
-    )
-    assert tr["f_smoothed_states_mean"]["value"].shape == (len(obs_times), 2)
-    assert tr["f_smoothed_states_cov_diag"]["value"].shape == (len(obs_times), 2)
-    assert tr["f_smoothed_states_chol_cov"]["value"].shape == (
-        len(obs_times),
-        2,
-        2,
+        expected_shapes={
+            "f_smoothed_states_mean": (len(obs_times), 2),
+            "f_smoothed_states_cov_diag": (len(obs_times), 2),
+            "f_smoothed_states_chol_cov": (len(obs_times), 2, 2),
+        },
     )
 
 
@@ -216,18 +202,25 @@ def test_predictive_smoother_discretetimesimulator_shapes():
                 predict_times=predict_times,
             )
 
-    assert samples["f_predicted_states"].shape == (2, 2, len(predict_times), 2)
-    assert samples["f_predicted_times"].shape == (2, 2, len(predict_times))
-    assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 2)
-    assert samples["f_smoothed_states_cov_diag"].shape == (2, len(obs_times), 2)
-    assert_tree_all_finite(
-        {
-            "predicted_states": samples["f_predicted_states"],
-            "predicted_times": samples["f_predicted_times"],
-            "smoothed_states_mean": samples["f_smoothed_states_mean"],
-            "smoothed_states_cov_diag": samples["f_smoothed_states_cov_diag"],
-        },
-        where="predictive discrete smoother samples",
+    assert_finite(
+        samples["f_predicted_states"],
+        (2, 2, len(predict_times), 2),
+        where="samples['f_predicted_states']",
+    )
+    assert_finite(
+        samples["f_predicted_times"],
+        (2, 2, len(predict_times)),
+        where="samples['f_predicted_times']",
+    )
+    assert_finite(
+        samples["f_smoothed_states_mean"],
+        (2, len(obs_times), 2),
+        where="samples['f_smoothed_states_mean']",
+    )
+    assert_finite(
+        samples["f_smoothed_states_cov_diag"],
+        (2, len(obs_times), 2),
+        where="samples['f_smoothed_states_cov_diag']",
     )
     x0_keys = [k for k in samples if k.endswith("_x_0")]
     assert "f_1_x_0" in x0_keys
@@ -258,16 +251,20 @@ def test_predictive_smoother_odesimulator_shapes():
                 ctrl_values=ctrl_values,
             )
 
-    assert samples["f_predicted_states"].shape == (2, 2, len(predict_times), 1)
-    assert samples["f_predicted_times"].shape == (2, 2, len(predict_times))
-    assert samples["f_smoothed_states_mean"].shape == (2, len(obs_times), 1)
-    assert_tree_all_finite(
-        {
-            "predicted_states": samples["f_predicted_states"],
-            "predicted_times": samples["f_predicted_times"],
-            "smoothed_states_mean": samples["f_smoothed_states_mean"],
-        },
-        where="predictive ODE smoother samples",
+    assert_finite(
+        samples["f_predicted_states"],
+        (2, 2, len(predict_times), 1),
+        where="samples['f_predicted_states']",
+    )
+    assert_finite(
+        samples["f_predicted_times"],
+        (2, 2, len(predict_times)),
+        where="samples['f_predicted_times']",
+    )
+    assert_finite(
+        samples["f_smoothed_states_mean"],
+        (2, len(obs_times), 1),
+        where="samples['f_smoothed_states_mean']",
     )
 
 
@@ -374,13 +371,16 @@ def test_predictive_smoother_cuthbert_pf_backward_methods_and_override(
                 predict_times=predict_times,
             )
 
-    assert samples["f_smoothed_particles"].shape[0] == 1
-    assert samples["f_smoothed_particles"].shape[1] == len(obs_times)
-    assert samples["f_smoothed_particles"].shape[2] == 16
-    assert samples["f_smoothed_log_weights"].shape[0] == 1
-    assert samples["f_smoothed_log_weights"].shape[1] == len(obs_times)
-    assert samples["f_smoothed_log_weights"].shape[2] == 16
-    assert jnp.all(jnp.isfinite(samples["f_smoothed_log_weights"]))
+    assert_finite(
+        samples["f_smoothed_particles"],
+        (1, len(obs_times), 16, 2),
+        where="smoothed particles",
+    )
+    assert_finite(
+        samples["f_smoothed_log_weights"],
+        (1, len(obs_times), 16),
+        where="smoothed log weights",
+    )
 
 
 def test_pf_smoother_mcmc_config_exposes_step_count():
@@ -566,8 +566,8 @@ def test_smoother_plate_batched_loglik_shape(smoother_config):
         tr,
         "f_marginal_loglik",
         where="plate smoother trace",
+        expected_shapes={"f_marginal_loglik": (m,)},
     )
-    assert tr["f_marginal_loglik"]["value"].shape == (m,)
 
 
 def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout():
@@ -591,10 +591,12 @@ def test_smoother_plate_batched_continuous_initial_condition_discretized_rollout
         "f_predicted_times",
         "f_predicted_states",
         where="discretized plate smoother trace",
+        expected_shapes={
+            "f_marginal_loglik": (3,),
+            "f_predicted_times": (3, 1, len(predict_times)),
+            "f_predicted_states": (3, 1, len(predict_times), 2),
+        },
     )
-    assert tr["f_marginal_loglik"]["value"].shape == (3,)
-    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
 
 
 def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
@@ -617,10 +619,12 @@ def test_smoother_plate_batched_continuous_initial_condition_ct_rollout():
         "f_predicted_times",
         "f_predicted_states",
         where="continuous plate smoother trace",
+        expected_shapes={
+            "f_marginal_loglik": (3,),
+            "f_predicted_times": (3, 1, len(predict_times)),
+            "f_predicted_states": (3, 1, len(predict_times), 2),
+        },
     )
-    assert tr["f_marginal_loglik"]["value"].shape == (3,)
-    assert tr["f_predicted_times"]["value"].shape == (3, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape == (3, 1, len(predict_times), 2)
 
 
 def _explicit_rollout_metadata_model(predict_times=None):
