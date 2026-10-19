@@ -379,7 +379,6 @@ def test_plated_hmm_condition_defers_numpyro_sites():
                     obs_values=obs_values,
                 )
 
-    assert isinstance(result, dsx.ConditionedResult)
     assert result.marginal_loglik is not None
     assert result.marginal_loglik.shape == (2,)
     assert isinstance(result.states, jax.Array)

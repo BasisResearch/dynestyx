@@ -84,10 +84,8 @@ def test_plated_condition_returns_backend_filter_states():
                 obs_values=jnp.stack([obs_values, obs_values]),
             )
 
-    assert isinstance(result, dsx.ConditionedResult)
     assert result.marginal_loglik is not None
     assert result.marginal_loglik.shape == (2,)
-    assert isinstance(unplated_result, dsx.ConditionedResult)
     assert type(result.states) is type(unplated_result.states)
     assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
 
@@ -134,7 +132,6 @@ def test_infer_optax_mle():
             result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
-        assert isinstance(result, dsx.ConditionedResult)
         assert result.marginal_loglik is not None
         return -result.marginal_loglik
 

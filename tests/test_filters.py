@@ -663,8 +663,6 @@ def test_cuthbert_enkf_sparse_h_matches_dense_h():
             "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
         )
 
-    assert isinstance(result_dense, dsx.ConditionedResult)
-    assert isinstance(result_sparse, dsx.ConditionedResult)
     assert result_dense.marginal_loglik is not None
     assert result_sparse.marginal_loglik is not None
     assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
@@ -728,8 +726,7 @@ def test_cuthbert_enkf_filtered_dists_are_low_rank_and_samplable():
             "f", dynamics, obs_times=obs_times, obs_values=obs_values
         )
 
-    assert isinstance(result, dsx.ConditionedResult)
-    ensemble = getattr(result.states, "ensemble")
+    ensemble = result.ensemble
     assert result.dists is not None
     assert len(result.dists) == len(obs_times)
     for t, d in enumerate(result.dists):
@@ -803,8 +800,6 @@ def test_kf_sparse_h_matches_dense_h_cd_dynamax():
         result_sparse = dsx.condition(
             "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
         )
-    assert isinstance(result_dense, dsx.ConditionedResult)
-    assert isinstance(result_sparse, dsx.ConditionedResult)
     assert result_dense.marginal_loglik is not None
     assert result_sparse.marginal_loglik is not None
     assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
@@ -833,8 +828,6 @@ def test_ekf_warns_on_sparse_observation_matrix_but_still_works():
             result_sparse = dsx.condition(
                 "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
             )
-    assert isinstance(result_dense, dsx.ConditionedResult)
-    assert isinstance(result_sparse, dsx.ConditionedResult)
     assert result_dense.marginal_loglik is not None
     assert result_sparse.marginal_loglik is not None
     assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)
@@ -865,8 +858,6 @@ def test_ekf_warns_on_sparse_observation_matrix_but_still_works_cd_dynamax():
             result_sparse = dsx.condition(
                 "f", dynamics_sparse, obs_times=obs_times, obs_values=obs_values
             )
-    assert isinstance(result_dense, dsx.ConditionedResult)
-    assert isinstance(result_sparse, dsx.ConditionedResult)
     assert result_dense.marginal_loglik is not None
     assert result_sparse.marginal_loglik is not None
     assert jnp.allclose(result_dense.marginal_loglik, result_sparse.marginal_loglik)

@@ -2,7 +2,8 @@
 
 import dataclasses
 from collections.abc import Callable
-from typing import Any, ClassVar, Protocol, Self, runtime_checkable
+from functools import cached_property
+from typing import Any, ClassVar, Never, Protocol, Self, cast, runtime_checkable
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -19,11 +20,230 @@ class FunctionOfTime(Protocol):
         raise NotImplementedError()
 
 
-class Result:
-    """Common base for outputs produced by dynestyx handlers.
+class FilterModelInputs(Protocol):
+    """Observation-aligned model inputs retained by a filter backend."""
 
-    Narrow to a concrete result class with ``isinstance`` to access its fields.
+    @property
+    def time(self) -> Real[Array, "..."]:
+        """Times at which observations are assimilated."""
+        ...
+
+    @property
+    def u(self) -> Real[Array, "..."]:
+        """Controls used to evaluate the observation model."""
+        ...
+
+
+class Result:
+    """Typed interface for outputs produced by dynestyx handlers.
+
+    Unsupported properties raise ``NotImplementedError``. Supported fields may
+    be ``None`` when their handler did not record a value. Concrete results
+    retain their constructor arguments and stored dataclass fields.
     """
+
+    def _unsupported_property(self, name: str) -> Never:
+        raise NotImplementedError(f"{type(self).__name__} does not support {name!r}.")
+
+    # Allow EvaluationResult's default factory to install its stored value.
+    @cached_property
+    def observation_scores(self) -> dict[str, Real[Array, "..."]]:
+        """Scores computed by an evaluation handler."""
+        return self._unsupported_property("observation_scores")
+
+    @property
+    def marginal_loglik(self) -> Real[Array, "*plate"] | None:
+        """Marginal observation log likelihood."""
+        return self._unsupported_property("marginal_loglik")
+
+    @property
+    def times(self) -> Real[Array, "..."] | None:
+        """Inference or simulation times."""
+        return self._unsupported_property("times")
+
+    @property
+    def states(self) -> object:
+        """Raw backend inference states or simulated state arrays."""
+        return self._unsupported_property("states")
+
+    @property
+    def dists(self) -> list | None:
+        """Time-major posterior distributions."""
+        return self._unsupported_property("dists")
+
+    @property
+    def predicted_observations(self) -> object:
+        """Observation predictions produced by the selected handler."""
+        return self._unsupported_property("predicted_observations")
+
+    @property
+    def evaluation_result(self) -> "EvaluationResult | None":
+        """Evaluation outputs attached to a conditioning result."""
+        return self._unsupported_property("evaluation_result")
+
+    @property
+    def joint_log_prob(self) -> Real[Array, "*plate"] | None:
+        """Joint log density of a reconstructed latent path and observations."""
+        return self._unsupported_property("joint_log_prob")
+
+    @property
+    def state_path_params(
+        self,
+    ) -> Real[Array, "*state_path_param_shape"] | list[Real[Array, "..."]] | None:
+        """Free parameters used to construct a latent state path."""
+        return self._unsupported_property("state_path_params")
+
+    @property
+    def state_path_param_times(
+        self,
+    ) -> (
+        Real[Array, "*state_path_param_time_plate state_path_param_time"]
+        | list[Real[Array, "..."]]
+        | None
+    ):
+        """Times associated with latent path parameters."""
+        return self._unsupported_property("state_path_param_times")
+
+    @property
+    def state_path_param_coordinate_indices(
+        self,
+    ) -> (
+        Int[Array, "*state_path_param_plate n_state_path_params"]
+        | list[Int[Array, "..."]]
+        | None
+    ):
+        """State coordinates associated with latent path parameters."""
+        return self._unsupported_property("state_path_param_coordinate_indices")
+
+    @property
+    def state_path(self) -> Real[Array, "*state_path_shape"] | None:
+        """Reconstructed latent state path."""
+        return self._unsupported_property("state_path")
+
+    @property
+    def state_path_times(
+        self,
+    ) -> Real[Array, "*state_path_time_plate state_path_time"] | None:
+        """Times of the reconstructed latent state path."""
+        return self._unsupported_property("state_path_times")
+
+    @property
+    def missing_obs_values(
+        self,
+    ) -> Real[Array, "*missing_obs_shape"] | list[Real[Array, "..."]] | None:
+        """Latent values used to fill missing observation entries."""
+        return self._unsupported_property("missing_obs_values")
+
+    @property
+    def missing_obs_times(
+        self,
+    ) -> (
+        Real[Array, "*missing_obs_time_plate n_missing_obs"]
+        | list[Real[Array, "..."]]
+        | None
+    ):
+        """Times associated with missing observation entries."""
+        return self._unsupported_property("missing_obs_times")
+
+    @property
+    def missing_obs_coordinate_indices(
+        self,
+    ) -> (
+        Int[Array, "*missing_obs_plate n_missing_obs"] | list[Int[Array, "..."]] | None
+    ):
+        """Observation coordinates associated with missing entries."""
+        return self._unsupported_property("missing_obs_coordinate_indices")
+
+    @property
+    def completed_obs_values(self) -> Real[Array, "*completed_obs_shape"] | None:
+        """Observation array after missing entries have been filled."""
+        return self._unsupported_property("completed_obs_values")
+
+    @property
+    def state_dists(self) -> list | None:
+        """Distributions along a reconstructed latent state path."""
+        return self._unsupported_property("state_dists")
+
+    @property
+    def x_0(
+        self,
+    ) -> (
+        Real[Array, "*plate n_simulations state_dim"]
+        | Real[Array, "*plate n_simulations"]
+        | None
+    ):
+        """Simulated initial states."""
+        return self._unsupported_property("x_0")
+
+    @property
+    def observations(
+        self,
+    ) -> (
+        Real[Array, "*plate n_simulations obs_time observation_dim"]
+        | Real[Array, "*plate n_simulations obs_time"]
+        | None
+    ):
+        """Simulated observation paths."""
+        return self._unsupported_property("observations")
+
+    @property
+    def obs_times(self) -> Real[Array, "*plate n_simulations obs_time"] | None:
+        """Times of simulated observations."""
+        return self._unsupported_property("obs_times")
+
+    @property
+    def controls(
+        self,
+    ) -> (
+        Real[Array, "*plate n_simulations ctrl_time control_dim"]
+        | Real[Array, "*plate n_simulations ctrl_time"]
+        | None
+    ):
+        """Controls recorded during simulation."""
+        return self._unsupported_property("controls")
+
+    @property
+    def ctrl_times(self) -> Real[Array, "*plate n_simulations ctrl_time"] | None:
+        """Times of recorded controls."""
+        return self._unsupported_property("ctrl_times")
+
+    @property
+    def predicted_times(
+        self,
+    ) -> Real[Array, "*plate n_simulations predict_time"] | None:
+        """Times used for posterior predictive simulation."""
+        return self._unsupported_property("predicted_times")
+
+    @property
+    def predicted_states(
+        self,
+    ) -> (
+        Real[Array, "*plate n_simulations predict_time state_dim"]
+        | Real[Array, "*plate n_simulations predict_time"]
+        | None
+    ):
+        """Posterior predictive state paths."""
+        return self._unsupported_property("predicted_states")
+
+    @property
+    def log_normalizing_constant(self) -> Real[Array, "*plate time"]:
+        """Cumulative log normalizing constants at the observation times."""
+        return self._unsupported_property("log_normalizing_constant")
+
+    @property
+    def predicted_ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """State ensembles before assimilating each observation."""
+        return self._unsupported_property("predicted_ensemble")
+
+    @property
+    def ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """Filtered state ensembles after assimilating each observation."""
+        return self._unsupported_property("ensemble")
+
+    @property
+    def model_inputs(self) -> FilterModelInputs:
+        """Observation-aligned inputs retained by the filter backend."""
+        return self._unsupported_property("model_inputs")
 
 
 @dataclasses.dataclass
@@ -67,6 +287,43 @@ class ConditionedResult(Result):
     _register_numpyro_sites: Callable[[str], None] | None = dataclasses.field(
         default=None, repr=False
     )
+
+    def _backend_value(self, name: str) -> object:
+        value = getattr(self.states, name, None)
+        if value is None:
+            raise NotImplementedError(
+                f"{type(self).__name__}.{name} is unavailable: the backend "
+                "does not provide it or did not record it."
+            )
+        return value
+
+    @property
+    def log_normalizing_constant(self) -> Real[Array, "*plate time"]:
+        """Cumulative log normalizing constants recorded by the filter backend."""
+        return cast(
+            Real[Array, "*plate time"], self._backend_value("log_normalizing_constant")
+        )
+
+    @property
+    def predicted_ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """State ensembles before assimilating each observation, when recorded."""
+        return cast(
+            Real[Array, "*plate time n_members state_dim"],
+            self._backend_value("predicted_ensemble"),
+        )
+
+    @property
+    def ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """Filtered state ensembles after assimilating each observation."""
+        return cast(
+            Real[Array, "*plate time n_members state_dim"],
+            self._backend_value("ensemble"),
+        )
+
+    @property
+    def model_inputs(self) -> FilterModelInputs:
+        """Observation-aligned inputs recorded by the filter backend."""
+        return cast(FilterModelInputs, self._backend_value("model_inputs"))
 
     def __call__(
         self, t: float | int | Real[Array, ""]

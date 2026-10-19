@@ -25,7 +25,6 @@ from dynestyx.inference.utils.plate_utils import (
     _stack_or_list_optional_member_values,
 )
 from dynestyx.observation_missingness import prepare_missing_observation_metadata
-from dynestyx.types import LatentStateResult
 
 
 def _make_discrete_dynamics():
@@ -839,7 +838,6 @@ def test_latent_path_builder_plated_odes_use_member_initial_condition_sites():
                     obs_values=obs_values,
                 )
 
-    assert isinstance(result, LatentStateResult)
     assert not isinstance(result.state_path_params, list)
     assert result.state_path_params is not None
     assert result.state_path_params.shape == (2, 1, 2)
@@ -1031,7 +1029,6 @@ def test_latent_path_builder_ragged_plate_metadata_is_not_broadcast():
                     obs_values=obs_values,
                 )
 
-    assert isinstance(result, LatentStateResult)
     assert isinstance(result.state_path_params, list)
     assert isinstance(result.state_path_param_times, list)
     assert isinstance(result.state_path_param_coordinate_indices, list)

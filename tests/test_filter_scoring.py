@@ -921,7 +921,6 @@ def test_condition_returns_attached_evaluation_result_without_registering_sites(
                     ctrl_values=ctrl_values,
                 )
 
-    assert isinstance(result, dsx.ConditionedResult)
     assert result.evaluation_result is not None
     assert "gaussian_log_prob" in result.evaluation_result.observation_scores
     assert "f_gaussian_log_prob" not in tr
@@ -951,7 +950,6 @@ def test_evaluation_composes_with_filter_and_simulator_registration():
                         predict_times=predict_times,
                     )
 
-    assert isinstance(result, dsx.ConditionedResult)
     assert result.evaluation_result is not None
     assert "f_gaussian_log_prob" in tr
     assert "f_marginal_log_likelihood" in tr
@@ -1142,7 +1140,6 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
                     ctrl_values=ctrl_values,
                 )
 
-    assert isinstance(result, dsx.ConditionedResult)
     predictions = result.predicted_observations
     assert isinstance(predictions, PredictedObservationOutputs)
     assert predictions.ensemble is not None
@@ -1155,8 +1152,8 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
     assert predictions.mean.shape == (len(obs_times), 1)
     assert predictions.cov.shape == (len(obs_times), 1, 1)
 
-    state_forecasts = getattr(result.states, "predicted_ensemble")
-    model_inputs = getattr(result.states, "model_inputs")
+    state_forecasts = result.predicted_ensemble
+    model_inputs = result.model_inputs
     expected_ensemble = jax.vmap(
         lambda ensemble_t, control_t, time_t: jax.vmap(
             lambda state: dynamics.observation_model(state, control_t, time_t).mean
@@ -1206,7 +1203,7 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
     assert scores["observation_wise_crps"].shape == (len(obs_times), 1)
     assert scores["energy_score"].shape == (len(obs_times), 1)
 
-    cumulative_loglik = getattr(result.states, "log_normalizing_constant")
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
     )
@@ -1253,7 +1250,6 @@ def test_cuthbert_enkf_energy_auto_samples_seeded_observation_noise():
                 ctrl_values=ctrl_values,
             )
 
-    assert isinstance(result, dsx.ConditionedResult)
     predictions = result.predicted_observations
     assert isinstance(predictions, PredictedObservationOutputs)
     assert predictions.ensemble is not None
@@ -1379,7 +1375,7 @@ def test_cuthbert_enkf_plate_batched_scores_preserve_member_and_time_axes():
     )
     assert_tree_all_finite(scores, where="plate-batched Cuthbert EnKF scores")
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate(
             [jnp.zeros_like(cumulative_loglik[..., :1]), cumulative_loglik],

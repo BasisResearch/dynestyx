@@ -213,7 +213,7 @@ def sample(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-) -> Result | None:
+) -> Result:
     """
     Samples from a dynamical model. This is the main primitive of dynestyx.
 
@@ -272,7 +272,7 @@ def condition(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-) -> Result | None:
+) -> Result:
     """Run inference on a dynamical model without registering numpyro sites.
 
     This is the NumPyro-free entry point. An active ``Filter`` or ``Smoother``
@@ -561,7 +561,7 @@ class plate(ObjectInterpretation):
         return [_DynestyxStackKind.PLATE, *fwd()]
 
     @implements(_condition_intp)
-    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Result | None:
+    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Result:
         """Effectful interpretation for the `sample` primitive in a plate.
 
         Appends metadata to the argument stack and passes forward.

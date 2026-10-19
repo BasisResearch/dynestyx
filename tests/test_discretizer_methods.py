@@ -293,7 +293,6 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
                         obs_values=obs_values,
                     )
 
-    assert isinstance(result, dsx.ConditionedResult)
     predictions = result.predicted_observations
     assert result.evaluation_result is not None
     scores = result.evaluation_result.observation_scores
@@ -313,7 +312,7 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
     assert jnp.all(jnp.isfinite(scores["gaussian_log_prob"]))
     assert jnp.all(jnp.isfinite(scores["energy_score"]))
 
-    cumulative_loglik = getattr(result.states, "log_normalizing_constant")
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
     )
