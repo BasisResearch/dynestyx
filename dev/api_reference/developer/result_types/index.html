@@ -5262,10 +5262,76 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#dynestyx.types.Result" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynestyx.types.ConditionedResult" class="md-nav__link">
     <span class="md-ellipsis">
       
         ConditionedResult
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.types.ConditionedResult.ensemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ensemble
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.types.ConditionedResult.log_normalizing_constant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        log_normalizing_constant
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.types.ConditionedResult.model_inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        model_inputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.types.ConditionedResult.predicted_ensemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        predicted_ensemble
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynestyx.types.LatentStateResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LatentStateResult
       
     </span>
   </a>
@@ -5572,7 +5638,65 @@
 
 <h1 id="result-types">Result Types<a class="headerlink" href="#result-types" title="Permanent link">&para;</a></h1>
 <p>The standalone and handler-based APIs return dataclasses.</p>
+<p><code>dynestyx.Result</code> provides typed properties for conditioning, latent-path,
+simulation, and evaluation outputs. <code>sample</code> and <code>condition</code> return this common
+interface. Unsupported properties raise <code>NotImplementedError</code>; supported fields
+can be <code>None</code> when their handler did not record a value.</p>
+<p>Filter diagnostics are available directly as <code>result.log_normalizing_constant</code>,
+<code>result.ensemble</code>, <code>result.predicted_ensemble</code>, and <code>result.model_inputs</code> when the
+backend records them. <code>.states</code> retains the original backend object. For example:</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">condition</span><span class="p">(</span><span class="s2">"trajectory"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">values</span><span class="p">)</span>
 
+<span class="c1"># Requires a backend that records cumulative log normalizing constants.</span>
+<span class="n">cumulative_loglik</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">log_normalizing_constant</span>
+</code></pre></div>
+<p><code>StructuredSimulatedResult</code> is an explicit conversion of a simulation result,
+not a direct handler result.</p>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynestyx.types.Result"></a>
+    <div class="doc doc-contents first">
+
+
+
+        <p>Typed interface for outputs produced by dynestyx handlers.</p>
+<p>Unsupported properties raise <code>NotImplementedError</code>. Supported fields may
+be <code>None</code> when their handler did not record a value. Concrete results
+retain their constructor arguments and stored dataclass fields.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -5580,6 +5704,8 @@
 
 <a id="dynestyx.types.ConditionedResult"></a>
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.types.Result" href="#dynestyx.types.Result">Result</a></code></p>
 
 
 
@@ -5593,6 +5719,156 @@ distributions are time-major:
 <code>dists[i]</code> corresponds to <code>times[..., i]</code>. Leading axes on <code>times</code>
 are optional plate axes, while each distribution may carry the matching
 plate axes in its batch shape.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynestyx.types.ConditionedResult.ensemble" class="doc doc-heading">
+            <code class=" language-python"><span class="n">ensemble</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*plate time n_members state_dim'</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#dynestyx.types.ConditionedResult.ensemble" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Filtered state ensembles after assimilating each observation.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynestyx.types.ConditionedResult.log_normalizing_constant" class="doc doc-heading">
+            <code class=" language-python"><span class="n">log_normalizing_constant</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*plate time'</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#dynestyx.types.ConditionedResult.log_normalizing_constant" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Cumulative log normalizing constants recorded by the filter backend.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynestyx.types.ConditionedResult.model_inputs" class="doc doc-heading">
+            <code class=" language-python"><span class="n">model_inputs</span><span class="p">:</span> <span class="n">FilterModelInputs</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#dynestyx.types.ConditionedResult.model_inputs" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Observation-aligned inputs recorded by the filter backend.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynestyx.types.ConditionedResult.predicted_ensemble" class="doc doc-heading">
+            <code class=" language-python"><span class="n">predicted_ensemble</span><span class="p">:</span> <span class="n">Real</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="s1">'*plate time n_members state_dim'</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#dynestyx.types.ConditionedResult.predicted_ensemble" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>State ensembles before assimilating each observation, when recorded.</p>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynestyx.types.LatentStateResult"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.types.Result" href="#dynestyx.types.Result">Result</a></code></p>
+
+
+
+        <p>Result of latent-state construction / scoring without NumPyro side effects.</p>
+<p>Let <code>z = state_path_params</code> denote the free variables used to
+parameterize the latent trajectory, and let</p>
+<p><code>x = state_path = g(z)</code></p>
+<p>denote the full reconstructed latent state path used by the probabilistic
+model. The joint density is evaluated as <code>log p(x, y)</code> after
+reconstructing <code>x</code> from <code>z</code>.</p>
+<p>In simple discrete models these may match exactly. In ODE models, or when
+exact observations leave only a subset of state coordinates free, they
+generally differ.</p>
+<p>When explicit missing-observation augmentation is active, the result also
+carries a second latent block:</p>
+<ul>
+<li><code>missing_obs_values</code> are the free coordinates used to fill missing
+  entries of <code>obs_values</code>,</li>
+<li><code>completed_obs_values</code> is the dense observation array after those
+  missing entries are filled back in.</li>
+</ul>
+<p>Under plates, latent-coordinate fields are stacked when all members have
+the same shape. Ragged values are returned as a flat list in plate order,
+with the rightmost plate index varying fastest.</p>
 
 
 
@@ -5629,6 +5905,8 @@ plate axes in its batch shape.</p>
 
 <a id="dynestyx.types.EvaluationResult"></a>
     <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynestyx.types.Result" href="#dynestyx.types.Result">Result</a></code></p>
 
 
 
@@ -5673,7 +5951,7 @@ side-effect free while <code>dsx.sample</code> can register the same outputs lat
 <a id="dynestyx.types.SimulatedResult"></a>
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="equinox.Module">Module</span></code></p>
+              Bases: <code><span title="equinox.Module">Module</span></code>, <code><a class="autorefs autorefs-internal" title="dynestyx.types.Result" href="#dynestyx.types.Result">Result</a></code></p>
 
 
 
