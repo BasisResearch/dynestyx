@@ -17,7 +17,7 @@ from dynestyx.models import (
     ImExDrift,
 )
 from dynestyx.types import as_scalar_time_array
-from dynestyx.utils import _build_control_path_eval
+from dynestyx.utils.controls import _build_control_path_eval
 
 
 def default_ode_diffeqsolve_settings() -> dict[str, Any]:
