@@ -1,5 +1,7 @@
 """Register NumPyro sites for filter and smoother outputs."""
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpyro
@@ -10,12 +12,16 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeConfigs,
     HMMConfig,
     PFConfig,
+    RBPFConfig,
     _config_to_record_kwargs,
 )
 from dynestyx.inference.configs.smoother import (
     BaseSmootherConfig,
     PFSmootherConfig,
     _config_to_smoother_record_kwargs,
+)
+from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+    SLDSFilterPosterior,
 )
 from dynestyx.inference.integrations.utils import covariance_from_cholesky
 from dynestyx.utils.recording import _should_record_field
@@ -54,6 +60,10 @@ def register_filter_sites(
 
     if isinstance(filter_config, tuple(ContinuousTimeConfigs)):
         _add_continuous_filter_sites(name, states, record_kwargs)
+    elif isinstance(filter_config, RBPFConfig):
+        _add_cd_dynamax_rbpf_sites(
+            name, cast(SLDSFilterPosterior, states), record_kwargs
+        )
     elif isinstance(filter_config, PFConfig):
         _add_cuthbert_pf_sites(name, states, record_kwargs)
     else:
@@ -239,6 +249,48 @@ def _add_cuthbert_pf_sites(name: str, states, record_kwargs: dict) -> None:
     if add_filtered_states_cov_diag:
         diag_cov = jnp.diagonal(filtered_covariances, axis1=1, axis2=2)
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+
+
+def _add_cd_dynamax_rbpf_sites(
+    name: str, states: SLDSFilterPosterior, record_kwargs: dict
+) -> None:
+    """Register requested summaries from a cd-dynamax SLDS RBPF result."""
+    max_elems = record_kwargs["record_max_elems"]
+    means = states.filtered_means
+    covs = states.filtered_covariances
+    particles = states.particles
+    log_weights = states.log_weights
+    regime_probs = states.filtered_regime_probs
+
+    if _should_record_field(
+        record_kwargs["record_filtered_states_mean"], means.shape, max_elems
+    ):
+        numpyro.deterministic(f"{name}_filtered_states_mean", means)
+    if _should_record_field(
+        record_kwargs["record_filtered_states_cov"], covs.shape, max_elems
+    ):
+        numpyro.deterministic(f"{name}_filtered_states_cov", covs)
+    if _should_record_field(
+        record_kwargs["record_filtered_states_cov_diag"],
+        covs.shape[:-1],
+        max_elems,
+    ):
+        diag_cov = jnp.diagonal(covs, axis1=-2, axis2=-1)
+        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+    if _should_record_field(
+        record_kwargs["record_filtered_particles"], particles.shape, max_elems
+    ):
+        numpyro.deterministic(f"{name}_filtered_particles", particles)
+    if _should_record_field(
+        record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
+    ):
+        numpyro.deterministic(f"{name}_filtered_log_weights", log_weights)
+    if _should_record_field(
+        record_kwargs["record_filtered_regime_probs"],
+        regime_probs.shape,
+        max_elems,
+    ):
+        numpyro.deterministic(f"{name}_filtered_regime_probs", regime_probs)
 
 
 def _add_gaussian_filter_sites(

@@ -8,10 +8,15 @@ import warnings
 from collections.abc import Callable
 from typing import NamedTuple, cast
 
+import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
+from dynestyx.distributions import (
+    MixedStateDistribution,
+    _extract_and_validate_mixed_state,
+)
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.covariances import (
     Covariance,
@@ -240,6 +245,91 @@ class LinearGaussianStateEvolution(DiscreteTimeStateEvolution):
             loc = loc + jnp.dot(B, u)
 
         return dist.MultivariateNormal(loc=loc, covariance_matrix=cov)
+
+
+class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
+    """
+    Switching linear-Gaussian discrete-time transition for SLDS models.
+
+    z_t | z_{t-1} ~ Categorical(P[z_{t-1}]) ## discrete switching latent
+    x_t | x_{t-1}, z_t ~ Normal(A[z_t] x_{t-1} + B[z_t] u_t + b[z_t], Q[z_t]) ## continuous linear dynamics latent
+    state = [z, x_0, ..., x_{D-1}]
+
+    The full simulator state is represented as [z, x...], where z is a
+    discrete regime encoded as the first scalar entry and `x` is the continuous
+    latent state.
+    """
+
+    transition_matrix: Float[Array, "num_regimes num_regimes"]
+    A: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"]
+    cov: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"]
+    B: Float[Array, "num_regimes continuous_state_dim control_dim"] | None = None
+    bias: Float[Array, "num_regimes continuous_state_dim"] | None = None
+
+    rounding: bool = False
+
+    def __init__(
+        self,
+        transition_matrix: Float[Array, "num_regimes num_regimes"],
+        A: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"],
+        cov: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"],
+        B: Float[Array, "num_regimes continuous_state_dim control_dim"] | None = None,
+        bias: Float[Array, "num_regimes continuous_state_dim"] | None = None,
+        *,
+        rounding: bool = False,
+    ) -> None:
+        """
+        Args:
+            transition_matrix: Regime transition matrix with shape `(K, K)`.
+            A: Regime-specific dynamics matrices with shape `(K, D, D)`.
+            cov: Regime-specific process covariances with shape `(K, D, D)`.
+            B: Optional regime-specific control matrices with shape `(K, D, U)`.
+            bias: Optional regime-specific dynamics biases with shape `(K, D)`.
+            rounding: Round the mixed state discrete component to the nearest
+                integer (ties to even) before validation. Defaults to False.
+                Nonfinite or out-of-range results raise an error.
+        """
+        self.transition_matrix = transition_matrix
+        self.A = A
+        self.cov = cov
+        self.B = B
+        self.bias = bias
+        self.rounding = rounding
+
+    @property
+    def num_regimes(self) -> int:
+        return int(self.transition_matrix.shape[0])
+
+    @property
+    def continuous_state_dim(self) -> int:
+        return int(self.A.shape[-1])
+
+    def __call__(
+        self,
+        x: Real[Array, " mixed_state_dim"],
+        u: Real[Array, " control_dim"] | None,
+        t_now: float | int | Real[Array, ""],
+        t_next: float | int | Real[Array, ""],
+    ) -> MixedStateDistribution:
+        z, x_cont, valid = _extract_and_validate_mixed_state(
+            x, self.num_regimes, rounding=self.rounding
+        )
+        z = eqx.error_if(
+            z,
+            ~valid,
+            "Mixed state discrete component must be a finite integer in [0, num_categories).",
+        )
+        locs = jnp.einsum("kij,j->ki", self.A, x_cont)
+        if self.bias is not None:
+            locs = locs + self.bias
+        if self.B is not None and u is not None:
+            locs = locs + jnp.einsum("kij,j->ki", self.B, u)
+        return MixedStateDistribution(
+            categorical_probs=self.transition_matrix[z],
+            continuous_locs=locs,
+            continuous_covs=self.cov,
+            rounding=self.rounding,
+        )
 
 
 class GaussianStateEvolution(DiscreteTimeStateEvolution):

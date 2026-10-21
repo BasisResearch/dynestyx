@@ -3,6 +3,7 @@
 Structure anticipates future extension to LTI factories, Neural SDEs, etc.
 """
 
+from dynestyx.distributions import MixedStateDistribution
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
@@ -33,12 +34,14 @@ from dynestyx.models.observations import (
     GaussianObservation,
     LinearGaussianObservation,
     LinearGaussianObservationParams,
+    SwitchingLinearGaussianObservation,
 )
 from dynestyx.models.state_evolution import (
     DeterministicStateEvolution,
     GaussianStateEvolution,
     LinearGaussianParams,
     LinearGaussianStateEvolution,
+    SwitchingLinearGaussianStateEvolution,
 )
 
 __all__ = [
@@ -68,6 +71,9 @@ __all__ = [
     "LinearGaussianParams",
     "LinearGaussianStateEvolution",
     "ObservationControlAlignment",
+    "MixedStateDistribution",
+    "SwitchingLinearGaussianObservation",
+    "SwitchingLinearGaussianStateEvolution",
     "ObservationModel",
     "StochasticContinuousTimeStateEvolution",
     "LTI_continuous",
