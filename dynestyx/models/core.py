@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, dataclass_transform, runtime_checkable
 
 import equinox as eqx
 import jax
@@ -23,6 +23,7 @@ from dynestyx.models.checkers import (
     _validate_continuous_time_flag,
     _validate_discrete_state_evolution_output_shape,
     _validate_imex_potential_conflict,
+    _validate_initial_condition_shape,
     _validate_observation_dim,
     _validate_state_dim,
 )
@@ -117,6 +118,8 @@ class DynamicalModel(eqx.Module):
         initial_condition (numpyro.distributions.Distribution): Distribution over the initial state $p(x_0)$.
             Pass a NumPyro distribution instance (i.e., a `numpyro.distributions.Distribution` subclass). See the
             [NumPyro distributions API](https://num.pyro.ai/en/stable/distributions.html).
+            Non-categorical scalar initial conditions emit a ``FutureWarning``;
+            use a trailing coordinate axis even for a one-dimensional state.
         state_evolution (ContinuousTimeStateEvolution | DiscreteTimeStateEvolution | Callable): The state transition model.
             Use `ContinuousTimeStateEvolution` for SDEs or `DiscreteTimeStateEvolution` for discrete-time Markov
             transitions. A callable is also accepted (e.g., `lambda x, u, t_now, t_next: ...`), but class-based
@@ -229,6 +232,10 @@ class DynamicalModel(eqx.Module):
         _validate_state_dim(state_dim, inferred_state_dim)
         inferred_categorical_state = _is_categorical_distribution(initial_condition)
         _validate_categorical_state(categorical_state, inferred_categorical_state)
+        if not inferred_categorical_state:
+            _validate_initial_condition_shape(
+                initial_condition, allow_batch_shape=_inside_plate
+            )
         if control_dim is None:
             control_dim = 0
 
@@ -339,7 +346,12 @@ class DynamicalModel(eqx.Module):
         self.categorical_state = bool(inferred_categorical_state)
 
 
-class ContinuousTimeStateEvolution(eqx.Module):
+@dataclass_transform(frozen_default=True, field_specifiers=(eqx.field,))
+class _FrozenModule(eqx.Module):
+    """Expose Equinox's runtime immutability to static type checkers."""
+
+
+class ContinuousTimeStateEvolution(_FrozenModule):
     """
     Continuous-time state evolution via stochastic differential equations (SDEs).
 
@@ -426,10 +438,10 @@ class DeterministicContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
             raise ValueError(
                 "DeterministicContinuousTimeStateEvolution does not accept diffusion."
             )
-        self.drift = drift
-        self.potential = potential
-        self.use_negative_gradient = use_negative_gradient
-        self.diffusion = None
+        object.__setattr__(self, "drift", drift)
+        object.__setattr__(self, "potential", potential)
+        object.__setattr__(self, "use_negative_gradient", use_negative_gradient)
+        object.__setattr__(self, "diffusion", None)
 
 
 class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
@@ -457,10 +469,10 @@ class StochasticContinuousTimeStateEvolution(ContinuousTimeStateEvolution):
                 "StochasticContinuousTimeStateEvolution requires diffusion with "
                 "resolved bm_dim."
             )
-        self.drift = drift
-        self.potential = potential
-        self.use_negative_gradient = use_negative_gradient
-        self.diffusion = diffusion
+        object.__setattr__(self, "drift", drift)
+        object.__setattr__(self, "potential", potential)
+        object.__setattr__(self, "use_negative_gradient", use_negative_gradient)
+        object.__setattr__(self, "diffusion", diffusion)
 
     @property
     def bm_dim(self) -> int:

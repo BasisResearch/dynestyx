@@ -17,6 +17,7 @@ from cd_dynamax.dynamax.parameters import ParameterProperties
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
+    Covariance,
     DeterministicContinuousTimeStateEvolution,
     DynamicalModel,
     GaussianObservation,
@@ -25,6 +26,8 @@ from dynestyx.models import (
     LinearGaussianStateEvolution,
     StochasticContinuousTimeStateEvolution,
 )
+from dynestyx.models.covariances import covariance_matrix
+from dynestyx.utils.distributions import gaussian_moments
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
 
@@ -303,7 +306,9 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
         emission_weights=obs.H,
         emission_input_weights=D,
         emission_bias=d,
-        emission_cov=obs.R,
+        emission_cov=covariance_matrix(
+            cast(Covariance | jnp.ndarray, obs.R), dsx_model.observation_dim
+        ),
     )
 
 
@@ -370,16 +375,9 @@ def dsx_to_cd_dynamax(
             _NumpyroDistributionAdapter(ic) if isinstance(ic, dist.Distribution) else ic
         )
     else:
-        if isinstance(ic, dist.MultivariateNormal):
-            initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
-            initial_cov = squeeze_leading_singletons(ic.covariance_matrix, 2)
-        elif isinstance(ic, dist.Normal):
-            initial_mean = squeeze_leading_singletons(ic.loc, 1)  # type: ignore
-            initial_cov = squeeze_leading_singletons(jnp.square(ic.scale), 2)
-        else:
-            raise NotImplementedError(
-                f"Initial condition of type {type(ic)} is not supported yet."
-            )
+        initial_mean, initial_cov = gaussian_moments(ic, dsx_model.state_dim)
+        initial_mean = squeeze_leading_singletons(initial_mean, 1)
+        initial_cov = squeeze_leading_singletons(initial_cov, 2)
 
     ## Map observation model ##
     obs = dsx_model.observation_model
@@ -400,6 +398,9 @@ def dsx_to_cd_dynamax(
         # The guard above ensures the parameters are constant arrays.
         H_matrix = cast(jnp.ndarray, obs.H)
         D_matrix = None if obs.D is None else cast(jnp.ndarray, obs.D)
+        R_matrix = covariance_matrix(
+            cast(Covariance | jnp.ndarray, obs.R), dsx_model.observation_dim
+        )
 
         def emission_function(x, u, t):
             if x.ndim > 1:
@@ -415,7 +416,7 @@ def dsx_to_cd_dynamax(
             emission_distribution = _ConditionalDistributionAdapter(
                 lambda x=None, u=None, t=None: dist.MultivariateNormal(
                     loc=jnp.atleast_1d(jnp.asarray(emission_function(x, u, t))),
-                    covariance_matrix=jnp.atleast_2d(jnp.asarray(obs.R)),
+                    covariance_matrix=jnp.atleast_2d(R_matrix),
                 )
             )
 
@@ -430,7 +431,7 @@ def dsx_to_cd_dynamax(
                 "initial_mean": initial_mean,
                 "initial_cov": initial_cov,
                 "emission_function": emission_function,
-                "emission_cov": obs.R,  # type: ignore
+                "emission_cov": R_matrix,  # type: ignore
             }
     elif isinstance(obs, GaussianObservation):
         if uses_nonlinear_non_gaussian_api:
@@ -445,7 +446,7 @@ def dsx_to_cd_dynamax(
                 "initial_mean": initial_mean,
                 "initial_cov": initial_cov,
                 "emission_function": obs.h,
-                "emission_cov": obs.R,
+                "emission_cov": covariance_matrix(obs.R, dsx_model.observation_dim),
             }
     else:
         if not uses_nonlinear_non_gaussian_api:
@@ -531,21 +532,9 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             stacklevel=2,
         )
 
-    if isinstance(ic, dist.MultivariateNormal):
-        initial_mean = squeeze_leading_singletons(ic.loc, 1)
-        initial_covariance = squeeze_leading_singletons(ic.covariance_matrix, 2)
-    elif isinstance(ic, dist.Normal):
-        # dist.Normal: scalar Gaussian, treat as 1D state with variance scale^2.
-        initial_mean = jnp.atleast_1d(squeeze_leading_singletons(ic.loc, 1))
-        initial_covariance = jnp.atleast_2d(
-            squeeze_leading_singletons(jnp.square(ic.scale), 2)
-        )
-    else:
-        raise TypeError(
-            "KF, EKF, and UKF require a Gaussian initial condition "
-            "(MultivariateNormal or Normal) because they propagate mean and covariance. "
-            "For non-Gaussian initial conditions, use filter_type='pf' (particle filter)."
-        )
+    initial_mean, initial_covariance = gaussian_moments(ic, state_dim)
+    initial_mean = squeeze_leading_singletons(initial_mean, 1)
+    initial_covariance = squeeze_leading_singletons(initial_covariance, 2)
 
     # ----- Dynamics function -----
     if isinstance(evo, LinearGaussianStateEvolution):
@@ -617,7 +606,9 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         initial_mean=initial_mean,
         initial_covariance=initial_covariance,
         dynamics_function=dynamics_function,
-        dynamics_covariance=evo.cov,
+        dynamics_covariance=covariance_matrix(evo.cov, state_dim),
         emission_function=emission_function,
-        emission_covariance=obs.R,
+        emission_covariance=covariance_matrix(
+            cast(Covariance | jnp.ndarray, obs.R), dynamics.observation_dim
+        ),
     )

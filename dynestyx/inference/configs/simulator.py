@@ -9,7 +9,7 @@ import diffrax as dfx
 from jaxtyping import Array, Real
 
 from dynestyx.types import as_scalar_time_array
-from dynestyx.utils import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 
 @dataclasses.dataclass

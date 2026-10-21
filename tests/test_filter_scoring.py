@@ -31,13 +31,14 @@ from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
     compute_continuous_filter,
 )
 from dynestyx.inference.observation_predictions import (
+    PredictedObservationOutputs,
     _observation_noise_covariance_sequence,
     extract_filter_predictions,
 )
 from dynestyx.models.observations import GaussianObservation, LinearGaussianObservation
 from dynestyx.simulation import SDESimulator
 from dynestyx.simulation.discrete import DiscreteTimeSimulator
-from tests.test_utils import assert_tree_all_finite
+from tests.test_utils import assert_finite, assert_tree_all_finite
 
 TRUE_RHO = 1.25
 
@@ -1059,21 +1060,21 @@ def test_plate_batched_scoring_and_conditioned_result_outputs():
 
     assert result.predicted_observations is not None
     assert result.predicted_observations.mean is not None
-    assert result.predicted_observations.mean.shape == (
-        plate_size,
-        obs_times.shape[0],
-        1,
+    assert_finite(
+        result.predicted_observations.mean,
+        (plate_size, obs_times.shape[0], 1),
+        where="result.predicted_observations.mean",
     )
     assert result.evaluation_result is not None
-    assert result.evaluation_result.observation_scores["gaussian_log_prob"].shape == (
-        plate_size,
-        obs_times.shape[0],
-        1,
+    assert_finite(
+        result.evaluation_result.observation_scores["gaussian_log_prob"],
+        (plate_size, obs_times.shape[0], 1),
+        where="result.evaluation_result.observation_scores['gaussian_log_prob']",
     )
-    assert tr["f_observation_wise_crps"]["value"].shape == (
-        plate_size,
-        obs_times.shape[0],
-        1,
+    assert_finite(
+        tr["f_observation_wise_crps"]["value"],
+        (plate_size, obs_times.shape[0], 1),
+        where="tr['f_observation_wise_crps']['value']",
     )
 
 
@@ -1101,10 +1102,10 @@ def test_plate_batched_scoring_broadcasts_shared_observations():
                 result = plate_model(plate_obs_times, obs_values)
 
     assert result.evaluation_result is not None
-    assert result.evaluation_result.observation_scores["gaussian_log_prob"].shape == (
-        plate_size,
-        obs_times.shape[0],
-        1,
+    assert_finite(
+        result.evaluation_result.observation_scores["gaussian_log_prob"],
+        (plate_size, obs_times.shape[0], 1),
+        where="result.evaluation_result.observation_scores['gaussian_log_prob']",
     )
 
 
@@ -1140,19 +1141,23 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
                 )
 
     predictions = result.predicted_observations
-    assert predictions is not None
+    assert isinstance(predictions, PredictedObservationOutputs)
     assert predictions.ensemble is not None
     assert predictions.mean is not None
     assert predictions.cov is not None
     assert predictions.obs_cov is not None
     assert predictions.noise_cov is not None
     assert predictions.obs_ensemble is None
-    assert predictions.ensemble.shape == (len(obs_times), n_particles, 1)
-    assert predictions.mean.shape == (len(obs_times), 1)
-    assert predictions.cov.shape == (len(obs_times), 1, 1)
+    assert_finite(
+        predictions.ensemble,
+        (len(obs_times), n_particles, 1),
+        where="predictions.ensemble",
+    )
+    assert_finite(predictions.mean, (len(obs_times), 1), where="predictions.mean")
+    assert_finite(predictions.cov, (len(obs_times), 1, 1), where="predictions.cov")
 
-    state_forecasts = result.states.predicted_ensemble
-    model_inputs = result.states.model_inputs
+    state_forecasts = result.predicted_ensemble
+    model_inputs = result.model_inputs
     expected_ensemble = jax.vmap(
         lambda ensemble_t, control_t, time_t: jax.vmap(
             lambda state: dynamics.observation_model(state, control_t, time_t).mean
@@ -1191,17 +1196,32 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
         for rule in scoring_config.rules
         if not isinstance(rule, EnergyScore)
     }
+    assert result.evaluation_result is not None
     scores = result.evaluation_result.observation_scores
     for score_name, expected_score in expected_scores.items():
         assert jnp.allclose(scores[score_name], expected_score)
         assert jnp.allclose(tr[f"f_{score_name}"]["value"], expected_score)
+    assert_finite(
+        scores["gaussian_log_prob"],
+        (len(obs_times), 1),
+        where="scores['gaussian_log_prob']",
+    )
+    assert_finite(
+        scores["dawid_sebastiani"],
+        (len(obs_times), 1),
+        where="scores['dawid_sebastiani']",
+    )
+    assert_finite(
+        scores["observation_wise_crps"],
+        (len(obs_times), 1),
+        where="scores['observation_wise_crps']",
+    )
+    assert_finite(
+        scores["energy_score"], (len(obs_times), 1), where="scores['energy_score']"
+    )
     assert_tree_all_finite(scores, where="Cuthbert EnKF observation scores")
-    assert scores["gaussian_log_prob"].shape == (len(obs_times), 1)
-    assert scores["dawid_sebastiani"].shape == (len(obs_times), 1)
-    assert scores["observation_wise_crps"].shape == (len(obs_times), 1)
-    assert scores["energy_score"].shape == (len(obs_times), 1)
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
     )
@@ -1211,6 +1231,7 @@ def test_cuthbert_enkf_scoring_uses_observation_aligned_forecasts_and_moments():
         rtol=2e-5,
         atol=2e-5,
     )
+    assert result.marginal_loglik is not None
     assert jnp.allclose(
         jnp.sum(scores["gaussian_log_prob"]),
         result.marginal_loglik,
@@ -1248,7 +1269,7 @@ def test_cuthbert_enkf_energy_auto_samples_seeded_observation_noise():
             )
 
     predictions = result.predicted_observations
-    assert predictions is not None
+    assert isinstance(predictions, PredictedObservationOutputs)
     assert predictions.ensemble is not None
     assert predictions.noise_cov is not None
     assert predictions.obs_ensemble is None
@@ -1262,6 +1283,7 @@ def test_cuthbert_enkf_energy_auto_samples_seeded_observation_noise():
         obs_values=obs_values[:, None],
         pred_ensemble=noisy_ensemble,
     )
+    assert result.evaluation_result is not None
     auto_score = result.evaluation_result.observation_scores["energy_score"]
     assert jnp.allclose(auto_score, expected_score)
 
@@ -1355,23 +1377,30 @@ def test_cuthbert_enkf_plate_batched_scores_preserve_member_and_time_axes():
     predictions = result.predicted_observations
     scores = result.evaluation_result.observation_scores
     assert predictions is not None
-    assert predictions.ensemble.shape == (
-        plate_size,
-        len(obs_times),
-        n_particles,
-        1,
+    assert_finite(
+        predictions.ensemble,
+        (plate_size, len(obs_times), n_particles, 1),
+        where="predictions.ensemble",
     )
-    assert predictions.mean.shape == (plate_size, len(obs_times), 1)
-    assert predictions.cov.shape == (plate_size, len(obs_times), 1, 1)
-    assert scores["gaussian_log_prob"].shape == (plate_size, len(obs_times), 1)
-    assert scores["observation_wise_crps"].shape == (
-        plate_size,
-        len(obs_times),
-        1,
+    assert_finite(
+        predictions.mean, (plate_size, len(obs_times), 1), where="predictions.mean"
+    )
+    assert_finite(
+        predictions.cov, (plate_size, len(obs_times), 1, 1), where="predictions.cov"
+    )
+    assert_finite(
+        scores["gaussian_log_prob"],
+        (plate_size, len(obs_times), 1),
+        where="scores['gaussian_log_prob']",
+    )
+    assert_finite(
+        scores["observation_wise_crps"],
+        (plate_size, len(obs_times), 1),
+        where="scores['observation_wise_crps']",
     )
     assert_tree_all_finite(scores, where="plate-batched Cuthbert EnKF scores")
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate(
             [jnp.zeros_like(cumulative_loglik[..., :1]), cumulative_loglik],
@@ -1391,8 +1420,8 @@ def test_cuthbert_enkf_plate_batched_scores_preserve_member_and_time_axes():
         rtol=2e-5,
         atol=2e-5,
     )
-    assert tr["f_gaussian_log_prob"]["value"].shape == (
-        plate_size,
-        len(obs_times),
-        1,
+    assert_finite(
+        tr["f_gaussian_log_prob"]["value"],
+        (plate_size, len(obs_times), 1),
+        where="tr['f_gaussian_log_prob']['value']",
     )

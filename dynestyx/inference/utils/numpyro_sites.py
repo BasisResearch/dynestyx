@@ -24,7 +24,7 @@ from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     SLDSFilterPosterior,
 )
 from dynestyx.inference.integrations.utils import covariance_from_cholesky
-from dynestyx.utils import _should_record_field
+from dynestyx.utils.recording import _should_record_field
 
 
 def register_filter_sites(

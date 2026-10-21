@@ -168,6 +168,6 @@ rather than inferring alignment from shapes. With state estimation,
 
 ## API
 
-- [`DiscreteControlLoopSimulator`](control/discrete_control_loop_simulator.md): the closed-loop simulator and its result type, `ControlledSimulatedResult`.
+- [`DiscreteControlLoopSimulator`](control/discrete_control_loop_simulator.md): the closed-loop simulator and its result types, `ControlledSimulatedResult` and `StructuredControlledSimulatedResult`.
 - [`PolicyCallable`](control/policy_callable.md): the policy protocol, with the `filter_state_mean` and `filter_state_dist` helpers.
 - [`MPPI`](control/mppi.md): the MPPI policy, `MPPIStepInfo`, and the noise distributions.

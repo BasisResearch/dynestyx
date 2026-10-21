@@ -63,7 +63,7 @@ from dynestyx.observation_missingness import (
 from dynestyx.simulation.discrete import _sample_discrete_state_path
 from dynestyx.simulation.utils import _sample_observation_path
 from dynestyx.types import ConditionedResult, LatentStateResult
-from dynestyx.utils import _build_control_path_eval
+from dynestyx.utils.controls import _build_control_path_eval
 
 _MissingObservationMetadataCache = dict[
     tuple[str, tuple[int, ...]],

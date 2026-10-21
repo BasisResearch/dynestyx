@@ -11,7 +11,7 @@ import jax.random as jr
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
-from dynestyx.utils import _validate_nonnegative_float
+from dynestyx.utils.validation import _validate_nonnegative_float
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
@@ -67,7 +67,7 @@ class ModifyPredictedObservationCovariance(Protocol):
         ...
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnKFLocalizationConfig:
     r"""Distance-based covariance localization for a discrete-time EnKF.
 
@@ -129,7 +129,7 @@ class EnKFLocalizationConfig:
             raise ValueError("EnKF localization taper_scale must be a scalar.")
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnKFLocalizationFunctions:
     """Advanced callback-based localization for a discrete-time EnKF.
 
@@ -175,12 +175,16 @@ class EnKFLocalizationFunctions:
             )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class BaseFilterConfig(abc.ABC):
     r"""Shared configuration options inherited by all filter configs.
 
     You do not instantiate this class directly; use one of the concrete
     subclasses (e.g. `KFConfig`, `PFConfig`).
+
+    Config fields are immutable after construction. Use `dataclasses.replace`
+    to create an updated config; nested objects such as dictionaries are not
+    recursively frozen.
 
     The `record_*` fields let you save intermediate filtering outputs into the
     NumPyro trace as `numpyro.deterministic` sites, making them accessible
@@ -251,8 +255,60 @@ class BaseFilterConfig(abc.ABC):
     crn_seed: PRNGKeyArray | None = None
 
 
-@dataclasses.dataclass
-class EnKFConfig(BaseFilterConfig):
+@dataclasses.dataclass(frozen=True)
+class EnKFBaseConfig(BaseFilterConfig):
+    """Shared options for discrete- and continuous-time EnKF configs."""
+
+    n_particles: int = 30
+    crn_seed: PRNGKeyArray | None = dataclasses.field(
+        default_factory=lambda: jr.PRNGKey(0)
+    )
+    perturb_measurements: bool | None = None
+    inflation_delta: float | None = None
+    localization: EnKFLocalizationConfig | EnKFLocalizationFunctions | None = None
+    recorded_filtered_states_cov_jitter: float = (
+        1e-5  # this is good for float32, may want to reduce for float64
+    )
+    ensemble_subspace: bool | None = None
+
+    def __post_init__(self):
+        if self.ensemble_subspace and (
+            self.localization is not None or self.filter_source != "cuthbert"
+        ):
+            raise ValueError(
+                "ensemble_subspace=True requires the Cuthbert backend "
+                "and no localization."
+            )
+        if self.localization is not None and not isinstance(
+            self.localization,
+            EnKFLocalizationConfig | EnKFLocalizationFunctions,
+        ):
+            raise TypeError(
+                "EnKFConfig.localization must be EnKFLocalizationConfig, "
+                "EnKFLocalizationFunctions, or None."
+            )
+        reserved_hooks = {
+            "modify_cross_covariance",
+            "construct_chol_innovation_covariance",
+            "modify_predicted_observation_covariance",
+        }
+        conflicts = sorted(reserved_hooks.intersection(self.extra_filter_kwargs))
+        if conflicts:
+            raise ValueError(
+                "EnKF localization callback names are reserved in "
+                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
+                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
+            )
+
+        # Check that the jitter is nonnegative float
+        _validate_nonnegative_float(
+            "recorded_filtered_states_cov_jitter",
+            self.recorded_filtered_states_cov_jitter,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class EnKFConfig(EnKFBaseConfig):
     r"""Ensemble Kalman Filter (EnKF) for discrete-time models.
 
     The **default filter** for discrete-time models. A good general-purpose
@@ -355,56 +411,10 @@ class EnKFConfig(BaseFilterConfig):
                 [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
-    n_particles: int = 30
-    crn_seed: PRNGKeyArray | None = dataclasses.field(
-        default_factory=lambda: jr.PRNGKey(0)
-    )
-    perturb_measurements: bool | None = None
-    inflation_delta: float | None = None
-    localization: EnKFLocalizationConfig | EnKFLocalizationFunctions | None = None
-    recorded_filtered_states_cov_jitter: float = (
-        1e-5  # this is good for float32, may want to reduce for float64
-    )
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
-    ensemble_subspace: bool | None = None
-
-    def __post_init__(self):
-        if self.ensemble_subspace and (
-            self.localization is not None or self.filter_source != "cuthbert"
-        ):
-            raise ValueError(
-                "ensemble_subspace=True requires the Cuthbert backend "
-                "and no localization."
-            )
-        if self.localization is not None and not isinstance(
-            self.localization,
-            EnKFLocalizationConfig | EnKFLocalizationFunctions,
-        ):
-            raise TypeError(
-                "EnKFConfig.localization must be EnKFLocalizationConfig, "
-                "EnKFLocalizationFunctions, or None."
-            )
-        reserved_hooks = {
-            "modify_cross_covariance",
-            "construct_chol_innovation_covariance",
-            "modify_predicted_observation_covariance",
-        }
-        conflicts = sorted(reserved_hooks.intersection(self.extra_filter_kwargs))
-        if conflicts:
-            raise ValueError(
-                "EnKF localization callback names are reserved in "
-                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
-                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
-            )
-
-        # Check that the jitter is nonnegative float
-        _validate_nonnegative_float(
-            "recorded_filtered_states_cov_jitter",
-            self.recorded_filtered_states_cov_jitter,
-        )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PFResamplingConfig:
     """Resampling strategy for particle-based filters.
 
@@ -451,8 +461,19 @@ class PFResamplingConfig:
     softness: float = 0.7
 
 
-@dataclasses.dataclass
-class PFConfig(BaseFilterConfig):
+@dataclasses.dataclass(frozen=True)
+class PFBaseConfig(BaseFilterConfig):
+    """Shared options for discrete- and continuous-time PF configs."""
+
+    n_particles: int = 1_000
+    resampling_method: PFResamplingConfig = dataclasses.field(
+        default_factory=PFResamplingConfig
+    )
+    ess_threshold_ratio: float = 0.7
+
+
+@dataclasses.dataclass(frozen=True)
+class PFConfig(PFBaseConfig):
     r"""Bootstrap Particle Filter (PF) for discrete-time models.
 
     The most flexible filter: works with any model, including non-Gaussian
@@ -510,15 +531,10 @@ class PFConfig(BaseFilterConfig):
             PyDPF: A Python Package for Differentiable Particle Filtering. [arXiv:2510.25693](https://arxiv.org/abs/2510.25693).
     """
 
-    n_particles: int = 1_000
-    resampling_method: PFResamplingConfig = dataclasses.field(
-        default_factory=PFResamplingConfig
-    )
-    ess_threshold_ratio: float = 0.7
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RBPFConfig(BaseFilterConfig):
     r"""Rao-Blackwellized particle filter for switching linear dynamical systems.
 
@@ -545,7 +561,7 @@ class RBPFConfig(BaseFilterConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EKFConfig(BaseFilterConfig):
     r"""Extended Kalman Filter (EKF) for discrete-time models.
 
@@ -599,7 +615,7 @@ class EKFConfig(BaseFilterConfig):
     filter_emission_order: FilterEmissionOrder = "first"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class KFConfig(BaseFilterConfig):
     r"""Kalman Filter (KF) for discrete-time linear-Gaussian models.
 
@@ -673,10 +689,7 @@ class KFConfig(BaseFilterConfig):
 
     def __post_init__(self):
         if self.associative is None:
-            if self.filter_source == "cuthbert":
-                self.associative = True
-            else:
-                self.associative = False
+            object.__setattr__(self, "associative", self.filter_source == "cuthbert")
 
         if self.associative and self.filter_source != "cuthbert":
             raise ValueError(
@@ -685,7 +698,7 @@ class KFConfig(BaseFilterConfig):
             )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UKFConfig(BaseFilterConfig):
     r"""Unscented Kalman Filter (UKF) for discrete-time models.
 
@@ -741,7 +754,7 @@ class UKFConfig(BaseFilterConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeConfig:
     """Solver options shared by all continuous-discrete filter configs.
 
@@ -773,7 +786,7 @@ class ContinuousTimeConfig:
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Kalman Filter (CD-KF).
 
@@ -811,8 +824,8 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
-class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
+@dataclasses.dataclass(frozen=True)
+class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Ensemble Kalman Filter (CD-EnKF).
 
     The **default filter** for continuous-time models. Each ensemble member
@@ -844,7 +857,7 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
             [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
     def __post_init__(self):
         super().__post_init__()
@@ -856,8 +869,8 @@ class ContinuousTimeEnKFConfig(EnKFConfig, ContinuousTimeConfig):
             )
 
 
-@dataclasses.dataclass
-class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
+@dataclasses.dataclass(frozen=True)
+class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Differentiable Particle Filter (CD-DPF).
 
     Particle filter for continuous-time SDEs. Particles are propagated by
@@ -883,13 +896,13 @@ class ContinuousTimeDPFConfig(PFConfig, ContinuousTimeConfig):
         See `PFConfig` for more information.
     """
 
-    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"  # type: ignore[assignment]
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
     resampling_method: PFResamplingConfig = dataclasses.field(
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     r"""Continuous-discrete Extended Kalman Filter (CD-EKF).
 
@@ -917,7 +930,7 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     """Continuous-discrete Unscented Kalman Filter (CD-UKF).
 
@@ -963,7 +976,7 @@ ContinuousTimeConfigs: tuple[type, ...] = (
 )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class HMMConfig(BaseFilterConfig):
     r"""Exact filter for Hidden Markov Models (finite discrete state space).
 

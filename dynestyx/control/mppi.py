@@ -26,7 +26,7 @@ import dynestyx as dsx
 from dynestyx.control.utils.distribution_utils import AR1Noise
 from dynestyx.models import DynamicalModel, ObservationControlAlignment
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 type MPPILossFn = Callable[[SimulatedResult], Real[Array, ""]]
 

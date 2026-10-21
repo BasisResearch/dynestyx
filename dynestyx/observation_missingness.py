@@ -18,7 +18,7 @@ from dynestyx.models.checkers import (
     _unwrap_base_distribution,
 )
 from dynestyx.models.core import DynamicalModel
-from dynestyx.utils import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 CATEGORICAL_MISSING_SENTINEL = -1
 LOG_2PI = jnp.log(2.0 * jnp.pi)

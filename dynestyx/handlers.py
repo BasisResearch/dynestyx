@@ -2,7 +2,7 @@
 
 import warnings
 from enum import Enum, auto
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import numpyro
 from effectful.ops.semantics import fwd, handler
@@ -18,13 +18,10 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import (
     prepare_observation_views,
 )
-from dynestyx.types import FunctionOfTime
-from dynestyx.utils import (
-    _get_dynamics_with_t0,
-    _validate_control_dim,
-    _validate_controls,
-    _validate_site_sorting,
-)
+from dynestyx.types import Result
+from dynestyx.utils.controls import _validate_controls
+from dynestyx.utils.models import _get_dynamics_with_t0, _validate_control_dim
+from dynestyx.utils.validation import _validate_site_sorting
 
 T = TypeVar("T")
 
@@ -32,6 +29,7 @@ T = TypeVar("T")
 class _DynestyxStackKind(Enum):
     PLATE = auto()
     DISCRETIZER = auto()
+    GAUSSIAN_RELAXATION = auto()
     FILTER = auto()
     SMOOTHER = auto()
     LATENT_PATH_BUILDER = auto()
@@ -57,9 +55,10 @@ _INFERENCE_KINDS = {
 _STACK_STAGES = {
     _DynestyxStackKind.PLATE: 0,
     _DynestyxStackKind.DISCRETIZER: 1,
-    **dict.fromkeys(_INFERENCE_KINDS, 2),
-    _DynestyxStackKind.SIMULATOR: 3,
-    _DynestyxStackKind.EVALUATION: 4,
+    _DynestyxStackKind.GAUSSIAN_RELAXATION: 2,
+    **dict.fromkeys(_INFERENCE_KINDS, 3),
+    _DynestyxStackKind.SIMULATOR: 4,
+    _DynestyxStackKind.EVALUATION: 5,
 }
 
 
@@ -68,7 +67,7 @@ def _validate_handler_stack(*, obs_values, predict_times) -> None:
     stages = [_STACK_STAGES[kind] for kind in kinds]
     order_hint = (
         "Use the nesting order (outermost first): "
-        "with Evaluation(...), Simulator(), Filter(...), Discretizer(), "
+        "with Evaluation(...), Simulator(), Filter(...), GaussianRelaxation(...), Discretizer(), "
         "plate(...): dsx.sample(...) . Omit stages you do not need; "
         "Smoother or LatentPathBuilder can replace Filter."
     )
@@ -84,7 +83,7 @@ def _validate_handler_stack(*, obs_values, predict_times) -> None:
                 kind.name for kind in kinds if _STACK_STAGES[kind] == stage
             )
             reason = (
-                "Cannot condition an already conditioned result. " if stage == 2 else ""
+                "Cannot condition an already conditioned result. " if stage == 3 else ""
             )
             raise ValueError(
                 f"{reason}Use only one handler per stage; got {repeated}. " + order_hint
@@ -214,7 +213,7 @@ def sample(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-):
+) -> Result:
     """
     Samples from a dynamical model. This is the main primitive of dynestyx.
 
@@ -273,7 +272,7 @@ def condition(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-):
+) -> Result:
     """Run inference on a dynamical model without registering numpyro sites.
 
     This is the NumPyro-free entry point. An active ``Filter`` or ``Smoother``
@@ -340,7 +339,7 @@ def _condition_intp(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-) -> FunctionOfTime:
+) -> Result:
     """
     The functional version of `sample` to be interpreted at runtime.
 
@@ -366,7 +365,7 @@ def _condition_intp(
         **kwargs: Additional keyword arguments.
 
     Returns:
-        FunctionOfTime: A function of time that samples from the dynamical model.
+        Result: The result produced by the active handler stack.
     """
     raise NotHandled()
 
@@ -562,7 +561,7 @@ class plate(ObjectInterpretation):
         return [_DynestyxStackKind.PLATE, *fwd()]
 
     @implements(_condition_intp)
-    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Any:
+    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Result:
         """Effectful interpretation for the `sample` primitive in a plate.
 
         Appends metadata to the argument stack and passes forward.
@@ -574,9 +573,7 @@ class plate(ObjectInterpretation):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            The downstream handler result, such as ``FunctionOfTime`` for
-            simulators/filters or ``LatentStateResult`` for
-            ``LatentPathBuilder``.
+            The downstream ``Result``, or None when no result is produced.
         """
         obs_model = dynamics.observation_model
         if isinstance(obs_model, LinearGaussianObservation) and isinstance(

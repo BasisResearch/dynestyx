@@ -4,6 +4,7 @@ from dynestyx.control.discrete_controller_simulators import (
     ControlledSimulatedResult,
     DiscreteControlLoopSimulator,
     PolicyCallable,
+    StructuredControlledSimulatedResult,
     filter_state_dist,
     filter_state_mean,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "MPPIState",
     "MPPIStepInfo",
     "PolicyCallable",
+    "StructuredControlledSimulatedResult",
     "WhiteNoise",
     "filter_state_dist",
     "filter_state_mean",

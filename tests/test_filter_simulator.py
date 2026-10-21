@@ -30,8 +30,8 @@ from tests.fixtures import (
     data_conditioned_jumpy_controls_sde,
 )
 from tests.test_utils import (
+    assert_finite,
     assert_trace_sites_exist_and_field_all_finite,
-    assert_tree_all_finite,
 )
 
 
@@ -44,7 +44,8 @@ def test_filter_sdesimulator_known_params():
 
     synthetic_obs = synthetic["observations"]
     filtered_means = tr["f_filtered_states_mean"]["value"]
-    assert synthetic_obs.shape == filtered_means.shape
+    assert_finite(synthetic_obs, where="synthetic observations")
+    assert_finite(filtered_means, synthetic_obs.shape, where="filtered mean")
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
     assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 3.5e-2
 
@@ -58,7 +59,8 @@ def test_filter_odesimulator_known_params():
 
     synthetic_obs = synthetic["observations"]
     filtered_means = tr["f_filtered_states_mean"]["value"]
-    assert synthetic_obs.shape == filtered_means.shape
+    assert_finite(synthetic_obs, where="synthetic observations")
+    assert_finite(filtered_means, synthetic_obs.shape, where="filtered mean")
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
     assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 0.1
 
@@ -76,7 +78,8 @@ def test_filter_discretetimesimulator_known_params(filter_type):
 
     synthetic_obs = synthetic["observations"]
     filtered_means = tr["f_filtered_states_mean"]["value"]
-    assert synthetic_obs.shape == filtered_means.shape
+    assert_finite(synthetic_obs, where="synthetic observations")
+    assert_finite(filtered_means, synthetic_obs.shape, where="filtered mean")
     assert jnp.allclose(synthetic_obs, filtered_means, atol=1e0)
     assert jnp.abs(jnp.mean(synthetic_obs - filtered_means)) < 1e-1
 
@@ -166,7 +169,7 @@ def test_filter_sdesimulator_predict_times_n_simulations(source):
         where="SDE filter + simulator trace",
     )
     pred_states = tr["f_predicted_states"]["value"]
-    assert pred_states.shape == (n_sim, len(predict_times), 3)
+    assert_finite(pred_states, (n_sim, len(predict_times), 3), where="pred_states")
 
 
 def test_filter_discretetimesimulator_predict_times_n_simulations():
@@ -219,7 +222,7 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
         where="discrete filter + simulator trace",
     )
     pred_states = tr["f_predicted_states"]["value"]
-    assert pred_states.shape == (n_sim, len(predict_times), 2), pred_states.shape
+    assert_finite(pred_states, (n_sim, len(predict_times), 2), where="pred_states")
 
 
 def test_filter_discretetimesimulator_pf_predict_times_particle_sampling():
@@ -258,18 +261,13 @@ def test_filter_discretetimesimulator_pf_predict_times_particle_sampling():
                 )
 
     pred_states = tr["f_predicted_states"]["value"]
-    assert pred_states.shape == (n_sim, len(predict_times), 2)
+    assert_finite(pred_states, (n_sim, len(predict_times), 2), where="pred_states")
 
     # Segment initial states are sampled from the PF posterior mixture.
     x0_keys = [k for k in tr if k.startswith("f_") and k.endswith("_x_0")]
     assert x0_keys, "Expected rollout segment initial-state sites."
     x0 = tr[x0_keys[0]]["value"]
-    assert_tree_all_finite(
-        {
-            "predicted_states": pred_states,
-            "segment_initial_state": x0,
-        },
-        where="PF rollout trace",
-    )
+    assert x0 is not None, "x0 is None"
     assert x0.shape[0] == n_sim
+    assert_finite(x0, where="x0")
     assert not jnp.allclose(x0[0], x0[1])
