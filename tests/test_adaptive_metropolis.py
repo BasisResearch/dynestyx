@@ -18,6 +18,7 @@ from dynestyx.inference.integrations.blackjax.adaptive_metropolis import (
     resolve_proposal_scale,
 )
 from dynestyx.inference.mcmc import MCMCInference
+from tests.test_utils import assert_finite
 
 
 def _normal_model(obs_times=None, obs_values=None, ctrl_times=None, ctrl_values=None):
@@ -80,9 +81,13 @@ def test_adaptive_metropolis_structured_multichain_run():
     )
     samples = inference.run(jr.PRNGKey(2), jnp.zeros(1), jnp.zeros(1))
 
-    assert samples["a"].shape == (2, 4)
-    assert samples["b"].shape == (2, 4, 2)
-    assert inference.get_diagnostics()["final_proposal_scale"].shape == (2, 3)
+    assert_finite(samples["a"], (2, 4), where="samples['a']")
+    assert_finite(samples["b"], (2, 4, 2), where="samples['b']")
+    assert_finite(
+        inference.get_diagnostics()["final_proposal_scale"],
+        (2, 3),
+        where="inference.get_diagnostics()['final_proposal_scale']",
+    )
 
 
 def test_numpyro_nuts_target_acceptance_and_diagnostics(monkeypatch):
