@@ -551,7 +551,7 @@ class RBPFConfig(BaseFilterConfig):
             `n_particles`. Used by the prior-proposal filter.
         record_filtered_regime_probs (bool | None): Save filtered regime
             probabilities \(p(z_t \mid y_{1:t})\).
-        filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
+        filter_source (CDDynamaxOnlyFilterSource): Backend. Defaults to `"cd_dynamax"`.
     """
 
     n_particles: int = 1_000
