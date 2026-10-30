@@ -53,6 +53,7 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
     from dynestyx.inference.latent.builder import LatentPathBuilder
     from dynestyx.models import (
         DeterministicContinuousTimeStateEvolution,
+        DeterministicObservation,
         GaussianObservation,
         GaussianStateEvolution,
         LinearGaussianObservation,
@@ -133,6 +134,13 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
                         "Automatic Evaluation requires a supported Gaussian "
                         "observation model and cuthbert EnKF predictive outputs. "
                         "Supply an explicit compatible Filter for this model."
+                    )
+                if isinstance(dynamics.observation_model, DeterministicObservation):
+                    raise ValueError(
+                        "Automatic particle filtering does not support deterministic "
+                        "observations for continuous latent states. Add observation "
+                        "noise explicitly with GaussianRelaxation(observation_model_cov=...), "
+                        "or supply an explicit compatible inference handler."
                     )
                 config = PFConfig()
             if dynamics.continuous_time:

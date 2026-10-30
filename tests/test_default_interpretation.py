@@ -163,6 +163,37 @@ def test_custom_transition_filter_matches_explicit(gaussian):
 
 
 @pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
+@pytest.mark.parametrize(
+    "observation",
+    [
+        dsx.DiracIdentityObservation(),
+        dsx.DeterministicObservation(lambda x, u, t: 2 * x),
+    ],
+)
+def test_default_particle_filter_rejects_deterministic_observations(entry, observation):
+    model = _nonlinear()
+    dynamics = dsx.DynamicalModel(
+        initial_condition=model.initial_condition,
+        state_evolution=model.state_evolution,
+        observation_model=observation,
+    )
+    with pytest.raises(
+        ValueError, match="Automatic particle filtering.*GaussianRelaxation"
+    ):
+        _run(dynamics, entry=entry, predictions=False)
+    with pytest.warns(UserWarning, match="EnKFConfig"):
+        result, _ = _run(
+            dynamics,
+            contexts=[dsx.GaussianRelaxation(observation_model_cov=0.1)],
+            entry=entry,
+            predictions=False,
+        )
+    assert jnp.isfinite(result.marginal_loglik)
+    with pytest.warns(UserWarning, match="Simulator"):
+        _run(dynamics, entry=entry, observations=False)
+
+
+@pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
 @pytest.mark.parametrize("gaussian", [False, True])
 def test_default_hmm_filter_matches_explicit(entry, gaussian):
     transition = jnp.array([[0.8, 0.2], [0.3, 0.7]])

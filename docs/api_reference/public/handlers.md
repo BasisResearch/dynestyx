@@ -45,7 +45,10 @@ if your custom transition supports it.
 
 Other cases choose the first structurally compatible filter: cuthbert Kalman
 filter, ensemble Kalman filter for supported Gaussian observation models, then
-bootstrap particle filter. `condition` always takes this filter route, as does
+bootstrap particle filter. Automatic particle filtering rejects
+`DeterministicObservation`, including `DiracIdentityObservation`; add observation
+noise explicitly with `GaussianRelaxation(observation_model_cov=...)`.
+`condition` always takes this filter route, as does
 an active `Evaluation`, which requires filtered results. For automatic Evaluation,
 the compatible choice is cuthbert EnKF for supported Gaussian observations:
 cuthbert KF/PF do not yet supply canonical predictive-observation diagnostics.
