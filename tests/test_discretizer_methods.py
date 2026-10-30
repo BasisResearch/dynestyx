@@ -508,7 +508,7 @@ def test_diffrax_rsample_is_differentiable_in_initial_state():
         return transition.rsample(key)[0]
 
     gradient = jax.grad(sample_endpoint)(jnp.array(0.2))
-    expected_gradient = (1.0 - 0.7 * 1e-4) ** 500
+    expected_gradient = (1.0 - 0.7 * 1e-2) ** 5
 
     assert jnp.allclose(gradient, expected_gradient)
 

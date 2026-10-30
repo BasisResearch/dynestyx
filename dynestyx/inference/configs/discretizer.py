@@ -15,7 +15,9 @@ from dynestyx.utils.validation import _validate_nonnegative_float
 
 
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:
-    return SDESimulatorConfig(source="diffrax", solver=dfx.Euler(), max_steps=100_000)
+    return SDESimulatorConfig(
+        source="diffrax", solver=dfx.Euler(), dt0=1e-2, max_steps=100_000
+    )
 
 
 @dataclasses.dataclass
@@ -382,16 +384,17 @@ class DiffraxSampleConfig(BaseDiscretizerConfig):
     The implementation supports any Diffrax solver that operates from ordinary
     Brownian increments, including `diffrax.Euler()` and `diffrax.Heun()`.
     The default inner config selects `diffrax.Euler()`, the Euler--Maruyama
-    solver. Cost scales with the number of internal solver steps and requested
-    samples. `source="em_scan"` is rejected. Reverse-mode differentiation
-    through the default `diffrax.RecursiveCheckpointAdjoint()` requires a finite
+    solver, with a default step size of `1e-2`. Cost scales with the number of
+    internal solver steps and requested samples. `source="em_scan"` is rejected.
+    Reverse-mode differentiation through the default
+    `diffrax.RecursiveCheckpointAdjoint()` requires a finite
     `sde_solver.max_steps`; the default bound is `100_000` steps per interval.
 
     Attributes:
         sde_solver (SDESimulatorConfig): Existing SDE simulator configuration
             used for each interval. It must have `source="diffrax"`. Defaults
             to `SDESimulatorConfig(source="diffrax",
-            solver=diffrax.Euler(), max_steps=100_000)`.
+            solver=diffrax.Euler(), dt0=1e-2, max_steps=100_000)`.
 
     ??? note "Algorithm Reference"
         - Kidger, P. Diffrax documentation:
