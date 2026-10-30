@@ -43,7 +43,12 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
     )
     from dynestyx.inference.checkers import _validate_inference_supported_model_classes
     from dynestyx.inference.configs.discretizer import DiffraxSampleConfig
-    from dynestyx.inference.configs.filter import EnKFConfig, KFConfig, PFConfig
+    from dynestyx.inference.configs.filter import (
+        EnKFConfig,
+        HMMConfig,
+        KFConfig,
+        PFConfig,
+    )
     from dynestyx.inference.filters import Filter
     from dynestyx.inference.latent.builder import LatentPathBuilder
     from dynestyx.models import (
@@ -81,7 +86,13 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
         # Choose LPB only for small sample sites with matching dimensions.
         # Count observations per trajectory, without multiplying by plate sizes.
         # condition() defaults and Evaluation use filtering instead.
-        if (
+        if dynamics.categorical_state:
+            if _DynestyxStackKind.EVALUATION in kinds:
+                raise ValueError(
+                    "Automatic Evaluation does not support HMM predictive outputs."
+                )
+            handlers.append(Filter(HMMConfig()))
+        elif (
             sample_mode
             and _DynestyxStackKind.EVALUATION not in kinds
             and dynamics.observation_dim == dynamics.state_dim
