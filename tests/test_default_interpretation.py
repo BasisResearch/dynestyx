@@ -501,6 +501,32 @@ def test_explicit_native_simulator_prior_remains_native():
     assert not any("dynestyx selected" in str(w.message) for w in caught)
 
 
+@pytest.mark.parametrize("conditioned_first", [False, True])
+def test_simulator_reuse_across_default_prior_and_conditioning(conditioned_first):
+    dynamics = _lti(True)
+    simulator = dsx.Simulator(n_simulations=2)
+    for observations in (
+        conditioned_first,
+        conditioned_first,
+        not conditioned_first,
+        conditioned_first,
+    ):
+        previous = simulator.simulator
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            _, actual = _run(dynamics, contexts=[simulator], observations=observations)
+            _, expected = _run(
+                dynamics,
+                contexts=[dsx.Simulator(n_simulations=2)],
+                observations=observations,
+            )
+        backend = dsx.DiscreteTimeSimulator if observations else dsx.SDESimulator
+        assert isinstance(simulator.simulator, backend)
+        if isinstance(previous, backend):
+            assert simulator.simulator is previous
+        _assert_traces_equal(actual, expected)
+
+
 def test_default_evaluation_rejects_unsupported_observations():
     with pytest.raises(ValueError, match="Automatic Evaluation requires"):
         _run(

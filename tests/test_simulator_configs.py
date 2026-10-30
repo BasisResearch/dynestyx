@@ -109,7 +109,8 @@ def test_simulator_routes_backend_specific_configs():
     assert sde_trace["f_states"]["value"].shape == (2, len(predict_times), 1)
 
 
-def test_simulator_rejects_mismatched_config_for_routed_backend():
+@pytest.mark.parametrize("warm_cache", [False, True])
+def test_simulator_rejects_mismatched_config_for_routed_backend(warm_cache):
     predict_times = jnp.array([0.0, 0.5, 1.0])
 
     with pytest.raises(ValueError, match="Pass an SDESimulatorConfig instead"):
@@ -118,6 +119,8 @@ def test_simulator_rejects_mismatched_config_for_routed_backend():
                 simulator_config=dsx.ODESimulatorConfig(),
                 n_simulations=1,
             ):
+                if warm_cache:
+                    _ode_model(predict_times=predict_times)
                 _sde_model(predict_times=predict_times)
 
     with pytest.raises(ValueError, match="Pass an ODESimulatorConfig instead"):
@@ -126,6 +129,8 @@ def test_simulator_rejects_mismatched_config_for_routed_backend():
                 simulator_config=dsx.SDESimulatorConfig(),
                 n_simulations=1,
             ):
+                if warm_cache:
+                    _sde_model(predict_times=predict_times)
                 _ode_model(predict_times=predict_times)
 
 
