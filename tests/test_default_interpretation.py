@@ -22,7 +22,7 @@ from dynestyx.control import ControlledSimulatedResult, DiscreteControlLoopSimul
 from dynestyx.handlers import _condition_intp
 from dynestyx.handlers import _DynestyxStackKind as Kind
 from dynestyx.inference.configs.discretizer import DiffraxSampleConfig, ODEFlowConfig
-from dynestyx.inference.configs.filter import EnKFConfig, KFConfig, PFConfig
+from dynestyx.inference.configs.filter import EnKFConfig, HMMConfig, KFConfig, PFConfig
 from dynestyx.types import ConditionedResult, LatentStateResult
 
 
@@ -160,6 +160,38 @@ def test_custom_transition_filter_matches_explicit(gaussian):
         dynamics, contexts=[dsx.Filter(config)], entry=dsx.condition, predictions=False
     )
     assert jnp.allclose(actual.marginal_loglik, expected.marginal_loglik)
+
+
+@pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
+@pytest.mark.parametrize("gaussian", [False, True])
+def test_default_hmm_filter_matches_explicit(entry, gaussian):
+    transition = jnp.array([[0.8, 0.2], [0.3, 0.7]])
+    means = jnp.array([[-1.0], [1.0]])
+    dynamics = dsx.DynamicalModel(
+        initial_condition=dist.Categorical(probs=jnp.array([0.6, 0.4])),
+        state_evolution=lambda x, u, t_now, t_next: dist.Categorical(transition[x]),
+        observation_model=(
+            dsx.GaussianObservation(lambda x, u, t: means[x], jnp.eye(1) * 0.2)
+            if gaussian
+            else lambda x, u, t: dist.Normal(means[x], 0.2).to_event(1)
+        ),
+    )
+    with pytest.warns(UserWarning, match="HMMConfig"):
+        actual, tr = _run(dynamics, entry=entry, predictions=False)
+    expected, explicit_tr = _run(
+        dynamics, contexts=[dsx.Filter(HMMConfig())], entry=entry, predictions=False
+    )
+    assert jnp.isfinite(actual.marginal_loglik)
+    assert jnp.allclose(actual.marginal_loglik, expected.marginal_loglik)
+    assert jnp.allclose(actual.states, expected.states)
+    _assert_traces_equal(tr, explicit_tr)
+    with pytest.raises(ValueError, match="Automatic Evaluation.*HMM"):
+        _run(
+            dynamics,
+            entry=entry,
+            contexts=[dsx.Evaluation(dsx.ObservationScoringConfig())],
+            predictions=False,
+        )
 
 
 def test_automatic_sde_ensemble_filter_matches_explicit():

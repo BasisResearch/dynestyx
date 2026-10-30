@@ -34,10 +34,11 @@ override these choices; supplying a handler also lets you configure its algorith
 | Observations and prediction times | Apply both rules |
 | An incomplete observation or control pair | Raise an input-validation error |
 
-For `sample`, equal observation and state dimensions with
-`T * observation_dim < 1,000` select `LatentPathBuilder()` when
-the transition is known to have a density, or the model is a native ODE. This
-initial size heuristic uses the number of observation times `T` per trajectory,
+Categorical latent states select exact HMM filtering with `HMMConfig()`.
+For other models, `sample` selects `LatentPathBuilder()` when observation and state
+dimensions match, `T * observation_dim < 1,000`, and the transition is known to
+have a density or the model is a native ODE. This initial size heuristic uses
+the number of observation times `T` per trajectory,
 without multiplying by plate sizes. An ODE remains native: LPB samples its initial state and integrates the
 path. Unknown custom transition capabilities use filtering; request LPB explicitly
 if your custom transition supports it.
@@ -48,9 +49,10 @@ bootstrap particle filter. `condition` always takes this filter route, as does
 an active `Evaluation`, which requires filtered results. For automatic Evaluation,
 the compatible choice is cuthbert EnKF for supported Gaussian observations:
 cuthbert KF/PF do not yet supply canonical predictive-observation diagnostics.
-Other observation models require an explicit compatible filter. `condition` does not
-register NumPyro sites; stochastic algorithms retain their existing seed/key
-requirements. Use an explicit filter config with `crn_seed` where needed, or
+HMM filtering does not supply these outputs, so automatic Evaluation rejects
+categorical latent states. Other observation models require an explicit compatible
+filter. `condition` does not register NumPyro sites; stochastic algorithms retain
+their existing seed/key requirements. Use an explicit filter config with `crn_seed` where needed, or
 `dsx.simulate(..., rng_key=...)` for pure-JAX simulation.
 
 Without observations, automatic simulation preserves the model's native
