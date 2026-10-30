@@ -15,7 +15,7 @@ from dynestyx.utils.validation import _validate_nonnegative_float
 
 
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:
-    return SDESimulatorConfig(source="diffrax", solver=dfx.Euler())
+    return SDESimulatorConfig(source="diffrax", solver=dfx.Euler(), max_steps=100_000)
 
 
 @dataclasses.dataclass
@@ -385,14 +385,13 @@ class DiffraxSampleConfig(BaseDiscretizerConfig):
     solver. Cost scales with the number of internal solver steps and requested
     samples. `source="em_scan"` is rejected. Reverse-mode differentiation
     through the default `diffrax.RecursiveCheckpointAdjoint()` requires a finite
-    `sde_solver.max_steps`; set that bound explicitly for gradient-based
-    inference.
+    `sde_solver.max_steps`; the default bound is `100_000` steps per interval.
 
     Attributes:
         sde_solver (SDESimulatorConfig): Existing SDE simulator configuration
             used for each interval. It must have `source="diffrax"`. Defaults
             to `SDESimulatorConfig(source="diffrax",
-            solver=diffrax.Euler())`.
+            solver=diffrax.Euler(), max_steps=100_000)`.
 
     ??? note "Algorithm Reference"
         - Kidger, P. Diffrax documentation:

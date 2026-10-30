@@ -499,7 +499,7 @@ def test_diffrax_sample_transition_samples_but_has_no_density():
 def test_diffrax_rsample_is_differentiable_in_initial_state():
     evolution = discretize_state_evolution(
         _affine_model().state_evolution,
-        _diffrax_config(),
+        DiffraxSampleConfig(),
     )
     key = jr.PRNGKey(3)
 
@@ -508,7 +508,7 @@ def test_diffrax_rsample_is_differentiable_in_initial_state():
         return transition.rsample(key)[0]
 
     gradient = jax.grad(sample_endpoint)(jnp.array(0.2))
-    expected_gradient = (1.0 - 0.7 * 0.01) ** 5
+    expected_gradient = (1.0 - 0.7 * 1e-4) ** 500
 
     assert jnp.allclose(gradient, expected_gradient)
 
