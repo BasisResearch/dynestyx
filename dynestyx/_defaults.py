@@ -28,6 +28,8 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
     heuristic and is required when ``infer`` is true. Returned handlers are
     ordered from innermost to outermost: discretization when needed, inference,
     then simulation. The caller composes them with the existing continuation.
+    Prediction-only requests retain the model's native representation so
+    Simulator can select the discrete-time, ODE, or SDE backend.
     """
     # Imports stay local: these interpretations themselves import this module.
     import numpyro.distributions as dist
@@ -133,15 +135,6 @@ def _default_handlers(dynamics, *, infer, predict, obs_times, sample_mode, kinds
                 )
                 handlers.append(Discretizer(discretizer_config))
             handlers.append(Filter(config))
-    elif (
-        predict
-        and dynamics.continuous_time
-        and not _INFERENCE_KINDS.intersection(kinds)
-    ):
-        # An explicit inference handler owns the model's continuous-time semantics.
-        handlers.append(
-            Discretizer(_automatic_discretizer_config(dynamics.state_evolution))
-        )
     if predict:
         # Append generation after any inference so it can simulate posterior paths.
         handlers.append(Simulator())
