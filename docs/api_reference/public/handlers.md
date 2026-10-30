@@ -53,9 +53,13 @@ register NumPyro sites; stochastic algorithms retain their existing seed/key
 requirements. Use an explicit filter config with `crn_seed` where needed, or
 `dsx.simulate(..., rng_key=...)` for pure-JAX simulation.
 
-Automatic continuous-time simulation and filtering add discretization. Simulation
-and Kalman filtering use the default discretizer; nonlinear SDE ensemble/particle
-filtering uses `DiffraxSampleConfig`, and ODE filtering uses `ODEFlowConfig`.
+Without observations, automatic simulation preserves the model's native
+representation: `Simulator()` selects `SDESimulator` for SDEs and `ODESimulator`
+for ODEs. Their internal integration steps are independent of `predict_times`.
+An explicit `Discretizer` instead selects simulation of the discrete transitions.
+Automatic continuous-time filtering adds discretization: Kalman filtering uses
+the default discretizer, nonlinear SDE ensemble/particle filtering uses
+`DiffraxSampleConfig`, and ODE filtering uses `ODEFlowConfig`.
 Explicit inference handlers retain their continuous-time behavior, including when
 an automatic simulator is added. An explicit native simulator or solver config
 must remain compatible with the model reaching it; incompatible combinations

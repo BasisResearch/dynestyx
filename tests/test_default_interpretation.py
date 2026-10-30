@@ -245,13 +245,47 @@ def _assert_traces_equal(actual, expected):
         ), name
 
 
-@pytest.mark.parametrize("continuous", [False, True])
-def test_prior_simulation_matches_explicit(continuous):
-    dynamics = _lti(continuous)
-    contexts = [dsx.Simulator(), *([dsx.Discretizer()] if continuous else [])]
+@pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
+@pytest.mark.parametrize(
+    "dynamics_factory,simulator_factory",
+    [
+        pytest.param(_lti, dsx.DiscreteTimeSimulator, id="discrete"),
+        pytest.param(lambda: _lti(True), dsx.SDESimulator, id="affine-sde"),
+        pytest.param(
+            lambda: _nonlinear(continuous=True), dsx.SDESimulator, id="nonlinear-sde"
+        ),
+        pytest.param(
+            lambda: _nonlinear(continuous=True, ode=True), dsx.ODESimulator, id="ode"
+        ),
+    ],
+)
+def test_prior_simulation_matches_explicit(dynamics_factory, simulator_factory, entry):
+    dynamics = dynamics_factory()
     with pytest.warns(UserWarning, match="dynestyx selected.*Simulator"):
-        _, actual = _run(dynamics, observations=False)
-    _, expected = _run(dynamics, contexts=contexts, observations=False)
+        actual_result, actual = _run(dynamics, entry=entry, observations=False)
+    expected_result, expected = _run(
+        dynamics, contexts=[simulator_factory()], entry=entry, observations=False
+    )
+    assert jnp.allclose(actual_result.states, expected_result.states)
+    assert jnp.allclose(actual_result.observations, expected_result.observations)
+    _assert_traces_equal(actual, expected)
+
+
+@pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
+def test_prior_simulation_preserves_explicit_discretizer(entry):
+    dynamics = _nonlinear(continuous=True)
+    with pytest.warns(UserWarning, match="dynestyx selected.*Simulator"):
+        actual_result, actual = _run(
+            dynamics, contexts=[dsx.Discretizer()], entry=entry, observations=False
+        )
+    expected_result, expected = _run(
+        dynamics,
+        contexts=[dsx.DiscreteTimeSimulator(), dsx.Discretizer()],
+        entry=entry,
+        observations=False,
+    )
+    assert jnp.allclose(actual_result.states, expected_result.states)
+    assert jnp.allclose(actual_result.observations, expected_result.observations)
     _assert_traces_equal(actual, expected)
 
 
