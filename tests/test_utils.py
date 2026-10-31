@@ -1,7 +1,7 @@
 """Utility functions for tests."""
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -28,7 +28,11 @@ def value_at_time(values, grid, t):
 
 
 def assert_tree_all_finite(tree, *, where: str = "value") -> None:
-    """Assert that every floating-point leaf in a nested value is finite."""
+    """Recursively assert that numerical leaves are finite.
+
+    Traverse dictionaries, lists, and tuples. Reject ``None`` and nonnumeric
+    leaves, and report the field path and index of non-finite values.
+    """
 
     def _walk(node, path: str) -> None:
         if isinstance(node, dict):
@@ -42,21 +46,25 @@ def assert_tree_all_finite(tree, *, where: str = "value") -> None:
                 _walk(value, f"{path}[{index}]")
             return
 
+        location = f"{where}{path}"
+        assert node is not None, f"{location} is None"
         try:
-            arr = jnp.asarray(node)
-        except Exception:
+            arr = np.asarray(node)
+            if not (
+                jnp.issubdtype(arr.dtype, jnp.number)
+                or jnp.issubdtype(arr.dtype, jnp.bool_)
+            ):
+                raise TypeError(f"nonnumeric dtype {arr.dtype}")
+            finite = np.isfinite(arr)
+        except (TypeError, ValueError) as exc:
+            raise AssertionError(
+                f"{location} is not a supported numerical value: {exc}"
+            ) from exc
+        if finite.all():
             return
 
-        if not jnp.issubdtype(arr.dtype, jnp.inexact):
-            return
-
-        finite = jnp.isfinite(arr)
-        if bool(jnp.all(finite)):
-            return
-
-        bad_index = tuple(int(i) for i in np.argwhere(~np.asarray(finite))[0])
-        bad_value = np.asarray(arr)[bad_index]
-        location = f"{where}{path}" if path else where
+        bad_index = tuple(int(i) for i in np.argwhere(~finite)[0])
+        bad_value = arr[bad_index]
         raise AssertionError(
             f"{location} contains non-finite value {bad_value} at index {bad_index}"
         )
@@ -68,15 +76,21 @@ def assert_finite(array, shape: tuple[int, ...] | None = None, *, where: str = "
     """Assert `array` exists, optionally has `shape`, and holds no NaN/inf.
 
     A shape check alone passes on arrays full of NaNs, which has hidden broken
-    simulations before; checking finiteness alongside catches that. Returns the
-    array, so callers can keep using it after the check.
+    simulations before; checking finiteness alongside catches that. Inspect on
+    the host without JAX dtype conversion, and return the original input.
+    Call outside jit/vmap/grad, after the numerical computation completes.
     """
     assert array is not None, f"{where} is None"
-    arr = jnp.asarray(array)
+    try:
+        arr = np.asarray(array)
+    except (TypeError, ValueError) as exc:
+        raise AssertionError(
+            f"{where} is not a supported numerical value: {exc}"
+        ) from exc
     if shape is not None:
         assert arr.shape == shape, f"{where} has shape {arr.shape}, expected {shape}"
     assert_tree_all_finite(arr, where=where)
-    return arr
+    return array
 
 
 def assert_trace_sites_exist_and_field_all_finite(
@@ -84,10 +98,10 @@ def assert_trace_sites_exist_and_field_all_finite(
     *site_names: str,
     field: str = "value",
     where: str,
+    expected_shapes: Mapping[str, tuple[int, ...]] | None = None,
 ) -> None:
-    """Assert that selected trace sites exist and have a finite field."""
+    """Check each site's presence, field, optional shape, then finiteness."""
 
-    selected = {}
     for site_name in site_names:
         if site_name not in tr:
             raise AssertionError(f"{where}: site {site_name!r} not found in trace")
@@ -98,12 +112,11 @@ def assert_trace_sites_exist_and_field_all_finite(
                 f"{where}: site {site_name!r} does not contain field {field!r}"
             )
 
-        selected[site_name] = site[field]
-
-    assert_tree_all_finite(
-        selected,
-        where=where,
-    )
+        assert_finite(
+            site[field],
+            None if expected_shapes is None else expected_shapes.get(site_name),
+            where=f"{where}.{site_name}",
+        )
 
 
 def test_assert_trace_sites_exist_and_field_all_finite_missing_site_error():
@@ -120,6 +133,19 @@ def test_assert_trace_sites_exist_and_field_all_finite_missing_site_error():
             where="demo trace",
         )
 
+    with pytest.raises(AssertionError, match="does not contain field 'value'"):
+        assert_trace_sites_exist_and_field_all_finite(
+            {"present": {}}, "present", where="demo trace"
+        )
+
+    with pytest.raises(AssertionError, match=r"demo trace\.present is None"):
+        assert_trace_sites_exist_and_field_all_finite(
+            {"present": {"value": None}},
+            "present",
+            expected_shapes={"present": (2,)},
+            where="demo trace",
+        )
+
 
 def test_assert_trace_sites_exist_and_field_all_finite_nonfinite_error():
     tr = {"present": {"value": jnp.array([1.0, jnp.nan])}}
@@ -133,6 +159,30 @@ def test_assert_trace_sites_exist_and_field_all_finite_nonfinite_error():
             "present",
             where="demo trace",
         )
+
+    # Shape errors take precedence over non-finite entries in the same field.
+    with pytest.raises(AssertionError, match=r"has shape \(2,\), expected \(3,\)"):
+        assert_trace_sites_exist_and_field_all_finite(
+            tr, "present", expected_shapes={"present": (3,)}, where="demo trace"
+        )
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf, -np.inf, None, object()])
+def test_numerical_assertion_helpers(bad_value):
+    with pytest.raises(AssertionError, match=r"output\.nested\[0\]"):
+        assert_tree_all_finite({"nested": [bad_value]}, where="output")
+    with pytest.raises(AssertionError):
+        assert_finite(bad_value, where="output")
+
+    # Inspecting NumPy float64 must not overflow through a JAX float32 cast.
+    with jax.enable_x64(False):
+        array = np.array([1e100], dtype=np.float64)
+        assert assert_finite(array, (1,)) is array
+        assert_tree_all_finite({"large": array})
+    array = jnp.ones(2, dtype=jnp.bfloat16)
+    assert assert_finite(array, (2,)) is array
+    assert_finite(np.array(1 + 2j), ())
+    assert_finite(np.empty((1, 0, 1)), (1, 0, 1))
 
 
 def run_profile_likelihood(

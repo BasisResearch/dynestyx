@@ -11,6 +11,7 @@ import dynestyx as dsx
 from dynestyx.inference.configs.filter import EnKFConfig, KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.types import ConditionedResult
+from tests.test_utils import assert_finite
 
 
 def _make_lti_dynamics(alpha):
@@ -55,10 +56,19 @@ def test_infer_returns_infer_result():
 
     assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
-    assert jnp.isfinite(result.marginal_loglik)
+    assert_finite(result.marginal_loglik, (), where="marginal_loglik")
     assert result.states is not None
+    assert_finite(
+        getattr(result.states, "mean"), (len(obs_times), 2), where="filtered mean"
+    )
+    assert_finite(
+        getattr(result.states, "chol_cov"),
+        (len(obs_times), 2, 2),
+        where="filtered chol_cov",
+    )
     assert result.dists is not None
     assert result.times is not None
+    assert_finite(result.times, obs_times.shape, where="times")
     assert jnp.array_equal(result.times, obs_times)
     assert result.evaluation_result is None
 
@@ -85,9 +95,18 @@ def test_plated_condition_returns_backend_filter_states():
             )
 
     assert result.marginal_loglik is not None
-    assert result.marginal_loglik.shape == (2,)
+    assert_finite(result.marginal_loglik, (2,), where="result.marginal_loglik")
     assert type(result.states) is type(unplated_result.states)
-    assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
+    assert_finite(
+        getattr(result.states, "mean"),
+        (2, len(obs_times), 2),
+        where="plated filtered mean",
+    )
+    assert_finite(
+        getattr(result.states, "chol_cov"),
+        (2, len(obs_times), 2, 2),
+        where="plated filtered chol_cov",
+    )
 
 
 def test_infer_enkf_with_crn_seed():
@@ -104,7 +123,16 @@ def test_infer_enkf_with_crn_seed():
 
     assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
-    assert jnp.isfinite(result.marginal_loglik)
+    assert_finite(result.marginal_loglik, (), where="marginal_loglik")
+    assert result.states is not None
+    assert_finite(
+        getattr(result.states, "mean"), (len(obs_times), 2), where="EnKF mean"
+    )
+    assert_finite(
+        getattr(result.states, "ensemble"),
+        (len(obs_times), 16, 2),
+        where="EnKF ensemble",
+    )
 
 
 def test_filter_rejects_already_conditioned_result():
@@ -140,14 +168,18 @@ def test_infer_optax_mle():
     opt_state = optimizer.init(alpha)
 
     initial_loss = neg_loglik(alpha)
+    assert_finite(initial_loss, (), where="initial loss")
     grad_fn = jax.grad(neg_loglik)
 
     for _ in range(20):
         grads = grad_fn(alpha)
+        assert_finite(grads, (), where="loss gradient")
         updates, opt_state = optimizer.update(grads, opt_state)
         alpha = optax.apply_updates(alpha, updates)
 
     final_loss = neg_loglik(alpha)
+    assert_finite(alpha, (), where="fitted alpha")
+    assert_finite(final_loss, (), where="final loss")
     assert final_loss < initial_loss
 
 
@@ -166,6 +198,7 @@ def test_infer_does_not_register_numpyro_sites():
 
     assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
+    assert_finite(result.marginal_loglik, (), where="marginal_loglik")
     assert "f_marginal_loglik" not in tr
     assert "f_marginal_log_likelihood" not in tr
 

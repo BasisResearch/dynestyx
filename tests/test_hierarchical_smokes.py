@@ -14,6 +14,7 @@ from dynestyx.inference.configs.mcmc import NUTSConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.models.lti_dynamics import LTI_discrete
+from tests.test_utils import assert_finite
 
 
 def _make_hierarchical_lti_data(M=3, T=10, seed=0):
@@ -191,9 +192,17 @@ def test_vector_hierarchical_lti_simulator_batched_initial_mean_shared_cov():
     M = 3
     obs_times, _, synthetic = _make_vector_hierarchical_lti_data(M=M)
 
-    assert synthetic["mu_i"].shape == (1, M, 2)
-    assert synthetic["f_states"].shape == (1, M, 1, len(obs_times), 2)
-    assert synthetic["f_observations"].shape == (1, M, 1, len(obs_times), 2)
+    assert_finite(synthetic["mu_i"], (1, M, 2), where="synthetic['mu_i']")
+    assert_finite(
+        synthetic["f_states"],
+        (1, M, 1, len(obs_times), 2),
+        where="synthetic['f_states']",
+    )
+    assert_finite(
+        synthetic["f_observations"],
+        (1, M, 1, len(obs_times), 2),
+        where="synthetic['f_observations']",
+    )
 
 
 def test_vector_hierarchical_lti_filter_loglik_and_batched_initial_cov():
@@ -204,7 +213,7 @@ def test_vector_hierarchical_lti_filter_loglik_and_batched_initial_cov():
         batched_initial_cov=True,
     )
 
-    assert synthetic["x0_scale"].shape == (1, M)
+    assert_finite(synthetic["x0_scale"], (1, M), where="synthetic['x0_scale']")
 
     with Filter(filter_config=KFConfig(filter_source="cd_dynamax")):
         tr = numpyro.handlers.trace(
@@ -217,8 +226,7 @@ def test_vector_hierarchical_lti_filter_loglik_and_batched_initial_cov():
         )
 
     loglik = tr["f_marginal_loglik"]["value"]
-    assert loglik.shape == (M,)
-    assert jnp.isfinite(loglik).all()
+    assert_finite(loglik, (M,), where="loglik")
 
 
 def test_vector_hierarchical_lti_tiny_nuts_shapes_with_independent_initial_mean():
@@ -255,10 +263,14 @@ def test_vector_hierarchical_lti_tiny_nuts_shapes_with_independent_initial_mean(
             independent_x0_mean=True,
         )
 
-    assert posterior["mu_global"].shape[-1] == 2
-    assert posterior["sigma"].shape[-1] == 2
-    assert posterior["mu_i"].shape[-2:] == (M, 2)
-    assert posterior["x0_mean_i"].shape[-2:] == (M, 2)
+    for name, shape in {
+        "mu_global": (1, 2),
+        "sigma": (1, 2),
+        "mu_i": (1, M, 2),
+        "x0_mean_i": (1, M, 2),
+    }.items():
+        assert name in posterior
+        assert_finite(posterior[name], shape, where=name)
 
 
 def test_unbatched_vector_fields_matching_plate_size_remain_shared():
@@ -273,8 +285,7 @@ def test_unbatched_vector_fields_matching_plate_size_remain_shared():
         ).get_trace(obs_times=obs_times, obs_values=obs_values, M=M)
 
     loglik = tr["f_marginal_loglik"]["value"]
-    assert loglik.shape == (M,)
-    assert jnp.isfinite(loglik).all()
+    assert_finite(loglik, (M,), where="loglik")
 
 
 def test_hierarchical_lti_cuthbert_ekf_smoke():
@@ -306,7 +317,7 @@ def test_hierarchical_lti_cuthbert_ekf_smoke():
 
     # Check that per-trajectory alpha has the right shape
     assert "alpha" in posterior
-    assert posterior["alpha"].shape[-1] == M  # plate dim is last
+    assert_finite(posterior["alpha"], (1, M), where="alpha")
 
 
 def test_hierarchical_lti_cd_dynamax_kf_smoke():
@@ -339,11 +350,13 @@ def test_hierarchical_lti_cd_dynamax_kf_smoke():
         )
 
     assert "alpha" in posterior
-    assert posterior["alpha"].shape[-1] == M
+    assert_finite(posterior["alpha"], (1, M), where="alpha")
 
     # Check global params exist
     assert "sigma_q" in posterior
+    assert_finite(posterior["sigma_q"], (1,), where="sigma_q")
     assert "sigma_r" in posterior
+    assert_finite(posterior["sigma_r"], (1,), where="sigma_r")
 
 
 def test_hierarchical_loglik_finite():
@@ -376,9 +389,7 @@ def test_hierarchical_loglik_finite():
         )
 
     assert "alpha" in posterior
-    alpha_vals = posterior["alpha"]
-    assert not jnp.isnan(alpha_vals).any()
-    assert not jnp.isinf(alpha_vals).any()
+    assert_finite(posterior["alpha"], (2, M), where="alpha")
 
 
 # ---------------------------------------------------------------------------
@@ -467,8 +478,7 @@ def test_nested_plate_filter_trace_records_batched_loglik_shape():
 
     assert "f_marginal_loglik" in tr
     loglik = tr["f_marginal_loglik"]["value"]
-    assert loglik.shape == (M, G)
-    assert jnp.isfinite(loglik).all()
+    assert_finite(loglik, (M, G), where="loglik")
 
 
 def test_plate_alignment_error_is_clear_for_unbatched_inputs():
@@ -525,9 +535,9 @@ def test_nested_plates_cuthbert_ekf_smoke():
         )
 
     assert "alpha" in posterior
-    assert posterior["alpha"].shape[-2:] == (M, G)
+    assert_finite(posterior["alpha"], (1, M, G), where="alpha")
     assert "beta" in posterior
-    assert posterior["beta"].shape[-1] == G
+    assert_finite(posterior["beta"], (1, G), where="beta")
 
 
 def test_nested_plates_cd_dynamax_kf_smoke():
@@ -560,6 +570,6 @@ def test_nested_plates_cd_dynamax_kf_smoke():
         )
 
     assert "alpha" in posterior
-    assert posterior["alpha"].shape[-2:] == (M, G)
+    assert_finite(posterior["alpha"], (1, M, G), where="alpha")
     assert "beta" in posterior
-    assert posterior["beta"].shape[-1] == G
+    assert_finite(posterior["beta"], (1, G), where="beta")
