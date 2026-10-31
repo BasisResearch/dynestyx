@@ -108,19 +108,19 @@ def test_simulate_discrete_returns_simulated_result():
         predict_times=predict_times,
         n_simulations=3,
     )
-    times = jnp.asarray(result.times)
-    states = jnp.asarray(result.states)
-    observations = jnp.asarray(result.observations)
-
     assert isinstance(result, dsx.SimulatedResult)
+    assert result.times is not None
+    times = result.times
+    assert result.states is not None
+    states = result.states
+    assert result.observations is not None
+    observations = result.observations
     assert result.x_0 is not None
-    assert times.shape == (3, len(predict_times))
-    assert result.x_0.shape == (3, 2)
-    assert states.shape == (3, len(predict_times), 2)
-    assert observations.shape == (3, len(predict_times), 1)
+    assert_finite(times, (3, len(predict_times)), where="times")
+    assert_finite(result.x_0, (3, 2), where="result.x_0")
+    assert_finite(states, (3, len(predict_times), 2), where="states")
+    assert_finite(observations, (3, len(predict_times), 1), where="observations")
     assert jnp.allclose(times[0], predict_times)
-    assert jnp.all(jnp.isfinite(states))
-    assert jnp.all(jnp.isfinite(observations))
 
 
 def test_simulate_vmaps_over_batched_controls():
@@ -146,7 +146,7 @@ def test_simulate_vmaps_over_batched_controls():
 
     assert isinstance(result, dsx.SimulatedResult)
     assert result.states is not None
-    assert result.states.shape == (2, 2, 4, 1)
+    assert_finite(result.states, (2, 2, 4, 1), where="result.states")
     expected_states = jnp.array(
         [
             [[[0.0], [1.0], [2.0], [3.0]]],
@@ -166,17 +166,17 @@ def test_simulate_callable_discrete_transition_auto_routes_to_discrete():
         predict_times=predict_times,
         n_simulations=2,
     )
-    times = jnp.asarray(result.times)
-    states = jnp.asarray(result.states)
-    observations = jnp.asarray(result.observations)
-
     assert isinstance(result, dsx.SimulatedResult)
-    assert times.shape == (2, len(predict_times))
-    assert states.shape == (2, len(predict_times), 2)
-    assert observations.shape == (2, len(predict_times), 1)
+    assert result.times is not None
+    times = result.times
+    assert result.states is not None
+    states = result.states
+    assert result.observations is not None
+    observations = result.observations
+    assert_finite(times, (2, len(predict_times)), where="times")
+    assert_finite(states, (2, len(predict_times), 2), where="states")
+    assert_finite(observations, (2, len(predict_times), 1), where="observations")
     assert jnp.allclose(times[0], predict_times)
-    assert jnp.all(jnp.isfinite(states))
-    assert jnp.all(jnp.isfinite(observations))
 
 
 def test_condition_with_simulator_returns_deferred_simulated_result():
@@ -224,15 +224,16 @@ def test_simulate_ode_accepts_structured_config():
         n_simulations=2,
         simulator_config=dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
     )
-    times = jnp.asarray(result.times)
-    states = jnp.asarray(result.states)
-    observations = jnp.asarray(result.observations)
-
     assert isinstance(result, dsx.SimulatedResult)
-    assert times.shape == (2, len(predict_times))
-    assert states.shape == (2, len(predict_times), 1)
-    assert observations.shape == (2, len(predict_times), 1)
-    assert jnp.all(jnp.isfinite(states))
+    assert result.times is not None
+    times = result.times
+    assert result.states is not None
+    states = result.states
+    assert result.observations is not None
+    observations = result.observations
+    assert_finite(times, (2, len(predict_times)), where="times")
+    assert_finite(states, (2, len(predict_times), 1), where="states")
+    assert_finite(observations, (2, len(predict_times), 1), where="observations")
 
 
 def test_simulate_sde_accepts_structured_config():
@@ -249,15 +250,16 @@ def test_simulate_sde_accepts_structured_config():
             source="em_scan",
         ),
     )
-    times = jnp.asarray(result.times)
-    states = jnp.asarray(result.states)
-    observations = jnp.asarray(result.observations)
-
     assert isinstance(result, dsx.SimulatedResult)
-    assert times.shape == (2, len(predict_times))
-    assert states.shape == (2, len(predict_times), 1)
-    assert observations.shape == (2, len(predict_times), 1)
-    assert jnp.all(jnp.isfinite(states))
+    assert result.times is not None
+    times = result.times
+    assert result.states is not None
+    states = result.states
+    assert result.observations is not None
+    observations = result.observations
+    assert_finite(times, (2, len(predict_times)), where="times")
+    assert_finite(states, (2, len(predict_times), 1), where="states")
+    assert_finite(observations, (2, len(predict_times), 1), where="observations")
 
 
 def test_simulate_rejects_missing_time_grid():
@@ -272,14 +274,16 @@ def test_simulate_allows_dirac_ode_models():
         rng_key=jr.PRNGKey(0),
         predict_times=predict_times,
     )
-    times = jnp.asarray(result.times)
-    states = jnp.asarray(result.states)
-    observations = jnp.asarray(result.observations)
-
     assert isinstance(result, dsx.SimulatedResult)
-    assert times.shape == (1, len(predict_times))
-    assert states.shape == (1, len(predict_times), 1)
-    assert observations.shape == (1, len(predict_times), 1)
+    assert result.times is not None
+    times = result.times
+    assert result.states is not None
+    states = result.states
+    assert result.observations is not None
+    observations = result.observations
+    assert_finite(times, (1, len(predict_times)), where="times")
+    assert_finite(states, (1, len(predict_times), 1), where="states")
+    assert_finite(observations, (1, len(predict_times), 1), where="observations")
     assert jnp.allclose(observations, states)
 
 
@@ -473,7 +477,9 @@ def test_same_time_pairs_each_observation_with_the_control_at_its_time():
     # -- the last one drives only the final observation, there being no
     # transition left for it -- so ctrl_times is the full grid, not times[:-1].
     assert jnp.array_equal(times, predict_times)
+    assert states is not None, "states is None"
     assert states.shape[0] == len(times)
+    assert_finite(states, where="states")
     assert jnp.array_equal(obs_times, times)
     assert jnp.array_equal(ctrl_times, times)
     assert jnp.array_equal(controls, ctrl_values)
@@ -523,7 +529,9 @@ def test_previous_transition_pairs_each_observation_with_the_control_before_it()
     # t_{N-1}, the last time a transition leaves from; observations start at
     # t_1, since no control precedes y_0.
     assert jnp.array_equal(times, predict_times)
+    assert states is not None, "states is None"
     assert states.shape[0] == len(times)
+    assert_finite(states, where="states")
     assert jnp.array_equal(ctrl_times, times[:-1])
     assert jnp.array_equal(obs_times, times[1:])
     assert jnp.array_equal(controls, ctrl_values)
@@ -619,8 +627,8 @@ def test_discrete_simulator_time_fields_tile_across_simulations():
     )
     assert result.obs_times is not None
     assert result.ctrl_times is not None
-    assert jnp.asarray(result.obs_times).shape == (3, 3)
-    assert jnp.asarray(result.ctrl_times).shape == (3, 3)
+    assert_finite(result.obs_times, (3, 3), where="result.obs_times")
+    assert_finite(result.ctrl_times, (3, 3), where="result.ctrl_times")
     assert jnp.array_equal(
         jnp.asarray(result.obs_times), jnp.tile(predict_times[1:], (3, 1))
     )
@@ -649,6 +657,6 @@ def test_continuous_simulators_report_obs_times(make_dynamics, simulator_config)
         simulator_config=simulator_config,
     )
     assert result.obs_times is not None
-    assert jnp.asarray(result.obs_times).shape == (2, len(predict_times))
+    assert_finite(result.obs_times, (2, len(predict_times)), where="result.obs_times")
     assert jnp.array_equal(jnp.asarray(result.obs_times)[0], predict_times)
     assert result.ctrl_times is None
