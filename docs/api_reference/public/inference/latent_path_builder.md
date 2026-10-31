@@ -119,6 +119,11 @@ metadata = dsx.MissingObservationMetadata(
 
 All fields must match the layout of `obs_values`.
 
+For automatic LPB selection, a [PreparedModel](prepared_model.md) wrapper can
+own these layouts across executions. Call `model.prepare(...)` with concrete
+observations before using traced model arguments. The wrapper also works with
+explicit LPB handlers and keeps unrelated wrapped models' layouts separate.
+
 ```python
 def conditioned_model(obs_times=None, obs_values=None):
     return dsx.sample(

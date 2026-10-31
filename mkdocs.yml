@@ -95,6 +95,7 @@ nav:
         - Filters: api_reference/public/inference/filters.md
         - FilterConfigs: api_reference/public/inference/configs/filter_configs.md
         - LatentPathBuilder: api_reference/public/inference/latent_path_builder.md
+        - PreparedModel: api_reference/public/inference/prepared_model.md
         - Smoothers: api_reference/public/inference/smoothers.md
         - SmootherOptions: api_reference/public/inference/configs/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
