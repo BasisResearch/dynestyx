@@ -72,7 +72,9 @@ raise instead of changing that configuration.
 
 Existing limitations still apply: LPB predictions must be at or after the final
 observation time, and LPB with traced observation arrays needs fixed missingness
-metadata supplied through `missing_obs_metadata`. No default infers identity
+metadata. A [PreparedModel](inference/prepared_model.md) wrapper can prepare and
+retain that metadata; it can also be supplied through `missing_obs_metadata`.
+No default infers identity
 observations or adds numerical jitter. Equal state and observation dimensions
 alone do not imply noise-free observations.
 

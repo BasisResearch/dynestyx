@@ -58,6 +58,7 @@ from dynestyx.observation_missingness import (
     masked_observation_log_prob,
     prepare_missing_observation_metadata,
 )
+from dynestyx.prepared import PreparedModel
 from dynestyx.relaxations import GaussianRelaxation, relax_dynamics
 from dynestyx.simulation import (
     DiscreteTimeSimulator,
@@ -110,6 +111,7 @@ __all__ = [
     "Filter",
     "Evaluation",
     "LatentPathBuilder",
+    "PreparedModel",
     "MissingObservationMetadata",
     "Smoother",
     "flatten_draws",
