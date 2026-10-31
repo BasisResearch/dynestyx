@@ -61,7 +61,24 @@ _STACK_STAGES = {
 }
 
 
-def _validate_handler_stack(*, obs_values=None, predict_times=None) -> None:
+def _validate_handler_stack(
+    *, obs_values: object | None = None, predict_times: object | None = None
+) -> None:
+    """Validate the order and uniqueness of active built-in handler stages.
+
+    Args:
+        obs_values: Observation input. Only its presence is checked here;
+            ``condition`` validates the values and their shape separately.
+        predict_times: Prediction input, also checked only for presence.
+
+    Raises:
+        ValueError: If handlers are out of order or more than one handler
+            occupies an inference, simulation, or other non-plate stage.
+
+    Warns:
+        UserWarning: If an inference handler has no observations or a simulator
+            has no prediction times.
+    """
     kinds = _dynestyx_stack_kind()
     stages = [_STACK_STAGES[kind] for kind in kinds]
     order_hint = (
