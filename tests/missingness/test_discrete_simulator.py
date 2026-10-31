@@ -364,7 +364,7 @@ def test_discrete_full_row_missing_correlated_student_t_mcmc_smoke():
     assert "alpha" in mcmc.get_samples()
 
 
-def test_discrete_categorical_conditioning_defaults_to_pf():
+def test_discrete_categorical_conditioning_defaults_to_hmm():
     times = jnp.arange(6.0)
     true_A = jnp.array([[0.95, 0.05], [0.1, 0.9]])
     with DiscreteTimeSimulator():
@@ -375,7 +375,7 @@ def test_discrete_categorical_conditioning_defaults_to_pf():
         )
     obs_values = jnp.asarray(generated["f_observations"])[0, 0, :, 0]
 
-    with pytest.warns(UserWarning, match="PFConfig"), DiscreteTimeSimulator():
+    with pytest.warns(UserWarning, match="HMMConfig"), DiscreteTimeSimulator():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(6)):
             _scalar_categorical_hmm_like_model(
                 A=true_A,
