@@ -9,6 +9,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, Real
 
+from dynestyx._defaults import _complete_defaults
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.observation_scoring import build_evaluation_result
 from dynestyx.handlers import (
@@ -43,6 +44,7 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
         return [_DynestyxStackKind.EVALUATION, *fwd()]
 
     @implements(_condition_intp)
+    @_complete_defaults(_DynestyxStackKind.EVALUATION)
     def _sample_ds(
         self,
         name: str,
