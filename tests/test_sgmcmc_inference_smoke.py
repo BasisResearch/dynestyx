@@ -7,6 +7,7 @@ from dynestyx.inference.configs.mcmc import SGLDConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from tests.models import continuous_time_stochastic_l63_model, discrete_time_l63_model
+from tests.test_utils import assert_finite
 
 SMOKE_NUM_SAMPLES = 1
 SMOKE_NUM_WARMUP = 1
@@ -48,10 +49,7 @@ def test_sgmcmc_inference_smoke(model, filter_config, target):
 
     assert target in posterior_samples
     values = posterior_samples[target]
-    assert values.shape[0] == 1
-    assert values.shape[1] == SMOKE_NUM_SAMPLES
-    assert not jnp.isnan(values).any()
-    assert not jnp.isinf(values).any()
+    assert_finite(values, (1, SMOKE_NUM_SAMPLES), where=target)
 
 
 def test_sgmcmc_inference_smoke_multiple_chains():
@@ -79,7 +77,4 @@ def test_sgmcmc_inference_smoke_multiple_chains():
 
     assert "rho" in posterior_samples
     values = posterior_samples["rho"]
-    assert values.shape[0] == 2
-    assert values.shape[1] == SMOKE_NUM_SAMPLES
-    assert not jnp.isnan(values).any()
-    assert not jnp.isinf(values).any()
+    assert_finite(values, (2, SMOKE_NUM_SAMPLES), where="rho")
