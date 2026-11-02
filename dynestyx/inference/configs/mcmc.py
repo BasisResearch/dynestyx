@@ -130,8 +130,7 @@ class AdaptiveMetropolisConfig(BaseMCMCConfig):
     cached across rejections, supporting pseudo-marginal inference when the
     likelihood estimator is nonnegative and unbiased.
 
-    This sampler supports only BlackJAX. The previous coordinate-wise sampler
-    is now named ``AdaptiveMWGConfig``; this name selects joint proposals.
+    This sampler supports only BlackJAX.
 
     Attributes:
         initial_proposal_scale (ArrayLike): Positive finite scalar or vector
