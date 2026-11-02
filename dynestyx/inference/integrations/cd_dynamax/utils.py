@@ -75,7 +75,7 @@ class _ConstantFunction(eqx.Module):
 
 
 class _CallableFunction(eqx.Module):
-    fn: Callable = eqx.field(static=True)
+    fn: Callable
 
     def f(self, x=None, u=None, t=None):
         return self.fn(x, u, t)
