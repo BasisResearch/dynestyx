@@ -547,8 +547,9 @@ class RBPFConfig(BaseFilterConfig):
         proposal ({"prior", "optimal"}): Proposal used for the discrete
             regime particles. `"prior"` samples from the Markov transition;
             `"optimal"` samples after conditioning on the current observation.
-        ess_threshold_ratio (float): Resampling threshold as a fraction of
-            `n_particles`. Used by the prior-proposal filter.
+        ess_threshold_ratio (float | None): Resampling threshold as a fraction
+            of `n_particles`. Defaults to `0.5` for the prior proposal.
+            Must be `None` for the optimal proposal, which does not use it.
         record_filtered_regime_probs (bool | None): Save filtered regime
             probabilities \(p(z_t \mid y_{1:t})\).
         filter_source (CDDynamaxOnlyFilterSource): Backend. Defaults to `"cd_dynamax"`.
@@ -556,9 +557,18 @@ class RBPFConfig(BaseFilterConfig):
 
     n_particles: int = 1_000
     proposal: RBPFProposal = "optimal"
-    ess_threshold_ratio: float = 0.5
+    ess_threshold_ratio: float | None = None
     record_filtered_regime_probs: bool | None = None
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+    def __post_init__(self):
+        if self.proposal == "optimal" and self.ess_threshold_ratio is not None:
+            raise ValueError(
+                "ess_threshold_ratio is only supported with proposal='prior'; "
+                "leave it as None for proposal='optimal'."
+            )
+        if self.proposal == "prior" and self.ess_threshold_ratio is None:
+            object.__setattr__(self, "ess_threshold_ratio", 0.5)
 
 
 @dataclasses.dataclass(frozen=True)
