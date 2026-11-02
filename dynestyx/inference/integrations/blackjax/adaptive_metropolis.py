@@ -83,6 +83,7 @@ def build_kernel() -> Callable:
         target_acceptance_rate: float,
         adaptation_rate: float,
         num_warmup: int,
+        initial_gain: float = 2**-0.6,
     ) -> tuple[AdaptiveMetropolisState, AdaptiveMetropolisInfo]:
         chol = jnp.linalg.cholesky(proposal_covariance(state))
 
@@ -100,7 +101,9 @@ def build_kernel() -> Callable:
         n_iter = state.n_iter + 1
 
         def adapt(_):
-            gain = n_iter.astype(state.position.dtype) ** -adaptation_rate
+            gain = (
+                initial_gain * n_iter.astype(state.position.dtype) ** -adaptation_rate
+            )
             delta = rw_state.position - state.mean
             return (
                 state.mean + gain * delta,
@@ -137,6 +140,7 @@ def adaptive_metropolis(
     target_acceptance_rate: float,
     adaptation_rate: float,
     num_warmup: int,
+    initial_gain: float = 2**-0.6,
 ) -> SamplingAlgorithm:
     """Return joint adaptive Metropolis as a BlackJAX sampling algorithm."""
     return build_sampling_algorithm(
@@ -144,5 +148,5 @@ def adaptive_metropolis(
         init,
         logdensity_fn,
         init_args=(proposal_scale,),
-        kernel_args=(target_acceptance_rate, adaptation_rate, num_warmup),
+        kernel_args=(target_acceptance_rate, adaptation_rate, num_warmup, initial_gain),
     )

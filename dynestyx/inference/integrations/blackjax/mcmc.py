@@ -371,6 +371,7 @@ def run_blackjax_mcmc_with_diagnostics(
                     proposal_scale,
                     target_acceptance_rate=mcmc_config.target_acceptance_rate,
                     adaptation_rate=mcmc_config.adaptation_rate,
+                    initial_gain=mcmc_config.initial_gain,
                     num_warmup=mcmc_config.num_warmup,
                 )
             return adaptive_mwg(

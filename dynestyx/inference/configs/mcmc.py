@@ -139,13 +139,17 @@ class AdaptiveMetropolisConfig(BaseMCMCConfig):
             global multiplier is ``2.38 ** 2 / d`` for dimension ``d``.
         target_acceptance_rate (float): Target joint acceptance probability.
         adaptation_rate (float): Exponent in the Robbins-Monro gain
-            ``(iteration + 1) ** -adaptation_rate``, in ``(0.5, 1]``.
+            ``initial_gain * (iteration + 1) ** -adaptation_rate``,
+            in ``(0.5, 1]``.
+        initial_gain (float): First warmup gain, finite and in ``(0, 1]``.
+            Defaults to ``2 ** -0.6``, retaining some initial covariance.
     """
 
     mcmc_source: MCMCSource = "blackjax"
     initial_proposal_scale: ArrayLike = 0.02
     target_acceptance_rate: float = 0.234
     adaptation_rate: float = 0.6
+    initial_gain: float = 2**-0.6
 
     def __post_init__(self) -> None:
         if self.mcmc_source != "blackjax":
@@ -158,6 +162,8 @@ class AdaptiveMetropolisConfig(BaseMCMCConfig):
             0.5 < self.adaptation_rate <= 1.0
         ):
             raise ValueError("adaptation_rate must be finite and in (0.5, 1]")
+        if not math.isfinite(self.initial_gain) or not (0.0 < self.initial_gain <= 1.0):
+            raise ValueError("initial_gain must be finite and in (0, 1]")
 
         proposal_scale = jnp.asarray(self.initial_proposal_scale)
         if proposal_scale.ndim > 1:
