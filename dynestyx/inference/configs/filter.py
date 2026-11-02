@@ -545,14 +545,23 @@ class RBPFConfig(BaseFilterConfig):
     Attributes:
         n_particles (int): Number of particles over discrete regimes.
         proposal ({"prior", "optimal"}): Proposal used for the discrete
-            regime particles. `"prior"` samples from the Markov transition;
-            `"optimal"` samples after conditioning on the current observation.
+            regime particles. `"prior"` uses the bootstrap proposal, sampling
+            from the Markov transition. `"optimal"` enumerates all next regimes
+            for each particle, weights them using the current observation,
+            and applies the optimal resampling scheme of Fearnhead and
+            Clifford (2003).
         ess_threshold_ratio (float | None): Resampling threshold as a fraction
             of `n_particles`. Defaults to `0.5` for the prior proposal.
             Must be `None` for the optimal proposal, which does not use it.
         record_filtered_regime_probs (bool | None): Save filtered regime
             probabilities \(p(z_t \mid y_{1:t})\).
         filter_source (CDDynamaxOnlyFilterSource): Backend. Defaults to `"cd_dynamax"`.
+
+    References:
+        Fearnhead, P., & Clifford, P. (2003). On-line inference for hidden
+        Markov models via particle filters. Journal of the Royal Statistical
+        Society: Series B, 65(4), 887–899.
+        [DOI: 10.1111/1467-9868.00421](https://doi.org/10.1111/1467-9868.00421).
     """
 
     n_particles: int = 1_000
