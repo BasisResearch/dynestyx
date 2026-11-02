@@ -6877,7 +6877,7 @@ plt.show()</div>
             <span class="n">continuous_time_lti_gaussian_model</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_value</span><span class="p">)},</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-            <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">out</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">123</span><span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
     <span class="c1"># Keep this robust to scalar vs singleton-shaped return.</span>
@@ -6914,7 +6914,7 @@ def marginal_loglik_at_rho(rho_value, *, obs_times, obs_values):
             continuous_time_lti_gaussian_model,
             params={"rho": jnp.array(rho_value)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         out = predictive(jr.PRNGKey(123), obs_times=obs_times, obs_values=obs_values)
     # Keep this robust to scalar vs singleton-shaped return.

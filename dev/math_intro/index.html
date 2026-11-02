@@ -5747,7 +5747,7 @@ models do not require a simulator configuration. In every case,
     <span class="n">samples</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">continuous_discrete_model</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
 </code></pre></div>
 <p>The same <code>dsx.Simulator()</code> call auto-routes to the discrete-time or ODE backend

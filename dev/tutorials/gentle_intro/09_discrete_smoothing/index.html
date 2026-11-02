@@ -6608,7 +6608,7 @@ from dynestyx.inference.configs.smoother import KFSmootherConfig</div>
     <span class="n">local_trend_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">alpha_true</span><span class="p">},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">(</span><span class="n">n_simulations</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
@@ -6627,7 +6627,7 @@ data_predictive = Predictive(
     local_trend_model,
     params={"alpha": alpha_true},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 with DiscreteTimeSimulator(n_simulations=1):
@@ -6771,7 +6771,7 @@ plt.show()</div>
     <span class="n">local_trend_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">alpha_true</span><span class="p">},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">with</span> <span class="n">Smoother</span><span class="p">(</span>
@@ -6797,7 +6797,7 @@ plt.show()</div>
     local_trend_model,
     params={"alpha": alpha_true},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 with Smoother(
@@ -6983,7 +6983,7 @@ $$</p>
     <span class="n">local_trend_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">alpha_true</span><span class="p">},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span>
@@ -7012,7 +7012,7 @@ $$</p>
     local_trend_model,
     params={"alpha": alpha_true},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 with Filter(
@@ -7362,7 +7362,7 @@ alpha_post_mean</div>
     <span class="n">local_trend_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">alpha_post_mean</span><span class="p">},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">n_rollout</span> <span class="o">=</span> <span class="mi">1_000</span>
@@ -7397,7 +7397,7 @@ forecast_predictive = Predictive(
     local_trend_model,
     params={"alpha": alpha_post_mean},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 n_rollout = 1_000

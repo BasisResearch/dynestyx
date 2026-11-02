@@ -6767,7 +6767,7 @@ def save_figure(fig, stem):
     <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">l63_partial_observation_model</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">ODESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">ode_config</span><span class="p">):</span>
         <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">rho</span><span class="o">=</span><span class="n">rho</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">full_times</span><span class="p">)</span>
@@ -6830,7 +6830,7 @@ def simulate_dataset(
     predictive = Predictive(
         l63_partial_observation_model,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator(simulator_config=ode_config):
         synthetic = predictive(key, rho=rho, predict_times=full_times)
@@ -7078,7 +7078,7 @@ observation shape per time step: (1,)
     <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">l63_partial_observation_model</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="k">with</span> <span class="n">inference_handler</span><span class="p">:</span>
@@ -7158,7 +7158,7 @@ def run_inference(inference_handler, discretizer_config, key):
     predictive = Predictive(
         l63_partial_observation_model,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     start = time.perf_counter()
     with inference_handler:
@@ -8532,7 +8532,7 @@ $$</p>
         <span class="s2">"rho"</span><span class="p">:</span> <span class="n">lpb_forecast_rho</span><span class="p">,</span>
         <span class="s2">"f_state_path_params"</span><span class="p">:</span> <span class="n">lpb_forecast_state_params</span><span class="p">,</span>
     <span class="p">},</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">with</span> <span class="n">ODESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">ode_config</span><span class="p">):</span>
@@ -8588,7 +8588,7 @@ $$</p>
 <span class="n">enkf_predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
     <span class="n">l63_partial_observation_model</span><span class="p">,</span>
     <span class="n">posterior_samples</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">enkf_forecast_rho</span><span class="p">},</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">with</span> <span class="n">dsx</span><span class="o">.</span><span class="n">DiscreteTimeSimulator</span><span class="p">(</span><span class="n">n_simulations</span><span class="o">=</span><span class="n">N_ENKF_STATE_FORECAST_DRAWS</span><span class="p">):</span>
@@ -8676,7 +8676,7 @@ lpb_predictive = Predictive(
         "rho": lpb_forecast_rho,
         "f_state_path_params": lpb_forecast_state_params,
     },
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 with ODESimulator(simulator_config=ode_config):
@@ -8732,7 +8732,7 @@ enkf_forecast_rho = jnp.asarray(enkf_rho_pool[enkf_rho_indices])
 enkf_predictive = Predictive(
     l63_partial_observation_model,
     posterior_samples={"rho": enkf_forecast_rho},
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 with dsx.DiscreteTimeSimulator(n_simulations=N_ENKF_STATE_FORECAST_DRAWS):

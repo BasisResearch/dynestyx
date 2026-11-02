@@ -6733,7 +6733,7 @@ Controls shape: (200, 1)
     <span class="n">continuous_lti_one_param_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_alpha</span><span class="p">)},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">dt0</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">)):</span>
@@ -6751,7 +6751,7 @@ Controls shape: (200, 1)
     continuous_lti_one_param_model,
     params={"alpha": jnp.array(true_alpha)},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 
 with SDESimulator(simulator_config=dsx.SDESimulatorConfig(dt0=1e-2)):
@@ -6879,7 +6879,7 @@ print("Observations shape:", obs_values.shape)</div>
         <span class="n">model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">alpha_val</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">out</span> <span class="o">=</span> <span class="n">pred</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">out</span><span class="p">[</span><span class="s2">"f_marginal_loglik"</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
@@ -6952,7 +6952,7 @@ def get_marginal_loglik(alpha_val, key, filter_type):
         model,
         params={"alpha": jnp.array(alpha_val)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     out = pred(key)
     return out["f_marginal_loglik"].squeeze()

@@ -6886,7 +6886,7 @@ def make_state_evolution(drift_fn, diffusion_coeff):
     <span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
 
 
-<span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">dt0</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)):</span>
     <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">k_data</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
@@ -6905,7 +6905,7 @@ def make_state_evolution(drift_fn, diffusion_coeff):
     ), obs_times=obs_times, obs_values=obs_values, predict_times=predict_times)
 
 
-predictive = Predictive(model_with_true_drift, num_samples=1, exclude_deterministic=False)
+predictive = Predictive(model_with_true_drift, num_samples=1, condition_deterministic=False)
 with SDESimulator(simulator_config=dsx.SDESimulatorConfig(dt0=1e-3)):
     synthetic = predictive(k_data, predict_times=obs_times)
 
@@ -7046,7 +7046,7 @@ plt.show()</div>
 <span class="n">true_mll</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
     <span class="n">true_model_with_filter</span><span class="p">,</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)(</span><span class="n">k_true_mll</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)[</span><span class="s2">"f_marginal_loglik"</span><span class="p">]</span>
 
 <span class="n">true_mll</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">true_mll</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">())</span>
@@ -7064,7 +7064,7 @@ key, k_true_mll = jr.split(key)
 true_mll = Predictive(
     true_model_with_filter,
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )(k_true_mll, obs_times=obs_times, obs_values=obs_values)["f_marginal_loglik"]
 
 true_mll = float(jnp.asarray(true_mll).squeeze())

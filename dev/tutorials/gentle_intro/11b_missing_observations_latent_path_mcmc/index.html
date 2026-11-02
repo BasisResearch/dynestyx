@@ -6924,7 +6924,7 @@ $$</p>
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_alpha</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">data_key</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
 <span class="n">states_clean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">synthetic</span><span class="p">[</span><span class="s2">"f_states"</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
@@ -6984,7 +6984,7 @@ with DiscreteTimeSimulator():
         ar1_model,
         params={"alpha": jnp.array(true_alpha)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(data_key, predict_times=obs_times)
 
 states_clean = np.asarray(synthetic["f_states"].squeeze((0, 1)))
@@ -7099,7 +7099,7 @@ plot_missing_data(
     <span class="n">pp_smoother</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="n">mcmc_smoother</span><span class="o">.</span><span class="n">get_samples</span><span class="p">(),</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">fold_in</span><span class="p">(</span><span class="n">pp_key</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">obs_mvn_missing</span><span class="p">))</span>
 
 <span class="n">smoothed_states</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pp_smoother</span><span class="p">[</span><span class="s2">"f_smoothed_states_mean"</span><span class="p">])</span>
@@ -7158,7 +7158,7 @@ with Smoother(
     pp_smoother = Predictive(
         ar1_model,
         posterior_samples=mcmc_smoother.get_samples(),
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.fold_in(pp_key, 1), obs_times=obs_times, obs_values=jnp.asarray(obs_mvn_missing))
 
 smoothed_states = np.asarray(pp_smoother["f_smoothed_states_mean"])
@@ -7378,7 +7378,7 @@ KF smoother missing-row RMSE: 0.4925110340118408
         <span class="n">asymmetric_laplace_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_alpha</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
 <span class="n">asym_laplace_states_true</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">asym_laplace_synth</span><span class="p">[</span><span class="s2">"f_states"</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
@@ -7431,7 +7431,7 @@ with DiscreteTimeSimulator():
         asymmetric_laplace_model,
         params={"alpha": jnp.array(true_alpha)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.PRNGKey(10), predict_times=obs_times)
 
 asym_laplace_states_true = np.asarray(asym_laplace_synth["f_states"].squeeze((0, 1)))
@@ -7762,7 +7762,7 @@ $$</p>
         <span class="s2">"f_state_path_param_times"</span><span class="p">,</span>
         <span class="s2">"f_state_path_param_coordinate_indices"</span><span class="p">,</span>
     <span class="p">],</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)(</span>
     <span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">32</span><span class="p">),</span>
     <span class="n">obs_times</span><span class="o">=</span><span class="n">small_obs_times</span><span class="p">,</span>
@@ -7899,7 +7899,7 @@ pp_dirac = Predictive(
         "f_state_path_param_times",
         "f_state_path_param_coordinate_indices",
     ],
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )(
     jr.PRNGKey(32),
     obs_times=small_obs_times,
@@ -8076,7 +8076,7 @@ $$</p>
         <span class="n">student_t_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_alpha</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
 <span class="n">student_states_true</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">student_synth</span><span class="p">[</span><span class="s2">"f_states"</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
@@ -8126,7 +8126,7 @@ with DiscreteTimeSimulator():
         student_t_model,
         params={"alpha": jnp.array(true_alpha)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.PRNGKey(20), predict_times=obs_times)
 
 student_states_true = np.asarray(student_synth["f_states"].squeeze((0, 1)))
@@ -8212,7 +8212,7 @@ plot_missing_data(
         <span class="s2">"f_missing_obs_times"</span><span class="p">,</span>
         <span class="s2">"f_missing_obs_coordinate_indices"</span><span class="p">,</span>
     <span class="p">],</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">22</span><span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">student_obs_missing</span><span class="p">))</span>
 
 <span class="n">student_completed_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pp_student</span><span class="p">[</span><span class="s2">"f_completed_obs_values"</span><span class="p">])</span>
@@ -8251,7 +8251,7 @@ pp_student = Predictive(
         "f_missing_obs_times",
         "f_missing_obs_coordinate_indices",
     ],
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )(jr.PRNGKey(22), obs_times=obs_times, obs_values=jnp.asarray(student_obs_missing))
 
 student_completed_obs = np.asarray(pp_student["f_completed_obs_values"])

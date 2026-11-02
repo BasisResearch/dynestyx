@@ -6411,7 +6411,7 @@ Observation scoring lets us evaluate those predictive distributions directly, no
 
 <span class="k">with</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">observation_scoring_config</span><span class="o">=</span><span class="n">scoring_config</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">filter_config</span><span class="p">):</span>
-        <span class="n">samples</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)(</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)(</span>
             <span class="n">rng_key</span><span class="p">,</span>
             <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
             <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span>
@@ -6738,7 +6738,7 @@ You can skim it and jump straight to the examples on a first pass.</p>
         <span class="n">l63_partial_observation_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"em_scan"</span><span class="p">)):</span>
         <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">full_times</span><span class="p">)</span>
@@ -6915,7 +6915,7 @@ def simulate_dataset(*, rho=TRUE_RHO, key=jr.PRNGKey(0), full_times=FULL_SIM_TIM
         l63_partial_observation_model,
         params={"rho": jnp.array(rho)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with SDESimulator(simulator_config=SDESimulatorConfig(source="em_scan")):
         synthetic = predictive(key, predict_times=full_times)
@@ -7158,7 +7158,7 @@ observation shape per time step: (1,)
             <span class="n">l63_partial_observation_model</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">TRUE_RHO</span><span class="p">)},</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-            <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="p">)(</span>
             <span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">123</span><span class="p">),</span>
             <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
@@ -7189,7 +7189,7 @@ with Evaluation(observation_scoring_config=scoring_config):
             l63_partial_observation_model,
             params={"rho": jnp.array(TRUE_RHO)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )(
             jr.PRNGKey(123),
             obs_times=obs_times,
@@ -7365,7 +7365,7 @@ In this run, the new score-related sites are the <code>f_gaussian_log_prob</code
                 <span class="n">l63_partial_observation_model</span><span class="p">,</span>
                 <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho</span><span class="p">)},</span>
                 <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-                <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="p">)(</span>
                 <span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">123</span><span class="p">),</span>
                 <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span>
@@ -7582,7 +7582,7 @@ def run_scored_filter(*, rho: float, filter_config, obs_times, obs_values):
                 l63_partial_observation_model,
                 params={"rho": jnp.array(rho)},
                 num_samples=1,
-                exclude_deterministic=False,
+                condition_deterministic=False,
             )(
                 jr.PRNGKey(123),
                 obs_times=obs_times,

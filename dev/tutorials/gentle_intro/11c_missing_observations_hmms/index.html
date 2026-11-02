@@ -6545,7 +6545,7 @@ az.style.use("arviz-variat")</div>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">simulate_hmm_dataset</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">true_A</span><span class="o">=</span><span class="n">TRUE_A</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">OBS_TIMES</span><span class="p">):</span>
-    <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">():</span>
         <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">A</span><span class="o">=</span><span class="n">true_A</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
@@ -6569,7 +6569,7 @@ az.style.use("arviz-variat")</div>
             <span class="n">model</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"A"</span><span class="p">:</span> <span class="n">posterior</span><span class="p">[</span><span class="s2">"A"</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)},</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-            <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">filtered</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">recon_key</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 
@@ -6867,7 +6867,7 @@ def make_hmm_model(observation_model):
 
 
 def simulate_hmm_dataset(model, *, key, true_A=TRUE_A, obs_times=OBS_TIMES):
-    predictive = Predictive(model, num_samples=1, exclude_deterministic=False)
+    predictive = Predictive(model, num_samples=1, condition_deterministic=False)
     with DiscreteTimeSimulator():
         synthetic = predictive(key, A=true_A, predict_times=obs_times)
 
@@ -6891,7 +6891,7 @@ def infer_hmm(model, obs_times, obs_values, *, fit_key, recon_key, num_warmup=N_
             model,
             params={"A": posterior["A"].mean(axis=0)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         filtered = predictive(recon_key, obs_times=obs_times, obs_values=obs_values)
 

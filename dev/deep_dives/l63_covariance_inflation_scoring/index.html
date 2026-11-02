@@ -6666,7 +6666,7 @@ def save_figure(fig, stem):
     <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">l63_model</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">ODESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">ODESimulatorConfig</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">150_000</span><span class="p">)):</span>
         <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">rho</span><span class="o">=</span><span class="n">TRUE_RHO</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">FULL_SIM_TIMES</span><span class="p">)</span>
@@ -6718,7 +6718,7 @@ def simulate_dataset(*, key=jr.PRNGKey(0)):
     predictive = Predictive(
         l63_model,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator(simulator_config=ODESimulatorConfig(max_steps=150_000)):
         synthetic = predictive(key, rho=TRUE_RHO, predict_times=FULL_SIM_TIMES)

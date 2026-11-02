@@ -6884,7 +6884,7 @@ def make_state_evolution(drift_fn, diffusion_coeff):
         <span class="o">**</span><span class="n">initial_condition_kwargs</span><span class="p">,</span>
     <span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
 
-<span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span><span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">():</span>
     <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">k_data</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
@@ -6910,7 +6910,7 @@ def model_with_true_drift(obs_times=None, obs_values=None, predict_times=None):
         **initial_condition_kwargs,
     ), obs_times=obs_times, obs_values=obs_values, predict_times=predict_times)
 
-predictive = Predictive(model_with_true_drift, num_samples=1, exclude_deterministic=False)
+predictive = Predictive(model_with_true_drift, num_samples=1, condition_deterministic=False)
 with SDESimulator():
     synthetic = predictive(k_data, predict_times=obs_times)
 
@@ -7696,7 +7696,7 @@ for name, t, i in zip(["sigma_x", "sigma_y"], truths, inferred):
     <span class="n">data_conditioned_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"Theta"</span><span class="p">:</span> <span class="n">Theta_inferred</span><span class="p">},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)(</span><span class="n">k_filter</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 
 <span class="n">filtered_mean</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"f_filtered_states_mean"</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># (T+1, 2)</span>
@@ -7752,7 +7752,7 @@ for name, t, i in zip(["sigma_x", "sigma_y"], truths, inferred):
     data_conditioned_model,
     params={"Theta": Theta_inferred},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )(k_filter, obs_times=obs_times, obs_values=obs_values)
 
 filtered_mean = jnp.squeeze(result["f_filtered_states_mean"], axis=0)  # (T+1, 2)

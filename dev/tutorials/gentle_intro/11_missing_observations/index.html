@@ -6686,7 +6686,7 @@ def ar1_model(obs_times=None, obs_values=None, predict_times=None):
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"alpha"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_alpha</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">data_key</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
 
 <span class="n">states_clean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">synthetic</span><span class="p">[</span><span class="s2">"f_states"</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
@@ -6703,7 +6703,7 @@ with DiscreteTimeSimulator():
         ar1_model,
         params={"alpha": jnp.array(true_alpha)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(data_key, predict_times=obs_times)
 
 states_clean = np.asarray(synthetic["f_states"].squeeze((0, 1)))
@@ -6950,7 +6950,7 @@ plt.show()</div>
     <span class="n">pp_filter_block</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="n">mcmc_filter_block</span><span class="o">.</span><span class="n">get_samples</span><span class="p">(),</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">pp_key</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_block</span><span class="p">)</span>
 
 <span class="n">posterior_alpha_filter_block</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mcmc_filter_block</span><span class="o">.</span><span class="n">get_samples</span><span class="p">()[</span><span class="s2">"alpha"</span><span class="p">])</span>
@@ -6998,7 +6998,7 @@ with Filter(
     pp_filter_block = Predictive(
         ar1_model,
         posterior_samples=mcmc_filter_block.get_samples(),
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(pp_key, obs_times=obs_times, obs_values=obs_block)
 
 posterior_alpha_filter_block = np.asarray(mcmc_filter_block.get_samples()["alpha"])
@@ -7093,7 +7093,7 @@ print(f"Filter runtime: {filter_block_runtime:.2f}s")</div>
     <span class="n">pp_smoother_block</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="n">mcmc_smoother_block</span><span class="o">.</span><span class="n">get_samples</span><span class="p">(),</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">fold_in</span><span class="p">(</span><span class="n">pp_key</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_block</span><span class="p">)</span>
 
 <span class="n">posterior_alpha_smoother_block</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mcmc_smoother_block</span><span class="o">.</span><span class="n">get_samples</span><span class="p">()[</span><span class="s2">"alpha"</span><span class="p">])</span>
@@ -7141,7 +7141,7 @@ with Smoother(
     pp_smoother_block = Predictive(
         ar1_model,
         posterior_samples=mcmc_smoother_block.get_samples(),
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.fold_in(pp_key, 1), obs_times=obs_times, obs_values=obs_block)
 
 posterior_alpha_smoother_block = np.asarray(mcmc_smoother_block.get_samples()["alpha"])
@@ -7535,7 +7535,7 @@ plt.show()</div>
     <span class="n">pp_filter_partial</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="n">mcmc_filter_partial</span><span class="o">.</span><span class="n">get_samples</span><span class="p">(),</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">fold_in</span><span class="p">(</span><span class="n">pp_key</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_partial</span><span class="p">)</span>
 
 <span class="k">with</span> <span class="n">Smoother</span><span class="p">(</span>
@@ -7548,7 +7548,7 @@ plt.show()</div>
     <span class="n">pp_smoother_partial</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">ar1_model</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="n">mcmc_smoother_partial</span><span class="o">.</span><span class="n">get_samples</span><span class="p">(),</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">jr</span><span class="o">.</span><span class="n">fold_in</span><span class="p">(</span><span class="n">pp_key</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_partial</span><span class="p">)</span>
 
 <span class="n">posterior_alpha_filter_partial</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mcmc_filter_partial</span><span class="o">.</span><span class="n">get_samples</span><span class="p">()[</span><span class="s2">"alpha"</span><span class="p">])</span>
@@ -7602,7 +7602,7 @@ with Filter(
     pp_filter_partial = Predictive(
         ar1_model,
         posterior_samples=mcmc_filter_partial.get_samples(),
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.fold_in(pp_key, 2), obs_times=obs_times, obs_values=obs_partial)
 
 with Smoother(
@@ -7615,7 +7615,7 @@ with Smoother(
     pp_smoother_partial = Predictive(
         ar1_model,
         posterior_samples=mcmc_smoother_partial.get_samples(),
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.fold_in(pp_key, 3), obs_times=obs_times, obs_values=obs_partial)
 
 posterior_alpha_filter_partial = np.asarray(mcmc_filter_partial.get_samples()["alpha"])

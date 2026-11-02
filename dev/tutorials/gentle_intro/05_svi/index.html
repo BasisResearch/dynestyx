@@ -6538,7 +6538,7 @@ def lti_model(
         <span class="n">lti_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_true</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">():</span>
         <span class="n">pred</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span>
@@ -6569,7 +6569,7 @@ def make_data(sigma_obs=0.1, sigma_process=0.1):
         lti_model,
         params={"rho": jnp.array(rho_true)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         pred = predictive(
@@ -6698,7 +6698,7 @@ obs_times, obs_values, ctrl_times, ctrl_values = make_data(sigma_obs=0.1, sigma_
     <span class="n">guide</span><span class="o">=</span><span class="n">guide2</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="n">svi_result2</span><span class="o">.</span><span class="n">params</span><span class="p">,</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="n">num_posterior_samples</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">return_sites</span><span class="o">=</span><span class="p">[</span>
         <span class="s2">"rho"</span><span class="p">,</span>
         <span class="s2">"f_joint_log_prob"</span><span class="p">,</span>
@@ -6750,7 +6750,7 @@ posterior_2 = Predictive(
     guide=guide2,
     params=svi_result2.params,
     num_samples=num_posterior_samples,
-    exclude_deterministic=False,
+    condition_deterministic=False,
     return_sites=[
         "rho",
         "f_joint_log_prob",
@@ -6966,7 +6966,7 @@ plt.show()</div>
         <span class="n">filter_conditioned_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">rho_subset</span><span class="p">[</span><span class="n">i</span><span class="p">]},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
     <span class="n">filtered_states_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"f_filtered_states_mean"</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
 <span class="n">posterior_1_filtered_states</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
@@ -7040,7 +7040,7 @@ for i in range(num_filter_trajectories):
         filter_conditioned_model,
         params={"rho": rho_subset[i]},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(keys[i])
     filtered_states_list.append(out["f_filtered_states_mean"][0])
 posterior_1_filtered_states = jnp.stack(

@@ -6924,7 +6924,7 @@ plt.show()</div>
     <span class="n">hmm_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"A"</span><span class="p">:</span> <span class="n">A_post_mean</span><span class="p">},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">(</span><span class="n">n_simulations</span><span class="o">=</span><span class="n">n_sim</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span><span class="n">filter_config</span><span class="o">=</span><span class="n">HMMConfig</span><span class="p">(</span><span class="n">record_filtered</span><span class="o">=</span><span class="kc">True</span><span class="p">)):</span>
@@ -6975,7 +6975,7 @@ predictive = Predictive(
     hmm_model,
     params={"A": A_post_mean},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 with DiscreteTimeSimulator(n_simulations=n_sim):
     with Filter(filter_config=HMMConfig(record_filtered=True)):

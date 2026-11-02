@@ -6688,7 +6688,7 @@ def save_figure(fig, stem):
 <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
     <span class="n">l63_model</span><span class="p">,</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span><span class="n">data_solver</span><span class="p">,</span> <span class="n">n_simulations</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
     <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span>
@@ -6752,7 +6752,7 @@ data_solver = SDESimulatorConfig(
 predictive = Predictive(
     l63_model,
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 with SDESimulator(data_solver, n_simulations=1):
     synthetic = predictive(

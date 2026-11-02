@@ -6590,7 +6590,7 @@ def l63_model(obs_times=None, obs_values=None, predict_times=None):
     <span class="n">l63_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_true</span><span class="p">)},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span><span class="n">simulator_config</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"em_scan"</span><span class="p">)):</span>
     <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times_full</span><span class="p">)</span>
@@ -6625,7 +6625,7 @@ predictive = Predictive(
     l63_model,
     params={"rho": jnp.array(rho_true)},
     num_samples=1,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 with SDESimulator(simulator_config=dsx.SDESimulatorConfig(source="em_scan")):
     synthetic = predictive(key, predict_times=obs_times_full)
@@ -7296,7 +7296,7 @@ Continuous-time cd-dynamax EnKF: 131.55 s, posterior median rho=28.407, 90% inte
     <span class="n">l63_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_post_mean</span><span class="p">)},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span>
     <span class="n">simulator_config</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"em_scan"</span><span class="p">),</span>
@@ -7367,7 +7367,7 @@ predictive = Predictive(
     l63_model,
     params={"rho": jnp.array(rho_post_mean)},
     num_samples=num_samples,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 with SDESimulator(
     simulator_config=dsx.SDESimulatorConfig(source="em_scan"),
@@ -7492,7 +7492,7 @@ plt.show()</div>
         <span class="n">l63_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_true</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)(</span><span class="n">key_backtest</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">times_backtest</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="s2">"backtest synthetic shapes:"</span><span class="p">,</span>
@@ -7517,7 +7517,7 @@ plt.show()</div>
     <span class="n">l63_model</span><span class="p">,</span>
     <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_post_mean</span><span class="p">)},</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">(</span>
     <span class="n">simulator_config</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">SDESimulatorConfig</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"em_scan"</span><span class="p">),</span>
@@ -7591,7 +7591,7 @@ with SDESimulator(simulator_config=dsx.SDESimulatorConfig(source="em_scan")):
         l63_model,
         params={"rho": jnp.array(rho_true)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(key_backtest, predict_times=times_backtest)
 print(
     "backtest synthetic shapes:",
@@ -7616,7 +7616,7 @@ predictive_interp = Predictive(
     l63_model,
     params={"rho": jnp.array(rho_post_mean)},
     num_samples=3,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 with SDESimulator(
     simulator_config=dsx.SDESimulatorConfig(source="em_scan"),

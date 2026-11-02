@@ -6898,7 +6898,7 @@ def make_state_evolution(drift_fn):
 
 
 <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
-    <span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span>
+    <span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">SDESimulator</span><span class="p">():</span>
     <span class="n">synthetic</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">k_data</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">)</span>
@@ -6925,7 +6925,7 @@ def model_with_true_drift(obs_times=None, obs_values=None, predict_times=None):
 
 
 predictive = Predictive(
-    model_with_true_drift, num_samples=1, exclude_deterministic=False
+    model_with_true_drift, num_samples=1, condition_deterministic=False
 )
 with SDESimulator():
     synthetic = predictive(k_data, predict_times=obs_times)
@@ -7423,7 +7423,7 @@ plt.show()</div>
     <span class="p">)</span>
 <span class="p">):</span>
     <span class="n">predictive_true</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
-        <span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span>
+        <span class="n">model_with_true_drift</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span>
     <span class="p">)</span>
     <span class="n">pred_true</span> <span class="o">=</span> <span class="n">predictive_true</span><span class="p">(</span><span class="n">k_filter</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
     <span class="n">log_lik_true</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">pred_true</span><span class="p">[</span><span class="s2">"f_marginal_loglik"</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
@@ -7433,7 +7433,7 @@ plt.show()</div>
         <span class="n">guide</span><span class="o">=</span><span class="n">guide</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="n">svi_result</span><span class="o">.</span><span class="n">params</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">pred_map</span> <span class="o">=</span> <span class="n">predictive_map</span><span class="p">(</span><span class="n">k_filter</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
     <span class="n">log_lik_map</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">pred_map</span><span class="p">[</span><span class="s2">"f_marginal_loglik"</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
@@ -7472,7 +7472,7 @@ with Filter(
     )
 ):
     predictive_true = Predictive(
-        model_with_true_drift, num_samples=1, exclude_deterministic=False
+        model_with_true_drift, num_samples=1, condition_deterministic=False
     )
     pred_true = predictive_true(k_filter, obs_times=obs_times, obs_values=obs_values)
     log_lik_true = float(pred_true["f_marginal_loglik"][0])
@@ -7482,7 +7482,7 @@ with Filter(
         guide=guide,
         params=svi_result.params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     pred_map = predictive_map(k_filter, obs_times=obs_times, obs_values=obs_values)
     log_lik_map = float(pred_map["f_marginal_loglik"][0])
@@ -7882,7 +7882,7 @@ Number of divergences: 0
     <span class="n">predictive_nuts_mean</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">model_with_gp_drift</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="p">{</span><span class="s2">"beta"</span><span class="p">:</span> <span class="n">beta_nuts_mean</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]},</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">pred_nuts_mean</span> <span class="o">=</span> <span class="n">predictive_nuts_mean</span><span class="p">(</span>
         <span class="n">k_filter</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span>
@@ -7893,7 +7893,7 @@ Number of divergences: 0
     <span class="n">predictive_nuts</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
         <span class="n">model_with_gp_drift</span><span class="p">,</span>
         <span class="n">posterior_samples</span><span class="o">=</span><span class="n">mcmc</span><span class="o">.</span><span class="n">get_samples</span><span class="p">(),</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">pred_nuts</span> <span class="o">=</span> <span class="n">predictive_nuts</span><span class="p">(</span><span class="n">k_filter</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 
@@ -7945,7 +7945,7 @@ with Filter(
     predictive_nuts_mean = Predictive(
         model_with_gp_drift,
         posterior_samples={"beta": beta_nuts_mean[None, ...]},
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     pred_nuts_mean = predictive_nuts_mean(
         k_filter, obs_times=obs_times, obs_values=obs_values
@@ -7956,7 +7956,7 @@ with Filter(
     predictive_nuts = Predictive(
         model_with_gp_drift,
         posterior_samples=mcmc.get_samples(),
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     pred_nuts = predictive_nuts(k_filter, obs_times=obs_times, obs_values=obs_values)
 

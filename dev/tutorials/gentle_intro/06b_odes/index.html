@@ -7360,7 +7360,7 @@ plt.show()</div>
 <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
     <span class="n">continuous_time_deterministic_l63_model</span><span class="p">,</span>
     <span class="n">posterior_samples</span><span class="o">=</span><span class="n">posterior_samples</span><span class="p">,</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="k">with</span> <span class="n">ODESimulator</span><span class="p">(</span><span class="n">n_simulations</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
     <span class="k">with</span> <span class="n">Filter</span><span class="p">(</span>
@@ -7390,7 +7390,7 @@ times_test = times_full[n_train_pts:]
 predictive = Predictive(
     continuous_time_deterministic_l63_model,
     posterior_samples=posterior_samples,
-    exclude_deterministic=False,
+    condition_deterministic=False,
 )
 with ODESimulator(n_simulations=10):
     with Filter(

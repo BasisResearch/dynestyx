@@ -7019,7 +7019,7 @@ with Filter(ContinuousTimeDPFConfig(n_particles=2_500)):
     <span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> 
     <span class="n">svi_result_normal</span><span class="o">.</span><span class="n">params</span><span class="p">,</span> 
     <span class="n">sample_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,),</span>
-    <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">True</span>
+    <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">True</span>
 <span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"True bias: </span><span class="si">{</span><span class="n">true_bias</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -7031,7 +7031,7 @@ posterior_samples = guide_normal.sample_posterior(
     jr.PRNGKey(3), 
     svi_result_normal.params, 
     sample_shape=(20,),
-    exclude_deterministic=True
+    condition_deterministic=True
 )
 
 print(f"True bias: {true_bias:.4f}")

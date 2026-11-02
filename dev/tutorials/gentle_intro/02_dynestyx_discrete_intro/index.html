@@ -6837,7 +6837,7 @@ ctrl_values = jr.normal(jr.PRNGKey(0), (len(ctrl_times), control_dim))
         <span class="n">lti_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_true</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="n">pred</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span><span class="n">rng_key</span><span class="o">=</span><span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="o">=</span><span class="n">ctrl_times</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="o">=</span><span class="n">ctrl_values</span><span class="p">)</span>
@@ -6851,7 +6851,7 @@ with DiscreteTimeSimulator():
         lti_model,
         params={"rho": jnp.array(rho_true)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     pred = predictive(rng_key=jr.PRNGKey(0), predict_times=predict_times, ctrl_times=ctrl_times, ctrl_values=ctrl_values)</div>

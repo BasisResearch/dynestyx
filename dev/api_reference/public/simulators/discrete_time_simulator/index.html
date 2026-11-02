@@ -5672,7 +5672,7 @@ standalone pure-JAX generation without a NumPyro trace.</p>
 <span class="gp">... </span>    <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">predict_times</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">(</span><span class="n">n_simulations</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">predictive</span> <span class="o">=</span> <span class="n">Predictive</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span>
+<span class="gp">... </span>        <span class="n">model</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span>
 <span class="gp">... </span>    <span class="p">)</span>
 <span class="gp">... </span>    <span class="n">draws</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span>
 <span class="gp">... </span>        <span class="n">jr</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)</span>
@@ -5746,7 +5746,7 @@ has length one.</p>
 <p>Here <code>"f"</code> is replaced by the <code>name</code> passed to <code>dsx.sample</code>. Under
 <code>Predictive(..., num_samples=N)</code>, NumPyro prepends an <code>N</code> axis to each
 shape. Because these sites are deterministic, pass
-<code>exclude_deterministic=False</code> to <code>Predictive</code> (or request the site names
+<code>condition_deterministic=False</code> to <code>Predictive</code> (or request the site names
 explicitly) to include them in its returned dictionary.</p>
 <p>When this simulator wraps a <code>Filter</code> or <code>Smoother</code>, the inner handler
 records its own configured sites and the simulator's aggregate rollout

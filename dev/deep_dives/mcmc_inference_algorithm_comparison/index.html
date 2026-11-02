@@ -6573,7 +6573,7 @@ def despine_curve_axis(ax):
         <span class="n">discrete_time_lti_simplified_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="n">true_params</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">():</span>
@@ -6622,7 +6622,7 @@ def make_data(seed=0):
         discrete_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -6687,7 +6687,7 @@ print("True alpha:", float(true_params["alpha"]))</div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>/var/folders/fx/6n6838cn51v4zyntllq4rxq80000gn/T/ipykernel_20889/473866982.py:36: FutureWarning: `exclude_deterministic` is deprecated, use `condition_deterministic` instead (`exclude_deterministic=True` corresponds to `condition_deterministic=False`).
+<pre>/var/folders/fx/6n6838cn51v4zyntllq4rxq80000gn/T/ipykernel_20889/473866982.py:36: FutureWarning: `condition_deterministic` is deprecated, use `condition_deterministic` instead (`condition_deterministic=True` corresponds to `condition_deterministic=False`).
   predictive = Predictive(
 </pre>
 </div>

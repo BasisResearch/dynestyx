@@ -6555,7 +6555,7 @@ def lti_model(
         <span class="n">lti_model</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"rho"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rho_true</span><span class="p">)},</span>
         <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">exclude_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">condition_deterministic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">DiscreteTimeSimulator</span><span class="p">():</span>
         <span class="n">pred</span> <span class="o">=</span> <span class="n">predictive</span><span class="p">(</span>
@@ -6587,7 +6587,7 @@ def make_data(sigma_obs=0.1, sigma_process=0.1):
         lti_model,
         params={"rho": jnp.array(rho_true)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         pred = predictive(
