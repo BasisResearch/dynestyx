@@ -5614,6 +5614,13 @@
 
 <h1 id="mcmc-inference">MCMC Inference<a class="headerlink" href="#mcmc-inference" title="Permanent link">&para;</a></h1>
 <p><code>MCMCInference</code> is the high-level inference wrapper for filter-based parameter inference. It wraps your model in an inference context and dispatches to the configured backend (<code>numpyro</code> or <code>blackjax</code>). <code>run()</code> keeps its samples-only return value; call <code>get_diagnostics()</code> afterward for compact sampler-specific diagnostics when supported.</p>
+<p>For joint Gaussian random-walk proposals, use <code>AdaptiveMetropolisConfig</code>.
+Its mean, full covariance, and global multiplier adapt only during warmup.
+<code>get_diagnostics()</code> reports observed acceptance over retained transitions,
+the final global multiplier, and the effective proposal covariance in flattened
+unconstrained coordinates (including numerical diagonal regularization).
+The coordinate-wise alternative is <code>AdaptiveMWGConfig</code>, whose diagnostics
+retain one acceptance rate and final proposal scale per coordinate.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -5678,7 +5685,7 @@
             <td>
               <div class="doc-md-description">
                 <p>Sampler configuration dataclass (<code>NUTSConfig</code>,
-<code>HMCConfig</code>, <code>AdaptiveMetropolisConfig</code>, <code>SGLDConfig</code>, or
+<code>HMCConfig</code>, <code>AdaptiveMetropolisConfig</code>, <code>AdaptiveMWGConfig</code>, <code>SGLDConfig</code>, or
 <code>MALAConfig</code>).</p>
               </div>
             </td>
@@ -5731,8 +5738,13 @@
 
         <p>Return compact diagnostics from the most recent successful run.</p>
 <p>NUTS reports <code>mean_acceptance_rate</code> and <code>num_divergences</code> per
-chain. Adaptive Metropolis reports <code>mean_acceptance_rate</code> and
-<code>final_proposal_scale</code> per chain and unconstrained coordinate.</p>
+chain. Adaptive MWG reports <code>mean_acceptance_rate</code> and
+<code>final_proposal_scale</code> per chain and unconstrained coordinate.
+Joint Adaptive Metropolis reports observed <code>mean_acceptance_rate</code>
+and <code>final_global_scale</code> per chain, plus <code>final_proposal_covariance</code>
+with shape <code>(num_chains, d, d)</code> in unconstrained coordinates. Adaptive
+sampler acceptance rates exclude warmup; the joint covariance includes
+the global multiplier and numerical diagonal regularization.</p>
 
 
 <p><span class="doc-section-title">Raises:</span></p>

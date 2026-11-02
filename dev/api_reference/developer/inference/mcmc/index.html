@@ -5700,7 +5700,7 @@
             <td>
               <div class="doc-md-description">
                 <p>Sampler configuration dataclass (<code>NUTSConfig</code>,
-<code>HMCConfig</code>, <code>AdaptiveMetropolisConfig</code>, <code>SGLDConfig</code>, or
+<code>HMCConfig</code>, <code>AdaptiveMetropolisConfig</code>, <code>AdaptiveMWGConfig</code>, <code>SGLDConfig</code>, or
 <code>MALAConfig</code>).</p>
               </div>
             </td>
@@ -5753,8 +5753,13 @@
 
         <p>Return compact diagnostics from the most recent successful run.</p>
 <p>NUTS reports <code>mean_acceptance_rate</code> and <code>num_divergences</code> per
-chain. Adaptive Metropolis reports <code>mean_acceptance_rate</code> and
-<code>final_proposal_scale</code> per chain and unconstrained coordinate.</p>
+chain. Adaptive MWG reports <code>mean_acceptance_rate</code> and
+<code>final_proposal_scale</code> per chain and unconstrained coordinate.
+Joint Adaptive Metropolis reports observed <code>mean_acceptance_rate</code>
+and <code>final_global_scale</code> per chain, plus <code>final_proposal_covariance</code>
+with shape <code>(num_chains, d, d)</code> in unconstrained coordinates. Adaptive
+sampler acceptance rates exclude warmup; the joint covariance includes
+the global multiplier and numerical diagonal regularization.</p>
 
 
 <p><span class="doc-section-title">Raises:</span></p>
