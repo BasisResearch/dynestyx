@@ -1,5 +1,7 @@
 """Automatic interpretations agree with explicit effectful compositions."""
 
+import logging
+import re
 import warnings
 from contextlib import ExitStack
 
@@ -151,11 +153,12 @@ def test_native_ode_and_sample_only_selection():
 
 
 @pytest.mark.parametrize("gaussian", [False, True])
-def test_custom_transition_filter_matches_explicit(gaussian):
+def test_custom_transition_filter_matches_explicit(caplog, gaussian):
     dynamics = _nonlinear(gaussian=gaussian)
     config = EnKFConfig() if gaussian else PFConfig()
-    with pytest.warns(UserWarning, match="Filter"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual, _ = _run(dynamics, entry=dsx.condition, predictions=False)
+    assert re.search("Filter", caplog.text)
     expected, _ = _run(
         dynamics, contexts=[dsx.Filter(config)], entry=dsx.condition, predictions=False
     )
@@ -170,7 +173,9 @@ def test_custom_transition_filter_matches_explicit(gaussian):
         dsx.DeterministicObservation(lambda x, u, t: 2 * x),
     ],
 )
-def test_default_particle_filter_rejects_deterministic_observations(entry, observation):
+def test_default_particle_filter_rejects_deterministic_observations(
+    caplog, entry, observation
+):
     model = _nonlinear()
     dynamics = dsx.DynamicalModel(
         initial_condition=model.initial_condition,
@@ -181,21 +186,23 @@ def test_default_particle_filter_rejects_deterministic_observations(entry, obser
         ValueError, match="Automatic particle filtering.*GaussianRelaxation"
     ):
         _run(dynamics, entry=entry, predictions=False)
-    with pytest.warns(UserWarning, match="EnKFConfig"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         result, _ = _run(
             dynamics,
             contexts=[dsx.GaussianRelaxation(observation_model_cov=0.1)],
             entry=entry,
             predictions=False,
         )
+    assert re.search("EnKFConfig", caplog.text)
     assert jnp.isfinite(result.marginal_loglik)
-    with pytest.warns(UserWarning, match="Simulator"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         _run(dynamics, entry=entry, observations=False)
+    assert re.search("Simulator", caplog.text)
 
 
 @pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
 @pytest.mark.parametrize("gaussian", [False, True])
-def test_default_hmm_filter_matches_explicit(entry, gaussian):
+def test_default_hmm_filter_matches_explicit(caplog, entry, gaussian):
     transition = jnp.array([[0.8, 0.2], [0.3, 0.7]])
     means = jnp.array([[-1.0], [1.0]])
     dynamics = dsx.DynamicalModel(
@@ -207,8 +214,9 @@ def test_default_hmm_filter_matches_explicit(entry, gaussian):
             else lambda x, u, t: dist.Normal(means[x], 0.2).to_event(1)
         ),
     )
-    with pytest.warns(UserWarning, match="HMMConfig"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual, tr = _run(dynamics, entry=entry, predictions=False)
+    assert re.search("HMMConfig", caplog.text)
     expected, explicit_tr = _run(
         dynamics, contexts=[dsx.Filter(HMMConfig())], entry=entry, predictions=False
     )
@@ -225,24 +233,28 @@ def test_default_hmm_filter_matches_explicit(entry, gaussian):
         )
 
 
-def test_automatic_sde_ensemble_filter_matches_explicit():
+def test_automatic_sde_ensemble_filter_matches_explicit(caplog):
     dynamics = _nonlinear(continuous=True)
     kwargs = dict(obs_times=jnp.arange(3.0) * 0.001, obs_values=jnp.zeros((3, 1)))
-    with seed(rng_seed=0), pytest.warns(UserWarning, match="DiffraxSampleConfig"):
+    with seed(rng_seed=0), caplog.at_level(logging.INFO, logger="dynestyx"):
         actual = dsx.condition("f", dynamics, **kwargs)
+    assert re.search("DiffraxSampleConfig", caplog.text)
     with (
         seed(rng_seed=0),
         dsx.Filter(EnKFConfig()),
         dsx.Discretizer(DiffraxSampleConfig()),
     ):
         expected = dsx.condition("f", dynamics, **kwargs)
+    assert actual.marginal_loglik is not None
+    assert expected.marginal_loglik is not None
     assert jnp.allclose(actual.marginal_loglik, expected.marginal_loglik)
 
 
-def test_native_ode_latent_path_matches_explicit():
+def test_native_ode_latent_path_matches_explicit(caplog):
     dynamics = _nonlinear(continuous=True, ode=True)
-    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual, tr = _run(dynamics)
+    assert re.search("LatentPathBuilder", caplog.text)
     expected, explicit_tr = _run(
         dynamics, contexts=[dsx.Simulator(), dsx.LatentPathBuilder()]
     )
@@ -251,14 +263,15 @@ def test_native_ode_latent_path_matches_explicit():
     _assert_traces_equal(tr, explicit_tr)
 
 
-def test_discretizer_only_conditions_observations():
-    with pytest.warns(UserWarning, match="Filter"):
+def test_discretizer_only_conditions_observations(caplog):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual, tr = _run(
             _lti(True),
             contexts=[dsx.Discretizer()],
             entry=dsx.condition,
             predictions=False,
         )
+    assert re.search("Filter", caplog.text)
     expected, _ = _run(
         _lti(True),
         contexts=[dsx.Filter(KFConfig(filter_source="cuthbert")), dsx.Discretizer()],
@@ -320,10 +333,13 @@ def _assert_traces_equal(actual, expected):
         ),
     ],
 )
-def test_prior_simulation_matches_explicit(dynamics_factory, simulator_factory, entry):
+def test_prior_simulation_matches_explicit(
+    caplog, dynamics_factory, simulator_factory, entry
+):
     dynamics = dynamics_factory()
-    with pytest.warns(UserWarning, match="dynestyx selected.*Simulator"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual_result, actual = _run(dynamics, entry=entry, observations=False)
+    assert re.search("Selected.*Simulator", caplog.text)
     expected_result, expected = _run(
         dynamics, contexts=[simulator_factory()], entry=entry, observations=False
     )
@@ -333,12 +349,13 @@ def test_prior_simulation_matches_explicit(dynamics_factory, simulator_factory, 
 
 
 @pytest.mark.parametrize("entry", [dsx.sample, dsx.condition])
-def test_prior_simulation_preserves_explicit_discretizer(entry):
+def test_prior_simulation_preserves_explicit_discretizer(caplog, entry):
     dynamics = _nonlinear(continuous=True)
-    with pytest.warns(UserWarning, match="dynestyx selected.*Simulator"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual_result, actual = _run(
             dynamics, contexts=[dsx.Discretizer()], entry=entry, observations=False
         )
+    assert re.search("Selected.*Simulator", caplog.text)
     expected_result, expected = _run(
         dynamics,
         contexts=[dsx.DiscreteTimeSimulator(), dsx.Discretizer()],
@@ -351,9 +368,10 @@ def test_prior_simulation_preserves_explicit_discretizer(entry):
 
 
 @pytest.mark.parametrize("plated", [False, True])
-def test_latent_path_and_rollout_match_explicit(plated):
-    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+def test_latent_path_and_rollout_match_explicit(caplog, plated):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         result, actual = _run(_lti(), plated=plated)
+    assert re.search("LatentPathBuilder", caplog.text)
     explicit_result, expected = _run(
         _lti(), contexts=[dsx.Simulator(), dsx.LatentPathBuilder()], plated=plated
     )
@@ -363,13 +381,14 @@ def test_latent_path_and_rollout_match_explicit(plated):
 
 
 @pytest.mark.parametrize("continuous", [False, True])
-def test_condition_matches_explicit_kf_and_has_no_sites(continuous):
+def test_condition_matches_explicit_kf_and_has_no_sites(caplog, continuous):
     contexts = [
         dsx.Filter(KFConfig(filter_source="cuthbert")),
         *([dsx.Discretizer()] if continuous else []),
     ]
-    with pytest.warns(UserWarning, match="Filter"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual, tr = _run(_lti(continuous), entry=dsx.condition, predictions=False)
+    assert re.search("Filter", caplog.text)
     expected, _ = _run(
         _lti(continuous), contexts=contexts, entry=dsx.condition, predictions=False
     )
@@ -379,7 +398,7 @@ def test_condition_matches_explicit_kf_and_has_no_sites(continuous):
 
 
 @pytest.mark.parametrize("stage", ["simulator", "filter", "evaluation"])
-def test_partial_stacks_match_explicit(stage):
+def test_partial_stacks_match_explicit(caplog, stage):
     factories = {
         "simulator": lambda: [dsx.Simulator()],
         "filter": lambda: [dsx.Filter(KFConfig(filter_source="cuthbert"))],
@@ -396,13 +415,14 @@ def test_partial_stacks_match_explicit(stage):
             dsx.Simulator(),
             dsx.Filter(EnKFConfig()),
         ]
-    with pytest.warns(UserWarning, match="dynestyx selected"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         _, actual = _run(_lti(), contexts=factories[stage]())
+    assert re.search("Selected", caplog.text)
     _, expected = _run(_lti(), contexts=explicit)
     _assert_traces_equal(actual, expected)
 
 
-def test_ambient_effect_and_handler_execute_once():
+def test_ambient_effect_and_handler_execute_once(caplog):
     calls = []
     other = defop(lambda: "default")
 
@@ -413,24 +433,38 @@ def test_ambient_effect_and_handler_execute_once():
             return fwd(name, dynamics, **kwargs)
 
     with handler({other: lambda: "preserved"}), handler(Observer()):
-        with pytest.warns(UserWarning, match="dynestyx selected"):
+        with caplog.at_level(logging.INFO, logger="dynestyx"):
             _run(_lti())
+        assert re.search("Selected", caplog.text)
         assert other() == "preserved"
     assert calls == ["preserved"]
 
 
-def test_explicit_handlers_are_quiet():
-    with warnings.catch_warnings(record=True) as caught:
+@pytest.mark.parametrize("level", [logging.INFO, logging.WARNING])
+def test_default_selection_logs_at_info_without_warning(caplog, level):
+    with (
+        caplog.at_level(level, logger="dynestyx"),
+        warnings.catch_warnings(record=True) as caught,
+    ):
+        _run(_lti(), observations=False)
+    assert not caught
+    assert caplog.messages == (
+        ["Selected Simulator() for site 'f'."] if level == logging.INFO else []
+    )
+
+
+def test_explicit_handlers_are_quiet(caplog):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         _run(
             _lti(),
             contexts=[dsx.Simulator(), dsx.Filter(KFConfig(filter_source="cuthbert"))],
         )
-    assert not any("dynestyx selected" in str(w.message) for w in caught)
+    assert not caplog.records
 
 
 @pytest.mark.parametrize("factory", [DiscreteControlLoopSimulator, dsx.Simulator])
 @pytest.mark.parametrize("observations", [False, True])
-def test_defaults_preserve_closed_loop_simulator(factory, observations):
+def test_defaults_preserve_closed_loop_simulator(caplog, factory, observations):
     dynamics = dsx.LTI_discrete(
         A=jnp.eye(1) * 0.8,
         B=jnp.eye(1),
@@ -446,14 +480,14 @@ def test_defaults_preserve_closed_loop_simulator(factory, observations):
             use_true_state=True,
         )
 
-    with warnings.catch_warnings(record=True) as caught:
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         actual, actual_trace = _run(
             dynamics,
             contexts=[simulator()],
             entry=dsx.condition,
             observations=observations,
         )
-    selected = [str(w.message) for w in caught if "dynestyx selected" in str(w.message)]
+    selected = caplog.messages
     if observations:
         assert len(selected) == 1
         assert "Filter(KFConfig" in selected[0]
@@ -490,13 +524,13 @@ def test_defaults_do_not_override_explicit_native_simulator(simulator):
         _run(_lti(True), contexts=[simulator])
 
 
-def test_explicit_native_simulator_prior_remains_native():
+def test_explicit_native_simulator_prior_remains_native(caplog):
     simulator = dsx.Simulator(simulator_config=dsx.SDESimulatorConfig(dt0=0.1))
-    with warnings.catch_warnings(record=True) as caught:
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         _run(_lti(True), contexts=[simulator], observations=False)
     assert isinstance(simulator.simulator, dsx.SDESimulator)
     assert simulator.simulator.simulator_config.dt0 == 0.1
-    assert not any("dynestyx selected" in str(w.message) for w in caught)
+    assert not caplog.records
 
 
 def test_default_evaluation_rejects_unsupported_observations():
@@ -507,25 +541,27 @@ def test_default_evaluation_rejects_unsupported_observations():
         )
 
 
-def test_observations_affect_density_without_a_handler():
+def test_observations_affect_density_without_a_handler(caplog):
     def model(y):
         return dsx.sample("f", _lti(), obs_times=jnp.arange(3.0), obs_values=y)
 
     params = {"f_state_path_params": jnp.zeros((3, 1))}
-    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         plausible = log_density(model, (jnp.zeros((3, 1)),), {}, params)[0]
         absurd = log_density(model, (jnp.full((3, 1), 100.0),), {}, params)[0]
+    assert re.search("LatentPathBuilder", caplog.text)
     assert plausible > absurd
 
 
-def test_jit_condition_and_latent_missingness_metadata():
+def test_jit_condition_and_latent_missingness_metadata(caplog):
     m = _lti()
     t = jnp.arange(3.0)
     y = jnp.array([[0.0], [jnp.nan], [0.2]])
-    with pytest.warns(UserWarning, match="Filter"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         result = jax.jit(
             lambda y: dsx.condition("f", m, obs_times=t, obs_values=y).marginal_loglik
         )(y)
+    assert re.search("Filter", caplog.text)
     assert jnp.isfinite(result)
     metadata = dsx.prepare_missing_observation_metadata(m, obs_times=t, obs_values=y)
 
@@ -535,11 +571,12 @@ def test_jit_condition_and_latent_missingness_metadata():
                 "f", m, obs_times=t, obs_values=y, missing_obs_metadata=metadata
             ).joint_log_prob
 
-    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         assert jnp.isfinite(jax.jit(model)(y))
+    assert re.search("LatentPathBuilder", caplog.text)
 
 
-def test_default_latent_path_mcmc_and_svi():
+def test_default_latent_path_mcmc_and_svi(caplog):
     m = _lti()
     t = jnp.arange(3.0)
     y = jnp.zeros((3, 1))
@@ -547,11 +584,12 @@ def test_default_latent_path_mcmc_and_svi():
     def model():
         return dsx.sample("f", m, obs_times=t, obs_values=y)
 
-    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         mcmc = MCMC(NUTS(model), num_warmup=2, num_samples=2, progress_bar=False)
         mcmc.run(jr.PRNGKey(0))
         svi = SVI(model, AutoNormal(model), Adam(0.01), Trace_ELBO())
         state = svi.init(jr.PRNGKey(1))
         _, loss = svi.update(state)
+    assert re.search("LatentPathBuilder", caplog.text)
     assert mcmc.get_samples()["f_state_path_params"].shape == (2, 3, 1)
     assert jnp.isfinite(loss)

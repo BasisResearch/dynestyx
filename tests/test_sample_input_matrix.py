@@ -15,6 +15,9 @@ whose predictions must be future-only. Explicit handlers retain their configs.
 All cases retain existing model/handler compatibility and LPB rollout limits.
 """
 
+import logging
+import re
+
 import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
@@ -143,9 +146,9 @@ def test_case1_simulator_predict_times_only_runs():
     assert "f_times" in tr and "f_states" in tr and "f_observations" in tr
 
 
-def test_case1_simulator_obs_times_obs_values_only_discrete_runs():
+def test_case1_simulator_obs_times_obs_values_only_discrete_runs(caplog):
     """Case 1: obs_times + obs_values (no predict_times), DiscreteTimeSimulator → default inference."""
-    with pytest.warns(UserWarning, match="dynestyx selected"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         tr = _run_model(
             jumpy_controls_model,
             obs_times=_TIMES,
@@ -154,12 +157,13 @@ def test_case1_simulator_obs_times_obs_values_only_discrete_runs():
             ctrl_values=_CTRL_VALUES,
             context=DiscreteTimeSimulator(),
         )
+    assert re.search("Selected", caplog.text)
     assert "f_joint_log_prob_factor" in tr or "f_marginal_loglik" in tr
 
 
-def test_case1_simulator_obs_times_obs_values_only_ode_runs():
+def test_case1_simulator_obs_times_obs_values_only_ode_runs(caplog):
     """Case 1: obs_times + obs_values (no predict_times), ODESimulator → default inference."""
-    with pytest.warns(UserWarning, match="dynestyx selected"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         tr = _run_model(
             jumpy_controls_model_ode,
             obs_times=_TIMES,
@@ -168,12 +172,13 @@ def test_case1_simulator_obs_times_obs_values_only_ode_runs():
             ctrl_values=_CTRL_VALUES,
             context=Simulator(),
         )
+    assert re.search("Selected", caplog.text)
     assert "f_joint_log_prob_factor" in tr or "f_marginal_loglik" in tr
 
 
-def test_case1_simulator_obs_times_obs_values_only_sde_runs():
+def test_case1_simulator_obs_times_obs_values_only_sde_runs(caplog):
     """Case 1: obs_times + obs_values (no predict_times), SDESimulator → default inference."""
-    with pytest.warns(UserWarning, match="dynestyx selected"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         tr = _run_model(
             jumpy_controls_model_sde,
             obs_times=_TIMES,
@@ -182,6 +187,7 @@ def test_case1_simulator_obs_times_obs_values_only_sde_runs():
             ctrl_values=_CTRL_VALUES,
             context=SDESimulator(),
         )
+    assert re.search("Selected", caplog.text)
 
     assert "f_joint_log_prob_factor" in tr or "f_marginal_loglik" in tr
 
@@ -254,7 +260,7 @@ def test_case2_simulator_filter_predict_times_only_runs():
 # -----------------------------------------------------------------------------
 
 
-def test_case3_filter_all_three_runs():
+def test_case3_filter_all_three_runs(caplog):
     """Case 3: obs_times + obs_values + predict_times → default Simulator runs."""
 
     def model():
@@ -266,10 +272,11 @@ def test_case3_filter_all_three_runs():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with pytest.warns(UserWarning, match="Simulator"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         with Filter(filter_config=ContinuousTimeEKFConfig()):
             with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
                 model()
+    assert re.search("Simulator", caplog.text)
     assert "f_predicted_states" in tr or "f_states" in tr
 
 
@@ -290,7 +297,7 @@ def test_case3_filter_obs_only_runs():
     assert "f_marginal_loglik" in tr
 
 
-def test_case3_filter_predict_times_only_runs():
+def test_case3_filter_predict_times_only_runs(caplog):
     """Case 3: predict_times only → default Simulator runs."""
 
     # Filter with no observations passes through to automatic prior simulation.
@@ -301,8 +308,9 @@ def test_case3_filter_predict_times_only_runs():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with pytest.warns(UserWarning, match="Simulator"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         with Filter(filter_config=EKFConfig()):
             with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
                 model()
+    assert re.search("Simulator", caplog.text)
     assert "f_predicted_states" in tr or "f_states" in tr

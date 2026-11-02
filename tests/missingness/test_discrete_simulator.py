@@ -1,3 +1,6 @@
+import logging
+import re
+
 import jax.numpy as jnp
 import jax.random as jr
 import numpyro
@@ -364,7 +367,7 @@ def test_discrete_full_row_missing_correlated_student_t_mcmc_smoke():
     assert "alpha" in mcmc.get_samples()
 
 
-def test_discrete_categorical_conditioning_defaults_to_hmm():
+def test_discrete_categorical_conditioning_defaults_to_hmm(caplog):
     times = jnp.arange(6.0)
     true_A = jnp.array([[0.95, 0.05], [0.1, 0.9]])
     with DiscreteTimeSimulator():
@@ -375,24 +378,26 @@ def test_discrete_categorical_conditioning_defaults_to_hmm():
         )
     obs_values = jnp.asarray(generated["f_observations"])[0, 0, :, 0]
 
-    with pytest.warns(UserWarning, match="HMMConfig"), DiscreteTimeSimulator():
+    with caplog.at_level(logging.INFO, logger="dynestyx"), DiscreteTimeSimulator():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(6)):
             _scalar_categorical_hmm_like_model(
                 A=true_A,
                 obs_times=times,
                 obs_values=obs_values,
             )
+    assert re.search("HMMConfig", caplog.text)
     assert jnp.isfinite(tr["f_marginal_loglik"]["value"]).all()
 
 
-def test_discrete_dirac_missingness_defaults_to_latent_path():
+def test_discrete_dirac_missingness_defaults_to_latent_path(caplog):
     times = jnp.arange(5.0)
     forward = _run_discrete_trace(discrete_dirac_model, predict_times=times)
     obs_values = forward["f_observations"]["value"][0]
     obs_values = set_full_row_missing(obs_values, 2)
 
-    with pytest.warns(UserWarning, match="LatentPathBuilder"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         tr = _run_discrete_trace(
             discrete_dirac_model, obs_times=times, obs_values=obs_values
         )
+    assert re.search("LatentPathBuilder", caplog.text)
     assert jnp.isfinite(tr["f_joint_log_prob"]["value"]).all()

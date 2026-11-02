@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-import warnings
+import logging
 from collections.abc import Callable, Sequence
 from typing import Any, cast
 
@@ -23,6 +23,7 @@ from dynestyx.types import Result
 
 _LATENT_PATH_SIZE_CUTOFF = 1_000
 _ConditionCallable = Callable[..., Result | Term[Result] | None]
+_logger = logging.getLogger("dynestyx")
 
 
 def _default_handlers(
@@ -210,7 +211,7 @@ def _apply_defaults(
 
     Existing inference handlers, forwarded results, and completed predictions
     prevent duplicate work. New handlers are composed around the continuation
-    without replaying the ambient stack. A warning names each automatic choice.
+    without replaying the ambient stack. An INFO log names each automatic choice.
 
     Args:
         continuation: Bound handler method, or the terminal default operation.
@@ -286,12 +287,7 @@ def _apply_defaults(
         if source is not None:
             config_name = f"{type(config).__name__}(filter_source={source!r})"
         descriptions.append(f"{type(interpretation).__name__}({config_name})")
-    warnings.warn(
-        f"dynestyx selected {', '.join(descriptions)} for site {name!r}. "
-        "Use explicit handler contexts to override these defaults.",
-        UserWarning,
-        stacklevel=3,
-    )
+    _logger.info("Selected %s for site %r.", ", ".join(descriptions), name)
 
     # The leftmost interpretation is the existing continuation. Calling the
     # composed method preserves its enclosing fwd prompt and unrelated effects.

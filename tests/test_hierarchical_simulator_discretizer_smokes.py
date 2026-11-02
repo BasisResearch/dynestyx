@@ -1,6 +1,7 @@
 """Smoke tests for hierarchical plate-aware simulator + discretizer behavior."""
 
 import itertools
+import logging
 import re
 
 import equinox as eqx
@@ -341,30 +342,33 @@ def test_plate_previous_transition_slices_the_time_axis():
         assert_finite(tr[site]["value"], shape, where=site)
 
 
-def test_plate_conditioning_discrete_single_and_nested():
+def test_plate_conditioning_discrete_single_and_nested(caplog):
     t = jnp.arange(5.0)
     obs_single = _make_obs_values((2, len(t), 1))
     obs_nested = _make_obs_values((2, 2, len(t), 1))
 
-    with DiscreteTimeSimulator(), pytest.warns(UserWarning, match="KFConfig"):
+    with DiscreteTimeSimulator(), caplog.at_level(logging.INFO, logger="dynestyx"):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(3)):
             _plate_discrete_lti_model(obs_times=t, obs_values=obs_single, M=2)
+    assert re.search("KFConfig", caplog.text)
     assert_finite(tr["f_marginal_loglik"]["value"], (2,))
 
-    with DiscreteTimeSimulator(), pytest.warns(UserWarning, match="KFConfig"):
+    with DiscreteTimeSimulator(), caplog.at_level(logging.INFO, logger="dynestyx"):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(4)):
             _nested_plate_discrete_lti_model(
                 obs_times=t, obs_values=obs_nested, G=2, M=2
             )
+    assert re.search("KFConfig", caplog.text)
     assert_finite(tr["f_marginal_loglik"]["value"], (2, 2))
 
 
-def test_plate_conditioning_ode_single():
+def test_plate_conditioning_ode_single(caplog):
     t = jnp.linspace(0.0, 0.4, 5)
     obs = _make_obs_values((2, len(t), 1))
-    with ODESimulator(), pytest.warns(UserWarning, match="ODEFlowConfig"):
+    with ODESimulator(), caplog.at_level(logging.INFO, logger="dynestyx"):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(5)):
             _plate_continuous_ode_model(obs_times=t, obs_values=obs, M=2)
+    assert re.search("ODEFlowConfig", caplog.text)
     assert_finite(tr["f_marginal_loglik"]["value"], (2,))
 
 
@@ -409,12 +413,13 @@ def test_plate_nonlinear_discrete_single_sample_under_plate():
     )
 
 
-def test_plate_sde_conditioning_supplies_default_filter():
+def test_plate_sde_conditioning_supplies_default_filter(caplog):
     t = jnp.linspace(0.0, 0.4, 5)
     obs = _make_obs_values((2, len(t), 1))
-    with SDESimulator(), pytest.warns(UserWarning, match="KFConfig"):
+    with SDESimulator(), caplog.at_level(logging.INFO, logger="dynestyx"):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(6)):
             _plate_continuous_sde_model(obs_times=t, obs_values=obs, M=2)
+    assert re.search("KFConfig", caplog.text)
     assert_finite(tr["f_marginal_loglik"]["value"], (2,))
 
 

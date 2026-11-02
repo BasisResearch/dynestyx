@@ -24,8 +24,18 @@ will implement the `dsx.sample` primitive using an extended Kalman filter. For m
 ## Default interpretations
 
 `sample` and `condition` supply missing inference and prediction handlers, and
-issue a standard Python warning naming the choices. Explicit handler contexts
-override these choices; supplying a handler also lets you configure its algorithm.
+log the choices at INFO level through the `dynestyx` logger. These messages are
+hidden at Python's default logging level. Explicit handler contexts override
+these choices; supplying a handler also lets you configure its algorithm.
+
+To display automatic selections, configure logging in your application:
+
+```python
+import logging
+
+logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")
+logging.getLogger("dynestyx").setLevel(logging.INFO)
+```
 
 | Inputs | Automatic behavior |
 | --- | --- |

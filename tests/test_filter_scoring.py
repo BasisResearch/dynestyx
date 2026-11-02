@@ -1,3 +1,6 @@
+import logging
+import re
+
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -956,9 +959,9 @@ def test_evaluation_composes_with_filter_and_simulator_registration():
     assert "f_predicted_states" in tr
 
 
-def test_evaluation_supplies_default_filter():
+def test_evaluation_supplies_default_filter(caplog):
     obs_times, obs_values, _, _ = _make_observations()
-    with pytest.warns(UserWarning, match="Filter"):
+    with caplog.at_level(logging.INFO, logger="dynestyx"):
         with Evaluation(
             observation_scoring_config=ObservationScoringConfig(
                 rules=(GaussianLogProbScore(),)
@@ -970,6 +973,7 @@ def test_evaluation_supplies_default_filter():
                 obs_times=obs_times,
                 obs_values=obs_values,
             )
+    assert re.search("Filter", caplog.text)
 
 
 def test_evaluation_explains_disabled_prediction_collection():
