@@ -3175,6 +3175,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../inference/prepared_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PreparedModel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../inference/smoothers/" class="md-nav__link">
         
   
@@ -5763,9 +5791,9 @@ add NumPyro sites.</p>
   <ul>
 <li>Controls are passed through to the selected backend. See the concrete
   simulator for its control interpolation or alignment rules.</li>
-<li>A <code>Simulator</code> instance selects and caches its concrete backend on the
-  first dynamics object it handles. Use separate instances for models
-  requiring different backend types.</li>
+<li>A <code>Simulator</code> instance reuses its cached backend while its type matches
+  the incoming dynamics. A change between discrete-time, ODE, and SDE
+  representations selects a new backend.</li>
 <li><code>Simulator().simulate(...)</code> consumes an already allocated simulation
   key. The public <a class="autorefs autorefs-internal" title="simulate(dynamics: DynamicalModel, *, rng_key: PRNGKeyArray, ctrl_times: Real[Array, ' ctrl_time'] | None = None, ctrl_values: Real[Array, 'ctrl_time control_dim'] | Real[Array, ' ctrl_time'] | None = None, predict_times: Real[Array, ' predict_time'] | None = None, n_simulations: int = 1, simulator_config: SimulatorConfig | None = None, control_policy: PolicyCallable | None = None, filter_config: BaseFilterConfig | None = None, use_true_state: bool = False, initial_policy_state: PyTree | None = None) -> SimulatedResult" href="../../../developer/handlers/#dynestyx.api.simulate">dsx.simulate</a> function splits
   its root key before dispatch.</li>
@@ -5789,7 +5817,7 @@ add NumPyro sites.</p>
             <td>
               <div class="doc-md-description">
                 <p>Optional ODE or SDE solver configuration. Its type
-must match the model selected at first use.</p>
+must match the model on every call.</p>
               </div>
             </td>
           </tr>
@@ -5852,7 +5880,7 @@ on the true state, with no filtering.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Concrete auto-selected simulator cached on first use.</p>
+                <p>Concrete auto-selected simulator cached while compatible.</p>
               </div>
             </td>
           </tr>

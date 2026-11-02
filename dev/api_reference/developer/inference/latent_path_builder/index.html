@@ -3173,6 +3173,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../public/inference/prepared_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PreparedModel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../public/inference/smoothers/" class="md-nav__link">
         
   
@@ -6106,7 +6134,8 @@ and caches this layout whenever observations are concrete. Before an outer
 <code>jax.jit</code> passes <code>obs_values</code> dynamically, either reuse a builder that has
 seen concrete observations or pass eagerly prepared <code>missing_obs_metadata</code>
 to <code>dsx.sample(...)</code>. JAX itself does not run the function eagerly before
-tracing.</p>
+tracing. A <code>PreparedModel</code> wrapper owns these layouts across executions
+even when automatic defaults construct a new builder for each call.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>

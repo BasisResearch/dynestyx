@@ -3175,6 +3175,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../inference/prepared_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PreparedModel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../inference/smoothers/" class="md-nav__link">
         
   
@@ -3611,6 +3639,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#default-interpretations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Default interpretations
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#handler-order" class="md-nav__link">
@@ -5700,6 +5739,94 @@ with NumPyro sampling inside the plate context. For example,</p>
     <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamical_model</span><span class="p">,</span> <span class="n">obs_times</span><span class="o">=</span><span class="n">obs_times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">obs_values</span><span class="p">)</span>
 </code></pre></div>
 <p>will implement the <code>dsx.sample</code> primitive using an extended Kalman filter. For more details, see the corresponding <a href="../../developer/handlers/">developer API page</a>.</p>
+<h2 id="default-interpretations">Default interpretations<a class="headerlink" href="#default-interpretations" title="Permanent link">&para;</a></h2>
+<p><code>sample</code> and <code>condition</code> supply missing inference and prediction handlers, and
+log the choices at INFO level through the <code>dynestyx</code> logger. These messages are
+hidden at Python's default logging level. Explicit handler contexts override
+these choices; supplying a handler also lets you configure its algorithm.</p>
+<p>To display automatic selections, configure logging in your application:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">"</span><span class="si">%(levelname)s</span><span class="s2"> </span><span class="si">%(name)s</span><span class="s2">: </span><span class="si">%(message)s</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"dynestyx"</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Inputs</th>
+<th>Automatic behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>predict_times</code></td>
+<td>Add <code>Simulator()</code> if none is active</td>
+</tr>
+<tr>
+<td><code>obs_times</code> and <code>obs_values</code></td>
+<td>Add an inference handler if none is active</td>
+</tr>
+<tr>
+<td>Observations and prediction times</td>
+<td>Apply both rules</td>
+</tr>
+<tr>
+<td>An incomplete observation or control pair</td>
+<td>Raise an input-validation error</td>
+</tr>
+</tbody>
+</table>
+<p>Categorical latent states select exact HMM filtering with <code>HMMConfig()</code>.
+For other models, <code>sample</code> selects <code>LatentPathBuilder()</code> when observation and state
+dimensions match, <code>T * observation_dim &lt; 1,000</code>, and the transition is known to
+have a density or the model is a native ODE. This initial size heuristic uses
+the number of observation times <code>T</code> per trajectory,
+without multiplying by plate sizes. An ODE remains native: LPB samples its initial state and integrates the
+path. Unknown custom transition capabilities use filtering; request LPB explicitly
+if your custom transition supports it.</p>
+<p>Other cases choose the first structurally compatible filter: cuthbert Kalman
+filter, ensemble Kalman filter for supported Gaussian observation models, then
+bootstrap particle filter. Automatic particle filtering rejects
+<code>DeterministicObservation</code>, including <code>DiracIdentityObservation</code>; add observation
+noise explicitly with <code>GaussianRelaxation(observation_model_cov=...)</code>.
+<code>condition</code> always takes this filter route, as does
+an active <code>Evaluation</code>, which requires filtered results. For automatic Evaluation,
+the compatible choice is cuthbert EnKF for supported Gaussian observations:
+cuthbert KF/PF do not yet supply canonical predictive-observation diagnostics.
+HMM filtering does not supply these outputs, so automatic Evaluation rejects
+categorical latent states. Other observation models require an explicit compatible
+filter. <code>condition</code> does not register NumPyro sites; stochastic algorithms retain
+their existing seed/key requirements. Use an explicit filter config with <code>crn_seed</code> where needed, or
+<code>dsx.simulate(..., rng_key=...)</code> for pure-JAX simulation.</p>
+<p>Without observations, automatic simulation preserves the model's native
+representation: <code>Simulator()</code> selects <code>SDESimulator</code> for SDEs and <code>ODESimulator</code>
+for ODEs. Their internal integration steps are independent of <code>predict_times</code>.
+An explicit <code>Discretizer</code> instead selects simulation of the discrete transitions.
+Automatic continuous-time filtering adds discretization: Kalman filtering uses
+the default discretizer, nonlinear SDE ensemble/particle filtering uses
+<code>DiffraxSampleConfig</code>, and ODE filtering uses <code>ODEFlowConfig</code>.
+Explicit inference handlers retain their continuous-time behavior, including when
+an automatic simulator is added. An explicit native simulator or solver config
+must remain compatible with the model reaching it; incompatible combinations
+raise instead of changing that configuration.</p>
+<p>Existing limitations still apply: LPB predictions must be at or after the final
+observation time, and LPB with traced observation arrays needs fixed missingness
+metadata. A <a href="../inference/prepared_model/">PreparedModel</a> wrapper can prepare and
+retain that metadata; it can also be supplied through <code>missing_obs_metadata</code>.
+No default infers identity
+observations or adds numerical jitter. Equal state and observation dimensions
+alone do not imply noise-free observations.</p>
+<p>For example, a model can request predictions without an explicit simulator:</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">handlers</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">rng_seed</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="n">prior</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">times</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">handlers</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">rng_seed</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">Filter</span><span class="p">(</span><span class="n">KFConfig</span><span class="p">(</span><span class="n">filter_source</span><span class="o">=</span><span class="s2">"cuthbert"</span><span class="p">)):</span>
+    <span class="n">posterior</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
+        <span class="s2">"f"</span><span class="p">,</span> <span class="n">discrete_dynamics</span><span class="p">,</span>
+        <span class="n">obs_times</span><span class="o">=</span><span class="n">times</span><span class="p">,</span> <span class="n">obs_values</span><span class="o">=</span><span class="n">observations</span><span class="p">,</span>
+        <span class="n">predict_times</span><span class="o">=</span><span class="n">future_times</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div>
 <h2 id="handler-order">Handler order<a class="headerlink" href="#handler-order" title="Permanent link">&para;</a></h2>
 <p>Nest handlers in this order, <strong>outermost first</strong>:</p>
 <ol>
@@ -5730,8 +5857,8 @@ statement, the leftmost context is outermost.</p>
 discretization and relaxation prepare the model for inference, followed by
 simulation and evaluation. This lets an outer inference handler receive the
 transformed model.</p>
-<p>Conditioning on <code>obs_values</code> requires an inference handler. Generating at
-<code>predict_times</code> requires a simulator. Direct calls to <code>simulate</code> and <code>log_prob</code>
+<p><code>sample</code> and <code>condition</code> supply missing inference and simulation stages as
+described above. Direct calls to <code>simulate</code> and <code>log_prob</code>
 use the model passed to them; apply model transformations explicitly with
 <code>discretize_dynamics</code> or <code>relax_dynamics</code> first when needed.</p>
 <h2 id="handler-primitives">Handler primitives<a class="headerlink" href="#handler-primitives" title="Permanent link">&para;</a></h2>
@@ -6089,6 +6216,10 @@ plotting/credible intervals.</p>
 <p>This is the NumPyro-free entry point. An active <code>Filter</code> or <code>Smoother</code>
 returns a <code>ConditionedResult</code> carrying the inference times, marginal log
 likelihood, backend states, and per-time distributions.</p>
+<p>Without an inference handler, observations select a compatible filter.
+Prediction times add a simulator when needed. Unlike <code>sample</code>, this entry
+point never automatically selects <code>LatentPathBuilder</code>. Randomized filters
+and simulation retain their existing seed/key requirements.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6253,6 +6384,11 @@ likelihood, backend states, and per-time distributions.</p>
 in usage, but using a <code>DynamicalModel</code> instead of a <code>Distribution</code>.</p>
 <p>Internally, <code>sample</code> calls <code>dsx.condition(...)</code> and then registers the
 results as numpyro sites (<code>numpyro.factor</code>, <code>numpyro.deterministic</code>).</p>
+<p>Missing inference and prediction handlers are supplied automatically, with
+a warning describing the chosen configuration. Small eligible models use
+<code>LatentPathBuilder</code>; other models use a compatible filter. Explicit
+handler contexts override these defaults. See the handler API guide for
+the selection rules and required nesting order.</p>
 
 
 <details class="shape-note" open>

@@ -3173,6 +3173,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../public/inference/prepared_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PreparedModel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../public/inference/smoothers/" class="md-nav__link">
         
   
@@ -5637,9 +5665,18 @@ internal operation, not part of the package's public API.</p>
 through discretization, Gaussian relaxation, inference, simulation, and evaluation. Plates may repeat;
 other stages may not. Filter, Smoother, and LatentPathBuilder share one inference
 stage. Observation inputs require inference, and prediction times require a
-simulator, including DiscreteControlLoopSimulator. Inference without observations
-and simulation without prediction times emit warnings. Existing model/backend
-compatibility checks still apply.</p>
+simulator, including DiscreteControlLoopSimulator; missing stages are supplied
+by the private default interpretation.
+Inference without observations and simulation without prediction times emit
+warnings. Existing model/backend compatibility checks still apply.</p>
+<p>Default completion happens before Simulator/Evaluation consume their inputs, or
+in <code>_condition_intp</code>'s default rule. <code>_defaults</code> builds ordinary interpretation
+objects and takes their coproduct with the existing continuation. Applying that
+composed method directly preserves its enclosing <code>fwd</code> continuation and unrelated
+effects, without replacing the ambient interpretation or replaying inner handlers.
+Forwarded conditioning results and <code>_dsx_prediction_done</code> prevent duplicate work.</p>
+<p>Stack-query implementations accept <code>**kwargs</code> to establish an empty argument
+frame in effectful even when queried inside an operation with arguments.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -5994,6 +6031,10 @@ plotting/credible intervals.</p>
 <p>This is the NumPyro-free entry point. An active <code>Filter</code> or <code>Smoother</code>
 returns a <code>ConditionedResult</code> carrying the inference times, marginal log
 likelihood, backend states, and per-time distributions.</p>
+<p>Without an inference handler, observations select a compatible filter.
+Prediction times add a simulator when needed. Unlike <code>sample</code>, this entry
+point never automatically selects <code>LatentPathBuilder</code>. Randomized filters
+and simulation retain their existing seed/key requirements.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6158,6 +6199,11 @@ likelihood, backend states, and per-time distributions.</p>
 in usage, but using a <code>DynamicalModel</code> instead of a <code>Distribution</code>.</p>
 <p>Internally, <code>sample</code> calls <code>dsx.condition(...)</code> and then registers the
 results as numpyro sites (<code>numpyro.factor</code>, <code>numpyro.deterministic</code>).</p>
+<p>Missing inference and prediction handlers are supplied automatically, with
+a warning describing the chosen configuration. Small eligible models use
+<code>LatentPathBuilder</code>; other models use a compatible filter. Explicit
+handler contexts override these defaults. See the handler API guide for
+the selection rules and required nesting order.</p>
 
 
 <details class="shape-note" open>

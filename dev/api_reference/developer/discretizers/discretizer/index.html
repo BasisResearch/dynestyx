@@ -3173,6 +3173,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../public/inference/prepared_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PreparedModel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../public/inference/smoothers/" class="md-nav__link">
         
   
@@ -5792,11 +5820,11 @@ require transition densities or analytic moments are not supported.</p>
 <p>The implementation supports any Diffrax solver that operates from ordinary
 Brownian increments, including <code>diffrax.Euler()</code> and <code>diffrax.Heun()</code>.
 The default inner config selects <code>diffrax.Euler()</code>, the Euler--Maruyama
-solver. Cost scales with the number of internal solver steps and requested
-samples. <code>source="em_scan"</code> is rejected. Reverse-mode differentiation
-through the default <code>diffrax.RecursiveCheckpointAdjoint()</code> requires a finite
-<code>sde_solver.max_steps</code>; set that bound explicitly for gradient-based
-inference.</p>
+solver, with a default step size of <code>1e-2</code>. Cost scales with the number of
+internal solver steps and requested samples. <code>source="em_scan"</code> is rejected.
+Reverse-mode differentiation through the default
+<code>diffrax.RecursiveCheckpointAdjoint()</code> requires a finite
+<code>sde_solver.max_steps</code>; the default bound is <code>100_000</code> steps per interval.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5819,7 +5847,7 @@ inference.</p>
                 <p>Existing SDE simulator configuration
 used for each interval. It must have <code>source="diffrax"</code>. Defaults
 to <code>SDESimulatorConfig(source="diffrax",
-solver=diffrax.Euler())</code>.</p>
+solver=diffrax.Euler(), dt0=1e-2, max_steps=100_000)</code>.</p>
               </div>
             </td>
           </tr>
