@@ -12,6 +12,7 @@ import numpyro
 import numpyro.distributions as dist
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from jax.core import Tracer
 from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
 
 from dynestyx.handlers import (
@@ -60,6 +61,7 @@ from dynestyx.observation_missingness import (
     resolve_missing_observation_strategy,
     validate_missing_obs_values,
 )
+from dynestyx.prepared import _get_prepared_missingness_cache
 from dynestyx.simulation.discrete import _sample_discrete_state_path
 from dynestyx.simulation.utils import _sample_observation_path
 from dynestyx.types import ConditionedResult, LatentStateResult
@@ -82,7 +84,10 @@ def _resolve_missing_observation_metadata(
 ) -> MissingObservationMetadata:
     """Prepare static missingness layout while retaining the current times."""
     cache_key = (name, tuple(obs_values.shape))
+    prepared_cache = _get_prepared_missingness_cache()
     metadata = missing_obs_metadata
+    if metadata is None and prepared_cache is not None:
+        metadata = prepared_cache.get(cache_key)
     if metadata is None:
         try:
             with jax.ensure_compile_time_eval():
@@ -99,7 +104,8 @@ def _resolve_missing_observation_metadata(
                 raise ValueError(
                     f"LatentPathBuilder sample site {name!r} needs a fixed "
                     "observation missingness pattern, but cannot infer one from "
-                    "traced obs_values. Reuse a builder that has first seen concrete "
+                    "traced obs_values. Call PreparedModel.prepare(...) eagerly, "
+                    "reuse a builder that has first seen concrete "
                     "observations, or pass metadata prepared with "
                     "dsx.prepare_missing_observation_metadata(...) to "
                     "dsx.sample(..., missing_obs_metadata=...)."
@@ -109,6 +115,19 @@ def _resolve_missing_observation_metadata(
             "missing_obs_metadata.observation_shape must match obs_values.shape."
         )
     cache[cache_key] = metadata
+    if (
+        prepared_cache is not None
+        and missing_obs_metadata is None
+        and not any(
+            isinstance(value, Tracer)
+            for value in (
+                metadata.missing_obs_times,
+                metadata.missing_obs_coordinate_indices,
+                metadata.missing_flat_indices,
+            )
+        )
+    ):
+        prepared_cache.setdefault(cache_key, metadata)
 
     time_indices = metadata.missing_flat_indices
     if len(metadata.observation_shape) > 1:
@@ -218,7 +237,8 @@ class LatentPathBuilder(ObjectInterpretation, HandlesSelf):
     `jax.jit` passes `obs_values` dynamically, either reuse a builder that has
     seen concrete observations or pass eagerly prepared `missing_obs_metadata`
     to `dsx.sample(...)`. JAX itself does not run the function eagerly before
-    tracing.
+    tracing. A ``PreparedModel`` wrapper owns these layouts across executions
+    even when automatic defaults construct a new builder for each call.
 
     Attributes:
         ode_simulator_config: ODE solver and integration settings used during
