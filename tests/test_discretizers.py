@@ -28,6 +28,7 @@ from dynestyx.models import (
 from dynestyx.models.observations import LinearGaussianObservation
 from dynestyx.solvers import euler_maruyama_loc_cov
 from tests.models import continuous_time_stochastic_l63_model_dirac_obs
+from tests.test_utils import assert_finite
 
 
 def _ctse_1d_zero_drift_unit_diffusion() -> ContinuousTimeStateEvolution:
@@ -124,8 +125,8 @@ def test_euler_maruyama_batched_time_covariance_shape():
     t_now = jnp.array([0.0, 1.0, 2.0])
     t_next = jnp.array([0.5, 1.5, 2.5])
     d = evo(x, None, t_now, t_next)
-    assert d.loc.shape == (3, 1)
-    assert d.covariance_matrix.shape == (3, 1, 1)
+    assert_finite(d.loc, (3, 1), where="d.loc")
+    assert_finite(d.covariance_matrix, (3, 1, 1), where="d.covariance_matrix")
     assert jnp.allclose(d.covariance_matrix[:, 0, 0], jnp.array([0.5, 0.5, 0.5]))
 
 
@@ -153,8 +154,8 @@ def test_euler_maruyama_loc_cov_batched_state_accepts_scalar_times():
         jnp.array(1.5),
     )
 
-    assert out["loc"].shape == (3, 1)
-    assert out["cov"].shape == (3, 1, 1)
+    assert_finite(out["loc"], (3, 1), where="out['loc']")
+    assert_finite(out["cov"], (3, 1, 1), where="out['cov']")
     assert jnp.allclose(out["loc"], x)
     assert jnp.allclose(out["cov"][:, 0, 0], 0.5)
 
@@ -232,8 +233,12 @@ def test_discretized_dirac_observations_preserve_state_dimension():
         with Discretizer():
             samples = predictive(jr.PRNGKey(0), predict_times=obs_times)
 
+    assert samples["f_states"] is not None, "samples['f_states'] is None"
     assert samples["f_states"].shape[-1] == 3
+    assert_finite(samples["f_states"], where="samples['f_states']")
+    assert samples["f_observations"] is not None, "samples['f_observations'] is None"
     assert samples["f_observations"].shape[-1] == 3
+    assert_finite(samples["f_observations"], where="samples['f_observations']")
     assert jnp.allclose(samples["f_states"], samples["f_observations"])
 
 

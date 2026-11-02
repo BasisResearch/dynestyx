@@ -11,6 +11,7 @@ from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from tests.fixtures import _squeeze_sim_dims
 from tests.models import discrete_time_lti_simplified_model
+from tests.test_utils import assert_finite
 
 SMOKE_NUM_SAMPLES = 1
 SMOKE_NUM_WARMUP = 1
@@ -45,6 +46,7 @@ def test_filter_based_discrete_nuts_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(0), obs_times, obs_values)
     assert "alpha" in posterior_samples
+    assert_finite(posterior_samples["alpha"], (SMOKE_NUM_SAMPLES,), where="alpha")
 
 
 @pytest.mark.parametrize("num_chains", [1, 2])
@@ -64,3 +66,6 @@ def test_filter_based_discrete_sgmcmc_smoke(num_chains):
         )
         posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
     assert "alpha" in posterior_samples
+    assert_finite(
+        posterior_samples["alpha"], (num_chains, SMOKE_NUM_SAMPLES), where="alpha"
+    )

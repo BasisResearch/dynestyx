@@ -20,6 +20,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
 )
 from dynestyx.models.drifts import AffineDrift
+from tests.test_utils import assert_finite
 
 # ---------------------------------------------------------------------------
 # Discrete-time nonlinear model (reused from hierarchical simulator smokes)
@@ -97,9 +98,7 @@ def test_hierarchical_discrete_simulator_inference_smoke():
         )
 
     assert "beta_raw" in posterior
-    assert posterior["beta_raw"].shape[-1] == M
-    assert not jnp.isnan(posterior["beta_raw"]).any()
-    assert not jnp.isinf(posterior["beta_raw"]).any()
+    assert_finite(posterior["beta_raw"], (1, M), where="beta_raw")
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +170,4 @@ def test_hierarchical_ode_simulator_inference_smoke():
         )
 
     assert "rho_raw" in posterior
-    assert posterior["rho_raw"].shape[-1] == M
-    assert not jnp.isnan(posterior["rho_raw"]).any()
-    assert not jnp.isinf(posterior["rho_raw"]).any()
+    assert_finite(posterior["rho_raw"], (1, M), where="rho_raw")

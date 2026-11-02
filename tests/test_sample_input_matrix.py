@@ -8,10 +8,10 @@ Matrix of expected behavior across three handler contexts:
 
 | Input Provided | Case 1: Simulator | Case 2: Sim+Filter | Case 3: Filter |
 |----------------|-------------------|--------------------|-----------------|
-| obs_times, obs_values, predict_times | Error | Filter consumes; Simulator runs | Runs |
+| obs_times, obs_values, predict_times | Error | Filter consumes; Simulator runs | Error |
 | obs_times, obs_values | Error | Filter consumes; Simulator no-ops | Runs |
 | obs_times, predict_times (no obs_values) | Error | Error | Error |
-| predict_times only | Runs | No-op → Case 1 | No-op |
+| predict_times only | Runs | No-op → Case 1 | Error |
 | obs_times only | Error | Error | Error |
 """
 
@@ -250,7 +250,7 @@ def test_case2_simulator_filter_predict_times_only_runs():
 
 
 def test_case3_filter_all_three_runs():
-    """Case 3: obs_times + obs_values + predict_times → Filter runs."""
+    """Case 3: obs_times + obs_values + predict_times → missing Simulator errors."""
 
     def model():
         return jumpy_controls_model_sde(
@@ -261,10 +261,10 @@ def test_case3_filter_all_three_runs():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with Filter(filter_config=ContinuousTimeEKFConfig()):
-        with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-            model()
-    assert "f_marginal_loglik" in tr
+    with pytest.raises(ValueError, match="predict_times requires a Simulator"):
+        with Filter(filter_config=ContinuousTimeEKFConfig()):
+            with trace(), seed(rng_seed=jr.PRNGKey(0)):
+                model()
 
 
 def test_case3_filter_obs_only_runs():
@@ -285,7 +285,7 @@ def test_case3_filter_obs_only_runs():
 
 
 def test_case3_filter_predict_times_only_noop():
-    """Case 3: predict_times only → Filter no-op (no obs to condition on)."""
+    """Case 3: predict_times only → missing Simulator errors."""
 
     # Filter with no obs adds nothing; falls through. No filter output expected.
     def model():
@@ -295,8 +295,7 @@ def test_case3_filter_predict_times_only_noop():
             ctrl_values=_CTRL_VALUES,
         )
 
-    with Filter(filter_config=EKFConfig()):
-        with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
-            model()
-    # No obs → filter adds nothing; no f_marginal_loglik
-    assert "f_marginal_loglik" not in tr
+    with pytest.raises(ValueError, match="predict_times requires a Simulator"):
+        with Filter(filter_config=EKFConfig()):
+            with trace(), seed(rng_seed=jr.PRNGKey(0)):
+                model()

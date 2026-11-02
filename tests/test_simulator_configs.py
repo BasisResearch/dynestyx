@@ -7,6 +7,7 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from tests.test_utils import assert_finite
 
 
 @pytest.mark.parametrize(
@@ -69,9 +70,19 @@ def test_odesimulator_accepts_structured_config():
         with dsx.ODESimulator(simulator_config=config, n_simulations=2):
             _ode_model(predict_times=predict_times)
 
-    assert tr["f_times"]["value"].shape == (2, len(predict_times))
-    assert tr["f_states"]["value"].shape == (2, len(predict_times), 1)
-    assert tr["f_observations"]["value"].shape == (2, len(predict_times), 1)
+    assert_finite(
+        tr["f_times"]["value"], (2, len(predict_times)), where="tr['f_times']['value']"
+    )
+    assert_finite(
+        tr["f_states"]["value"],
+        (2, len(predict_times), 1),
+        where="tr['f_states']['value']",
+    )
+    assert_finite(
+        tr["f_observations"]["value"],
+        (2, len(predict_times), 1),
+        where="tr['f_observations']['value']",
+    )
 
 
 def test_odesimulator_config_forwards_throw_setting():
@@ -87,9 +98,19 @@ def test_sdesimulator_accepts_structured_config():
         with dsx.SDESimulator(simulator_config=config, n_simulations=2):
             _sde_model(predict_times=predict_times)
 
-    assert tr["f_times"]["value"].shape == (2, len(predict_times))
-    assert tr["f_states"]["value"].shape == (2, len(predict_times), 1)
-    assert tr["f_observations"]["value"].shape == (2, len(predict_times), 1)
+    assert_finite(
+        tr["f_times"]["value"], (2, len(predict_times)), where="tr['f_times']['value']"
+    )
+    assert_finite(
+        tr["f_states"]["value"],
+        (2, len(predict_times), 1),
+        where="tr['f_states']['value']",
+    )
+    assert_finite(
+        tr["f_observations"]["value"],
+        (2, len(predict_times), 1),
+        where="tr['f_observations']['value']",
+    )
 
 
 def test_simulator_routes_backend_specific_configs():
@@ -105,8 +126,16 @@ def test_simulator_routes_backend_specific_configs():
         with dsx.Simulator(simulator_config=sde_config, n_simulations=2):
             _sde_model(predict_times=predict_times)
 
-    assert ode_trace["f_states"]["value"].shape == (2, len(predict_times), 1)
-    assert sde_trace["f_states"]["value"].shape == (2, len(predict_times), 1)
+    assert_finite(
+        ode_trace["f_states"]["value"],
+        (2, len(predict_times), 1),
+        where="ode_trace['f_states']['value']",
+    )
+    assert_finite(
+        sde_trace["f_states"]["value"],
+        (2, len(predict_times), 1),
+        where="sde_trace['f_states']['value']",
+    )
 
 
 def test_simulator_rejects_mismatched_config_for_routed_backend():

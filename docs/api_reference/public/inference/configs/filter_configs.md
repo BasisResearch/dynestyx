@@ -2,6 +2,21 @@
 
 The single `Filter()` handler is directed to the appropriate filtering algorithm via the provided `FilterConfig`. We provide a summary below, as well as an exhaustive list of classes.
 
+Filter configs, including localization and resampling options, are frozen dataclasses.
+Create an updated config with `dataclasses.replace` instead of assigning to its fields:
+
+```python
+from dataclasses import replace
+
+from dynestyx.inference.configs.filter import EnKFConfig
+
+config = EnKFConfig(n_particles=30)
+larger_ensemble = replace(config, n_particles=100)
+```
+
+Replacement reruns configuration validation and leaves the original unchanged.
+Nested objects such as `extra_filter_kwargs` dictionaries are not recursively frozen.
+
 `include_predicted_observations` controls whether supported backend predictive-observation outputs are collected into `ConditionedResult` and defaults to `True`. The shared `record_predicted_observations_*` fields independently control whether available means, covariances, or ensembles are recorded to the NumPyro trace; they also default to `True`. Observation scoring is configured on the separate `Evaluation` handler.
 
 ## Available filter configurations

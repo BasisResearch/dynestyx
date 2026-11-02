@@ -27,6 +27,7 @@ from dynestyx.inference.configs.simulator import (
     SDESimulatorConfig,
 )
 from dynestyx.inference.filters import Filter
+from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
@@ -35,6 +36,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     StochasticContinuousTimeStateEvolution,
 )
+from tests.test_utils import assert_finite
 
 
 def _ode_state_evolution():
@@ -222,8 +224,7 @@ def test_ode_flow_discretizer_runs_discrete_simulator():
             with trace() as tr, seed(rng_seed=2):
                 model(jnp.array([0.0, 0.05, 0.12]))
 
-    assert tr["f_states"]["value"].shape == (1, 3, 1)
-    assert jnp.all(jnp.isfinite(tr["f_states"]["value"]))
+    assert_finite(tr["f_states"]["value"], (1, 3, 1), where="tr['f_states']['value']")
 
 
 @pytest.mark.parametrize(
@@ -293,21 +294,29 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
                     )
 
     predictions = result.predicted_observations
+    assert result.evaluation_result is not None
     scores = result.evaluation_result.observation_scores
-    assert predictions is not None
-    assert predictions.ensemble.shape == (
-        len(obs_times),
-        n_particles,
-        1,
+    assert isinstance(predictions, PredictedObservationOutputs)
+    assert predictions.ensemble is not None
+    assert predictions.mean is not None
+    assert predictions.cov is not None
+    assert_finite(
+        predictions.ensemble,
+        (len(obs_times), n_particles, 1),
+        where="predictions.ensemble",
     )
-    assert predictions.mean.shape == (len(obs_times), 1)
-    assert predictions.cov.shape == (len(obs_times), 1, 1)
-    assert scores["gaussian_log_prob"].shape == (len(obs_times), 1)
-    assert scores["energy_score"].shape == (len(obs_times), 1)
-    assert jnp.all(jnp.isfinite(scores["gaussian_log_prob"]))
-    assert jnp.all(jnp.isfinite(scores["energy_score"]))
+    assert_finite(predictions.mean, (len(obs_times), 1), where="predictions.mean")
+    assert_finite(predictions.cov, (len(obs_times), 1, 1), where="predictions.cov")
+    assert_finite(
+        scores["gaussian_log_prob"],
+        (len(obs_times), 1),
+        where="scores['gaussian_log_prob']",
+    )
+    assert_finite(
+        scores["energy_score"], (len(obs_times), 1), where="scores['energy_score']"
+    )
 
-    cumulative_loglik = result.states.log_normalizing_constant
+    cumulative_loglik = result.log_normalizing_constant
     per_step_loglik = jnp.diff(
         jnp.concatenate([jnp.zeros_like(cumulative_loglik[:1]), cumulative_loglik])
     )
@@ -317,6 +326,7 @@ def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
         rtol=2e-5,
         atol=2e-5,
     )
+    assert result.marginal_loglik is not None
     assert jnp.allclose(
         jnp.sum(scores["gaussian_log_prob"]),
         result.marginal_loglik,
@@ -481,7 +491,11 @@ def test_diffrax_sample_transition_samples_but_has_no_density():
     first = transition.sample(jr.PRNGKey(1))
     assert transition.has_rsample
     assert jnp.array_equal(first, transition.sample(jr.PRNGKey(1)))
-    assert transition.sample(jr.PRNGKey(2), sample_shape=(2,)).shape == (2, 1)
+    assert_finite(
+        transition.sample(jr.PRNGKey(2), sample_shape=(2,)),
+        (2, 1),
+        where="transition.sample(jr.PRNGKey(2), sample_shape=(2,))",
+    )
     assert jnp.array_equal(
         transition.rsample(jr.PRNGKey(2), sample_shape=(2,)),
         transition.sample(jr.PRNGKey(2), sample_shape=(2,)),

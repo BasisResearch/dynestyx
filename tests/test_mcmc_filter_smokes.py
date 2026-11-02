@@ -21,6 +21,7 @@ from tests.models import (
     continuous_time_stochastic_l63_model,
     discrete_time_lti_simplified_model,
 )
+from tests.test_utils import assert_finite
 
 SMOKE_NUM_SAMPLES = 1
 SMOKE_NUM_WARMUP = 1
@@ -70,6 +71,7 @@ def test_filter_based_mcmc_nuts_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(0), obs_times, obs_values)
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (SMOKE_NUM_SAMPLES,), where="rho")
 
 
 def test_filter_based_mcmc_hmc_smoke():
@@ -88,6 +90,7 @@ def test_filter_based_mcmc_hmc_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (1, SMOKE_NUM_SAMPLES), where="rho")
 
 
 def test_discrete_filter_based_mcmc_hmc_smoke():
@@ -106,6 +109,7 @@ def test_discrete_filter_based_mcmc_hmc_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(1), obs_times, obs_values)
     assert "alpha" in posterior_samples
+    assert_finite(posterior_samples["alpha"], (1, SMOKE_NUM_SAMPLES), where="alpha")
 
 
 def test_filter_based_sgmcmc_smoke():
@@ -124,6 +128,7 @@ def test_filter_based_sgmcmc_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(2), obs_times, obs_values)
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (1, SMOKE_NUM_SAMPLES), where="rho")
 
 
 def test_filter_based_adaptive_mwg_smoke():
@@ -140,6 +145,7 @@ def test_filter_based_adaptive_mwg_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(4), obs_times, obs_values)
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (1, SMOKE_NUM_SAMPLES), where="rho")
 
 
 def test_particle_filter_based_adaptive_metropolis_smoke():
@@ -176,6 +182,7 @@ def test_filter_based_mala_smoke():
         )
         posterior_samples = inference.run(jr.PRNGKey(3), obs_times, obs_values)
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (1, SMOKE_NUM_SAMPLES), where="rho")
 
 
 if __name__ == "__main__":

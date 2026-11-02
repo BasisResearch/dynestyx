@@ -10,7 +10,12 @@ from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
 from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
 from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
 from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
-from dynestyx.handlers import HandlesSelf, _condition_intp
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
 from dynestyx.inference.configs.discretizer import (
     BaseDiscretizerConfig,
     DiffraxSampleConfig,
@@ -193,6 +198,10 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
                 f"got {type(discretizer_config).__name__}."
             )
         self.discretizer_config = discretizer_config
+
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self, **kwargs):
+        return [_DynestyxStackKind.DISCRETIZER, *fwd()]
 
     @implements(_condition_intp)
     def _sample_ds(

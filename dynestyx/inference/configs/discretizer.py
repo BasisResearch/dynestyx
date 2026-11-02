@@ -11,7 +11,7 @@ from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
 )
-from dynestyx.utils import _validate_nonnegative_float
+from dynestyx.utils.validation import _validate_nonnegative_float
 
 
 def _default_diffrax_sde_solver() -> SDESimulatorConfig:

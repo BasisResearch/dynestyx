@@ -2,11 +2,13 @@
 
 import dataclasses
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, Self, cast, overload, runtime_checkable
 
 import equinox as eqx
 import jax.numpy as jnp
-from jaxtyping import Array, Int, Real
+from jaxtyping import Array, Int, PyTree, Real
+
+from dynestyx.models.layout import LayoutCollection
 
 
 @runtime_checkable
@@ -17,8 +19,181 @@ class FunctionOfTime(Protocol):
         raise NotImplementedError()
 
 
+class FilterModelInputs(Protocol):
+    """Observation-aligned model inputs retained by a filter backend."""
+
+    @property
+    def time(self) -> Real[Array, "..."]:
+        """Times at which observations are assimilated."""
+        ...
+
+    @property
+    def u(self) -> Real[Array, "..."]:
+        """Controls used to evaluate the observation model."""
+        ...
+
+
+class _Unsupported[T]:
+    """Typed, non-data descriptor that lets concrete results store field values."""
+
+    def __init__(self, doc: str):
+        self.__doc__ = doc
+        self.name = ""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.name = name
+
+    @overload
+    def __get__(self, instance: None, owner: type | None = None) -> Self: ...
+
+    @overload
+    def __get__(self, instance: object, owner: type | None = None) -> T: ...
+
+    def __get__(self, instance: object | None, owner: type | None = None) -> Self | T:
+        if instance is None:
+            return self
+        raise NotImplementedError(
+            f"{type(instance).__name__} does not support {self.name!r}."
+        )
+
+
+class Result:
+    """Typed interface for outputs produced by dynestyx handlers.
+
+    Unsupported properties raise ``NotImplementedError``. Supported fields may
+    be ``None`` when their handler did not record a value. Concrete results
+    retain their constructor arguments and stored dataclass fields.
+    """
+
+    observation_scores = _Unsupported[dict[str, Real[Array, "..."]]](
+        "Scores computed by an evaluation handler."
+    )
+
+    marginal_loglik = _Unsupported[Real[Array, "*plate"] | None](
+        "Marginal observation log likelihood."
+    )
+
+    times = _Unsupported[Real[Array, "..."] | None]("Inference or simulation times.")
+
+    states = _Unsupported[object](
+        "Raw backend inference states or simulated state arrays."
+    )
+
+    dists = _Unsupported[list | None]("Time-major posterior distributions.")
+
+    predicted_observations = _Unsupported[object](
+        "Observation predictions produced by the selected handler."
+    )
+
+    evaluation_result = _Unsupported["EvaluationResult | None"](
+        "Evaluation outputs attached to a conditioning result."
+    )
+
+    joint_log_prob = _Unsupported[Real[Array, "*plate"] | None](
+        "Joint log density of a reconstructed latent path and observations."
+    )
+
+    state_path_params = _Unsupported[
+        Real[Array, "*state_path_param_shape"] | list[Real[Array, "..."]] | None
+    ]("Free parameters used to construct a latent state path.")
+
+    state_path_param_times = _Unsupported[
+        Real[Array, "*state_path_param_time_plate state_path_param_time"]
+        | list[Real[Array, "..."]]
+        | None
+    ]("Times associated with latent path parameters.")
+
+    state_path_param_coordinate_indices = _Unsupported[
+        Int[Array, "*state_path_param_plate n_state_path_params"]
+        | list[Int[Array, "..."]]
+        | None
+    ]("State coordinates associated with latent path parameters.")
+
+    state_path = _Unsupported[Real[Array, "*state_path_shape"] | None](
+        "Reconstructed latent state path."
+    )
+
+    state_path_times = _Unsupported[
+        Real[Array, "*state_path_time_plate state_path_time"] | None
+    ]("Times of the reconstructed latent state path.")
+
+    missing_obs_values = _Unsupported[
+        Real[Array, "*missing_obs_shape"] | list[Real[Array, "..."]] | None
+    ]("Latent values used to fill missing observation entries.")
+
+    missing_obs_times = _Unsupported[
+        Real[Array, "*missing_obs_time_plate n_missing_obs"]
+        | list[Real[Array, "..."]]
+        | None
+    ]("Times associated with missing observation entries.")
+
+    missing_obs_coordinate_indices = _Unsupported[
+        Int[Array, "*missing_obs_plate n_missing_obs"] | list[Int[Array, "..."]] | None
+    ]("Observation coordinates associated with missing entries.")
+
+    completed_obs_values = _Unsupported[Real[Array, "*completed_obs_shape"] | None](
+        "Observation array after missing entries have been filled."
+    )
+
+    state_dists = _Unsupported[list | None](
+        "Distributions along a reconstructed latent state path."
+    )
+
+    x_0 = _Unsupported[
+        Real[Array, "*plate n_simulations state_dim"]
+        | Real[Array, "*plate n_simulations"]
+        | None
+    ]("Simulated initial states.")
+
+    observations = _Unsupported[
+        Real[Array, "*plate n_simulations obs_time observation_dim"]
+        | Real[Array, "*plate n_simulations obs_time"]
+        | None
+    ]("Simulated observation paths.")
+
+    obs_times = _Unsupported[Real[Array, "*plate n_simulations obs_time"] | None](
+        "Times of simulated observations."
+    )
+
+    controls = _Unsupported[
+        Real[Array, "*plate n_simulations ctrl_time control_dim"]
+        | Real[Array, "*plate n_simulations ctrl_time"]
+        | None
+    ]("Controls recorded during simulation.")
+
+    ctrl_times = _Unsupported[Real[Array, "*plate n_simulations ctrl_time"] | None](
+        "Times of recorded controls."
+    )
+
+    predicted_times = _Unsupported[
+        Real[Array, "*plate n_simulations predict_time"] | None
+    ]("Times used for posterior predictive simulation.")
+
+    predicted_states = _Unsupported[
+        Real[Array, "*plate n_simulations predict_time state_dim"]
+        | Real[Array, "*plate n_simulations predict_time"]
+        | None
+    ]("Posterior predictive state paths.")
+
+    log_normalizing_constant = _Unsupported[Real[Array, "*plate time"]](
+        "Cumulative log normalizing constants at the observation times."
+    )
+
+    predicted_ensemble = _Unsupported[Real[Array, "*plate time n_members state_dim"]](
+        "State ensembles before assimilating each observation."
+    )
+
+    ensemble = _Unsupported[Real[Array, "*plate time n_members state_dim"]](
+        "Filtered state ensembles after assimilating each observation."
+    )
+
+    model_inputs = _Unsupported[FilterModelInputs](
+        "Observation-aligned inputs retained by the filter backend."
+    )
+
+
 @dataclasses.dataclass
-class EvaluationResult:
+class EvaluationResult(Result):
     """Outputs computed by an evaluation handler.
 
     Evaluation handlers attach this object to the ``ConditionedResult`` they
@@ -35,7 +210,7 @@ class EvaluationResult:
 
 
 @dataclasses.dataclass
-class ConditionedResult:
+class ConditionedResult(Result):
     """Common base for results from the NumPyro-free conditioning primitive.
 
     ``dsx.condition`` returns this type under both ``Filter`` and ``Smoother``.
@@ -59,6 +234,43 @@ class ConditionedResult:
         default=None, repr=False
     )
 
+    def _backend_value(self, name: str) -> object:
+        value = getattr(self.states, name, None)
+        if value is None:
+            raise NotImplementedError(
+                f"{type(self).__name__}.{name} is unavailable: the backend "
+                "does not provide it or did not record it."
+            )
+        return value
+
+    @property
+    def log_normalizing_constant(self) -> Real[Array, "*plate time"]:
+        """Cumulative log normalizing constants recorded by the filter backend."""
+        return cast(
+            Real[Array, "*plate time"], self._backend_value("log_normalizing_constant")
+        )
+
+    @property
+    def predicted_ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """State ensembles before assimilating each observation, when recorded."""
+        return cast(
+            Real[Array, "*plate time n_members state_dim"],
+            self._backend_value("predicted_ensemble"),
+        )
+
+    @property
+    def ensemble(self) -> Real[Array, "*plate time n_members state_dim"]:
+        """Filtered state ensembles after assimilating each observation."""
+        return cast(
+            Real[Array, "*plate time n_members state_dim"],
+            self._backend_value("ensemble"),
+        )
+
+    @property
+    def model_inputs(self) -> FilterModelInputs:
+        """Observation-aligned inputs recorded by the filter backend."""
+        return cast(FilterModelInputs, self._backend_value("model_inputs"))
+
     def __call__(
         self, t: float | int | Real[Array, ""]
     ) -> Real[Array, " state_dim"] | Real[Array, ""]:
@@ -69,7 +281,7 @@ class ConditionedResult:
 
 
 @dataclasses.dataclass
-class LatentStateResult:
+class LatentStateResult(Result):
     """Result of latent-state construction / scoring without NumPyro side effects.
 
     Let ``z = state_path_params`` denote the free variables used to
@@ -131,7 +343,7 @@ class LatentStateResult:
     state_dists: list | None = None
 
 
-class SimulatedResult(eqx.Module):
+class SimulatedResult(eqx.Module, Result):
     """Result of simulation without eager NumPyro side effects.
 
     This result therefore stores the realized state path ``x`` and observation path ``y``
@@ -143,6 +355,11 @@ class SimulatedResult(eqx.Module):
     posterior rollout, the same result object instead carries
     ``predicted_times``, ``predicted_states``, and
     ``predicted_observations``.
+
+    Simulator outputs always retain a trailing coordinate axis: ``x_0`` has
+    shape ``(*plate, n_simulations, state_coordinates)``, and paths have shape
+    ``(*plate, n_simulations, time, coordinates)``. Scalar states, categorical
+    labels, and scalar observations use a singleton coordinate axis.
 
     ``obs_times`` and ``ctrl_times`` record where ``observations`` and
     ``controls`` actually sit -- the names match the ``obs_times`` /
@@ -170,6 +387,7 @@ class SimulatedResult(eqx.Module):
     [DiscreteTimeSimulator][dynestyx.simulation.discrete.DiscreteTimeSimulator].
     """
 
+    # Keep StructuredSimulatedResult's fields in sync with these.
     # observations/controls use their own axis names ("obs_time"/"ctrl_time")
     # rather than sharing "time" with times/states: under
     # observation_control_alignment="previous_transition" they are one
@@ -211,6 +429,105 @@ class SimulatedResult(eqx.Module):
     _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
         default=None, repr=False, static=True
     )
+
+    def unflatten(self, layout: LayoutCollection) -> "StructuredSimulatedResult":
+        """Return a structured copy of this result.
+
+        Each populated state, control, and observation field (including
+        ``x_0`` and the ``predicted_*`` fields) is converted by the matching
+        sublayout of ``layout``. Fields whose sublayout is ``None`` and time
+        fields are copied unchanged.
+        [StructuredSimulatedResult.flatten][dynestyx.types.StructuredSimulatedResult.flatten]
+        undoes the conversion.
+        """
+        return StructuredSimulatedResult._from_flat(self, layout)
+
+
+class StructuredSimulatedResult(eqx.Module):
+    """A [SimulatedResult][dynestyx.types.SimulatedResult] with structured values.
+
+    Returned by
+    [SimulatedResult.unflatten][dynestyx.types.SimulatedResult.unflatten]. It
+    has the same fields, but ``x_0``, ``states``, ``controls``,
+    ``observations``, ``predicted_states``, and ``predicted_observations`` may
+    be pytrees of arrays, as described by the sublayouts of a
+    ``LayoutCollection``. Leaves keep the leading batch and time axes of the
+    flat field. Time fields are never converted.
+
+    This is a user-facing helper: Dynestyx itself only consumes flat results.
+    ``flatten(layout)`` converts back to a ``SimulatedResult``.
+    """
+
+    # The state fields must share one pytree structure ("S"), as must the
+    # observation fields ("O").
+    times: Real[Array, "*plate n_simulations time"] | None = None
+    x_0: PyTree[Real[Array, "..."], " S"] | None = None
+    states: PyTree[Real[Array, "..."], " S"] | None = None
+    observations: PyTree[Real[Array, "..."], " O"] | None = None
+    obs_times: Real[Array, "*plate n_simulations obs_time"] | None = None
+    controls: PyTree[Real[Array, "..."]] | None = None
+    ctrl_times: Real[Array, "*plate n_simulations ctrl_time"] | None = None
+    predicted_times: Real[Array, "*plate n_simulations predict_time"] | None = None
+    predicted_states: PyTree[Real[Array, "..."], " S"] | None = None
+    predicted_observations: PyTree[Real[Array, "..."], " O"] | None = None
+    _register_numpyro_sites: Callable[[str], None] | None = eqx.field(
+        default=None, repr=False, static=True
+    )
+
+    # The ``LayoutCollection`` sublayout that converts each structured field.
+    _field_sublayouts: ClassVar[dict[str, str]] = {
+        "x_0": "state",
+        "states": "state",
+        "predicted_states": "state",
+        "controls": "control",
+        "observations": "observation",
+        "predicted_observations": "observation",
+    }
+
+    @classmethod
+    def _from_flat(cls, result: SimulatedResult, layout: LayoutCollection) -> Self:
+        """Unflatten the fields of ``result``; see ``SimulatedResult.unflatten``."""
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
+
+        values = {
+            field.name: getattr(result, field.name)
+            for field in dataclasses.fields(result)
+        }
+        for name, sublayout_name in cls._field_sublayouts.items():
+            sublayout = getattr(layout, sublayout_name)
+            if sublayout is not None and values[name] is not None:
+                values[name] = sublayout.unflatten(values[name])
+        return cls(**values)
+
+    def _flat_values(self, layout: LayoutCollection) -> dict[str, Any]:
+        """Flatten the structured fields into flat-result keyword arguments."""
+        if not isinstance(layout, LayoutCollection):
+            raise TypeError("layout must be a LayoutCollection instance.")
+
+        values = {
+            field.name: getattr(self, field.name) for field in dataclasses.fields(self)
+        }
+        for name, sublayout_name in self._field_sublayouts.items():
+            sublayout = getattr(layout, sublayout_name)
+            value = values[name]
+            if value is None:
+                continue
+            if sublayout is not None:
+                values[name] = sublayout.flatten(value)
+            elif not eqx.is_array(value):
+                raise ValueError(
+                    f"{name} is structured, but layout.{sublayout_name} is None."
+                )
+        return values
+
+    def flatten(self, layout: LayoutCollection) -> SimulatedResult:
+        """Return the flat result that ``unflatten(layout)`` converted.
+
+        ``layout`` must be the ``LayoutCollection`` passed to ``unflatten``.
+        Raises ``ValueError`` if a structured field has no sublayout.
+        """
+        return SimulatedResult(**self._flat_values(layout))
 
 
 def as_scalar_time_array(

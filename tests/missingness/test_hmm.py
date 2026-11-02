@@ -379,7 +379,9 @@ def test_plated_hmm_condition_defers_numpyro_sites():
                     obs_values=obs_values,
                 )
 
+    assert result.marginal_loglik is not None
     assert result.marginal_loglik.shape == (2,)
+    assert isinstance(result.states, jax.Array)
     assert result.states.shape == (2, 3, 2)
     assert not any(site_name.startswith("f_") for site_name in tr)
 

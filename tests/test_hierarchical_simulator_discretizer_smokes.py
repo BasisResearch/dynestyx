@@ -42,7 +42,6 @@ from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
 from tests.test_utils import (
     assert_finite,
     assert_trace_sites_exist_and_field_all_finite,
-    assert_tree_all_finite,
 )
 
 
@@ -276,10 +275,12 @@ def test_plate_forward_discrete_ode_sde_shapes(source):
         "f_states",
         "f_observations",
         where="plate discrete forward trace",
+        expected_shapes={
+            "f_times": (2, 1, len(t)),
+            "f_states": (2, 1, len(t), 2),
+            "f_observations": (2, 1, len(t), 1),
+        },
     )
-    assert tr["f_times"]["value"].shape == (2, 1, len(t))
-    assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
-    assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
     with ODESimulator():
         with trace() as tr, seed(rng_seed=jr.PRNGKey(1)):
@@ -290,10 +291,12 @@ def test_plate_forward_discrete_ode_sde_shapes(source):
         "f_states",
         "f_observations",
         where="plate ODE forward trace",
+        expected_shapes={
+            "f_times": (2, 1, len(t)),
+            "f_states": (2, 1, len(t), 2),
+            "f_observations": (2, 1, len(t), 1),
+        },
     )
-    assert tr["f_times"]["value"].shape == (2, 1, len(t))
-    assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
-    assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
     with SDESimulator(simulator_config=SDESimulatorConfig(source=source)):
         with trace() as tr, seed(rng_seed=jr.PRNGKey(2)):
@@ -304,10 +307,12 @@ def test_plate_forward_discrete_ode_sde_shapes(source):
         "f_states",
         "f_observations",
         where="plate SDE forward trace",
+        expected_shapes={
+            "f_times": (2, 1, len(t)),
+            "f_states": (2, 1, len(t), 2),
+            "f_observations": (2, 1, len(t), 1),
+        },
     )
-    assert tr["f_times"]["value"].shape == (2, 1, len(t))
-    assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
-    assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
 
 def test_plate_previous_transition_slices_the_time_axis():
@@ -374,10 +379,12 @@ def test_plate_nonlinear_discrete_single_sample_under_plate():
         "f_states",
         "f_observations",
         where="plate nonlinear discrete forward trace",
+        expected_shapes={
+            "f_times": (2, 1, len(t)),
+            "f_states": (2, 1, len(t), 1),
+            "f_observations": (2, 1, len(t), 1),
+        },
     )
-    assert tr["f_times"]["value"].shape == (2, 1, len(t))
-    assert tr["f_states"]["value"].shape[:3] == (2, 1, len(t))
-    assert tr["f_observations"]["value"].shape[:3] == (2, 1, len(t))
 
     obs = tr["f_observations"]["value"][:, 0]
     with DiscreteTimeSimulator():
@@ -394,9 +401,11 @@ def test_plate_nonlinear_discrete_single_sample_under_plate():
         "f_predicted_times",
         "f_predicted_states",
         where="plate nonlinear discrete rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 1, len(t)),
+            "f_predicted_states": (2, 1, len(t), 1),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(t))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(t))
 
 
 def test_plate_sde_conditioning_policy_unchanged():
@@ -428,9 +437,11 @@ def test_plate_rollout_discrete_gaussian_pf_hmm():
         "f_predicted_times",
         "f_predicted_states",
         where="plate Gaussian rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 1, len(predict_times)),
+            "f_predicted_states": (2, 1, len(predict_times), 2),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
 
     with DiscreteTimeSimulator():
         with Filter(
@@ -452,9 +463,11 @@ def test_plate_rollout_discrete_gaussian_pf_hmm():
         "f_predicted_times",
         "f_predicted_states",
         where="plate PF rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 1, len(predict_times)),
+            "f_predicted_states": (2, 1, len(predict_times), 2),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
 
     with DiscreteTimeSimulator():
         with Filter(filter_config=HMMConfig()):
@@ -470,9 +483,11 @@ def test_plate_rollout_discrete_gaussian_pf_hmm():
         "f_predicted_times",
         "f_predicted_states",
         where="plate HMM rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 1, len(predict_times)),
+            "f_predicted_states": (2, 1, len(predict_times), 1),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
 
 
 def test_plate_rollout_discrete_cuthbert_kf_keeps_filtered_time_alignment():
@@ -495,9 +510,11 @@ def test_plate_rollout_discrete_cuthbert_kf_keeps_filtered_time_alignment():
         "f_predicted_times",
         "f_predicted_states",
         where="plate cuthbert rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 1, len(predict_times)),
+            "f_predicted_states": (2, 1, len(predict_times), 2),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
     assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0], predict_times)
 
 
@@ -520,8 +537,16 @@ def test_plate_rollout_continuous_gaussian_and_dpf():
                     predict_times=predict_times,
                     M=2,
                 )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
+    assert_finite(
+        tr["f_predicted_times"]["value"],
+        (2, 1, len(predict_times)),
+        where="tr['f_predicted_times']['value']",
+    )
+    assert_finite(
+        tr["f_predicted_states"]["value"],
+        (2, 1, len(predict_times), 2),
+        where="tr['f_predicted_states']['value']",
+    )
 
     with SDESimulator():
         with Filter(
@@ -537,8 +562,16 @@ def test_plate_rollout_continuous_gaussian_and_dpf():
                     predict_times=predict_times,
                     M=2,
                 )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
+    assert_finite(
+        tr["f_predicted_times"]["value"],
+        (2, 1, len(predict_times)),
+        where="tr['f_predicted_times']['value']",
+    )
+    assert_finite(
+        tr["f_predicted_states"]["value"],
+        (2, 1, len(predict_times), 2),
+        where="tr['f_predicted_states']['value']",
+    )
 
 
 def _plate_continuous_for_discretizer_model(
@@ -730,12 +763,8 @@ def _assert_hierarchical_dirac_shapes_and_finite(tr, plate_shape, t, state_dim):
     states = tr["f_states"]["value"]
     observations = tr["f_observations"]["value"]
     expected = plate_shape + (1, len(t), state_dim)
-    assert_tree_all_finite(
-        (states, observations),
-        where="hierarchical Dirac trace",
-    )
-    assert states.shape == expected
-    assert observations.shape == expected
+    assert_finite(states, expected, where="hierarchical Dirac states")
+    assert_finite(observations, expected, where="hierarchical Dirac observations")
     assert jnp.allclose(states, observations)
 
 
@@ -745,12 +774,13 @@ def _assert_hierarchical_dirac_latent_shapes_and_finite(tr, plate_shape, t, stat
         state_path = tr[f"{member_name}_state_path"]["value"]
         state_path_times = tr[f"{member_name}_state_path_times"]["value"]
         joint_log_prob = tr[f"{member_name}_joint_log_prob"]["value"]
-        assert_tree_all_finite(
-            (state_path, state_path_times, joint_log_prob),
-            where=f"hierarchical Dirac latent trace {member_name}",
+        assert_finite(
+            state_path, (len(t), state_dim), where=f"{member_name} state_path"
         )
-        assert state_path.shape == (len(t), state_dim)
-        assert state_path_times.shape == (len(t),)
+        assert_finite(
+            state_path_times, (len(t),), where=f"{member_name} state_path_times"
+        )
+        assert_finite(joint_log_prob, (), where=f"{member_name} joint_log_prob")
 
 
 def _squeeze_n_sim_axis(observations, plate_ndim):
@@ -771,8 +801,8 @@ def test_plate_discretizer_forward_and_rollout():
         "f_states",
         "f_observations",
         where="plate discretizer forward trace",
+        expected_shapes={"f_times": (2, 1, len(obs_times))},
     )
-    assert tr["f_times"]["value"].shape == (2, 1, len(obs_times))
     obs = tr["f_observations"]["value"][:, 0]
 
     with DiscreteTimeSimulator():
@@ -790,9 +820,11 @@ def test_plate_discretizer_forward_and_rollout():
         "f_predicted_times",
         "f_predicted_states",
         where="plate discretizer rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 1, len(predict_times)),
+            "f_predicted_states": (2, 1, len(predict_times), 2),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape[:3] == (2, 1, len(predict_times))
 
 
 def test_nested_plate_discretizer_forward_shapes():
@@ -811,10 +843,12 @@ def test_nested_plate_discretizer_forward_shapes():
         "f_states",
         "f_observations",
         where="nested plate discretizer forward trace",
+        expected_shapes={
+            "f_times": (2, 2, 1, len(obs_times)),
+            "f_states": (2, 2, 1, len(obs_times), 2),
+            "f_observations": (2, 2, 1, len(obs_times), 1),
+        },
     )
-    assert tr["f_times"]["value"].shape == (2, 2, 1, len(obs_times))
-    assert tr["f_states"]["value"].shape == (2, 2, 1, len(obs_times), 2)
-    assert tr["f_observations"]["value"].shape == (2, 2, 1, len(obs_times), 1)
 
 
 def test_nested_plate_discretizer_filter_rollout_shapes():
@@ -847,10 +881,12 @@ def test_nested_plate_discretizer_filter_rollout_shapes():
         "f_predicted_states",
         "f_marginal_loglik",
         where="nested plate discretizer rollout trace",
+        expected_shapes={
+            "f_predicted_times": (2, 2, 1, len(predict_times)),
+            "f_predicted_states": (2, 2, 1, len(predict_times), 2),
+            "f_marginal_loglik": (2, 2),
+        },
     )
-    assert tr["f_predicted_times"]["value"].shape == (2, 2, 1, len(predict_times))
-    assert tr["f_predicted_states"]["value"].shape == (2, 2, 1, len(predict_times), 2)
-    assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
     assert jnp.array_equal(tr["f_predicted_times"]["value"][0, 0, 0], predict_times)
 
 
@@ -885,8 +921,8 @@ def test_nested_plate_continuous_sde_enkf_shapes():
         tr,
         "f_marginal_loglik",
         where="nested plate continuous SDE EnKF trace",
+        expected_shapes={"f_marginal_loglik": (2, 2)},
     )
-    assert tr["f_marginal_loglik"]["value"].shape == (2, 2)
 
 
 def test_plate_discrete_dirac_forward_and_conditioning_shapes():
