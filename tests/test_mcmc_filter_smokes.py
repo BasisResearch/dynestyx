@@ -5,8 +5,10 @@ import jax.random as jr
 from numpyro.infer import Predictive
 
 from dynestyx import Simulator
+from dynestyx.inference.configs.filter import PFConfig
 from dynestyx.inference.configs.mcmc import (
     AdaptiveMetropolisConfig,
+    AdaptiveMWGConfig,
     HMCConfig,
     MALAConfig,
     NUTSConfig,
@@ -129,11 +131,11 @@ def test_filter_based_sgmcmc_smoke():
     assert_finite(posterior_samples["rho"], (1, SMOKE_NUM_SAMPLES), where="rho")
 
 
-def test_filter_based_adaptive_metropolis_smoke():
+def test_filter_based_adaptive_mwg_smoke():
     obs_times, obs_values = _make_data_continuous()
     with Filter():
         inference = MCMCInference(
-            mcmc_config=AdaptiveMetropolisConfig(
+            mcmc_config=AdaptiveMWGConfig(
                 num_samples=SMOKE_NUM_SAMPLES,
                 num_warmup=SMOKE_NUM_WARMUP,
                 num_chains=1,
@@ -144,6 +146,25 @@ def test_filter_based_adaptive_metropolis_smoke():
         posterior_samples = inference.run(jr.PRNGKey(4), obs_times, obs_values)
     assert "rho" in posterior_samples
     assert_finite(posterior_samples["rho"], (1, SMOKE_NUM_SAMPLES), where="rho")
+
+
+def test_particle_filter_based_adaptive_metropolis_smoke():
+    obs_times, obs_values = _make_data_discrete()
+    with Filter(filter_config=PFConfig(n_particles=20)):
+        inference = MCMCInference(
+            mcmc_config=AdaptiveMetropolisConfig(
+                num_samples=3,
+                num_warmup=2,
+                num_chains=2,
+            ),
+            model=discrete_time_lti_simplified_model,
+        )
+        samples = inference.run(jr.PRNGKey(5), obs_times, obs_values)
+    assert samples["alpha"].shape == (2, 3)
+    assert bool(jnp.all(jnp.isfinite(samples["alpha"])))
+    diagnostics = inference.get_diagnostics()
+    assert diagnostics["final_proposal_covariance"].shape == (2, 1, 1)
+    assert bool(jnp.all(jnp.isfinite(diagnostics["final_proposal_covariance"])))
 
 
 def test_filter_based_mala_smoke():

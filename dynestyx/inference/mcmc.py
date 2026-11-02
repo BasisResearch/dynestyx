@@ -6,6 +6,7 @@ from numpyro.infer import HMC, MCMC, NUTS
 
 from dynestyx.inference.configs.mcmc import (
     AdaptiveMetropolisConfig,
+    AdaptiveMWGConfig,
     BaseMCMCConfig,
     HMCConfig,
     MALAConfig,
@@ -24,7 +25,7 @@ class MCMCInference:
 
     Attributes:
         mcmc_config: Sampler configuration dataclass (`NUTSConfig`,
-            `HMCConfig`, `AdaptiveMetropolisConfig`, `SGLDConfig`, or
+            `HMCConfig`, `AdaptiveMetropolisConfig`, `AdaptiveMWGConfig`, `SGLDConfig`, or
             `MALAConfig`).
         model: Callable probabilistic model with signature
             `model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)`.
@@ -39,8 +40,13 @@ class MCMCInference:
         """Return compact diagnostics from the most recent successful run.
 
         NUTS reports ``mean_acceptance_rate`` and ``num_divergences`` per
-        chain. Adaptive Metropolis reports ``mean_acceptance_rate`` and
+        chain. Adaptive MWG reports ``mean_acceptance_rate`` and
         ``final_proposal_scale`` per chain and unconstrained coordinate.
+        Joint Adaptive Metropolis reports observed ``mean_acceptance_rate``
+        and ``final_global_scale`` per chain, plus ``final_proposal_covariance``
+        with shape ``(num_chains, d, d)`` in unconstrained coordinates. Adaptive
+        sampler acceptance rates exclude warmup; the joint covariance includes
+        the global multiplier and numerical diagonal regularization.
 
         Raises:
             RuntimeError: If inference has not completed successfully.
@@ -180,7 +186,12 @@ def _blackjax_mcmc(
     """Run BlackJAX inference via the BlackJAX integration module."""
     if not isinstance(
         mcmc_config,
-        NUTSConfig | HMCConfig | AdaptiveMetropolisConfig | SGLDConfig | MALAConfig,
+        NUTSConfig
+        | HMCConfig
+        | AdaptiveMWGConfig
+        | AdaptiveMetropolisConfig
+        | SGLDConfig
+        | MALAConfig,
     ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
     return run_blackjax_mcmc_with_diagnostics(  # type: ignore
