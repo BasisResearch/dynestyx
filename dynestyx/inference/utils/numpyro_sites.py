@@ -20,7 +20,7 @@ from dynestyx.inference.configs.smoother import (
     PFSmootherConfig,
     _config_to_smoother_record_kwargs,
 )
-from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+from dynestyx.inference.integrations.cd_dynamax.slds_filter import (
     SLDSFilterPosterior,
 )
 from dynestyx.inference.integrations.utils import covariance_from_cholesky
