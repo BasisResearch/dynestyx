@@ -76,7 +76,7 @@ def test_hierarchical_svi_science(num_steps: int):
         hierarchical_multitraj_lti_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(data_key, predict_times=obs_times, M=n_traj)

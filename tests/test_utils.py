@@ -229,7 +229,7 @@ def run_profile_likelihood(
             model,
             params={param_name: jnp.array(param_val)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         out = pred(key)
         if "f_marginal_loglik" not in out:

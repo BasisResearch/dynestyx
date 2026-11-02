@@ -549,7 +549,7 @@ def test_hmm_independent_categorical_missing_filter_mcmc_runs_under_tracing():
         synthetic = Predictive(
             model,
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )(jr.PRNGKey(2), A=true_A, predict_times=obs_times)
 
     obs_values = jnp.asarray(synthetic["f_observations"])[0, 0].astype(float)
@@ -571,7 +571,7 @@ def test_hmm_independent_categorical_missing_filter_mcmc_runs_under_tracing():
             model,
             params={"A": posterior["A"].mean(axis=0)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         filtered = predictive(
             jr.PRNGKey(4),

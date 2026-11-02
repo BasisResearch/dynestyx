@@ -236,7 +236,7 @@ from numpyro.infer import Predictive
 
 with dsx.Simulator(n_simulations=100):
     samples = Predictive(
-        model, num_samples=1, exclude_deterministic=False
+        model, num_samples=1, condition_deterministic=False
     )(jr.PRNGKey(0), predict_times=times)
 ```
 

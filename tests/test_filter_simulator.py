@@ -135,7 +135,7 @@ def test_filter_sdesimulator_predict_times_n_simulations(source):
             continuous_time_stochastic_l63_model,
             params={"rho": jnp.array(true_rho)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng_key, predict_times=obs_times)
     obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
@@ -190,7 +190,7 @@ def test_filter_discretetimesimulator_predict_times_n_simulations():
             discrete_time_lti_simplified_model,
             params={"alpha": jnp.array(true_alpha)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng_key, predict_times=predict_times)
     obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
@@ -242,7 +242,7 @@ def test_filter_discretetimesimulator_pf_predict_times_particle_sampling():
             discrete_time_lti_simplified_model,
             params={"alpha": jnp.array(true_alpha)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng_key, predict_times=obs_times)
     obs_values = jnp.array(_squeeze_sim_dims(sim["f_observations"]))
