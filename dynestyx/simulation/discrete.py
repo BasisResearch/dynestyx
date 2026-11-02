@@ -159,7 +159,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
         >>> with DiscreteTimeSimulator(n_simulations=3):
         ...     predictive = Predictive(
-        ...         model, num_samples=10, exclude_deterministic=False
+        ...         model, num_samples=10, condition_deterministic=False
         ...     )
         ...     draws = predictive(
         ...         jr.PRNGKey(0), predict_times=jnp.arange(20.0)
@@ -231,7 +231,7 @@ class DiscreteTimeSimulator(BaseSimulator):
     Here `"f"` is replaced by the `name` passed to `dsx.sample`. Under
     `Predictive(..., num_samples=N)`, NumPyro prepends an `N` axis to each
     shape. Because these sites are deterministic, pass
-    `exclude_deterministic=False` to `Predictive` (or request the site names
+    `condition_deterministic=False` to `Predictive` (or request the site names
     explicitly) to include them in its returned dictionary.
 
     When this simulator wraps a `Filter` or `Smoother`, the inner handler

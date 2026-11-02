@@ -147,7 +147,7 @@ def data_conditioned_hmm(request):
         hmm_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -212,7 +212,7 @@ def data_conditioned_discrete_time_l63(request):
         discrete_time_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -275,7 +275,7 @@ def data_conditioned_discrete_time_l63_filter(request):
         discrete_time_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -336,7 +336,7 @@ def data_conditioned_discrete_time_l63_filter_pf(request):
         discrete_time_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -408,7 +408,7 @@ def data_conditioned_continuous_time_stochastic_l63(request):
         continuous_time_stochastic_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -475,7 +475,7 @@ def data_conditioned_continuous_time_l63_dpf(request):
         continuous_time_stochastic_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -540,7 +540,7 @@ def data_conditioned_continuous_time_deterministic_l63(request):
         continuous_time_deterministic_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -584,7 +584,7 @@ def data_conditioned_continuous_time_potential_dynamics(request):
         continuous_time_potential_dynamics_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -646,7 +646,7 @@ def data_conditioned_stochastic_volatility(request):
         model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -713,7 +713,7 @@ def data_conditioned_continuous_time_lti_gaussian(request):
         continuous_time_LTI_gaussian,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -774,7 +774,7 @@ def data_conditioned_continuous_time_lti_gaussian_dpf(request):
         continuous_time_LTI_gaussian,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -831,7 +831,7 @@ def data_conditioned_discrete_time_l63_auto_dirac_obs(request):
         continuous_time_stochastic_l63_model_dirac_obs,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -890,7 +890,7 @@ def data_conditioned_discrete_time_l63_auto(request):
         continuous_time_stochastic_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -930,7 +930,7 @@ def data_conditioned_jumpy_controls(
     predictive = Predictive(
         jumpy_controls_model,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     predict_times = _profiled_arange(
@@ -1007,7 +1007,7 @@ def data_conditioned_jumpy_controls_sde():
     predictive = Predictive(
         jumpy_controls_model_sde,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     predict_times = _profiled_arange(
@@ -1053,7 +1053,7 @@ def data_conditioned_jumpy_controls_ode():
     predictive = Predictive(
         jumpy_controls_model_ode,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     predict_times = _profiled_arange(
@@ -1137,7 +1137,7 @@ def data_conditioned_discrete_time_lti_kf(request):
         discrete_time_lti_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -1204,7 +1204,7 @@ def data_conditioned_discrete_time_lti_simplified(request):
         discrete_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -1267,7 +1267,7 @@ def data_conditioned_discrete_time_lti_simplified_science(request):
         discrete_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -1326,7 +1326,7 @@ def data_conditioned_continuous_time_lti_simplified(request):
         continuous_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -1386,7 +1386,7 @@ def data_conditioned_continuous_time_lti_simplified_science(request):
         continuous_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():

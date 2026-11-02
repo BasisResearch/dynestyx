@@ -137,7 +137,7 @@ def _make_discrete_lti_data():
         discrete_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=obs_times)
@@ -583,7 +583,7 @@ def test_default_discrete_filter_uses_cuthbert_enkf_on_nonlinear_model():
         discrete_time_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=obs_times)

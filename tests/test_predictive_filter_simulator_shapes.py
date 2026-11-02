@@ -48,7 +48,7 @@ def _gen_obs_sde(source: Literal["diffrax", "em_scan"]):
             continuous_time_stochastic_l63_model,
             params={"rho": jnp.array(28.0)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng, predict_times=obs_times)
     obs_values = sim["f_observations"][0, 0]
@@ -65,7 +65,7 @@ def _gen_obs_discrete():
             discrete_time_lti_simplified_model,
             params={"alpha": jnp.array(0.35)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng, predict_times=obs_times)
     obs_values = sim["f_observations"][0, 0]
@@ -86,7 +86,7 @@ def _gen_obs_ode():
             jumpy_controls_model_ode,
             params={},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(
             rng,
@@ -109,7 +109,7 @@ def test_predictive_filter_sdesimulator_shapes(num_samples, n_sim, source):
         continuous_time_stochastic_l63_model,
         params={"rho": jnp.array(28.0)},
         num_samples=num_samples,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with SDESimulator(
         simulator_config=SDESimulatorConfig(source=source), n_simulations=n_sim
@@ -151,7 +151,7 @@ def test_predictive_filter_discretetimesimulator_shapes(num_samples, n_sim):
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
         num_samples=num_samples,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator(n_simulations=n_sim):
         with Filter(
@@ -197,7 +197,7 @@ def test_predictive_filter_odesimulator_shapes(num_samples, n_sim):
         jumpy_controls_model_ode,
         params={},
         num_samples=num_samples,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator(n_simulations=n_sim):
         with Filter(
@@ -245,7 +245,7 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
             discrete_time_lti_simplified_model,
             params={"alpha": jnp.array(0.35)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         train_samples = train_pred(jr.PRNGKey(123), predict_times=obs_times)
     obs_values = train_samples["f_observations"][0, 0]
@@ -254,7 +254,7 @@ def test_predictive_filter_discrete_rollout_uses_only_nonempty_segments():
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
         num_samples=2,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator(n_simulations=2):
         with Filter(
@@ -291,7 +291,7 @@ def test_predictive_simulator_only_times_has_n_sim_axis_sde(num_samples, n_sim):
         continuous_time_stochastic_l63_model,
         params={"rho": jnp.array(28.0)},
         num_samples=num_samples,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with SDESimulator(n_simulations=n_sim):
         samples = predictive(jr.PRNGKey(0), predict_times=predict_times)
@@ -321,7 +321,7 @@ def test_predictive_simulator_only_times_has_n_sim_axis_discrete(num_samples, n_
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
         num_samples=num_samples,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator(n_simulations=n_sim):
         samples = predictive(jr.PRNGKey(0), predict_times=predict_times)
@@ -355,7 +355,7 @@ def test_predictive_simulator_only_times_has_n_sim_axis_ode(num_samples, n_sim):
         jumpy_controls_model_ode,
         params={},
         num_samples=num_samples,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator(n_simulations=n_sim):
         samples = predictive(

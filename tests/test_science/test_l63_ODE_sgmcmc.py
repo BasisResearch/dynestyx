@@ -24,7 +24,7 @@ def test_sgmcmc_inference(num_samples):
         continuous_time_deterministic_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with Simulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)

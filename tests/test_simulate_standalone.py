@@ -395,7 +395,7 @@ def test_predictive_simulator_matches_standalone_simulate(
         predictive = Predictive(
             model,
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )(rng_key)
 
     mismatched_fields = []

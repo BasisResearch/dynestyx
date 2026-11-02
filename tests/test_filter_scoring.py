@@ -122,7 +122,7 @@ def _make_observations():
             _continuous_lti_model,
             params={"rho": jnp.array(TRUE_RHO)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )(
             jr.PRNGKey(0),
             predict_times=obs_times,
