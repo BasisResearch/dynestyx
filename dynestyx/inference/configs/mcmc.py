@@ -71,7 +71,36 @@ class NUTSConfig(BaseMCMCConfig):
 
 
 @dataclasses.dataclass
-class AdaptiveMWGConfig(BaseMCMCConfig):
+class _BaseAdaptiveRandomWalkConfig(BaseMCMCConfig):
+    """Shared options and validation for adaptive random-walk samplers."""
+
+    mcmc_source: MCMCSource = "blackjax"
+    initial_proposal_scale: ArrayLike = 1.0
+    target_acceptance_rate: float = 0.44
+    adaptation_rate: float = 0.5
+
+    def __post_init__(self) -> None:
+        if self.mcmc_source != "blackjax":
+            raise ValueError(
+                f"{type(self).__name__} only supports mcmc_source='blackjax'"
+            )
+        if not 0.0 < self.target_acceptance_rate < 1.0:
+            raise ValueError("target_acceptance_rate must be between 0 and 1")
+
+        if self.adaptation_rate <= 0.0:
+            raise ValueError("adaptation_rate must be positive")
+
+        proposal_scale = jnp.asarray(self.initial_proposal_scale)
+        if proposal_scale.ndim > 1:
+            raise ValueError("initial_proposal_scale must be a scalar or 1D array")
+        if proposal_scale.size == 0 or not jnp.all(jnp.isfinite(proposal_scale)):
+            raise ValueError("initial_proposal_scale must contain finite values")
+        if jnp.any(proposal_scale <= 0.0):
+            raise ValueError("initial_proposal_scale must be positive")
+
+
+@dataclasses.dataclass
+class AdaptiveMWGConfig(_BaseAdaptiveRandomWalkConfig):
     """Adaptive random-walk Metropolis-within-Gibbs configuration.
 
     One transition updates each flattened unconstrained coordinate in order.
@@ -94,33 +123,16 @@ class AdaptiveMWGConfig(BaseMCMCConfig):
             warmup transition.
     """
 
-    mcmc_source: MCMCSource = "blackjax"
-    initial_proposal_scale: ArrayLike = 1.0
-    target_acceptance_rate: float = 0.44
-    adaptation_rate: float = 0.5
     max_adaptation: float = 0.01
 
     def __post_init__(self) -> None:
-        if self.mcmc_source != "blackjax":
-            raise ValueError("AdaptiveMWGConfig only supports mcmc_source='blackjax'")
-        if not 0.0 < self.target_acceptance_rate < 1.0:
-            raise ValueError("target_acceptance_rate must be between 0 and 1")
-        if self.adaptation_rate <= 0.0:
-            raise ValueError("adaptation_rate must be positive")
+        super().__post_init__()
         if self.max_adaptation <= 0.0:
             raise ValueError("max_adaptation must be positive")
 
-        proposal_scale = jnp.asarray(self.initial_proposal_scale)
-        if proposal_scale.ndim > 1:
-            raise ValueError("initial_proposal_scale must be a scalar or 1D array")
-        if proposal_scale.size == 0 or not jnp.all(jnp.isfinite(proposal_scale)):
-            raise ValueError("initial_proposal_scale must contain finite values")
-        if jnp.any(proposal_scale <= 0.0):
-            raise ValueError("initial_proposal_scale must be positive")
-
 
 @dataclasses.dataclass
-class AdaptiveMetropolisConfig(BaseMCMCConfig):
+class AdaptiveMetropolisConfig(_BaseAdaptiveRandomWalkConfig):
     """Joint adaptive Gaussian random-walk Metropolis configuration.
 
     Each transition proposes the entire flattened unconstrained parameter
@@ -145,33 +157,19 @@ class AdaptiveMetropolisConfig(BaseMCMCConfig):
             Defaults to ``2 ** -0.6``, retaining some initial covariance.
     """
 
-    mcmc_source: MCMCSource = "blackjax"
     initial_proposal_scale: ArrayLike = 0.02
     target_acceptance_rate: float = 0.234
     adaptation_rate: float = 0.6
     initial_gain: float = 2**-0.6
 
     def __post_init__(self) -> None:
-        if self.mcmc_source != "blackjax":
-            raise ValueError(
-                "AdaptiveMetropolisConfig only supports mcmc_source='blackjax'"
-            )
-        if not 0.0 < self.target_acceptance_rate < 1.0:
-            raise ValueError("target_acceptance_rate must be between 0 and 1")
+        super().__post_init__()
         if not math.isfinite(self.adaptation_rate) or not (
             0.5 < self.adaptation_rate <= 1.0
         ):
             raise ValueError("adaptation_rate must be finite and in (0.5, 1]")
         if not math.isfinite(self.initial_gain) or not (0.0 < self.initial_gain <= 1.0):
             raise ValueError("initial_gain must be finite and in (0, 1]")
-
-        proposal_scale = jnp.asarray(self.initial_proposal_scale)
-        if proposal_scale.ndim > 1:
-            raise ValueError("initial_proposal_scale must be a scalar or 1D array")
-        if proposal_scale.size == 0 or not jnp.all(jnp.isfinite(proposal_scale)):
-            raise ValueError("initial_proposal_scale must contain finite values")
-        if jnp.any(proposal_scale <= 0.0):
-            raise ValueError("initial_proposal_scale must be positive")
 
 
 @dataclasses.dataclass
