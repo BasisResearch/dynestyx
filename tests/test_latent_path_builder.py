@@ -478,7 +478,9 @@ def test_latent_path_builder_outer_jit_predictive_refreshes_handler_metadata():
         obs_values=refreshed_values,
         predict_times=jnp.array([3.0]),
     )
-    predictive = jax.jit(Predictive(model, num_samples=2, condition_deterministic=False))
+    predictive = jax.jit(
+        Predictive(model, num_samples=2, condition_deterministic=False)
+    )
     samples = predictive(
         jr.PRNGKey(0),
         obs_times=jnp.array([10.0, 11.0, 12.0]),
