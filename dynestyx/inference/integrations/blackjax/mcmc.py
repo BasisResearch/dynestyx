@@ -93,9 +93,9 @@ def _run_blackjax(
     if initial_states is None:
         algorithm = make_algorithm(init_density_key)
         initial_states = (
-            jax.vmap(algorithm.init)(initial_positions)  # type: ignore[call-arg]
+            jax.jit(jax.vmap(algorithm.init))(initial_positions)  # type: ignore[call-arg]
             if has_chain_axis
-            else algorithm.init(initial_positions)  # type: ignore[call-arg]
+            else jax.jit(algorithm.init)(initial_positions)  # type: ignore[call-arg]
         )
 
     chain_keys = jr.split(mcmc_key, num_chains)
