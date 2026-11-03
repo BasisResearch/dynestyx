@@ -396,3 +396,39 @@ def test_custom_noise_independence_under_jit():
 
     with pytest.raises(jax.errors.JaxRuntimeError, match="state-independent"):
         jax.jit(run)(0.1).block_until_ready()
+
+
+@pytest.mark.parametrize(
+    "kind", ["linear_scalar", "linear_diagonal", "gaussian", "normal", "independent"]
+)
+def test_diagonal_noise_never_expands_to_dense(kind, monkeypatch):
+    variance = dsx.DiagonalCovariance(variance=jnp.array([0.2, 0.4]))
+    observation = {
+        "linear_scalar": dsx.LinearGaussianObservation(
+            H=jnp.eye(2), R=dsx.ScalarCovariance(variance=0.2)
+        ),
+        "linear_diagonal": dsx.LinearGaussianObservation(
+            H=lambda t: jnp.eye(2), R=variance, bias=lambda t: jnp.array([0.1, -0.1])
+        ),
+        "gaussian": dsx.GaussianObservation(h=lambda x, u, t: x, R=variance),
+        "normal": lambda x, u, t: dist.Normal(x, jnp.sqrt(jnp.array([0.2, 0.4]))),
+        "independent": lambda x, u, t: dist.Normal(x, 0.4).to_event(1),
+    }[kind]
+    model = _problem(observation_model=observation)
+    expected_ll, expected = _run(model=model)
+
+    def reject_expansion(*args, **kwargs):
+        raise AssertionError("LETKF must not expand diagonal observation noise.")
+
+    monkeypatch.setattr(dsx.ScalarCovariance, "as_matrix", reject_expansion)
+    monkeypatch.setattr(dsx.DiagonalCovariance, "as_matrix", reject_expansion)
+    original_diag = jnp.diag
+
+    def diagonal_only(array, *args, **kwargs):
+        assert jnp.ndim(array) != 1, "LETKF must not construct a dense diagonal factor."
+        return original_diag(array, *args, **kwargs)
+
+    monkeypatch.setattr(jnp, "diag", diagonal_only)
+    ll, states = _run(model=model)
+    assert jnp.allclose(ll, expected_ll)
+    assert jnp.allclose(states.ensemble, expected.ensemble)

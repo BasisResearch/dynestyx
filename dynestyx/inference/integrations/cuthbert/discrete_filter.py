@@ -47,7 +47,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.models.covariances import covariance_matrix
+from dynestyx.models.covariances import Covariance, covariance_matrix
 from dynestyx.utils.validation import _raise_now_or_error_if
 
 
@@ -77,11 +77,12 @@ class CuthbertInputs(NamedTuple):
 
 
 def _extract_gaussian_chol(
-    d: dist.Distribution, obs_dim: int
-) -> Float[Array, "observation_dim observation_dim"]:
-    """Extract a Cholesky factor of the covariance from a Gaussian distribution."""
+    d: dist.Distribution, obs_dim: int, *, diagonal_only: bool = False
+) -> Float[Array, "..."]:
+    """Extract a Gaussian noise factor, retaining vector scales for LETKF."""
     if isinstance(d, dist.MultivariateNormal):
-        return jnp.asarray(d.scale_tril)
+        factor = jnp.asarray(d.scale_tril)
+        return _letkf_diagonal_factor(factor) if diagonal_only else factor
     if isinstance(d, dist.Independent) and isinstance(d.base_dist, dist.Normal):
         scale = jnp.atleast_1d(jnp.asarray(d.base_dist.scale))
     elif isinstance(d, dist.Normal):
@@ -95,18 +96,20 @@ def _extract_gaussian_chol(
         )
     if scale.size == 1 and obs_dim > 1:
         scale = jnp.full((obs_dim,), scale[0])
-    return jnp.diag(scale)
+    return scale if diagonal_only else jnp.diag(scale)
 
 
 def _check_state_independent_noise(
-    chol_R_at_x0: Float[Array, "observation_dim observation_dim"],
+    chol_R_at_x0: Float[Array, "..."],
     probe_dist_at_x1: dist.Distribution,
     obs_dim: int,
     *,
     strict: bool = False,
-) -> Float[Array, "observation_dim observation_dim"] | None:
+) -> Float[Array, "..."] | None:
     """Raise if noise varies with state; strict mode retains checks under JIT."""
-    chol_R_at_x1 = _extract_gaussian_chol(probe_dist_at_x1, obs_dim)
+    chol_R_at_x1 = _extract_gaussian_chol(
+        probe_dist_at_x1, obs_dim, diagonal_only=strict
+    )
     if strict:
         return _raise_now_or_error_if(
             chol_R_at_x0,
@@ -132,7 +135,7 @@ def _check_state_independent_noise(
 
 
 def _probe_state_independent_observation_noise(
-    obs_model, *, state_dim: int, obs_dim: int
+    obs_model, *, state_dim: int, obs_dim: int, strict: bool = False
 ) -> None:
     """Probe custom observation callables for state-dependent noise."""
     probe_u = jnp.zeros(())
@@ -152,8 +155,8 @@ def _probe_state_independent_observation_noise(
         return
 
     if probe_d0 is not None and probe_d1 is not None:
-        chol0 = _extract_gaussian_chol(probe_d0, obs_dim)
-        _check_state_independent_noise(chol0, probe_d1, obs_dim)
+        chol0 = _extract_gaussian_chol(probe_d0, obs_dim, diagonal_only=strict)
+        _check_state_independent_noise(chol0, probe_d1, obs_dim, strict=strict)
 
 
 def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
@@ -656,22 +659,32 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
     return pf
 
 
-def _letkf_diagonal_factor(matrix, y, *, covariance=False):
-    """Convert diagonal covariance/factors while rejecting correlated noise."""
-    off_diagonal = matrix.at[jnp.diag_indices(matrix.shape[0])].set(0)
-    matrix = _raise_now_or_error_if(
-        matrix,
-        jnp.any(off_diagonal != 0),
-        "LETKF requires diagonal observation noise; correlated noise is unsupported.",
-    )
-    # Preserve the validation dependency under JIT.
-    diagonal = jnp.diag(matrix)
-    diagonal = _raise_now_or_error_if(
-        diagonal,
-        jnp.any(~jnp.isnan(y) & (~jnp.isfinite(diagonal) | (diagonal <= 0))),
-        "LETKF observation noise must be finite and strictly positive for observed dimensions.",
-    )
-    return jnp.sqrt(diagonal) if covariance else diagonal
+def _letkf_diagonal_factor(value, y=None, *, covariance=False):
+    """Read diagonal noise directly; validate dense inputs before extracting."""
+    if isinstance(value, Covariance):
+        value = value.value
+    value = jnp.asarray(value)
+    if value.ndim == 2:
+        if value.shape[0] != value.shape[1]:
+            raise ValueError("LETKF dense observation noise must be a square matrix.")
+        off_diagonal = value.at[jnp.diag_indices(value.shape[0])].set(0)
+        value = _raise_now_or_error_if(
+            value,
+            jnp.any(off_diagonal != 0),
+            "LETKF requires diagonal observation noise; correlated noise is unsupported.",
+        )
+        value = jnp.diag(value)
+    if y is not None:
+        if value.shape not in ((), y.shape):
+            raise ValueError(
+                "LETKF observation noise must be scalar or match the observation dimension."
+            )
+        value = _raise_now_or_error_if(
+            value,
+            jnp.any(~jnp.isnan(y) & (~jnp.isfinite(value) | (value <= 0))),
+            "LETKF observation noise must be finite and strictly positive for observed dimensions.",
+        )
+    return jnp.sqrt(value) if covariance else value
 
 
 def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
@@ -701,7 +714,10 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
     obs_model = dynamics.observation_model
     if not isinstance(obs_model, LinearGaussianObservation | GaussianObservation):
         _probe_state_independent_observation_noise(
-            obs_model, state_dim=state_dim, obs_dim=obs_dim
+            obs_model,
+            state_dim=state_dim,
+            obs_dim=obs_dim,
+            strict=get_localization is not None,
         )
 
     def init_sample(key):
@@ -725,22 +741,28 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         y = jnp.atleast_1d(jnp.asarray(mi.y))
 
         if isinstance(obs_model, LinearGaussianObservation):
-            obs_params = obs_model.params_at(mi.time)
+            if get_localization is not None:
+                # params_at expands structured covariance to a dense matrix.
+                # Resolve the mean parameters separately to retain diagonal R.
+                def resolve(field):
+                    return field(mi.time) if callable(field) else field
 
-            H = obs_params.H
-
-            covariance = jnp.atleast_2d(jnp.asarray(obs_params.R))
-            chol_R = (
-                _letkf_diagonal_factor(covariance, y, covariance=True)
-                if get_localization is not None
-                else jnp.linalg.cholesky(covariance)
-            )
+                H = resolve(obs_model.H)
+                bias_value = resolve(obs_model.bias)
+                D = resolve(obs_model.D)
+                chol_R = _letkf_diagonal_factor(
+                    resolve(obs_model.R), y, covariance=True
+                )
+            else:
+                obs_params = obs_model.params_at(mi.time)
+                H, bias_value, D = obs_params.H, obs_params.bias, obs_params.D
+                chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
-                if obs_params.bias is None
-                else jnp.atleast_1d(jnp.asarray(obs_params.bias))
+                if bias_value is None
+                else jnp.atleast_1d(jnp.asarray(bias_value))
             )
-            D = None if obs_params.D is None else jnp.asarray(obs_params.D)
+            D = None if D is None else jnp.asarray(D)
 
             def observation_fn(x):
                 loc = H @ x + bias
@@ -750,11 +772,12 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             return observation_fn, chol_R, y
         elif isinstance(obs_model, GaussianObservation):
-            covariance = jnp.atleast_2d(covariance_matrix(obs_model.R, obs_dim))
             chol_R = (
-                _letkf_diagonal_factor(covariance, y, covariance=True)
+                _letkf_diagonal_factor(obs_model.R, y, covariance=True)
                 if get_localization is not None
-                else jnp.linalg.cholesky(covariance)
+                else jnp.linalg.cholesky(
+                    jnp.atleast_2d(covariance_matrix(obs_model.R, obs_dim))
+                )
             )
 
             def observation_fn(x):
@@ -765,7 +788,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             probe_x0 = jnp.zeros((state_dim,), dtype=y.dtype)
             probe_x1 = jnp.ones((state_dim,), dtype=y.dtype)
             probe_dist = obs_model(probe_x0, mi.u, mi.time)
-            chol_R = _extract_gaussian_chol(probe_dist, obs_dim)
+            chol_R = _extract_gaussian_chol(
+                probe_dist, obs_dim, diagonal_only=get_localization is not None
+            )
             checked_chol = _check_state_independent_noise(
                 chol_R,
                 obs_model(probe_x1, mi.u, mi.time),
