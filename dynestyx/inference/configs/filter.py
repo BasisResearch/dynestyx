@@ -442,6 +442,10 @@ class LETKFConfig(BaseFilterConfig):
     predictive approximation, not an unbiased model likelihood estimate.
     Predictive observation outputs retain the global forecast covariance.
 
+    batch_size controls how many state coordinates are analyzed concurrently.
+    None processes one coordinate at a time; positive integers trade memory
+    for parallelism. The batch size must be static under JIT.
+
     Continuous-time models must first be discretized. Only the Cuthbert
     backend is supported. Recorded covariance jitter affects returned
     distributions only, following EnKFConfig.
@@ -451,6 +455,7 @@ class LETKFConfig(BaseFilterConfig):
     localization_weights: ArrayLike | None = None
     get_localization: GetLETKFLocalization | None = None
     n_particles: int = 30
+    batch_size: int | None = None
     crn_seed: PRNGKeyArray | None = dataclasses.field(
         default_factory=lambda: jr.PRNGKey(0)
     )
@@ -465,6 +470,12 @@ class LETKFConfig(BaseFilterConfig):
             or self.n_particles < 2
         ):
             raise ValueError("LETKF n_particles must be an integer of at least 2.")
+        if self.batch_size is not None and (
+            not isinstance(self.batch_size, int)
+            or isinstance(self.batch_size, bool)
+            or self.batch_size < 1
+        ):
+            raise ValueError("LETKF batch_size must be a positive integer or None.")
         if self.filter_source != "cuthbert":
             raise ValueError("LETKFConfig requires the Cuthbert backend.")
         has_arrays = (

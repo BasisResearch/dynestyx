@@ -63,8 +63,14 @@ def _run(config=None, values=VALUES, model=None):
     )
 
 
-def test_matches_direct_cuthbert_and_linear_gaussian_analysis():
-    model, config = _problem(), _config(inflation_delta=0.1)
+@pytest.mark.parametrize("batch_size", [None, 1, 2, 3])
+def test_matches_direct_cuthbert_and_linear_gaussian_analysis(batch_size):
+    model, config = _problem(), _config(inflation_delta=0.1, batch_size=batch_size)
+    built, parallel = build_cuthbert_filter(
+        model, config, jr.PRNGKey(7), want_parallel=True
+    )
+    assert built.filter_combine.keywords["batch_size"] == batch_size
+    assert not parallel
     ll, states = _run(config, model=model)
 
     def get_dynamics(mi):
@@ -432,3 +438,9 @@ def test_diagonal_noise_never_expands_to_dense(kind, monkeypatch):
     ll, states = _run(model=model)
     assert jnp.allclose(ll, expected_ll)
     assert jnp.allclose(states.ensemble, expected.ensemble)
+
+
+@pytest.mark.parametrize("batch_size", [0, -1, 1.5, True, "2"])
+def test_invalid_batch_size(batch_size):
+    with pytest.raises((ValueError, TypeError), match="batch_size"):
+        _config(batch_size=batch_size)

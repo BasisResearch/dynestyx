@@ -172,6 +172,7 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
     elif isinstance(config, LETKFConfig):
         config.__post_init__()
         kwargs["n_particles"] = config.n_particles
+        kwargs["batch_size"] = config.batch_size
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
         )
@@ -828,6 +829,7 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             get_observations=get_observations,
             get_localization=get_localization,
             n_particles=n_particles,
+            batch_size=filter_kwargs.get("batch_size"),
             inflation=filter_kwargs.get("inflation", 0.0),
             store_predicted_ensemble=bool(
                 filter_kwargs.get("store_predicted_ensemble", False)

@@ -107,6 +107,7 @@ from dynestyx.inference.filters import Filter, LETKFConfig
 # A two-coordinate state and two-dimensional observation.
 config = LETKFConfig(
     n_particles=30,
+    batch_size=2,
     observation_indices=jnp.array([[0, -1], [0, 1]]),
     localization_weights=jnp.array([[1.0, 0.0], [0.3, 1.0]]),
     inflation_delta=0.05,
@@ -129,6 +130,11 @@ including scalar `time` and observation-aligned controls `u`, and returns
 `(observation_indices, localization_weights)`. Shapes must stay fixed across
 time and JIT execution; indices and weights may vary and weights may depend on
 differentiable parameters. Neighborhood validation also runs under JIT.
+
+`batch_size` sets the number of state coordinates analyzed concurrently.
+The default `None` processes one coordinate at a time; a positive integer trades
+additional memory for parallelism. It must remain static under JIT and does not
+change the analysis or likelihood.
 
 LETKF requires at least two ensemble members and state-independent diagonal
 Gaussian observation noise. Scalar and diagonal covariance specifications,
@@ -154,7 +160,7 @@ Predictive observation summaries and evaluation scores use the global forecast.
 
 LETKF is opt-in, uses sequential Cuthbert execution, and does not provide a
 smoother. Discretize continuous-time models before using it. The backend is
-pinned to [Cuthbert commit 2c4452a](https://github.com/DanWaxman/cuthbert/commit/2c4452a888e3b815c9666a94e0e1a907781d60fa).
+pinned to [Cuthbert commit 8df30b6](https://github.com/DanWaxman/cuthbert/commit/8df30b64e3334a7e31203d26761b4921abf8ab24).
 
 ## Discrete Time Configuration Classes
 
