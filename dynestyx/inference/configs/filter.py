@@ -418,7 +418,15 @@ class GetLETKFLocalization(Protocol):
     """Return fixed-shape local observation indices and precision weights."""
 
     def __call__(self, model_inputs: FilterModelInputs, /) -> tuple[Array, Array]:
-        """Return arrays shaped (state_dim, max_local_observations)."""
+        """Return arrays shaped (n_analysis, max_local_observations)."""
+        ...
+
+
+class GetLETKFWeightInterpolation(Protocol):
+    """Return coarse-analysis indices and coefficients for each state coordinate."""
+
+    def __call__(self, model_inputs: FilterModelInputs, /) -> tuple[Array, Array]:
+        """Return arrays shaped (state_dim, stencil_size)."""
         ...
 
 
@@ -434,9 +442,19 @@ class LETKFConfig(BaseFilterConfig):
     must be finite and nonnegative. Zero weights exclude observations.
     Callback array shapes must remain fixed under JIT.
 
+    Optional weight_interpolation=(indices, coefficients), or
+    get_weight_interpolation(model_inputs), interpolates mean-analysis weights
+    and symmetric transforms from coarse analysis points. Localization rows
+    then have shape (n_analysis, max_local_observations). Interpolation arrays
+    have shape (state_dim, stencil_size); indices refer to localization rows,
+    with -1 padding. Nonpadding coefficients must be finite, nonnegative,
+    and sum to one per state coordinate. Padding coefficients are ignored.
+    Without interpolation, n_analysis must equal state_dim.
+
     Requires state-independent diagonal Gaussian observation noise and at
-    least two members. NaN observations are excluded; empty neighborhoods
-    preserve forecast members. Forecast anomalies are multiplied by
+    least two members. NaN observations are excluded. Without interpolation,
+    empty neighborhoods preserve forecast members; interpolation may inherit
+    updates from other analysis points. Forecast anomalies are multiplied by
     1 + inflation_delta. The deterministic analysis uses local symmetric
     ensemble transforms. The likelihood is one global normalized Gaussian
     predictive approximation, not an unbiased model likelihood estimate.
@@ -454,6 +472,8 @@ class LETKFConfig(BaseFilterConfig):
     observation_indices: ArrayLike | None = None
     localization_weights: ArrayLike | None = None
     get_localization: GetLETKFLocalization | None = None
+    weight_interpolation: tuple[ArrayLike, ArrayLike] | None = None
+    get_weight_interpolation: GetLETKFWeightInterpolation | None = None
     n_particles: int = 30
     batch_size: int | None = None
     crn_seed: PRNGKeyArray | None = dataclasses.field(
@@ -493,12 +513,28 @@ class LETKFConfig(BaseFilterConfig):
             raise ValueError(
                 "LETKF requires both observation_indices and localization_weights, or get_localization."
             )
+        if self.get_weight_interpolation is not None:
+            if not callable(self.get_weight_interpolation):
+                raise TypeError("LETKF get_weight_interpolation must be callable.")
+            if self.weight_interpolation is not None:
+                raise ValueError(
+                    "Supply either weight_interpolation or get_weight_interpolation, not both."
+                )
+        if self.weight_interpolation is not None and (
+            not isinstance(self.weight_interpolation, tuple)
+            or len(self.weight_interpolation) != 2
+        ):
+            raise ValueError(
+                "LETKF weight_interpolation must be an (indices, coefficients) pair."
+            )
         _validate_nonnegative_float(
             "recorded_filtered_states_cov_jitter",
             self.recorded_filtered_states_cov_jitter,
         )
         reserved = {
             "get_localization",
+            "weight_interpolation",
+            "get_weight_interpolation",
             "observation_indices",
             "localization_weights",
             "ensemble_subspace",

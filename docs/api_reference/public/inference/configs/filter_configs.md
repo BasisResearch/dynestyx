@@ -136,13 +136,41 @@ The default `None` processes one coordinate at a time; a positive integer trades
 additional memory for parallelism. It must remain static under JIT and does not
 change the analysis or likelihood.
 
+Optional `weight_interpolation=(indices, coefficients)` solves the local
+analyses at coarse points, then interpolates their mean-analysis weights and
+symmetric transforms onto the state coordinates. Localization arrays then
+have shape `(n_analysis, max_local_observations)`; interpolation arrays both
+have shape `(state_dim, stencil_size)`. Interpolation indices refer to
+localization rows, with `-1` padding. Nonpadding coefficients must be finite,
+nonnegative, and sum to one per state coordinate. Padding coefficients are
+ignored. For example, one coarse analysis can update both state coordinates:
+
+```python
+config = LETKFConfig(
+    observation_indices=jnp.array([[0, 1]]),
+    localization_weights=jnp.ones((1, 2)),
+    weight_interpolation=(
+        jnp.array([[0], [0]]),
+        jnp.ones((2, 1)),
+    ),
+)
+```
+
+For time-varying geometry, use `get_weight_interpolation(model_inputs)`
+returning the same pair instead of `weight_interpolation`. All shapes must
+stay fixed under JIT. With interpolation, `batch_size` applies to both the
+coarse solves and fine updates; a coordinate can inherit an update from other
+analysis points even if its own neighborhood would be empty. The global
+predictive likelihood is unchanged for the same forecast. By default,
+interpolation is disabled and localization has one row per state coordinate.
+
 LETKF requires at least two ensemble members and state-independent diagonal
 Gaussian observation noise. Scalar and diagonal covariance specifications,
 including dense diagonal matrices and diagonal multivariate Gaussian
 distributions, are accepted. Correlated observation noise is rejected. Noise
 variances must be finite and positive in observed dimensions. NaN observations
-are omitted from both analysis and likelihood. Empty or entirely excluded local
-neighborhoods preserve their forecast members.
+are omitted from both analysis and likelihood. Without interpolation, empty or
+entirely excluded local neighborhoods preserve their forecast members.
 
 Forecast anomalies multiply by `1 + inflation_delta`, as in Cuthbert's EnKF.
 The fixed random-key default, ensemble recording options, and covariance jitter
@@ -160,7 +188,7 @@ Predictive observation summaries and evaluation scores use the global forecast.
 
 LETKF is opt-in, uses sequential Cuthbert execution, and does not provide a
 smoother. Discretize continuous-time models before using it. The backend is
-pinned to [Cuthbert commit 8df30b6](https://github.com/DanWaxman/cuthbert/commit/8df30b64e3334a7e31203d26761b4921abf8ab24).
+pinned to [Cuthbert commit 83cd066](https://github.com/DanWaxman/cuthbert/commit/83cd06604c73a50dbee5656ecf6787f704744a69).
 
 ## Discrete Time Configuration Classes
 
@@ -181,6 +209,7 @@ pinned to [Cuthbert commit 8df30b6](https://github.com/DanWaxman/cuthbert/commit
         - EnKFConfig
         - LETKFConfig
         - GetLETKFLocalization
+        - GetLETKFWeightInterpolation
 
 ## Continuous Time Configuration Classes
 

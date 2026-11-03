@@ -37,7 +37,10 @@ from dynestyx.inference.enkf_localization import (
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )
-from dynestyx.inference.letkf_localization import resolve_letkf_localization
+from dynestyx.inference.letkf_localization import (
+    resolve_letkf_localization,
+    resolve_letkf_weight_interpolation,
+)
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
@@ -249,6 +252,13 @@ def build_cuthbert_filter(
             filter_config,
             state_dim=dynamics.state_dim,
             observation_dim=dynamics.observation_dim,
+        )
+        filter_kwargs["_get_letkf_weight_interpolation"] = (
+            resolve_letkf_weight_interpolation(
+                filter_config,
+                state_dim=dynamics.state_dim,
+                get_localization=filter_kwargs["_get_letkf_localization"],
+            )
         )
         filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
     elif isinstance(filter_config, EnKFConfig):
@@ -828,6 +838,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             get_dynamics=get_dynamics,
             get_observations=get_observations,
             get_localization=get_localization,
+            get_weight_interpolation=filter_kwargs.get(
+                "_get_letkf_weight_interpolation"
+            ),
             n_particles=n_particles,
             batch_size=filter_kwargs.get("batch_size"),
             inflation=filter_kwargs.get("inflation", 0.0),

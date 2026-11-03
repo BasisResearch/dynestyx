@@ -444,3 +444,129 @@ def test_diagonal_noise_never_expands_to_dense(kind, monkeypatch):
 def test_invalid_batch_size(batch_size):
     with pytest.raises((ValueError, TypeError), match="batch_size"):
         _config(batch_size=batch_size)
+
+
+@pytest.mark.parametrize("callbacks", [False, True])
+@pytest.mark.parametrize("batch_size", [None, 1, 3])
+def test_coarse_weight_interpolation_matches_cuthbert(callbacks, batch_size):
+    from cuthbertlib.ensemble_kalman import letkf_update
+
+    neighborhoods = jnp.array([[0, 1]])
+    precision = jnp.array([[1.0, 0.5]])
+    pair = (
+        jnp.array([[0, -1], [0, -1]]),
+        jnp.array([[1.0, jnp.nan], [1.0, -2.0]]),
+    )
+    if callbacks:
+        config = LETKFConfig(
+            n_particles=8,
+            batch_size=batch_size,
+            get_localization=lambda mi: (neighborhoods, precision),
+            get_weight_interpolation=lambda mi: pair,
+        )
+    else:
+        config = LETKFConfig(
+            n_particles=8,
+            batch_size=batch_size,
+            observation_indices=neighborhoods,
+            localization_weights=precision,
+            weight_interpolation=pair,
+        )
+    ll, states = _run(config)
+    clean_pair = (pair[0], jnp.array([[1.0, 0.0], [1.0, 0.0]]))
+    expected, scores = jax.vmap(
+        lambda forecast, y: letkf_update(
+            forecast,
+            lambda x: x,
+            jnp.sqrt(jnp.array([0.2, 0.4])),
+            y,
+            neighborhoods,
+            precision,
+            weight_interpolation=clean_pair,
+        )
+    )(states.predicted_ensemble, VALUES)
+    assert jnp.allclose(states.ensemble, expected, atol=2e-6)
+    assert jnp.allclose(ll, scores.sum(), atol=2e-6)
+
+
+def test_time_varying_weight_interpolation_and_gradient():
+    from cuthbertlib.ensemble_kalman import letkf_update
+
+    indices = jnp.array([[0, 1], [0, 1]])
+    neighborhoods = jnp.array([[0], [1]])
+
+    def interpolation(time, parameter):
+        weight = jax.nn.sigmoid(time + parameter)
+        return indices, jnp.array([[weight, 1 - weight], [1 - weight, weight]])
+
+    def run(parameter):
+        config = LETKFConfig(
+            observation_indices=neighborhoods,
+            localization_weights=jnp.ones((2, 1)),
+            get_weight_interpolation=lambda mi: interpolation(mi.time, parameter),
+            n_particles=8,
+        )
+        return _run(config)
+
+    ll, states = jax.jit(run)(0.3)
+    expected, scores = jax.vmap(
+        lambda forecast, y, time: letkf_update(
+            forecast,
+            lambda x: x,
+            jnp.sqrt(jnp.array([0.2, 0.4])),
+            y,
+            neighborhoods,
+            jnp.ones((2, 1)),
+            weight_interpolation=interpolation(time, 0.3),
+        )
+    )(states.predicted_ensemble, VALUES, TIMES)
+    assert jnp.allclose(states.ensemble, expected, atol=2e-6)
+    assert jnp.allclose(ll, scores.sum(), atol=2e-6)
+    gradient = jax.jit(jax.grad(lambda p: run(p)[0]))(0.3)
+    assert jnp.isfinite(gradient)
+    assert jnp.abs(gradient) > 1e-6
+
+
+@pytest.mark.parametrize(
+    "pair,message",
+    [
+        ((jnp.array([[0]]), jnp.ones((1, 1))), "shape"),
+        ((jnp.array([[0.0], [0.0]]), jnp.ones((2, 1))), "integers"),
+        ((jnp.array([[0], [1]]), jnp.ones((2, 1))), "range"),
+        ((jnp.array([[0], [-2]]), jnp.ones((2, 1))), "range"),
+        ((jnp.array([[0], [0]]), jnp.array([[1.0], [-1.0]])), "nonnegative"),
+        ((jnp.array([[0], [0]]), jnp.array([[1.0], [jnp.nan]])), "finite"),
+        ((jnp.array([[0], [0]]), jnp.array([[1.0], [0.5]])), "sum to one"),
+        ((jnp.array([[0], [-1]]), jnp.ones((2, 1))), "sum to one"),
+    ],
+)
+def test_invalid_weight_interpolation(pair, message):
+    config = LETKFConfig(
+        observation_indices=jnp.array([[0, 1]]),
+        localization_weights=jnp.ones((1, 2)),
+        weight_interpolation=pair,
+    )
+    with pytest.raises(ValueError, match=message):
+        build_cuthbert_filter(_problem(), config, jr.PRNGKey(0), want_parallel=False)
+
+
+def test_weight_interpolation_callback_validation_under_jit():
+    def run(coefficients):
+        config = _config(
+            get_weight_interpolation=lambda mi: (jnp.array([[0], [1]]), coefficients)
+        )
+        return _run(config)[0]
+
+    with pytest.raises(jax.errors.JaxRuntimeError, match="sum to one"):
+        jax.jit(run)(jnp.array([[0.5], [1.0]])).block_until_ready()
+
+
+def test_conflicting_weight_interpolation_options():
+    with pytest.raises(ValueError, match="either"):
+        _config(
+            weight_interpolation=(jnp.array([[0], [1]]), jnp.ones((2, 1))),
+            get_weight_interpolation=lambda mi: (
+                jnp.array([[0], [1]]),
+                jnp.ones((2, 1)),
+            ),
+        )
