@@ -14,6 +14,7 @@ from dynestyx.inference.configs.filter import (
     EnKFConfig,
     HMMConfigs,
     KFConfig,
+    LETKFConfig,
     PFConfig,
 )
 from dynestyx.inference.configs.smoother import (
@@ -115,10 +116,10 @@ def _validate_missing_observation_support(
     if mode == "filter":
         continuous_types = ContinuousTimeConfigs
         discrete_types = DiscreteTimeConfigs
-        exact_supported_types = (KFConfig, EnKFConfig)
+        exact_supported_types = (KFConfig, EnKFConfig, LETKFConfig)
         exact_supported_msg = (
             "NaN-valued obs_values are currently supported only for "
-            "cuthbert KFConfig and EnKFConfig filters."
+            "cuthbert KFConfig, EnKFConfig, and LETKFConfig filters."
         )
         cd_dynamax_msg = (
             "CD-Dynamax filters do not support NaNs in obs_values. "

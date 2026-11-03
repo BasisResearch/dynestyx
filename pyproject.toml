@@ -31,8 +31,8 @@ classifiers = [
 ]
 dependencies = [
     "effectful>=0.4.0",
-    "cuthbert>=0.1.1",
-    "cuthbertlib>=0.1.1",
+    "cuthbert @ git+https://github.com/DanWaxman/cuthbert.git@2c4452a888e3b815c9666a94e0e1a907781d60fa#subdirectory=pkg/cuthbert",
+    "cuthbertlib @ git+https://github.com/DanWaxman/cuthbert.git@2c4452a888e3b815c9666a94e0e1a907781d60fa#subdirectory=pkg/cuthbertlib",
     "cd-dynamax>=0.4.3",
     "matplotlib>=3.10.7",
     # numpyro<0.21.0 fails to import against jax>=0.10 (removed xla_pmap_p);

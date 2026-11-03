@@ -11,6 +11,7 @@ import jax.random as jr
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
+from dynestyx.types import FilterModelInputs
 from dynestyx.utils.validation import _validate_nonnegative_float
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
@@ -411,6 +412,96 @@ class EnKFConfig(EnKFBaseConfig):
     """
 
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+
+class GetLETKFLocalization(Protocol):
+    """Return fixed-shape local observation indices and precision weights."""
+
+    def __call__(self, model_inputs: FilterModelInputs, /) -> tuple[Array, Array]:
+        """Return arrays shaped (state_dim, max_local_observations)."""
+        ...
+
+
+@dataclasses.dataclass(frozen=True)
+class LETKFConfig(BaseFilterConfig):
+    """Local ensemble transform Kalman filter for discrete-time models.
+
+    Supply either both observation_indices and localization_weights, or
+    get_localization(model_inputs) returning those arrays at each time.
+    Arrays have shape (state_dim, max_local_observations). Integer indices
+    refer to the original observation order, with -1 padding; nonpadding
+    indices must be in range and unique within each row. Nonpadding weights
+    must be finite and nonnegative. Zero weights exclude observations.
+    Callback array shapes must remain fixed under JIT.
+
+    Requires state-independent diagonal Gaussian observation noise and at
+    least two members. NaN observations are excluded; empty neighborhoods
+    preserve forecast members. Forecast anomalies are multiplied by
+    1 + inflation_delta. The deterministic analysis uses local symmetric
+    ensemble transforms. The likelihood is one global normalized Gaussian
+    predictive approximation, not an unbiased model likelihood estimate.
+    Predictive observation outputs retain the global forecast covariance.
+
+    Continuous-time models must first be discretized. Only the Cuthbert
+    backend is supported. Recorded covariance jitter affects returned
+    distributions only, following EnKFConfig.
+    """
+
+    observation_indices: ArrayLike | None = None
+    localization_weights: ArrayLike | None = None
+    get_localization: GetLETKFLocalization | None = None
+    n_particles: int = 30
+    crn_seed: PRNGKeyArray | None = dataclasses.field(
+        default_factory=lambda: jr.PRNGKey(0)
+    )
+    inflation_delta: float | None = None
+    recorded_filtered_states_cov_jitter: float = 1e-5
+    filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+    def __post_init__(self):
+        if (
+            not isinstance(self.n_particles, int)
+            or isinstance(self.n_particles, bool)
+            or self.n_particles < 2
+        ):
+            raise ValueError("LETKF n_particles must be an integer of at least 2.")
+        if self.filter_source != "cuthbert":
+            raise ValueError("LETKFConfig requires the Cuthbert backend.")
+        has_arrays = (
+            self.observation_indices is not None
+            or self.localization_weights is not None
+        )
+        if self.get_localization is not None:
+            if not callable(self.get_localization):
+                raise TypeError("LETKF get_localization must be callable.")
+            if has_arrays:
+                raise ValueError(
+                    "Supply either LETKF arrays or get_localization, not both."
+                )
+        elif self.observation_indices is None or self.localization_weights is None:
+            raise ValueError(
+                "LETKF requires both observation_indices and localization_weights, or get_localization."
+            )
+        _validate_nonnegative_float(
+            "recorded_filtered_states_cov_jitter",
+            self.recorded_filtered_states_cov_jitter,
+        )
+        reserved = {
+            "get_localization",
+            "observation_indices",
+            "localization_weights",
+            "ensemble_subspace",
+            "perturbed_obs",
+            "modify_cross_covariance",
+            "construct_chol_innovation_covariance",
+            "modify_predicted_observation_covariance",
+        }
+        conflicts = sorted(reserved.intersection(self.extra_filter_kwargs))
+        if conflicts:
+            raise ValueError(
+                "LETKF options are reserved in extra_filter_kwargs: "
+                + ", ".join(conflicts)
+            )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -931,6 +1022,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 
 
 DiscreteTimeConfigs: tuple[type, ...] = (
+    LETKFConfig,
     EnKFConfig,
     PFConfig,
     EKFConfig,

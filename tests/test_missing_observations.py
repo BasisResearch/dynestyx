@@ -9,7 +9,13 @@ from numpyro.infer import Predictive
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Filter, Smoother
 from dynestyx.inference.checkers import _validate_missing_observation_support
-from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
+from dynestyx.inference.configs.filter import (
+    EKFConfig,
+    EnKFConfig,
+    KFConfig,
+    LETKFConfig,
+    PFConfig,
+)
 from dynestyx.inference.configs.smoother import (
     EKFSmootherConfig,
     EnRTSSmootherConfig,
@@ -91,13 +97,26 @@ def _partial_missing_observations(obs_values):
         ),
         pytest.param(
             "filter",
+            LETKFConfig(
+                observation_indices=jnp.array([[0, 1], [0, 1]]),
+                localization_weights=jnp.ones((2, 2)),
+                n_particles=16,
+                record_filtered_states_mean=True,
+            ),
+            True,
+            "f_filtered_states_mean",
+            None,
+            id="letkf-filter",
+        ),
+        pytest.param(
+            "filter",
             EKFConfig(
                 filter_source="cuthbert",
                 record_filtered_states_mean=True,
             ),
             False,
             None,
-            "supported only for cuthbert KFConfig and EnKFConfig filters",
+            "supported only for cuthbert KFConfig, EnKFConfig, and LETKFConfig filters",
             id="ekf-filter",
         ),
         pytest.param(

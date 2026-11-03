@@ -22,6 +22,7 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
     EnKFConfig,
+    LETKFConfig,
 )
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
@@ -41,7 +42,7 @@ type ContinuousObservationPredictionConfig = (
     | ContinuousTimeEnKFConfig
 )
 type SupportedObservationPredictionConfig = (
-    ContinuousObservationPredictionConfig | EnKFConfig
+    ContinuousObservationPredictionConfig | EnKFConfig | LETKFConfig
 )
 
 
@@ -380,7 +381,7 @@ def _extract_cuthbert_enkf_predictions(
     posterior: Any,
     *,
     dynamics: DynamicalModel,
-    filter_config: EnKFConfig,
+    filter_config: EnKFConfig | LETKFConfig,
     plate_shapes: tuple[int, ...],
     resolved_localization: ResolvedEnKFLocalization | None = None,
 ) -> PredictedObservationOutputs:
@@ -395,7 +396,9 @@ def _extract_cuthbert_enkf_predictions(
 
     state_ensemble = jnp.asarray(state_ensemble_raw)
     covariance_modifier = None
-    localization = filter_config.localization
+    localization = (
+        filter_config.localization if isinstance(filter_config, EnKFConfig) else None
+    )
     if resolved_localization is None and localization is not None:
         resolved_localization = resolve_enkf_localization(
             localization,
@@ -480,7 +483,7 @@ def extract_filter_predictions(
         )
 
     if (
-        isinstance(filter_config, EnKFConfig)
+        isinstance(filter_config, (EnKFConfig, LETKFConfig))
         and filter_config.filter_source == "cuthbert"
     ):
         return _extract_cuthbert_enkf_predictions(

@@ -7,7 +7,10 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpyro.distributions as dist
 from cuthbert import filter as cuthbert_filter
-from cuthbert.ensemble_kalman import ensemble_kalman_filter
+from cuthbert.ensemble_kalman import (
+    ensemble_kalman_filter,
+    local_ensemble_transform_kalman_filter,
+)
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import particle_filter
 from cuthbertlib.resampling import (
@@ -24,6 +27,7 @@ from dynestyx.inference.configs.filter import (
     EKFConfig,
     EnKFConfig,
     KFConfig,
+    LETKFConfig,
     PFConfig,
 )
 from dynestyx.inference.enkf_localization import (
@@ -33,6 +37,7 @@ from dynestyx.inference.enkf_localization import (
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )
+from dynestyx.inference.letkf_localization import resolve_letkf_localization
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
@@ -43,6 +48,7 @@ from dynestyx.models import (
     LinearGaussianStateEvolution,
 )
 from dynestyx.models.covariances import covariance_matrix
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 
 class CuthbertInputs(NamedTuple):
@@ -96,9 +102,17 @@ def _check_state_independent_noise(
     chol_R_at_x0: Float[Array, "observation_dim observation_dim"],
     probe_dist_at_x1: dist.Distribution,
     obs_dim: int,
-) -> None:
-    """Raise if the observation noise covariance varies with state."""
+    *,
+    strict: bool = False,
+) -> Float[Array, "observation_dim observation_dim"] | None:
+    """Raise if noise varies with state; strict mode retains checks under JIT."""
     chol_R_at_x1 = _extract_gaussian_chol(probe_dist_at_x1, obs_dim)
+    if strict:
+        return _raise_now_or_error_if(
+            chol_R_at_x0,
+            ~jnp.allclose(chol_R_at_x0, chol_R_at_x1, equal_nan=True),
+            "LETKF requires state-independent observation noise.",
+        )
     try:
         equal = bool(
             jnp.asarray(chol_R_at_x0).shape == jnp.asarray(chol_R_at_x1).shape
@@ -151,6 +165,12 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
         kwargs["resampling_base_method"] = config.resampling_method.base_method
         kwargs["resampling_differential_method"] = (
             config.resampling_method.differential_method
+        )
+    elif isinstance(config, LETKFConfig):
+        config.__post_init__()
+        kwargs["n_particles"] = config.n_particles
+        kwargs["inflation"] = (
+            config.inflation_delta if config.inflation_delta is not None else 0.0
         )
     elif isinstance(config, EnKFConfig):
         reserved_hooks = {
@@ -216,6 +236,17 @@ def build_cuthbert_filter(
                 "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
             )
         filter_obj = _cuthbert_filter_pf(dynamics, filter_kwargs)
+    elif isinstance(filter_config, LETKFConfig):
+        if key is None:
+            raise ValueError(
+                "LETKF requires a PRNG key: set crn_seed or use a NumPyro seeded context."
+            )
+        filter_kwargs["_get_letkf_localization"] = resolve_letkf_localization(
+            filter_config,
+            state_dim=dynamics.state_dim,
+            observation_dim=dynamics.observation_dim,
+        )
+        filter_obj = _cuthbert_filter_enkf(dynamics, filter_kwargs)
     elif isinstance(filter_config, EnKFConfig):
         if key is None:
             raise ValueError(
@@ -239,7 +270,7 @@ def build_cuthbert_filter(
     else:
         raise ValueError(
             f"Unsupported cuthbert config: {type(filter_config).__name__}. "
-            "Expected KFConfig, EKFConfig, EnKFConfig, PFConfig."
+            "Expected KFConfig, EKFConfig, EnKFConfig, LETKFConfig, PFConfig."
         )
 
     parallel = bool(
@@ -475,7 +506,7 @@ def compute_cuthbert_filter(
 
     if store_predicted_ensemble is None:
         store_predicted_ensemble = bool(
-            isinstance(filter_config, EnKFConfig)
+            isinstance(filter_config, (EnKFConfig, LETKFConfig))
             and filter_config.include_predicted_observations
         )
 
@@ -625,12 +656,31 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
     return pf
 
 
+def _letkf_diagonal_factor(matrix, y, *, covariance=False):
+    """Convert diagonal covariance/factors while rejecting correlated noise."""
+    off_diagonal = matrix.at[jnp.diag_indices(matrix.shape[0])].set(0)
+    matrix = _raise_now_or_error_if(
+        matrix,
+        jnp.any(off_diagonal != 0),
+        "LETKF requires diagonal observation noise; correlated noise is unsupported.",
+    )
+    # Preserve the validation dependency under JIT.
+    diagonal = jnp.diag(matrix)
+    diagonal = _raise_now_or_error_if(
+        diagonal,
+        jnp.any(~jnp.isnan(y) & (~jnp.isfinite(diagonal) | (diagonal <= 0))),
+        "LETKF observation noise must be finite and strictly positive for observed dimensions.",
+    )
+    return jnp.sqrt(diagonal) if covariance else diagonal
+
+
 def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
     if filter_kwargs is None:
         filter_kwargs = {}
 
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
+    get_localization = filter_kwargs.get("_get_letkf_localization")
 
     localization_kwargs = {}
     resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
@@ -679,7 +729,12 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             H = obs_params.H
 
-            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_params.R)))
+            covariance = jnp.atleast_2d(jnp.asarray(obs_params.R))
+            chol_R = (
+                _letkf_diagonal_factor(covariance, y, covariance=True)
+                if get_localization is not None
+                else jnp.linalg.cholesky(covariance)
+            )
             bias = (
                 jnp.zeros((obs_dim,), dtype=y.dtype)
                 if obs_params.bias is None
@@ -695,8 +750,11 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             return observation_fn, chol_R, y
         elif isinstance(obs_model, GaussianObservation):
-            chol_R = jnp.linalg.cholesky(
-                jnp.atleast_2d(covariance_matrix(obs_model.R, obs_dim))
+            covariance = jnp.atleast_2d(covariance_matrix(obs_model.R, obs_dim))
+            chol_R = (
+                _letkf_diagonal_factor(covariance, y, covariance=True)
+                if get_localization is not None
+                else jnp.linalg.cholesky(covariance)
             )
 
             def observation_fn(x):
@@ -708,9 +766,17 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
             probe_x1 = jnp.ones((state_dim,), dtype=y.dtype)
             probe_dist = obs_model(probe_x0, mi.u, mi.time)
             chol_R = _extract_gaussian_chol(probe_dist, obs_dim)
-            _check_state_independent_noise(
-                chol_R, obs_model(probe_x1, mi.u, mi.time), obs_dim
+            checked_chol = _check_state_independent_noise(
+                chol_R,
+                obs_model(probe_x1, mi.u, mi.time),
+                obs_dim,
+                strict=get_localization is not None,
             )
+            if checked_chol is not None:
+                chol_R = checked_chol
+
+            if get_localization is not None:
+                chol_R = _letkf_diagonal_factor(chol_R, y)
 
             def observation_fn(x):
                 edist = obs_model(x, mi.u, mi.time)
@@ -729,6 +795,19 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
                 return jnp.atleast_1d(jnp.asarray(edist.mean))
 
             return observation_fn, chol_R, y
+
+    if get_localization is not None:
+        return local_ensemble_transform_kalman_filter.build_filter(
+            init_sample=init_sample,
+            get_dynamics=get_dynamics,
+            get_observations=get_observations,
+            get_localization=get_localization,
+            n_particles=n_particles,
+            inflation=filter_kwargs.get("inflation", 0.0),
+            store_predicted_ensemble=bool(
+                filter_kwargs.get("store_predicted_ensemble", False)
+            ),
+        )
 
     return ensemble_kalman_filter.build_filter(
         init_sample=init_sample,  # type: ignore

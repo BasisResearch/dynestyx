@@ -24,6 +24,7 @@ Nested objects such as `extra_filter_kwargs` dictionaries are not recursively fr
 | Config class               | Time domain         | When it fits best |
 |----------------------------|---------------------|-------------------|
 | `KFConfig`                 | Discrete            | Linear-Gaussian dynamics and linear-Gaussian observations (exact & optimal). |
+| `LETKFConfig`              | Discrete            | Deterministic local ensemble transforms with explicit observation neighborhoods and diagonal Gaussian noise. |
 | `EnKFConfig`               | Discrete            | Nonlinear or expensive models with Gaussian observations; cuthbert-backed and a good general-purpose default. *(default)* |
 | `EKFConfig`                | Discrete            | Nonlinear, differentiable Gaussian dynamics, nonlinear (and with `cuthbert`, non-Gaussian) but differentiable observations (approximate). |
 | `UKFConfig`                | Discrete            | Nonlinear, differentiable Gaussian dynamics, nonlinear but differentiable Gaussian observations (approximate). Generally more accurate, but slower than `EKFConfig`. |
@@ -92,6 +93,69 @@ filter_config = EnKFConfig(
 
 Projected forecast ensembles remain the raw ensemble even when the observation marginal is localized. For an `EnergyScore` intended to represent the localized Gaussian covariance, select `ObservationScoringConfig(sample_source="gaussian_moments")`.
 
+## Local ensemble transform filtering (LETKF)
+
+`LETKFConfig` selects Cuthbert's deterministic local ensemble transform Kalman
+filter. Supply observation indices and precision weights, both shaped
+`(state_dim, max_local_observations)`:
+
+```python
+import jax.numpy as jnp
+import dynestyx as dsx
+from dynestyx.inference.filters import Filter, LETKFConfig
+
+# A two-coordinate state and two-dimensional observation.
+config = LETKFConfig(
+    n_particles=30,
+    observation_indices=jnp.array([[0, -1], [0, 1]]),
+    localization_weights=jnp.array([[1.0, 0.0], [0.3, 1.0]]),
+    inflation_delta=0.05,
+)
+with Filter(filter_config=config):
+    result = dsx.condition(
+        "state", dynamics, obs_times=obs_times, obs_values=obs_values
+    )
+```
+
+Indices refer to the original observation order. Use `-1` for padding; other
+indices must be in range and unique within each row. Nonpadding weights must
+be finite and nonnegative; zero excludes an observation. Padding weights are
+ignored. Existing Cuthbert Gaussian and Gaspari–Cohn taper utilities can compute
+precision weights from local distances.
+
+For time-varying neighborhoods, supply `get_localization(model_inputs)` instead
+of the two arrays. The callback receives the current `FilterModelInputs`,
+including scalar `time` and observation-aligned controls `u`, and returns
+`(observation_indices, localization_weights)`. Shapes must stay fixed across
+time and JIT execution; indices and weights may vary and weights may depend on
+differentiable parameters. Neighborhood validation also runs under JIT.
+
+LETKF requires at least two ensemble members and state-independent diagonal
+Gaussian observation noise. Scalar and diagonal covariance specifications,
+including dense diagonal matrices and diagonal multivariate Gaussian
+distributions, are accepted. Correlated observation noise is rejected. Noise
+variances must be finite and positive in observed dimensions. NaN observations
+are omitted from both analysis and likelihood. Empty or entirely excluded local
+neighborhoods preserve their forecast members.
+
+Forecast anomalies multiply by `1 + inflation_delta`, as in Cuthbert's EnKF.
+The fixed random-key default, ensemble recording options, and covariance jitter
+for returned distributions follow `EnKFConfig`. Forecast ensembles are retained
+when `include_predicted_observations=True`.
+
+The marginal log likelihood sums one **global Gaussian predictive density** per
+time step using the full forecast observation covariance plus the original
+observation noise. Each observed dimension is scored once, even when it occurs
+in multiple neighborhoods or none. Localization changes analysis and later
+forecasts; current weights do not directly alter the current predictive score.
+An entirely missing observation contributes zero. This is a normalized
+approximation, not an unbiased estimate of the original model likelihood.
+Predictive observation summaries and evaluation scores use the global forecast.
+
+LETKF is opt-in, uses sequential Cuthbert execution, and does not provide a
+smoother. Discretize continuous-time models before using it. The backend is
+pinned to [Cuthbert commit 2c4452a](https://github.com/DanWaxman/cuthbert/commit/2c4452a888e3b815c9666a94e0e1a907781d60fa).
+
 ## Discrete Time Configuration Classes
 
 ::: dynestyx.inference.configs.filter
@@ -109,6 +173,8 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
         - EnKFLocalizationConfig
         - EnKFLocalizationFunctions
         - EnKFConfig
+        - LETKFConfig
+        - GetLETKFLocalization
 
 ## Continuous Time Configuration Classes
 
