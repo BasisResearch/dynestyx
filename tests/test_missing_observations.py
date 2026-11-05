@@ -108,7 +108,8 @@ def _partial_missing_observations(obs_values):
             ),
             False,
             None,
-            "CD-Dynamax filters do not support NaNs in obs_values",
+            "CD-Dynamax filters currently support NaNs in obs_values for "
+            "the discrete-time SLDS RBPFConfig path",
             id="cd-dynamax-filter",
         ),
         pytest.param(

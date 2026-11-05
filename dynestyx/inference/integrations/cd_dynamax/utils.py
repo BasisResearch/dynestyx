@@ -13,6 +13,7 @@ from cd_dynamax import (
 )
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
+from jaxtyping import Array, Real
 
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
@@ -30,6 +31,30 @@ from dynestyx.models.covariances import covariance_matrix
 from dynestyx.utils.distributions import gaussian_moments
 
 type SSMType = ContDiscreteNonlinearGaussianSSM | ContDiscreteNonlinearSSM
+
+
+def _prepare_inputs(
+    dynamics: DynamicalModel,
+    obs_values: Real[Array, "obs_time observation_dim"],
+    obs_times: Real[Array, " obs_time"],
+    ctrl_times: Real[Array, " ctrl_time"] | None,
+    ctrl_values: Real[Array, "ctrl_time control_dim"] | None,
+) -> tuple[
+    Real[Array, "obs_time observation_dim"],
+    Real[Array, "obs_time control_dim"],
+]:
+    """Prepare observations and inputs arrays for cd-dynamax discrete filters."""
+    num_times = obs_values.shape[0]
+    control_dim = dynamics.control_dim
+    if control_dim == 0 or ctrl_values is None:
+        inputs = jnp.zeros((num_times, control_dim))
+    elif ctrl_values.shape[0] > num_times:
+        aligned_ctrl_times = cast(Real[Array, " ctrl_time"], ctrl_times)
+        inds = jnp.searchsorted(aligned_ctrl_times, obs_times, side="left")
+        inputs = ctrl_values[inds]
+    else:
+        inputs = ctrl_values
+    return obs_values, inputs
 
 
 def _as_cd_dynamax_diffusion_coefficient(
