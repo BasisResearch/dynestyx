@@ -7,10 +7,15 @@ from jaxtyping import Array, PRNGKeyArray, Real
 from dynestyx.inference.configs.simulator import ODESimulatorConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import BaseSimulator
-from dynestyx.simulation.utils import _sample_initial_states, _tile_times
+from dynestyx.simulation.utils import (
+    _ensure_initial_state_dim,
+    _ensure_trailing_dim,
+    _sample_initial_states,
+    _tile_times,
+)
 from dynestyx.solvers import solve_ode_state_path
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _build_control_path_eval
+from dynestyx.utils.controls import _build_control_path_eval
 
 
 class ODESimulator(BaseSimulator):
@@ -59,7 +64,7 @@ class ODESimulator(BaseSimulator):
         >>> config = ODESimulatorConfig(dt0=1e-2)
         >>> with ODESimulator(config, n_simulations=3):
         ...     predictive = Predictive(
-        ...         model, num_samples=10, exclude_deterministic=False
+        ...         model, num_samples=10, condition_deterministic=False
         ...     )
         ...     draws = predictive(
         ...         jr.PRNGKey(0), predict_times=jnp.linspace(0.0, 5.0, 51)
@@ -127,7 +132,7 @@ class ODESimulator(BaseSimulator):
     Here `"f"` is replaced by the `name` passed to `dsx.sample`. Under
     `Predictive(..., num_samples=N)`, NumPyro prepends an `N` axis to each
     shape. Because these sites are deterministic, pass
-    `exclude_deterministic=False` to `Predictive` (or request the site names
+    `condition_deterministic=False` to `Predictive` (or request the site names
     explicitly) to include them in its returned dictionary.
 
     When this simulator wraps a `Filter` or `Smoother`, the inner handler
@@ -236,9 +241,9 @@ class ODESimulator(BaseSimulator):
         )
         return SimulatedResult(
             times=_tile_times(times, n_sim),
-            x_0=initial_state,
-            states=states,
-            observations=observations,
+            x_0=_ensure_initial_state_dim(initial_state),
+            states=_ensure_trailing_dim(states),
+            observations=_ensure_trailing_dim(observations),
             obs_times=_tile_times(times, n_sim),
         )
 

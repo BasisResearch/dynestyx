@@ -42,6 +42,7 @@ from dynestyx.models import (
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
+from dynestyx.models.covariances import covariance_matrix
 
 
 class CuthbertInputs(NamedTuple):
@@ -165,6 +166,7 @@ def _config_to_filter_kwargs(config: BaseFilterConfig) -> dict:
                 "EnKFLocalizationFunctions via EnKFConfig.localization instead."
             )
         kwargs["n_particles"] = config.n_particles
+        kwargs["ensemble_subspace"] = config.ensemble_subspace
         kwargs["inflation"] = (
             config.inflation_delta if config.inflation_delta is not None else 0.0
         )
@@ -632,6 +634,10 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
     localization_kwargs = {}
     resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
+    n_particles = int(filter_kwargs.get("n_particles", 30))
+    ensemble_subspace = filter_kwargs.get("ensemble_subspace")
+    if ensemble_subspace is None:
+        ensemble_subspace = n_particles < obs_dim and resolved_localization is None
     if resolved_localization is not None:
         if resolved_localization.modify_cross_covariance is not None:
             localization_kwargs["modify_cross_covariance"] = (
@@ -689,7 +695,9 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
 
             return observation_fn, chol_R, y
         elif isinstance(obs_model, GaussianObservation):
-            chol_R = jnp.linalg.cholesky(jnp.atleast_2d(jnp.asarray(obs_model.R)))
+            chol_R = jnp.linalg.cholesky(
+                jnp.atleast_2d(covariance_matrix(obs_model.R, obs_dim))
+            )
 
             def observation_fn(x):
                 return jnp.atleast_1d(jnp.asarray(obs_model.h(x, mi.u, mi.time)))
@@ -726,7 +734,8 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         init_sample=init_sample,  # type: ignore
         get_dynamics=get_dynamics,  # type: ignore
         get_observations=get_observations,  # type: ignore
-        n_particles=int(filter_kwargs.get("n_particles", 30)),
+        n_particles=n_particles,
+        ensemble_subspace=bool(ensemble_subspace),
         inflation=filter_kwargs.get("inflation", jnp.array(0.0)),
         perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
         store_predicted_ensemble=bool(
@@ -747,7 +756,9 @@ def _kalman_dynamics_params_builder(
     ``lax.cond`` branches agree with the ``_noop`` branch.
     """
     chol_Q_const = (
-        None if callable(evo.cov) else jnp.linalg.cholesky(jnp.asarray(evo.cov))
+        None
+        if callable(evo.cov)
+        else jnp.linalg.cholesky(covariance_matrix(evo.cov, state_dim))
     )
 
     def get_dynamics_params(mi: CuthbertInputs):
@@ -797,7 +808,11 @@ def _kalman_observation_params_builder(
     step's ``mi.time``; the Cholesky of a constant covariance is hoisted out
     of the per-step path.
     """
-    chol_R_const = None if callable(obs.R) else jnp.linalg.cholesky(jnp.asarray(obs.R))
+    chol_R_const = (
+        None
+        if callable(obs.R)
+        else jnp.linalg.cholesky(covariance_matrix(obs.R, obs_dim))
+    )
 
     def get_observation_params(mi: CuthbertInputs):
         obs_params = obs.params_at(mi.time)

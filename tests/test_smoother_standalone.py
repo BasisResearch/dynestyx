@@ -11,6 +11,7 @@ import dynestyx as dsx
 from dynestyx.inference.configs.smoother import KFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.types import ConditionedResult
+from tests.test_utils import assert_finite
 
 
 def _make_lti_dynamics(alpha):
@@ -54,14 +55,23 @@ def test_infer_smoother_returns_infer_result():
             dynamics,
             obs_times=obs_times,
             obs_values=obs_values,
-            predict_times=jnp.arange(obs_times[-1], obs_times[-1] + 3.0),
         )
 
     assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
-    assert jnp.isfinite(result.marginal_loglik)
+    assert_finite(result.marginal_loglik, (), where="marginal_loglik")
     assert result.states is not None
+    assert_finite(
+        getattr(result.states, "mean"), (len(obs_times), 2), where="smoothed mean"
+    )
+    assert_finite(
+        getattr(result.states, "chol_cov"),
+        (len(obs_times), 2, 2),
+        where="smoothed chol_cov",
+    )
     assert result.dists is not None
+    assert result.times is not None
+    assert_finite(result.times, obs_times.shape, where="times")
     assert jnp.array_equal(result.times, obs_times)
 
 
@@ -101,9 +111,19 @@ def test_plated_condition_returns_backend_smoother_states():
                 obs_values=jnp.stack([obs_values, obs_values]),
             )
 
-    assert result.marginal_loglik.shape == (2,)
+    assert result.marginal_loglik is not None
+    assert_finite(result.marginal_loglik, (2,), where="result.marginal_loglik")
     assert type(result.states) is type(unplated_result.states)
-    assert getattr(result.states, "mean").shape[:2] == (2, len(obs_times))
+    assert_finite(
+        getattr(result.states, "mean"),
+        (2, len(obs_times), 2),
+        where="plated smoothed mean",
+    )
+    assert_finite(
+        getattr(result.states, "chol_cov"),
+        (2, len(obs_times), 2, 2),
+        where="plated smoothed chol_cov",
+    )
 
 
 def test_infer_smoother_optax_mle():
@@ -116,6 +136,7 @@ def test_infer_smoother_optax_mle():
             result = dsx.condition(
                 "f", dynamics, obs_times=obs_times, obs_values=obs_values
             )
+        assert result.marginal_loglik is not None
         return -result.marginal_loglik
 
     optimizer = optax.adam(1e-2)
@@ -123,14 +144,18 @@ def test_infer_smoother_optax_mle():
     opt_state = optimizer.init(alpha)
 
     initial_loss = neg_loglik(alpha)
+    assert_finite(initial_loss, (), where="initial loss")
     grad_fn = jax.grad(neg_loglik)
 
     for _ in range(20):
         grads = grad_fn(alpha)
+        assert_finite(grads, (), where="loss gradient")
         updates, opt_state = optimizer.update(grads, opt_state)
         alpha = optax.apply_updates(alpha, updates)
 
     final_loss = neg_loglik(alpha)
+    assert_finite(alpha, (), where="fitted alpha")
+    assert_finite(final_loss, (), where="final loss")
     assert final_loss < initial_loss
 
 
@@ -149,30 +174,9 @@ def test_infer_smoother_does_not_register_numpyro_sites():
 
     assert isinstance(result, ConditionedResult)
     assert result.marginal_loglik is not None
+    assert_finite(result.marginal_loglik, (), where="marginal_loglik")
     assert "f_marginal_loglik" not in tr
     assert "f_marginal_log_likelihood" not in tr
-
-
-def test_condition_smoother_no_observations():
-    """Smoother without observations returns an empty ConditionedResult."""
-    dynamics = _make_lti_dynamics(0.5)
-    obs_times, obs_values = _make_data()
-
-    with Smoother(smoother_config=KFSmootherConfig(filter_source="cuthbert")):
-        # Reusing the handler must not leak the first call's cached likelihood.
-        dsx.condition("observed", dynamics, obs_times=obs_times, obs_values=obs_values)
-        result = dsx.condition(
-            "f",
-            dynamics,
-            obs_times=None,
-            obs_values=None,
-            predict_times=jnp.arange(0.0, 5.0, 1.0),
-        )
-
-    assert isinstance(result, ConditionedResult)
-    assert result.marginal_loglik is None
-    assert result.states is None
-    assert result.dists is None
 
 
 def test_smoother_rejects_dirac_ode_inference():

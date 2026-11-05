@@ -12,6 +12,7 @@ import dynestyx as dsx
 from dynestyx.inference.configs.filter import KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models.lti_dynamics import LTI_discrete
+from tests.test_utils import assert_finite, assert_tree_all_finite
 
 
 def _make_hierarchical_lti_data(M=3, T=10, seed=0):
@@ -81,12 +82,12 @@ def test_hierarchical_lti_svi_smoke():
     svi = SVI(data_conditioned_model, guide, optimizer, loss=Trace_ELBO())
 
     svi_result = svi.run(jr.PRNGKey(0), 5)
+    assert_finite(svi_result.losses, (5,), where="SVI losses")
+    assert_tree_all_finite(svi_result.params, where="SVI parameters")
 
     posterior = guide.sample_posterior(
         jr.PRNGKey(1), svi_result.params, sample_shape=(2,)
     )
 
     assert "alpha" in posterior
-    assert posterior["alpha"].shape == (2, M)
-    assert not jnp.isnan(posterior["alpha"]).any()
-    assert not jnp.isinf(posterior["alpha"]).any()
+    assert_finite(posterior["alpha"], (2, M), where="posterior['alpha']")

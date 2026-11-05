@@ -12,7 +12,7 @@ from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.scoring import EnergyScore
 from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.types import EvaluationResult
-from dynestyx.utils import _array_has_plate_dims
+from dynestyx.utils.plates import _array_has_plate_dims
 
 
 def _canonicalize_observed_values(

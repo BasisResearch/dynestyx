@@ -10,6 +10,9 @@ from cd_dynamax import (
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
 )
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.inference import (
+    KFHyperParams,
+)
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
     PosteriorGSSMFiltered,
 )
@@ -159,10 +162,18 @@ def _run_linear_kf(
         emission_dim=dynamics.observation_dim,
         input_dim=dynamics.control_dim,
     )
+    filter_hyperparams = KFHyperParams(
+        diffeqsolve_settings={
+            "dt0": filter_config.diffeqsolve_dt0,
+            "max_steps": filter_config.diffeqsolve_max_steps,
+            **filter_config.diffeqsolve_kwargs,
+        }
+    )
     filtered = cd_model.filter(
         params=params,
         emissions=obs_values,
         t_emissions=obs_times,
+        filter_hyperparams=filter_hyperparams,
         inputs=ctrl_values,
         output_fields=output_fields,
         warn=filter_config.warn,

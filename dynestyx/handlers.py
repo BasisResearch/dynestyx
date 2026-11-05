@@ -1,11 +1,12 @@
 """Contains the core dynestyx primitives and `effectful` handler utilities."""
 
-from typing import Any, TypeVar
+import warnings
+from enum import Enum, auto
+from typing import TypeVar
 
 import numpyro
 from effectful.ops.semantics import fwd, handler
 from effectful.ops.syntax import ObjectInterpretation, defop, implements
-from effectful.ops.types import NotHandled
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Real
 
@@ -16,15 +17,105 @@ from dynestyx.models import (
 from dynestyx.observation_missingness import (
     prepare_observation_views,
 )
-from dynestyx.types import FunctionOfTime
-from dynestyx.utils import (
-    _get_dynamics_with_t0,
-    _validate_control_dim,
-    _validate_controls,
-    _validate_site_sorting,
-)
+from dynestyx.types import Result
+from dynestyx.utils.controls import _validate_controls
+from dynestyx.utils.models import _get_dynamics_with_t0, _validate_control_dim
+from dynestyx.utils.validation import _validate_site_sorting
 
 T = TypeVar("T")
+
+
+class _DynestyxStackKind(Enum):
+    PLATE = auto()
+    DISCRETIZER = auto()
+    GAUSSIAN_RELAXATION = auto()
+    FILTER = auto()
+    SMOOTHER = auto()
+    LATENT_PATH_BUILDER = auto()
+    SIMULATOR = auto()
+    EVALUATION = auto()
+
+
+@defop
+def _dynestyx_stack_kind() -> list[_DynestyxStackKind]:
+    """Return active dynestyx interpretation kinds, innermost first.
+
+    Implementations accept **kwargs so effectful saves an empty argument frame
+    when this query is called from inside another operation's implementation.
+    """
+    return []
+
+
+_INFERENCE_KINDS = {
+    _DynestyxStackKind.FILTER,
+    _DynestyxStackKind.SMOOTHER,
+    _DynestyxStackKind.LATENT_PATH_BUILDER,
+}
+_STACK_STAGES = {
+    _DynestyxStackKind.PLATE: 0,
+    _DynestyxStackKind.DISCRETIZER: 1,
+    _DynestyxStackKind.GAUSSIAN_RELAXATION: 2,
+    **dict.fromkeys(_INFERENCE_KINDS, 3),
+    _DynestyxStackKind.SIMULATOR: 4,
+    _DynestyxStackKind.EVALUATION: 5,
+}
+
+
+def _validate_handler_stack(
+    *, obs_values: object | None = None, predict_times: object | None = None
+) -> None:
+    """Validate the order and uniqueness of active built-in handler stages.
+
+    Args:
+        obs_values: Observation input. Only its presence is checked here;
+            ``condition`` validates the values and their shape separately.
+        predict_times: Prediction input, also checked only for presence.
+
+    Raises:
+        ValueError: If handlers are out of order or more than one handler
+            occupies an inference, simulation, or other non-plate stage.
+
+    Warns:
+        UserWarning: If an inference handler has no observations or a simulator
+            has no prediction times.
+    """
+    kinds = _dynestyx_stack_kind()
+    stages = [_STACK_STAGES[kind] for kind in kinds]
+    order_hint = (
+        "Use the nesting order (outermost first): "
+        "with Evaluation(...), Simulator(), Filter(...), GaussianRelaxation(...), Discretizer(), "
+        "plate(...): dsx.sample(...) . Omit stages you do not need; "
+        "Smoother or LatentPathBuilder can replace Filter."
+    )
+    for left, right in zip(kinds, kinds[1:]):
+        if _STACK_STAGES[left] > _STACK_STAGES[right]:
+            raise ValueError(
+                f"Invalid handler order: {left.name} is inside {right.name}. "
+                + order_hint
+            )
+    for stage in set(stages) - {0}:
+        if stages.count(stage) > 1:
+            repeated = ", ".join(
+                kind.name for kind in kinds if _STACK_STAGES[kind] == stage
+            )
+            reason = (
+                "Cannot condition an already conditioned result. " if stage == 3 else ""
+            )
+            raise ValueError(
+                f"{reason}Use only one handler per stage; got {repeated}. " + order_hint
+            )
+    if obs_values is None and _INFERENCE_KINDS.intersection(kinds):
+        warnings.warn(
+            "Filter, Smoother, or LatentPathBuilder has no obs_values to condition on.",
+            UserWarning,
+            stacklevel=3,
+        )
+    if predict_times is None and _DynestyxStackKind.SIMULATOR in kinds:
+        warnings.warn(
+            "Simulator has no predict_times to simulate at.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 def _validate_and_prepare(
@@ -131,7 +222,7 @@ def sample(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-):
+) -> Result:
     """
     Samples from a dynamical model. This is the main primitive of dynestyx.
 
@@ -140,6 +231,12 @@ def sample(
 
     Internally, ``sample`` calls ``dsx.condition(...)`` and then registers the
     results as numpyro sites (``numpyro.factor``, ``numpyro.deterministic``).
+
+    Missing inference and prediction handlers are supplied automatically, with
+    a warning describing the chosen configuration. Small eligible models use
+    ``LatentPathBuilder``; other models use a compatible filter. Explicit
+    handler contexts override these defaults. See the handler API guide for
+    the selection rules and required nesting order.
 
     Shape note:
         Inside ``dsx.plate``, observation arrays use leading plate axes followed
@@ -190,12 +287,17 @@ def condition(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-):
+) -> Result:
     """Run inference on a dynamical model without registering numpyro sites.
 
     This is the NumPyro-free entry point. An active ``Filter`` or ``Smoother``
     returns a ``ConditionedResult`` carrying the inference times, marginal log
     likelihood, backend states, and per-time distributions.
+
+    Without an inference handler, observations select a compatible filter.
+    Prediction times add a simulator when needed. Unlike ``sample``, this entry
+    point never automatically selects ``LatentPathBuilder``. Randomized filters
+    and simulation retain their existing seed/key requirements.
 
     Parameters:
         name: Name of the inference site.
@@ -219,6 +321,7 @@ def condition(
         )
     )
 
+    _validate_handler_stack(obs_values=obs_values, predict_times=predict_times)
     return _condition_intp(
         name,
         dynamics_with_t0,
@@ -256,14 +359,13 @@ def _condition_intp(
     | None = None,
     predict_times: Real[Array, "*predict_time_plate predict_time"] | None = None,
     **kwargs,
-) -> FunctionOfTime:
+) -> Result | None:
     """
     The functional version of `sample` to be interpreted at runtime.
 
-    This is implemented as a `defop` in `effectful`, meaning it is
-    an undefined function here, but "interpreted" at runtime. In other words,
-    the actual implementation of a `sample` operation is determined by the context
-    in which it is used, e.g., within a `Filter` or `Simulator` object.
+    Explicit interpretations dispatch through `effectful`. The default fills
+    missing inference and prediction stages using the model and supplied inputs;
+    it returns None when enclosing handlers have already consumed those inputs.
 
     Parameters:
         name: Name of the sample site.
@@ -282,9 +384,25 @@ def _condition_intp(
         **kwargs: Additional keyword arguments.
 
     Returns:
-        FunctionOfTime: A function of time that samples from the dynamical model.
+        The selected handler result, or None after all requested stages finish.
     """
-    raise NotHandled()
+    from dynestyx._defaults import _apply_defaults
+
+    return _apply_defaults(
+        lambda *args, **kwargs: None,
+        None,
+        name,
+        dynamics,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        _obs_values_filled=_obs_values_filled,
+        _obs_mask=_obs_mask,
+        _obs_has_missing=_obs_has_missing,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+        predict_times=predict_times,
+        **kwargs,
+    )
 
 
 class HandlesSelf:
@@ -473,8 +591,12 @@ class plate(ObjectInterpretation):
         self._cm.__exit__(exc_type, exc, tb)
         return self._numpyro_plate.__exit__(exc_type, exc, tb)
 
+    @implements(_dynestyx_stack_kind)
+    def _stack_kind(self, **kwargs):
+        return [_DynestyxStackKind.PLATE, *fwd()]
+
     @implements(_condition_intp)
-    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Any:
+    def _sample_ds(self, name, dynamics, *, plate_shapes=(), **kwargs) -> Result:
         """Effectful interpretation for the `sample` primitive in a plate.
 
         Appends metadata to the argument stack and passes forward.
@@ -486,9 +608,7 @@ class plate(ObjectInterpretation):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            The downstream handler result, such as ``FunctionOfTime`` for
-            simulators/filters or ``LatentStateResult`` for
-            ``LatentPathBuilder``.
+            The downstream ``Result``, or None when no result is produced.
         """
         obs_model = dynamics.observation_model
         if isinstance(obs_model, LinearGaussianObservation) and isinstance(

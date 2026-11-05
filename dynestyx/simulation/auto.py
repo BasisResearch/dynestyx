@@ -69,7 +69,7 @@ class Simulator(BaseSimulator):
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
         >>> with Simulator(n_simulations=4):
         ...     predictive = Predictive(
-        ...         model, num_samples=20, exclude_deterministic=False
+        ...         model, num_samples=20, condition_deterministic=False
         ...     )
         ...     draws = predictive(jr.PRNGKey(0), predict_times=times)
         >>> draws["f_states"].shape
@@ -93,7 +93,7 @@ class Simulator(BaseSimulator):
         ...         predictive = Predictive(
         ...             model,
         ...             posterior_samples=posterior_samples,
-        ...             exclude_deterministic=False,
+        ...             condition_deterministic=False,
         ...         )
         ...         forecast = predictive(
         ...             jr.PRNGKey(1),
@@ -165,7 +165,7 @@ class Simulator(BaseSimulator):
     length of the prediction grid, and `plate_shape` is absent outside a
     `dsx.plate`. Under `Predictive(..., num_samples=N)`, NumPyro prepends an
     `N` axis to every shape above. Because these sites are deterministic, pass
-    `exclude_deterministic=False` to `Predictive` (or request the site names
+    `condition_deterministic=False` to `Predictive` (or request the site names
     explicitly) to include them in its returned dictionary.
 
     When the simulator wraps a `Filter` or `Smoother`, the inner handler records
@@ -189,16 +189,16 @@ class Simulator(BaseSimulator):
     Notes:
         - Controls are passed through to the selected backend. See the concrete
           simulator for its control interpolation or alignment rules.
-        - A `Simulator` instance selects and caches its concrete backend on the
-          first dynamics object it handles. Use separate instances for models
-          requiring different backend types.
+        - A `Simulator` instance reuses its cached backend while its type matches
+          the incoming dynamics. A change between discrete-time, ODE, and SDE
+          representations selects a new backend.
         - `Simulator().simulate(...)` consumes an already allocated simulation
           key. The public [dsx.simulate][dynestyx.api.simulate] function splits
           its root key before dispatch.
 
     Attributes:
         simulator_config: Optional ODE or SDE solver configuration. Its type
-            must match the model selected at first use.
+            must match the model on every call.
         n_simulations: Number of independent trajectories drawn per model
             execution. Defaults to one and must be greater than or equal to one.
         control_policy: Optional control policy (see
@@ -214,7 +214,7 @@ class Simulator(BaseSimulator):
         use_true_state: Forwarded to `DiscreteControlLoopSimulator` when
             `control_policy` is given; ignored otherwise. Runs the closed loop
             on the true state, with no filtering.
-        simulator: Concrete auto-selected simulator cached on first use.
+        simulator: Concrete auto-selected simulator cached while compatible.
     """
 
     def __init__(
@@ -234,10 +234,7 @@ class Simulator(BaseSimulator):
         self.simulator: BaseSimulator | None = None
 
     def _ensure_simulator(self, dynamics: DynamicalModel) -> BaseSimulator:
-        """Instantiate and cache the concrete simulator for ``dynamics``."""
-        if self.simulator is not None:
-            return self.simulator
-
+        """Validate routing and reuse the cached backend when its type matches."""
         if self.control_policy is not None:
             from dynestyx.control.discrete_controller_simulators import (
                 DiscreteControlLoopSimulator,
@@ -248,12 +245,13 @@ class Simulator(BaseSimulator):
                     "Received a SimulatorConfig together with control_policy. "
                     "DiscreteControlLoopSimulator does not accept a simulator_config."
                 )
-            self.simulator = DiscreteControlLoopSimulator(
-                control_policy=self.control_policy,
-                filter_config=self.filter_config,
-                use_true_state=self.use_true_state,
-                n_simulations=self.n_simulations,
-            )
+            if not isinstance(self.simulator, DiscreteControlLoopSimulator):
+                self.simulator = DiscreteControlLoopSimulator(
+                    control_policy=self.control_policy,
+                    filter_config=self.filter_config,
+                    use_true_state=self.use_true_state,
+                    n_simulations=self.n_simulations,
+                )
         elif isinstance(
             dynamics.state_evolution, StochasticContinuousTimeStateEvolution
         ):
@@ -262,10 +260,11 @@ class Simulator(BaseSimulator):
                     "Received an ODESimulatorConfig for stochastic continuous-time "
                     "dynamics. Pass an SDESimulatorConfig instead."
                 )
-            self.simulator = SDESimulator(
-                simulator_config=self.simulator_config,
-                n_simulations=self.n_simulations,
-            )
+            if not isinstance(self.simulator, SDESimulator):
+                self.simulator = SDESimulator(
+                    simulator_config=self.simulator_config,
+                    n_simulations=self.n_simulations,
+                )
         elif isinstance(
             dynamics.state_evolution, DeterministicContinuousTimeStateEvolution
         ):
@@ -274,17 +273,19 @@ class Simulator(BaseSimulator):
                     "Received an SDESimulatorConfig for deterministic continuous-time "
                     "dynamics. Pass an ODESimulatorConfig instead."
                 )
-            self.simulator = ODESimulator(
-                simulator_config=self.simulator_config,
-                n_simulations=self.n_simulations,
-            )
+            if not isinstance(self.simulator, ODESimulator):
+                self.simulator = ODESimulator(
+                    simulator_config=self.simulator_config,
+                    n_simulations=self.n_simulations,
+                )
         else:
             if self.simulator_config is not None:
                 raise ValueError(
                     "Received a continuous-time SimulatorConfig for discrete-time "
                     "dynamics. Use direct DiscreteTimeSimulator settings instead."
                 )
-            self.simulator = DiscreteTimeSimulator(n_simulations=self.n_simulations)
+            if not isinstance(self.simulator, DiscreteTimeSimulator):
+                self.simulator = DiscreteTimeSimulator(n_simulations=self.n_simulations)
 
         return self.simulator
 

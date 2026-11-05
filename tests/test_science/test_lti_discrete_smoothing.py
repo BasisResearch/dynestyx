@@ -49,7 +49,7 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(true_alpha)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with DiscreteTimeSimulator():
@@ -131,7 +131,7 @@ def test_discrete_lti_smoother_mcmc_science(smoother_type: str, num_samples: int
         data_conditioned_model,
         params={"alpha": posterior_alpha.mean()},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     post_out = post_pred(post_key)
 

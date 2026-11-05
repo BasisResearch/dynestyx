@@ -5,6 +5,7 @@ import pytest
 
 from dynestyx.models.lti_dynamics import LTI_continuous
 from dynestyx.solvers import solve_sde_state_path
+from tests.test_utils import assert_finite
 
 
 @pytest.mark.parametrize(
@@ -47,7 +48,7 @@ def test_sde_state_path_early_return_with_key(source, diffeqsolve_settings):
     )
 
     expected = jnp.broadcast_to(x0, (len(saveat_times), x0.shape[0]))
-    assert states.shape == expected.shape
+    assert_finite(states, expected.shape, where="states")
     assert jnp.allclose(states, expected)
 
 
@@ -68,4 +69,4 @@ def test_sde_state_path_em_scan_accepts_jax_scalar_dt0():
         diffeqsolve_settings={"dt0": jnp.asarray(0.05, dtype=jnp.float32)},
         key=jr.PRNGKey(0),
     )
-    assert states.shape == (3, 2)
+    assert_finite(states, (3, 2), where="states")

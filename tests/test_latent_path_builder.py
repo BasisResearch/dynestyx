@@ -478,7 +478,9 @@ def test_latent_path_builder_outer_jit_predictive_refreshes_handler_metadata():
         obs_values=refreshed_values,
         predict_times=jnp.array([3.0]),
     )
-    predictive = jax.jit(Predictive(model, num_samples=2, exclude_deterministic=False))
+    predictive = jax.jit(
+        Predictive(model, num_samples=2, condition_deterministic=False)
+    )
     samples = predictive(
         jr.PRNGKey(0),
         obs_times=jnp.array([10.0, 11.0, 12.0]),
@@ -524,7 +526,7 @@ def test_latent_path_builder_outer_jit_predictive_accepts_explicit_metadata():
                 missing_obs_metadata=metadata,
             )
 
-    samples = jax.jit(Predictive(model, num_samples=1, exclude_deterministic=False))(
+    samples = jax.jit(Predictive(model, num_samples=1, condition_deterministic=False))(
         jr.PRNGKey(0),
         obs_times=jnp.array([10.0, 11.0]),
         obs_values=obs_values,
@@ -838,7 +840,10 @@ def test_latent_path_builder_plated_odes_use_member_initial_condition_sites():
                     obs_values=obs_values,
                 )
 
+    assert not isinstance(result.state_path_params, list)
+    assert result.state_path_params is not None
     assert result.state_path_params.shape == (2, 1, 2)
+    assert result.joint_log_prob is not None
     assert result.joint_log_prob.shape == (2,)
     for member_name in ("f_p0_state_path_params", "f_p1_state_path_params"):
         assert tr[member_name]["value"].shape == (1, 2)
@@ -938,7 +943,7 @@ def test_latent_path_builder_dirac_partial_missing_mcmc_smoke():
             "f_state_path_param_times",
             "f_state_path_param_coordinate_indices",
         ],
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.PRNGKey(1), obs_times=obs_times, obs_values=obs_values)
 
     assert jnp.array_equal(
@@ -1046,8 +1051,11 @@ def test_latent_path_builder_ragged_plate_metadata_is_not_broadcast():
         result.state_path_param_coordinate_indices[1],
         jnp.array([1]),
     )
+    assert result.state_path is not None
     assert result.state_path.shape == (2, 2, 2)
+    assert result.state_path_times is not None
     assert result.state_path_times.shape == (2, 2)
+    assert result.joint_log_prob is not None
     assert result.joint_log_prob.shape == (2,)
     assert tr["f_p0_state_path_params"]["value"].shape == (2,)
     assert tr["f_p1_state_path_params"]["value"].shape == (1,)
@@ -1282,7 +1290,7 @@ def test_latent_path_builder_auto_augments_student_t_partial_missing_mcmc_smoke(
             "f_missing_obs_times",
             "f_missing_obs_coordinate_indices",
         ],
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.PRNGKey(4), obs_times=obs_times, obs_values=obs_values)
 
     assert posterior["f_completed_obs_values"].shape == (10, 4, 2)

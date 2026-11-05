@@ -11,12 +11,14 @@ from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import (
+    _ensure_initial_state_dim,
     _ensure_trailing_dim,
     _sample_initial_states,
     _tile_times,
 )
 from dynestyx.types import SimulatedResult
-from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
+from dynestyx.utils.arrays import _get_val_or_None
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 
 def _align_ctrl_values_to_times(
@@ -157,7 +159,7 @@ class DiscreteTimeSimulator(BaseSimulator):
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
         >>> with DiscreteTimeSimulator(n_simulations=3):
         ...     predictive = Predictive(
-        ...         model, num_samples=10, exclude_deterministic=False
+        ...         model, num_samples=10, condition_deterministic=False
         ...     )
         ...     draws = predictive(
         ...         jr.PRNGKey(0), predict_times=jnp.arange(20.0)
@@ -229,7 +231,7 @@ class DiscreteTimeSimulator(BaseSimulator):
     Here `"f"` is replaced by the `name` passed to `dsx.sample`. Under
     `Predictive(..., num_samples=N)`, NumPyro prepends an `N` axis to each
     shape. Because these sites are deterministic, pass
-    `exclude_deterministic=False` to `Predictive` (or request the site names
+    `condition_deterministic=False` to `Predictive` (or request the site names
     explicitly) to include them in its returned dictionary.
 
     When this simulator wraps a `Filter` or `Smoother`, the inner handler
@@ -337,7 +339,7 @@ class DiscreteTimeSimulator(BaseSimulator):
 
         return SimulatedResult(
             times=_tile_times(times, n_sim),
-            x_0=initial_state,
+            x_0=_ensure_initial_state_dim(initial_state),
             states=_ensure_trailing_dim(states),
             observations=_ensure_trailing_dim(observations),
             obs_times=_tile_times(obs_times, n_sim),

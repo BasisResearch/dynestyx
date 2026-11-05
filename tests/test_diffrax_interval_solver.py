@@ -7,6 +7,7 @@ import pytest
 
 import dynestyx as dsx
 from dynestyx.solvers import solve_diffrax_sde_interval, solve_sde_state_path
+from tests.test_utils import assert_finite
 
 
 @pytest.mark.parametrize("solver", [dfx.Euler(), dfx.Heun()])
@@ -54,7 +55,5 @@ def test_brownian_increment_solver_runs_for_path_and_interval(solver):
         tol_vbt=0.005,
     )
 
-    assert endpoint.shape == (1,)
-    assert path.shape == (2, 1)
-    assert jnp.all(jnp.isfinite(endpoint))
-    assert jnp.all(jnp.isfinite(path))
+    assert_finite(endpoint, (1,), where="endpoint")
+    assert_finite(path, (2, 1), where="path")

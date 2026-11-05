@@ -22,6 +22,7 @@ from tests.fixtures import (
     data_conditioned_hmm,  # noqa: F401
     data_conditioned_stochastic_volatility,  # noqa: F401
 )
+from tests.test_utils import assert_finite
 
 NUM_SAMPLES = 1
 NUM_WARMUP = 1
@@ -38,8 +39,15 @@ def test_hmm_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "A" in posterior_samples
+    assert_finite(
+        posterior_samples["A"], (NUM_SAMPLES, *true_params["A"].shape), where="A"
+    )
     assert "mu" in posterior_samples
+    assert_finite(
+        posterior_samples["mu"], (NUM_SAMPLES, *true_params["mu"].shape), where="mu"
+    )
     assert "sigma" in posterior_samples
+    assert_finite(posterior_samples["sigma"], (NUM_SAMPLES,), where="sigma")
 
 
 def test_discrete_time_l63_mcmc_smoke(
@@ -55,6 +63,7 @@ def test_discrete_time_l63_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_discrete_time_l63_auto_mcmc_smoke(
@@ -73,6 +82,7 @@ def test_discrete_time_l63_auto_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
@@ -91,6 +101,7 @@ def test_discrete_time_l63_auto_dirac_obs_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_stochastic_volatility_mcmc_smoke(
@@ -106,6 +117,7 @@ def test_stochastic_volatility_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "phi" in posterior_samples
+    assert_finite(posterior_samples["phi"], (NUM_SAMPLES,), where="phi")
 
 
 def test_continuous_time_stochastic_l63_mcmc_smoke(
@@ -121,6 +133,7 @@ def test_continuous_time_stochastic_l63_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_continuous_time_deterministic_l63_mcmc_smoke(
@@ -136,6 +149,7 @@ def test_continuous_time_deterministic_l63_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_continuous_time_potential_dynamics_mcmc_smoke(
@@ -151,7 +165,9 @@ def test_continuous_time_potential_dynamics_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "alpha" in posterior_samples
+    assert_finite(posterior_samples["alpha"], (NUM_SAMPLES,), where="alpha")
     assert "beta" in posterior_samples
+    assert_finite(posterior_samples["beta"], (NUM_SAMPLES,), where="beta")
     assert mode in {"drift_only", "grad_only", "both"}
 
 
@@ -168,6 +184,7 @@ def test_continuous_time_stochastic_l63_dpf_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_continuous_time_lti_gaussian_mcmc_smoke(
@@ -183,6 +200,7 @@ def test_continuous_time_lti_gaussian_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_continuous_time_lti_simplified_mcmc_smoke(
@@ -199,6 +217,7 @@ def test_continuous_time_lti_simplified_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")
 
 
 def test_continuous_time_lti_gaussian_dpf_mcmc_smoke(
@@ -214,3 +233,4 @@ def test_continuous_time_lti_gaussian_dpf_mcmc_smoke(
     mcmc.run(mcmc_key)
     posterior_samples = mcmc.get_samples()
     assert "rho" in posterior_samples
+    assert_finite(posterior_samples["rho"], (NUM_SAMPLES,), where="rho")

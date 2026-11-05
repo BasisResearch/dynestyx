@@ -232,7 +232,7 @@ def test_ode_missingness_mcmc_smoke():
         sampled_ode_linear_gaussian_model,
         params={"alpha": jnp.array(0.2)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator():
         generated = predictive(jr.PRNGKey(1), predict_times=times)

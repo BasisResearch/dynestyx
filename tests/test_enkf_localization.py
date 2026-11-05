@@ -615,19 +615,24 @@ def test_localization_configuration_validation():
 @pytest.mark.parametrize(
     "field,value,message",
     [
-        ("taper", "unknown", "Unsupported"),
+        ("taper", "unknown", "taper"),
         ("taper", jnp.ones_like, "requires taper_scale=None"),
         ("taper_scale", None, "requires a positive scalar"),
-        ("taper_scale", [1.0], "must be a scalar"),
+        ("taper_scale", jnp.array([1.0]), "must be a scalar"),
     ],
 )
-def test_distance_config_is_revalidated_after_mutation(field, value, message):
+def test_distance_config_rejects_mutation_and_invalid_replacement(
+    field, value, message
+):
     config = EnKFLocalizationConfig(
         state_observation_distances=jnp.zeros((3, 2)), taper_scale=1.0
     )
-    setattr(config, field, value)
-    with pytest.raises(ValueError, match=message):
-        resolve_enkf_localization(config, state_dim=3, observation_dim=2)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(config, field, value)
+    # The pytest runtime type checker may reject invalid literals before validation.
+    with pytest.raises((TypeError, ValueError), match=message):
+        dataclasses.replace(config, **{field: value})
+    resolve_enkf_localization(config, state_dim=3, observation_dim=2)
 
 
 @pytest.mark.parametrize(
@@ -643,13 +648,17 @@ def test_distance_config_is_revalidated_after_mutation(field, value, message):
         ),
     ],
 )
-def test_callback_config_is_revalidated_after_mutation(field, value, error, message):
+def test_callback_config_rejects_mutation_and_invalid_replacement(
+    field, value, error, message
+):
     config = EnKFLocalizationFunctions(
         modify_cross_covariance=lambda cross_covariance, model_inputs: cross_covariance
     )
-    setattr(config, field, value)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(config, field, value)
     with pytest.raises(error, match=message):
-        resolve_enkf_localization(config, state_dim=3, observation_dim=2)
+        dataclasses.replace(config, **{field: value})
+    resolve_enkf_localization(config, state_dim=3, observation_dim=2)
 
 
 def test_custom_observation_taper_must_be_symmetric():

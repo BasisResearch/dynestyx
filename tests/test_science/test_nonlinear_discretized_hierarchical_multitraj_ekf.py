@@ -91,7 +91,7 @@ def test_hierarchical_nonlinear_discretized_multitraj_ekf_science(num_samples: i
         hierarchical_nonlinear_discretized_multitraj_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         with Discretizer():
