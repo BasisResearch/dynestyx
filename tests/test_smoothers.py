@@ -55,7 +55,7 @@ def _gen_obs_discrete():
             discrete_time_lti_simplified_model,
             params={"alpha": jnp.array(0.35)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng, predict_times=obs_times)
     obs_values = sim["f_observations"][0, 0]
@@ -75,7 +75,7 @@ def _gen_obs_ode():
             jumpy_controls_model_ode,
             params={},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(
             rng,
@@ -185,7 +185,7 @@ def test_predictive_smoother_discretetimesimulator_shapes():
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
         num_samples=2,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator(n_simulations=2):
         with Smoother(
@@ -234,7 +234,7 @@ def test_predictive_smoother_odesimulator_shapes():
         jumpy_controls_model_ode,
         params={},
         num_samples=2,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator(n_simulations=2):
         with Smoother(
@@ -284,7 +284,7 @@ def test_predictive_smoother_discrete_rejects_in_window_predict_times(
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with pytest.raises(
         (ValueError, eqx.EquinoxRuntimeError),
@@ -316,7 +316,7 @@ def test_predictive_smoother_continuous_rejects_in_window_predict_times(
         jumpy_controls_model_ode,
         params={},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     total_times = jnp.union1d(obs_times, bad_predict_times)
     bad_ctrl_values = jnp.ones((len(total_times),)) * 100
@@ -349,7 +349,7 @@ def test_predictive_smoother_cuthbert_pf_backward_methods_and_override(
         discrete_time_lti_simplified_model,
         params={"alpha": jnp.array(0.35)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator(n_simulations=1):
         with Smoother(
@@ -426,7 +426,7 @@ def test_continuous_time_kf_smoother_type_option_smoke():
             continuous_time_lti_simplified_model,
             params={"rho": jnp.array(2.0)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )
         sim = pred(rng, predict_times=obs_times)
 

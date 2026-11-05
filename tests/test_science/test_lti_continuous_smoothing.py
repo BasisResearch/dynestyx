@@ -48,7 +48,7 @@ def test_continuous_lti_smoother_mcmc_science(num_samples: int):
         continuous_time_lti_simplified_model,
         params={"rho": jnp.array(true_rho)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with Simulator():
@@ -111,7 +111,7 @@ def test_continuous_lti_smoother_mcmc_science(num_samples: int):
         data_conditioned_model,
         params={"rho": posterior_rho.mean()},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     post_out = post_pred(post_key)
 

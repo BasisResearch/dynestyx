@@ -68,7 +68,7 @@ class SDESimulator(BaseSimulator):
         >>> config = SDESimulatorConfig(source="em_scan", dt0=1e-3)
         >>> with SDESimulator(config, n_simulations=4):
         ...     predictive = Predictive(
-        ...         model, num_samples=10, exclude_deterministic=False
+        ...         model, num_samples=10, condition_deterministic=False
         ...     )
         ...     draws = predictive(
         ...         jr.PRNGKey(0), predict_times=jnp.linspace(0.0, 5.0, 51)
@@ -145,7 +145,7 @@ class SDESimulator(BaseSimulator):
     Here `"f"` is replaced by the `name` passed to `dsx.sample`. Under
     `Predictive(..., num_samples=N)`, NumPyro prepends an `N` axis to each
     shape. Because these sites are deterministic, pass
-    `exclude_deterministic=False` to `Predictive` (or request the site names
+    `condition_deterministic=False` to `Predictive` (or request the site names
     explicitly) to include them in its returned dictionary.
 
     When this simulator wraps a `Filter` or `Smoother`, the inner handler

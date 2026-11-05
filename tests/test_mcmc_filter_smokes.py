@@ -36,7 +36,7 @@ def _make_data_continuous():
         continuous_time_stochastic_l63_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with Simulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)
@@ -50,7 +50,7 @@ def _make_data_discrete():
         discrete_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with Simulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=obs_times)

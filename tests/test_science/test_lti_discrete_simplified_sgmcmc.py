@@ -22,7 +22,7 @@ def test_sgmcmc_inference(num_samples):
         discrete_time_lti_simplified_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(jr.PRNGKey(0), predict_times=predict_times)

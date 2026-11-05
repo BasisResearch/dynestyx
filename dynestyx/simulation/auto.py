@@ -69,7 +69,7 @@ class Simulator(BaseSimulator):
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
         >>> with Simulator(n_simulations=4):
         ...     predictive = Predictive(
-        ...         model, num_samples=20, exclude_deterministic=False
+        ...         model, num_samples=20, condition_deterministic=False
         ...     )
         ...     draws = predictive(jr.PRNGKey(0), predict_times=times)
         >>> draws["f_states"].shape
@@ -93,7 +93,7 @@ class Simulator(BaseSimulator):
         ...         predictive = Predictive(
         ...             model,
         ...             posterior_samples=posterior_samples,
-        ...             exclude_deterministic=False,
+        ...             condition_deterministic=False,
         ...         )
         ...         forecast = predictive(
         ...             jr.PRNGKey(1),
@@ -165,7 +165,7 @@ class Simulator(BaseSimulator):
     length of the prediction grid, and `plate_shape` is absent outside a
     `dsx.plate`. Under `Predictive(..., num_samples=N)`, NumPyro prepends an
     `N` axis to every shape above. Because these sites are deterministic, pass
-    `exclude_deterministic=False` to `Predictive` (or request the site names
+    `condition_deterministic=False` to `Predictive` (or request the site names
     explicitly) to include them in its returned dictionary.
 
     When the simulator wraps a `Filter` or `Smoother`, the inner handler records

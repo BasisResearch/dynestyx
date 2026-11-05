@@ -321,7 +321,7 @@ def test_discrete_missingness_mcmc_smoke():
         sampled_discrete_linear_gaussian_model,
         params={"alpha": jnp.array(0.72)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         generated = predictive(jr.PRNGKey(1), predict_times=times)
@@ -348,7 +348,7 @@ def test_discrete_full_row_missing_correlated_student_t_mcmc_smoke():
             _correlated_student_t_model,
             params={"alpha": jnp.array(0.3)},
             num_samples=1,
-            exclude_deterministic=False,
+            condition_deterministic=False,
         )(jr.PRNGKey(3), predict_times=times)
     obs_values = generated["f_observations"][0, 0]
     obs_values = set_full_row_missing(obs_values, 2)

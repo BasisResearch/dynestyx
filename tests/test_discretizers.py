@@ -226,7 +226,7 @@ def test_discretized_dirac_observations_preserve_state_dimension():
         continuous_time_stochastic_l63_model_dirac_obs,
         params={"rho": jnp.array(28.0)},
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
 
     with dsx.DiscreteTimeSimulator():
