@@ -116,11 +116,18 @@ def _run_blackjax(
         initial_states,
     )
     diagnostics = diagnostics_fn(final_states, info) if diagnostics_fn else {}
-    constrained = jax.jit(jax.vmap(jax.vmap(transform_fn)))(positions)
+    retained = jax.tree.map(lambda value: value[:, num_warmup:], positions)
 
-    if num_warmup == 0:
-        return constrained, diagnostics
-    samples = jax.vmap(lambda s: {k: v[num_warmup:] for k, v in s.items()})(constrained)
+    @jax.jit
+    def constrain_chains(draws):
+        # A postprocess function may replay the model. Bound the number of
+        # draws it evaluates together to limit memory use on long runs.
+        return jax.lax.map(
+            lambda chain: jax.lax.map(transform_fn, chain, batch_size=128),
+            draws,
+        )
+
+    samples = constrain_chains(retained)
     return samples, diagnostics
 
 
