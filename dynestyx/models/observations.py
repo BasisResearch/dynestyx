@@ -9,13 +9,13 @@ from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Float, Real
 from numpyro import distributions as dist
 
-from dynestyx.distributions import _extract_and_validate_mixed_state
 from dynestyx.models.core import ObservationModel
 from dynestyx.models.covariances import (
     Covariance,
     construct_gaussian,
     covariance_matrix,
 )
+from dynestyx.models.mixed_state import _extract_and_validate_mixed_state
 
 
 class LinearGaussianObservationParams(NamedTuple):

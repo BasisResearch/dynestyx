@@ -13,10 +13,6 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
-from dynestyx.distributions import (
-    MixedStateDistribution,
-    _extract_and_validate_mixed_state,
-)
 from dynestyx.models.core import DiscreteTimeStateEvolution
 from dynestyx.models.covariances import (
     Covariance,
@@ -24,6 +20,10 @@ from dynestyx.models.covariances import (
     covariance_matrix,
 )
 from dynestyx.models.drifts import AffineDrift as _AffineDrift
+from dynestyx.models.mixed_state import (
+    MixedStateDistribution,
+    _extract_and_validate_mixed_state,
+)
 
 
 class AffineDrift(_AffineDrift):

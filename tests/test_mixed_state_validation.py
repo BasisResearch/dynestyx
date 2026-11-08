@@ -6,8 +6,8 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 import pytest
 
-from dynestyx.distributions import MixedStateDistribution
 from dynestyx.models import (
+    MixedStateDistribution,
     SwitchingLinearGaussianObservation,
     SwitchingLinearGaussianStateEvolution,
 )

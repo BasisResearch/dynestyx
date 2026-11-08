@@ -1,4 +1,4 @@
-"""Distribution implementations used by dynestyx models."""
+"""Packed discrete and continuous states for switching dynamical models."""
 
 import jax.numpy as jnp
 import jax.random as jr

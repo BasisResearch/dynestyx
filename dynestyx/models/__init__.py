@@ -3,7 +3,6 @@
 Structure anticipates future extension to LTI factories, Neural SDEs, etc.
 """
 
-from dynestyx.distributions import MixedStateDistribution
 from dynestyx.models.core import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
@@ -28,6 +27,7 @@ from dynestyx.models.diffusions import (
 from dynestyx.models.drifts import AffineDrift, Drift, ImExDrift, linearize_drift
 from dynestyx.models.layout import Layout, LayoutCollection
 from dynestyx.models.lti_dynamics import LTI_continuous, LTI_discrete
+from dynestyx.models.mixed_state import MixedStateDistribution
 from dynestyx.models.observations import (
     DeterministicObservation,
     DiracIdentityObservation,
