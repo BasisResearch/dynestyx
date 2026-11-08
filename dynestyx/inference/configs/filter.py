@@ -226,7 +226,7 @@ class BaseFilterConfig(abc.ABC):
             implement covariance inflation, which can improve robustness when
             the model is misspecified. `None` disables rescaling.
         crn_seed (PRNGKeyArray | None): Fix the PRNG key for stochastic filters
-            (EnKF, PF). Useful when differentiating through the filter:
+            (EnKF, PF, RBPF). Useful when differentiating through the filter:
             a fixed key makes the randomness a deterministic function of model
             parameters. `None` draws a fresh key each call.
         warn (bool): Whether or not to suppress warnings from filtering backends.

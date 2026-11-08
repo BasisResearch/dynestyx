@@ -797,7 +797,7 @@ def _filter_discrete_time(
 ]:
     """Discrete-time marginal likelihood via cuthbert or cd-dynamax.
 
-    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig
+    Filter type inferred from config class: KFConfig, EKFConfig, UKFConfig, RBPFConfig
     (cd-dynamax) or KFConfig, EKFConfig, EnKFConfig, PFConfig (cuthbert).
 
     Args:
