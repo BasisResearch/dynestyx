@@ -205,10 +205,7 @@ def run_discrete_filter(
         particle_mode=isinstance(filter_config, RBPFConfig),
         missing="empty",
     )
-    marginal_loglik = posterior.marginal_loglik
-    if marginal_loglik is None:
-        raise AttributeError("cd-dynamax filter output is missing `marginal_loglik`.")
-    return marginal_loglik, posterior, filtered_dists
+    return posterior.marginal_loglik, posterior, filtered_dists
 
 
 __all__ = [

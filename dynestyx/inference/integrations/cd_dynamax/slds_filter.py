@@ -140,13 +140,6 @@ def _slds_rbpfilter_output_to_filter_output(
     means = rbpf_output.means
     covs = rbpf_output.covariances
     states = rbpf_output.states
-    marginal_loglik = rbpf_output.marginal_loglik
-    if marginal_loglik is None:
-        raise AttributeError(
-            "cd-dynamax SLDS RBPF output must include `marginal_loglik`. "
-            "Update cd_dynamax.dynamax.slds.inference.rbpfilter/"
-            "rbpfilter_optimal to return RBPFiltered(marginal_loglik=...)."
-        )
     if weights is None or means is None or covs is None or states is None:
         raise ValueError(
             "cd-dynamax SLDS RBPF output must include weights, means, "
@@ -165,7 +158,7 @@ def _slds_rbpfilter_output_to_filter_output(
     particles = jnp.concatenate([states[..., None].astype(means.dtype), means], axis=-1)
     log_weights = jnp.log(weights)
     return SLDSFilterPosterior(
-        marginal_loglik=marginal_loglik,
+        marginal_loglik=rbpf_output.marginal_loglik,
         filtered_means=filtered_means,
         filtered_covariances=filtered_covs,
         filtered_regime_probs=regime_probs,
