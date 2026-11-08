@@ -1,7 +1,7 @@
 """Array conversion, event-axis normalization, and indexing helpers."""
 
 from jax import Array
-from jaxtyping import Real, Shaped
+from jaxtyping import Shaped
 
 
 def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
@@ -28,8 +28,8 @@ def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
 
 
 def _ensure_trailing_event_axis(
-    values: Real[Array, "..."],
-) -> Real[Array, "..."]:
+    values: Shaped[Array, "..."],
+) -> Shaped[Array, "..."]:
     """Lift a scalar time series from ``(time,)`` to ``(time, 1)``."""
     if values.ndim == 1:
         return values[..., None]
