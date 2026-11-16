@@ -9,6 +9,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, Real
 
+from dynestyx._defaults import _complete_defaults
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.observation_scoring import build_evaluation_result
 from dynestyx.handlers import (
@@ -24,7 +25,7 @@ from dynestyx.types import (
     EvaluationResult,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _raise_now_or_error_if
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 _MISSING_OBSERVATIONS_ERROR = (
     "Observation scoring does not yet support missing obs_values. "
@@ -43,6 +44,7 @@ class Evaluation(ObjectInterpretation, HandlesSelf):
         return [_DynestyxStackKind.EVALUATION, *fwd()]
 
     @implements(_condition_intp)
+    @_complete_defaults(_DynestyxStackKind.EVALUATION)
     def _sample_ds(
         self,
         name: str,

@@ -99,7 +99,7 @@ def test_hierarchical_ode_simulator_science(num_samples: int):
         hierarchical_ode_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with ODESimulator(simulator_config=ODESimulatorConfig(dt0=5e-2)):
         synthetic = predictive(data_key, predict_times=obs_times, M=n_traj)

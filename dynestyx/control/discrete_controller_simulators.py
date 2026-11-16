@@ -2,7 +2,7 @@
 
 import warnings
 from types import SimpleNamespace
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -23,11 +23,15 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
-from dynestyx.models import DynamicalModel, ObservationControlAlignment
+from dynestyx.models import (
+    DynamicalModel,
+    LayoutCollection,
+    ObservationControlAlignment,
+)
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
-from dynestyx.types import SimulatedResult
-from dynestyx.utils import _should_record_field
+from dynestyx.types import SimulatedResult, StructuredSimulatedResult
+from dynestyx.utils.recording import _should_record_field
 
 
 def filter_state_mean(state: Any) -> Real[Array, "..."]:
@@ -168,12 +172,48 @@ class ControlledSimulatedResult(SimulatedResult):
     $[t_1, \dots, t_N]$ under `"previous_transition"`.
     """
 
-    # belief per state).
-    controls: Real[Array, "n_simulations ctrl_time control_dim"] | None = None
+    # Keep StructuredControlledSimulatedResult's fields in sync with these.
     filtered_states_mean: (
         Real[Array, "n_simulations filtered_time state_dim"] | None
     ) = None
     policy_states: PyTree | None = None
+
+    def unflatten(
+        self, layout: LayoutCollection
+    ) -> "StructuredControlledSimulatedResult":
+        """Return a structured copy of this result.
+
+        Converts fields as
+        [SimulatedResult.unflatten][dynestyx.types.SimulatedResult.unflatten]
+        does. ``filtered_states_mean`` is converted by ``layout.state``, and
+        ``policy_states`` is copied unchanged.
+        """
+        return StructuredControlledSimulatedResult._from_flat(self, layout)
+
+
+class StructuredControlledSimulatedResult(StructuredSimulatedResult):
+    """A `ControlledSimulatedResult` with structured values.
+
+    Returned by `ControlledSimulatedResult.unflatten`. `filtered_states_mean`
+    shares the structure of the state fields; `policy_states` is unchanged.
+    `flatten(layout)` converts back to a `ControlledSimulatedResult`.
+    """
+
+    filtered_states_mean: PyTree[Real[Array, "..."], " S"] | None = None
+    policy_states: PyTree | None = None
+
+    _field_sublayouts: ClassVar[dict[str, str]] = {
+        **StructuredSimulatedResult._field_sublayouts,
+        "filtered_states_mean": "state",
+    }
+
+    def flatten(self, layout: LayoutCollection) -> ControlledSimulatedResult:
+        """Return the flat result that ``unflatten(layout)`` converted.
+
+        ``layout`` must be the ``LayoutCollection`` passed to ``unflatten``.
+        Raises ``ValueError`` if a structured field has no sublayout.
+        """
+        return ControlledSimulatedResult(**self._flat_values(layout))
 
 
 class DiscreteControlLoopSimulator(BaseSimulator):
@@ -226,7 +266,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             update currently requires `filter_source="cuthbert"`. Its
             `record_filtered_states_mean`/`record_max_elems` fields gate
             whether the `filtered_states_mean` output is recorded, exactly
-            as they do for `Filter` (see `dynestyx.utils._should_record_field`).
+            as they do for `Filter` (see `dynestyx.utils.recording._should_record_field`).
             Must not be given together with `use_true_state=True`, which
             filters nothing.
         use_true_state: Give the policy the true state $x_k$ instead of a
@@ -576,7 +616,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(observations, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -748,7 +788,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -821,7 +861,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         return ControlledSimulatedResult(
             times=_tile_times(times, 1),
-            x_0=jnp.expand_dims(x_0, axis=0),
+            x_0=jnp.atleast_2d(x_0),
             states=_ensure_trailing_dim(jnp.expand_dims(states, axis=0)),
             observations=_ensure_trailing_dim(jnp.expand_dims(ys, axis=0)),
             obs_times=_tile_times(obs_times, 1),
@@ -836,6 +876,7 @@ __all__ = [
     "ControlledSimulatedResult",
     "DiscreteControlLoopSimulator",
     "PolicyCallable",
+    "StructuredControlledSimulatedResult",
     "filter_state_dist",
     "filter_state_mean",
 ]

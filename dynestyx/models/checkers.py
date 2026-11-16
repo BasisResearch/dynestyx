@@ -1,5 +1,6 @@
 """Validation and shape-inference helpers for dynamical models."""
 
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -217,6 +218,30 @@ def _validate_state_dim(state_dim: int | None, inferred_state_dim: int) -> None:
         raise ValueError(
             "state_dim does not match inferred initial_condition shape. "
             f"Got state_dim={state_dim}, inferred={inferred_state_dim}."
+        )
+
+
+def _validate_initial_condition_shape(
+    initial_condition: dist.Distribution, *, allow_batch_shape: bool = False
+) -> None:
+    """Warn for scalar states using the dimension-inference convention.
+
+    Inside plates, batch axes represent members rather than state coordinates.
+    """
+    shape = (
+        initial_condition.event_shape
+        if allow_batch_shape
+        else initial_condition.shape()
+    )
+    if len(shape) == 0:
+        warnings.warn(
+            "Scalar initial conditions are deprecated and will raise an error in "
+            "a future release. Represent a one-dimensional state with a trailing "
+            "coordinate axis, e.g. "
+            "dist.Normal(jnp.array([0.0]), 1.0).to_event(1). "
+            "Inside plates, keep that coordinate axis in event_shape.",
+            FutureWarning,
+            stacklevel=3,
         )
 
 

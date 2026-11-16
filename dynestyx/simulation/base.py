@@ -13,9 +13,11 @@ import numpy as np
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
+from effectful.ops.types import Term
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 from numpyro.contrib.control_flow import scan as nscan
 
+from dynestyx._defaults import _complete_defaults
 from dynestyx.handlers import (
     HandlesSelf,
     _condition_intp,
@@ -37,14 +39,13 @@ from dynestyx.simulation.utils import (
 )
 from dynestyx.types import (
     ConditionedResult,
+    Result,
     SimulatedResult,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import (
-    _get_val_or_None,
-    _has_any_batched_plate_source,
-    _validate_site_sorting,
-)
+from dynestyx.utils.arrays import _get_val_or_None
+from dynestyx.utils.models import _has_any_batched_plate_source
+from dynestyx.utils.validation import _validate_site_sorting
 
 
 def _slice_rollout_result_for_plate_member(
@@ -412,6 +413,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         return [_DynestyxStackKind.SIMULATOR, *fwd()]
 
     @implements(_condition_intp)
+    @_complete_defaults(_DynestyxStackKind.SIMULATOR)
     def _sample_ds(
         self,
         name: str,
@@ -437,7 +439,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         filtered_result: ConditionedResult | None = None,
         smoothed_result: ConditionedResult | None = None,
         **kwargs,
-    ) -> object:
+    ) -> Result | Term[Result] | None:
         posterior_rollout_final_only = kwargs.pop(
             "_posterior_rollout_final_only", False
         )
@@ -487,6 +489,7 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
                 **kwargs,
             )
 
+        kwargs["_dsx_prediction_done"] = need_simulation
         downstream_result = fwd(
             name,
             dynamics,
@@ -505,6 +508,8 @@ class BaseSimulator(ObjectInterpretation, HandlesSelf):
         )
 
         if results is None:
+            # A no-op handler can forward an unhandled symbolic operation;
+            # an inner Filter/Smoother still returns the concrete Result.
             return downstream_result
 
         def _register_self(site_name: str) -> None:

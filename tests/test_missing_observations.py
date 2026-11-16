@@ -46,7 +46,7 @@ def _simulate_identity_lti_data():
     predictive = Predictive(
         _identity_lti_model,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator(n_simulations=1):
         samples = predictive(jr.PRNGKey(0), predict_times=obs_times)

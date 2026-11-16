@@ -15,7 +15,7 @@ from jaxtyping import Array, PRNGKeyArray, Real
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.models.diffusions import EvaluatedDiffusion
 from dynestyx.types import as_scalar_time_array
-from dynestyx.utils import _build_control_path_eval
+from dynestyx.utils.controls import _build_control_path_eval
 
 
 class EulerMaruyamaMoments(TypedDict):

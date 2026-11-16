@@ -13,7 +13,8 @@ from dynestyx.observation_missingness import (
     MissingObservationStrategy,
     prepare_observation_log_prob,
 )
-from dynestyx.utils import _get_val_or_None, _raise_now_or_error_if
+from dynestyx.utils.arrays import _get_val_or_None
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 
 def _gather_by_exact_time(

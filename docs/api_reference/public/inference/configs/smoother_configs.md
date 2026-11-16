@@ -8,6 +8,10 @@ recording fields such as `record_smoothed_states_mean`,
 `record_smoothed_states_cov_diag`, `record_smoothed_particles`, and
 `record_smoothed_log_weights`.
 
+Smoother configs are frozen dataclasses, like filter configs. Use
+`dataclasses.replace(config, n_particles=100)` to create an updated config
+instead of assigning to its fields.
+
 ## Common Choices
 
 ```python

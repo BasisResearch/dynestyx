@@ -102,7 +102,7 @@ with dsx.Simulator(
     samples = Predictive(
         continuous_discrete_model,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )(jr.PRNGKey(0), predict_times=predict_times)
 ```
 

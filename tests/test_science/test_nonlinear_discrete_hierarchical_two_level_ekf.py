@@ -97,7 +97,7 @@ def test_hierarchical_nonlinear_two_level_ekf_science(num_samples: int):
         hierarchical_nonlinear_two_level_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(

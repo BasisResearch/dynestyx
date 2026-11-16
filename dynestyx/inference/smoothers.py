@@ -68,10 +68,10 @@ from dynestyx.inference.utils.plate_utils import (
 from dynestyx.models import DynamicalModel
 from dynestyx.types import (
     ConditionedResult,
-    FunctionOfTime,
     chain_numpyro_site_registrations,
 )
-from dynestyx.utils import _dist_has_plate_batch_dims, _ensure_trailing_event_axis
+from dynestyx.utils.arrays import _ensure_trailing_event_axis
+from dynestyx.utils.plates import _dist_has_plate_batch_dims
 
 DiscreteSmootherConfig = (
     KFSmootherConfig
@@ -125,7 +125,7 @@ class BaseSmootherLogFactorAdder(ObjectInterpretation, HandlesSelf, ABC):
         filtered_result: ConditionedResult | None = None,
         smoothed_result: ConditionedResult | None = None,
         **kwargs,
-    ) -> FunctionOfTime:
+    ) -> ConditionedResult:
         if filtered_result is not None or smoothed_result is not None:
             raise ValueError(
                 "Smoother cannot condition an already conditioned result. Use only "

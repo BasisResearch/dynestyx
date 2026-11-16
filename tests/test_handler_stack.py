@@ -17,6 +17,7 @@ from dynestyx.handlers import _DynestyxStackKind as Kind
     [
         (dsx.plate("members", 2), Kind.PLATE),
         (dsx.Discretizer(), Kind.DISCRETIZER),
+        (dsx.GaussianRelaxation(), Kind.GAUSSIAN_RELAXATION),
         (dsx.Filter(), Kind.FILTER),
         (dsx.Smoother(), Kind.SMOOTHER),
         (dsx.LatentPathBuilder(), Kind.LATENT_PATH_BUILDER),

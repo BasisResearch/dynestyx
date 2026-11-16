@@ -28,7 +28,8 @@ from dynestyx.models import (
     DiracIdentityObservation,
     DynamicalModel,
 )
-from dynestyx.utils import _has_any_batched_plate_source, _raise_now_or_error_if
+from dynestyx.utils.models import _has_any_batched_plate_source
+from dynestyx.utils.validation import _raise_now_or_error_if
 
 
 def _leading_dims(

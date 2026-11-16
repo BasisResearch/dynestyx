@@ -32,10 +32,12 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
+    Covariance,
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
+from dynestyx.models.covariances import covariance_matrix
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
@@ -75,11 +77,15 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
             dynamics_weights=evo.A,
             dynamics_bias=evo.bias,
             dynamics_input_weights=evo.B,
-            dynamics_covariance=evo.cov,
+            dynamics_covariance=covariance_matrix(
+                cast(Covariance | Array, evo.cov), state_dim
+            ),
             emission_weights=obs.H,
             emission_bias=obs.bias,
             emission_input_weights=obs.D,
-            emission_covariance=obs.R,
+            emission_covariance=covariance_matrix(
+                cast(Covariance | Array, obs.R), emission_dim
+            ),
         )
         return params
     raise TypeError(

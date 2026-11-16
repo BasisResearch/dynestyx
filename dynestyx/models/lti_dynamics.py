@@ -7,6 +7,7 @@ from dynestyx.models.core import (
     DynamicalModel,
     ObservationControlAlignment,
 )
+from dynestyx.models.covariances import Covariance, covariance_matrix
 from dynestyx.models.diffusions import FullDiffusion
 from dynestyx.models.drifts import AffineDrift
 from dynestyx.models.observations import LinearGaussianObservation
@@ -26,15 +27,17 @@ def _infer_control_dim(B: Array | None, D: Array | None) -> int:
 
 def LTI_discrete(
     A: Float[Array, "*a_plate state_dim state_dim"],
-    Q: Float[Array, "*q_plate state_dim state_dim"],
+    Q: Covariance | Float[Array, "*q_plate state_dim state_dim"],
     H: Float[Array, "*h_plate observation_dim state_dim"],
-    R: Float[Array, "*r_plate observation_dim observation_dim"],
+    R: Covariance | Float[Array, "*r_plate observation_dim observation_dim"],
     B: Float[Array, "*b_matrix_plate state_dim control_dim"] | None = None,
     b: Float[Array, "*state_bias_plate state_dim"] | None = None,
     D: Float[Array, "*d_matrix_plate observation_dim control_dim"] | None = None,
     d: Float[Array, "*obs_bias_plate observation_dim"] | None = None,
     initial_mean: Float[Array, "*init_mean_plate state_dim"] | None = None,
-    initial_cov: Float[Array, "*init_cov_plate state_dim state_dim"] | None = None,
+    initial_cov: Covariance
+    | Float[Array, "*init_cov_plate state_dim state_dim"]
+    | None = None,
     observation_control_alignment: ObservationControlAlignment | str | None = None,
 ) -> DynamicalModel:
     """
@@ -96,7 +99,9 @@ def LTI_discrete(
         )
     if initial_cov is None:
         initial_cov = jnp.eye(state_dim)
-    elif initial_cov.shape[-1] != state_dim:
+    else:
+        initial_cov = covariance_matrix(initial_cov, state_dim)
+    if initial_cov.shape[-1] != state_dim:
         raise ValueError(
             f"initial_cov must have last dim {state_dim}, got shape {initial_cov.shape}"
         )

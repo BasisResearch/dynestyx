@@ -18,7 +18,7 @@ PFBackwardSamplingMethod = Literal["tracing", "exact", "mcmc"]
 CDKFSmootherType = Literal["cd_smoother_1", "cd_smoother_2"]
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class BaseSmootherConfig(abc.ABC):
     r"""Shared base class for all smoother configs.
 
@@ -29,6 +29,9 @@ class BaseSmootherConfig(abc.ABC):
     so backend selection, filter tuning, continuous-time solver options, and
     filter recording fields follow the same conventions as
     `dynestyx.inference.configs.filter`.
+
+    Config fields are immutable after construction. Use `dataclasses.replace`
+    to create an updated config.
 
     The `record_smoothed_*` fields let you save intermediate smoothing outputs
     into the NumPyro trace as `numpyro.deterministic` sites, making them
@@ -69,7 +72,7 @@ class BaseSmootherConfig(abc.ABC):
             )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class KFSmootherConfig(KFConfig, BaseSmootherConfig):
     r"""Rauch-Tung-Striebel Kalman Smoother (RTS) for discrete-time models.
 
@@ -130,7 +133,7 @@ class KFSmootherConfig(KFConfig, BaseSmootherConfig):
     """
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EKFSmootherConfig(EKFConfig, BaseSmootherConfig):
     r"""Extended Kalman Smoother (EKS) for discrete-time models.
 
@@ -169,7 +172,7 @@ class EKFSmootherConfig(EKFConfig, BaseSmootherConfig):
     """
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EnRTSSmootherConfig(EnKFConfig, BaseSmootherConfig):
     r"""Ensemble Rauch-Tung-Striebel smoother (EnRTS) for discrete-time models.
 
@@ -219,7 +222,7 @@ class EnRTSSmootherConfig(EnKFConfig, BaseSmootherConfig):
     """
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UKFSmootherConfig(UKFConfig, BaseSmootherConfig):
     r"""Unscented Kalman Smoother (UKS) for discrete-time models.
 
@@ -266,7 +269,7 @@ class UKFSmootherConfig(UKFConfig, BaseSmootherConfig):
     """
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PFSmootherConfig(PFConfig, BaseSmootherConfig):
     r"""Particle smoother for discrete-time models.
 
@@ -326,7 +329,7 @@ class PFSmootherConfig(PFConfig, BaseSmootherConfig):
     pf_n_smoother_particles: int | None = None
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, BaseSmootherConfig):
     r"""Continuous-discrete Kalman Smoother (CD-KS).
 
@@ -372,7 +375,7 @@ class ContinuousTimeKFSmootherConfig(ContinuousTimeKFConfig, BaseSmootherConfig)
     cdlgssm_smoother_type: CDKFSmootherType = "cd_smoother_1"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ContinuousTimeEKFSmootherConfig(ContinuousTimeEKFConfig, BaseSmootherConfig):
     r"""Continuous-discrete Extended Kalman Smoother (CD-EKS).
 

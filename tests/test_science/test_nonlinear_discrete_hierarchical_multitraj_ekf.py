@@ -89,7 +89,7 @@ def test_hierarchical_nonlinear_multitraj_ekf_science(num_samples: int):
         hierarchical_nonlinear_multitraj_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with DiscreteTimeSimulator():
         synthetic = predictive(data_key, predict_times=obs_times, M=n_traj)

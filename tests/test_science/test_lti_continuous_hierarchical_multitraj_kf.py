@@ -74,7 +74,7 @@ def test_hierarchical_multitraj_lti_continuous_kf_science(num_samples: int):
         hierarchical_multitraj_continuous_lti_model,
         params=true_params,
         num_samples=1,
-        exclude_deterministic=False,
+        condition_deterministic=False,
     )
     with Simulator():
         synthetic = predictive(data_key, predict_times=obs_times, M=n_traj)
