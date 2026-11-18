@@ -9,6 +9,7 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.discretizers import (
     DiffraxSampleConfig,
     Discretizer,
@@ -39,8 +40,8 @@ from dynestyx.models import (
 from tests.test_utils import assert_finite
 
 
-def _ode_state_evolution():
-    model = DynamicalModel(
+def _ode_model():
+    return DynamicalModel(
         initial_condition=dist.MultivariateNormal(jnp.zeros(2), jnp.eye(2)),
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.array([-0.4 * x[0] + u[0], 0.2 * x[1]])
@@ -48,6 +49,10 @@ def _ode_state_evolution():
         observation_model=LinearGaussianObservation(H=jnp.eye(2), R=jnp.eye(2)),
         control_dim=1,
     )
+
+
+def _ode_state_evolution():
+    model = _ode_model()
     assert isinstance(model.state_evolution, DeterministicContinuousTimeStateEvolution)
     return model.state_evolution
 
@@ -114,6 +119,8 @@ def test_ode_flow_matches_controlled_linear_analytic_solution():
             jnp.exp(0.2 * h) * x[1],
         ]
     )
+    assert isinstance(evolution, dsx.DeterministicStateEvolution)
+    assert isinstance(evolution, _ODEFlowStateEvolution)
     assert isinstance(transition, dist.Delta)
     assert transition.event_shape == (2,)
     assert jnp.allclose(transition.mean, expected, rtol=2e-5, atol=2e-5)
@@ -127,11 +134,25 @@ def test_ode_flow_positive_jitter_returns_independent_normal():
 
     transition = evolution(jnp.array([1.2, -0.7]), jnp.array([0.3]), 0.2, 0.55)
 
+    assert isinstance(evolution, dsx.GaussianStateEvolution)
+    assert isinstance(evolution, _ODEFlowStateEvolution)
     assert isinstance(transition, dist.Independent)
     assert isinstance(transition.base_dist, dist.Normal)
     assert transition.event_shape == (2,)
     assert jnp.allclose(transition.base_dist.scale, jnp.full((2,), 0.3))
     assert jnp.allclose(transition.variance, jnp.full((2,), 0.09))
+
+
+@pytest.mark.parametrize("jitter", [0.0, 0.3])
+def test_ode_flow_retains_identity_under_gaussian_relaxation(jitter):
+    discrete = dsx.discretize_dynamics(_ode_model(), ODEFlowConfig(jitter_scale=jitter))
+    addition = jnp.array([[0.2, 0.05], [0.05, 0.1]])
+    relaxed = dsx.relax_dynamics(discrete, state_evolution_cov=addition, mode="add")
+    evo = relaxed.state_evolution
+    assert isinstance(evo, dsx.GaussianStateEvolution)
+    assert isinstance(evo, _ODEFlowStateEvolution)
+    transition = evo(jnp.zeros(2), jnp.ones(1), 0.2, 0.3)
+    assert jnp.allclose(transition.covariance_matrix, addition + jitter**2 * jnp.eye(2))
 
 
 def test_ode_flow_passes_simulator_config_settings(monkeypatch):

@@ -119,7 +119,7 @@ def test_gaussian_to_nlgssm_params_rejects_callable_cov() -> None:
     )
 
     with pytest.raises(TypeError, match="array-valued process covariance"):
-        gaussian_to_nlgssm_params(dynamics)
+        gaussian_to_nlgssm_params(dynamics, jnp.arange(2), jnp.zeros((2, 0)))
 
 
 def test_continuous_state_evolution_rejects_scalar_drift_for_1d_state() -> None:

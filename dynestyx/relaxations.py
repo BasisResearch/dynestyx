@@ -11,6 +11,10 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jax.typing import ArrayLike
 from jaxtyping import Array, Float, Real
 
+from dynestyx.discretization.ode_flow import (
+    _GaussianODEFlowStateEvolution,
+    _ODEFlowStateEvolution,
+)
 from dynestyx.handlers import (
     HandlesSelf,
     _condition_intp,
@@ -160,7 +164,12 @@ def _relax_state_evolution(
 ) -> GaussianStateEvolution | LinearGaussianStateEvolution:
     """Relax a transition while retaining its mean function and Gaussian class."""
     if isinstance(evolution, DeterministicStateEvolution):
-        return GaussianStateEvolution(
+        gaussian_type = (
+            _GaussianODEFlowStateEvolution
+            if isinstance(evolution, _ODEFlowStateEvolution)
+            else GaussianStateEvolution
+        )
+        return gaussian_type(
             F=evolution.F,
             cov=_apply_covariance_setting(
                 original=None, addition=covariance, event_dim=state_dim, mode=mode

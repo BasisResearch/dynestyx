@@ -137,7 +137,8 @@ def compute_cd_dynamax_discrete_filter(
         return lgssm_filter(params, emissions, inputs=inputs)
 
     # EKF and UKF share the same nonlinear params representation.
-    params_nl = gaussian_to_nlgssm_params(dynamics)
+    params_nl = gaussian_to_nlgssm_params(dynamics, obs_times, inputs)
+    steps = jnp.arange(len(obs_times))
 
     if isinstance(filter_config, EKFConfig):
         obs_model = dynamics.observation_model
@@ -150,7 +151,7 @@ def compute_cd_dynamax_discrete_filter(
                 "use of automatic differentiation.",
                 stacklevel=2,
             )
-        return extended_kalman_filter(params_nl, emissions, inputs=inputs)
+        return extended_kalman_filter(params_nl, emissions, inputs=steps)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
             alpha=filter_config.alpha,
@@ -158,7 +159,7 @@ def compute_cd_dynamax_discrete_filter(
             kappa=filter_config.kappa,
         )
         return unscented_kalman_filter(
-            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
+            params_nl, emissions, hyperparams=hyperparams, inputs=steps
         )
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
