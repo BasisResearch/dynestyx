@@ -77,7 +77,10 @@ from dynestyx.types import (
 )
 from dynestyx.utils import flatten_draws
 
+from . import config
+
 __all__ = [
+    "config",
     "Covariance",
     "ScalarCovariance",
     "DiagonalCovariance",

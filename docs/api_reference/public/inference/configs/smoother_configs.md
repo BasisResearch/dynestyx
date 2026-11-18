@@ -15,17 +15,12 @@ instead of assigning to its fields.
 ## Common Choices
 
 ```python
-from dynestyx.inference.configs.smoother import (
-    ContinuousTimeKFSmootherConfig,
-    EnRTSSmootherConfig,
-    KFSmootherConfig,
-    PFSmootherConfig,
-)
+import dynestyx as dsx
 
-kf = KFSmootherConfig(filter_source="cd_dynamax")
-enrts = EnRTSSmootherConfig(n_particles=100)
-pf = PFSmootherConfig(filter_source="cuthbert", n_particles=1_000)
-ct_kf = ContinuousTimeKFSmootherConfig()
+kf = dsx.config.KFSmootherConfig(filter_source="cd_dynamax")
+enrts = dsx.config.EnRTSSmootherConfig(n_particles=100)
+pf = dsx.config.PFSmootherConfig(filter_source="cuthbert", n_particles=1_000)
+ct_kf = dsx.config.ContinuousTimeKFSmootherConfig()
 ```
 
 `EnRTSSmootherConfig` inherits the EnKF ensemble-size, inflation, perturbed-observation, and localization options. Localization affects its forward EnKF; the EnRTS backward gain remains the standard unlocalized empirical gain. `PFSmootherConfig` exposes particle-smoother options: `pf_backward_sampling_method`, `pf_mcmc_n_steps`, and `pf_n_smoother_particles`. `ContinuousTimeKFSmootherConfig` exposes `cdlgssm_smoother_type` for the CD-Dynamax continuous-discrete linear Gaussian smoother variant.

@@ -8,9 +8,9 @@ Create an updated config with `dataclasses.replace` instead of assigning to its 
 ```python
 from dataclasses import replace
 
-from dynestyx.inference.configs.filter import EnKFConfig
+import dynestyx as dsx
 
-config = EnKFConfig(n_particles=30)
+config = dsx.config.EnKFConfig(n_particles=30)
 larger_ensemble = replace(config, n_particles=100)
 ```
 
@@ -46,7 +46,7 @@ Dynestyx offers a few built-in taper functions for commonly-used correlation fun
 ```python
 import jax.numpy as jnp
 
-from dynestyx.inference.filters import EnKFConfig, EnKFLocalizationConfig
+import dynestyx as dsx
 
 
 def gaussian_taper(distances):
@@ -54,19 +54,20 @@ def gaussian_taper(distances):
     return jnp.exp(-0.5 * (distances / length_scale) ** 2)
 
 
-localization = EnKFLocalizationConfig(
+localization = dsx.config.EnKFLocalizationConfig(
     state_observation_distances=cross_distances,
     observation_distances=observation_distances,
     taper=gaussian_taper,
 )
-filter_config = EnKFConfig(localization=localization)
+filter_config = dsx.config.EnKFConfig(localization=localization)
 ```
 
 For advanced usage, one may provide directly the functions that modify the covariance and cross-covariance. [Cuthbert's localization tutorial](https://state-space-models.github.io/cuthbert/examples/enkf_localization_l96/) shows how to construct these callbacks from distance-based tapers and explains their role in the EnKF update:
 
 ```python
 from cuthbertlib.ensemble_kalman import construct_tapered_chol_innovation_covariance
-from dynestyx.inference.filters import EnKFConfig, EnKFLocalizationFunctions
+
+import dynestyx as dsx
 
 
 def modify_cross_covariance(cross_covariance, model_inputs):
@@ -81,8 +82,8 @@ def modify_predicted_observation_covariance(covariance, model_inputs):
     return observation_taper * covariance
 
 
-filter_config = EnKFConfig(
-    localization=EnKFLocalizationFunctions(
+filter_config = dsx.config.EnKFConfig(
+    localization=dsx.config.EnKFLocalizationFunctions(
         modify_cross_covariance=modify_cross_covariance,
         construct_chol_innovation_covariance=construct_chol_innovation_covariance,
         modify_predicted_observation_covariance=modify_predicted_observation_covariance,
@@ -102,6 +103,7 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
         - EKFConfig
         - UKFConfig
         - PFConfig
+        - PFResamplingConfig
         - TaperCovarianceFn
         - ModifyCrossCovariance
         - ConstructCholInnovationCovariance
@@ -118,8 +120,8 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
         - ContinuousTimeConfig
         - ContinuousTimeKFConfig
         - ContinuousTimeEKFConfig
-        - ContinuousTimeKFConfig
-        - ContinuousTimePFConfig
+        - ContinuousTimeUKFConfig
+        - ContinuousTimeDPFConfig
         - ContinuousTimeEnKFConfig
 
 
