@@ -19,6 +19,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Real
 
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
@@ -27,7 +28,7 @@ from dynestyx.inference.configs.filter import (
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
-    prepare_nlgssm,
+    gaussian_to_nlgssm_params,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
@@ -137,7 +138,9 @@ def compute_cd_dynamax_discrete_filter(
         return lgssm_filter(params, emissions, inputs=inputs)
 
     # EKF and UKF share the same nonlinear params representation.
-    params_nl, inputs = prepare_nlgssm(dynamics, obs_times, inputs)
+    params_nl = gaussian_to_nlgssm_params(dynamics, obs_times, inputs)
+    if isinstance(dynamics.state_evolution, _ODEFlowStateEvolution):
+        inputs = jnp.arange(len(obs_times))
 
     if isinstance(filter_config, EKFConfig):
         obs_model = dynamics.observation_model

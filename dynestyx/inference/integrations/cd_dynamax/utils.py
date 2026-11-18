@@ -490,7 +490,11 @@ def dsx_to_cd_dynamax(
     return cd_dynamax_params, non_gaussian_flag
 
 
-def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
+def gaussian_to_nlgssm_params(
+    dynamics: DynamicalModel,
+    obs_times: jax.Array | None = None,
+    controls: jax.Array | None = None,
+) -> ParamsNLGSSM:
     """Build ParamsNLGSSM from a Gaussian discrete-time DynamicalModel.
 
     Supports linear or nonlinear dynamics:
@@ -499,7 +503,8 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     with either `LinearGaussianObservation` (H x + d + D u) or `GaussianObservation`
     (arbitrary h(x,u,t) with Gaussian noise).
 
-    For ODE flows, `prepare_nlgssm` binds the interval-dependent transition.
+    ODE flows take a step index as the backend input. Their callbacks look up
+    the integration interval and aligned control from `obs_times` and `controls`.
     Used by EKF/UKF in discrete filters. When control_dim is 0, u has shape (0,)
     and the B@u / D@u terms are omitted.
     """
@@ -577,6 +582,22 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
                 out = out + (B @ jnp.reshape(u, (-1, 1))).ravel()
             return out
 
+    elif isinstance(evo, _ODEFlowStateEvolution):
+        if obs_times is None or controls is None:
+            raise ValueError(
+                "A discretized ODE flow requires observation times and aligned controls."
+            )
+
+        def dynamics_function(x: jnp.ndarray, step: jnp.ndarray) -> jnp.ndarray:
+            # cd_dynamax asks for a prediction even at the final observation.
+            # Skip that solve for all sigma points.
+            terminal = eqx.internal.unvmap_all(step == len(obs_times) - 1)
+            return jax.lax.cond(
+                terminal,
+                lambda: x,
+                lambda: evo.F(x, controls[step], obs_times[step], obs_times[step + 1]),
+            )
+
     else:
         # GaussianStateEvolution: arbitrary nonlinear F(x, u, t_now, t_next) with Gaussian noise.
         def dynamics_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
@@ -626,35 +647,12 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             if cov is None
             else covariance_matrix(cov, state_dim)
         ),
-        emission_function=emission_function,
+        emission_function=(
+            (lambda x, step: emission_function(x, controls[step]))
+            if isinstance(evo, _ODEFlowStateEvolution) and controls is not None
+            else emission_function
+        ),
         emission_covariance=covariance_matrix(
             cast(Covariance | jnp.ndarray, obs.R), dynamics.observation_dim
         ),
     )
-
-
-def prepare_nlgssm(
-    dynamics: DynamicalModel, obs_times: jax.Array, controls: jax.Array
-) -> tuple[ParamsNLGSSM, jax.Array]:
-    """Bind the actual integration interval only for ODE-flow transitions."""
-    params = gaussian_to_nlgssm_params(dynamics)
-    flow = dynamics.state_evolution
-    if not isinstance(flow, _ODEFlowStateEvolution):
-        return params, controls
-
-    def integrate(x, step):
-        # The backend predicts after every update, including the last one.
-        # All UKF sigma points share this step and must skip that final solve.
-        terminal = eqx.internal.unvmap_all(step == len(obs_times) - 1)
-        return jax.lax.cond(
-            terminal,
-            lambda: x,
-            lambda: flow.F(x, controls[step], obs_times[step], obs_times[step + 1]),
-        )
-
-    def observe(x, step):
-        return params.emission_function(x, controls[step])
-
-    return params._replace(
-        dynamics_function=integrate, emission_function=observe
-    ), jnp.arange(len(obs_times))
