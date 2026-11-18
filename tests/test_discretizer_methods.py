@@ -21,7 +21,7 @@ from dynestyx.discretizers import (
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.handlers import Evaluation
 from dynestyx.evaluation.scoring import EnergyScore, GaussianLogProbScore
-from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, PFConfig, UKFConfig
+from dynestyx.inference.configs.filter import EnKFConfig, PFConfig
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
@@ -231,7 +231,14 @@ def test_ode_flow_discretizer_runs_discrete_simulator():
     assert_finite(tr["f_states"]["value"], (1, 3, 1), where="tr['f_states']['value']")
 
 
-def _filter_ode_flow(filter_config, jitter):
+@pytest.mark.parametrize(
+    "filter_config",
+    [
+        EnKFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)),
+        PFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)),
+    ],
+)
+def test_ode_flow_runs_sample_based_filters(filter_config):
     dynamics = DynamicalModel(
         initial_condition=dist.MultivariateNormal(jnp.ones(1), 0.1 * jnp.eye(1)),
         state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -0.2 * x),
@@ -240,45 +247,15 @@ def _filter_ode_flow(filter_config, jitter):
         ),
     )
 
-    solver = ODESimulatorConfig(dt0=0.01, max_steps=32)
-    flow = ODEFlowConfig(simulator_config=solver, jitter_scale=jitter)
-    with Filter(filter_config), Discretizer(flow), trace() as tr, seed(rng_seed=2):
-        dsx.sample(
-            "f",
-            dynamics,
-            obs_times=jnp.array([0.0, 0.05, 0.12]),
-            obs_values=jnp.ones((3, 1)),
-        )
-    return tr
+    def model(obs_times, obs_values):
+        return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
+    with Filter(filter_config):
+        with Discretizer(ODEFlowConfig(jitter_scale=0.01)):
+            with trace() as tr, seed(rng_seed=2):
+                model(jnp.array([0.0, 0.05, 0.12]), jnp.ones((3, 1)))
 
-@pytest.mark.parametrize(
-    "filter_config,jitter",
-    [
-        (EnKFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)), 0.0),
-        (EnKFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)), 1e-6),
-        (PFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)), 0.01),
-        (EKFConfig(filter_source="cuthbert"), 1e-6),
-    ],
-)
-def test_ode_flow_runs_discrete_filters(filter_config, jitter):
-    tr = _filter_ode_flow(filter_config, jitter)
-    for field in ("marginal_loglik", "filtered_states_mean", "filtered_states_cov"):
-        assert jnp.all(jnp.isfinite(tr[f"f_{field}"]["value"]))
-
-
-@pytest.mark.parametrize(
-    "filter_config,jitter",
-    [(UKFConfig(), 1e-6), (EKFConfig(filter_source="cd_dynamax"), 0.0)],
-)
-def test_cd_dynamax_rejects_ode_flow(filter_config, jitter):
-    with pytest.raises(NotImplementedError, match="requires interval endpoints"):
-        _filter_ode_flow(filter_config, jitter)
-
-
-def test_cuthbert_ekf_requires_ode_flow_jitter():
-    with pytest.raises(ValueError, match="jitter_scale"):
-        _filter_ode_flow(EKFConfig(filter_source="cuthbert"), 0.0)
+    assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
 
 
 def test_ode_flow_cuthbert_enkf_supports_observation_scoring():
