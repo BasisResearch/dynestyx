@@ -49,6 +49,8 @@ class ODEFlowConfig(BaseDiscretizerConfig):
     ``jitter_scale**2 * I``.
 
     All Diffrax settings come from the existing ``ODESimulatorConfig``.
+    With the cd_dynamax discrete EKF, select a forward-mode-compatible
+    adjoint such as ``diffrax.DirectAdjoint()`` for the transition Jacobian.
 
     Attributes:
         simulator_config (ODESimulatorConfig): Diffrax ODE solver settings.

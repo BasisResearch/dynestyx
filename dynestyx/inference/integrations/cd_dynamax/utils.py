@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -14,12 +15,15 @@ from cd_dynamax import (
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
 
+from dynestyx.discretization.ode_flow import (
+    _DeterministicODEFlowStateEvolution,
+    _ODEFlowStateEvolution,
+)
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
     Covariance,
     DeterministicContinuousTimeStateEvolution,
-    DeterministicStateEvolution,
     DynamicalModel,
     GaussianObservation,
     GaussianStateEvolution,
@@ -486,50 +490,66 @@ def dsx_to_cd_dynamax(
     return cd_dynamax_params, non_gaussian_flag
 
 
-def gaussian_to_nlgssm_params(
-    dynamics: DynamicalModel, obs_times: jax.Array, controls: jax.Array
-) -> ParamsNLGSSM:
-    """Convert discrete additive Gaussian or deterministic dynamics for EKF/UKF.
+def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
+    """Build ParamsNLGSSM from a Gaussian discrete-time DynamicalModel.
 
-    The backend receives observation indices as its inputs. Its callbacks can
-    then look up the original controls and times without mixing their dtypes.
+    Supports linear or nonlinear dynamics:
+    - `LinearGaussianStateEvolution` (LTI: f(x,u) = A@x + b + B@u with Gaussian noise),
+    - `GaussianStateEvolution` (nonlinear: F(x, u, t_now, t_next) with Gaussian noise),
+    with either `LinearGaussianObservation` (H x + d + D u) or `GaussianObservation`
+    (arbitrary h(x,u,t) with Gaussian noise).
+
+    For ODE flows, `prepare_nlgssm` binds the interval-dependent transition.
+    Used by EKF/UKF in discrete filters. When control_dim is 0, u has shape (0,)
+    and the B@u / D@u terms are omitted.
     """
+    if not isinstance(
+        dynamics.state_evolution,
+        (
+            LinearGaussianStateEvolution,
+            GaussianStateEvolution,
+            _DeterministicODEFlowStateEvolution,
+        ),
+    ) or not isinstance(
+        dynamics.observation_model, (LinearGaussianObservation, GaussianObservation)
+    ):
+        raise TypeError(
+            "gaussian_to_nlgssm_params expects a Gaussian DynamicalModel with "
+            "state_evolution LinearGaussianStateEvolution, GaussianStateEvolution, "
+            "or a discretized ODE flow, and observation_model either "
+            "LinearGaussianObservation or GaussianObservation."
+        )
+
     evo = dynamics.state_evolution
     obs = dynamics.observation_model
     ic = dynamics.initial_condition
     state_dim = dynamics.state_dim
     control_dim = dynamics.control_dim
-    if not isinstance(
-        evo,
-        (
-            LinearGaussianStateEvolution,
-            GaussianStateEvolution,
-            DeterministicStateEvolution,
-        ),
-    ):
+
+    cov = None if isinstance(evo, _DeterministicODEFlowStateEvolution) else evo.cov
+    if callable(cov):
         raise TypeError(
-            "cd_dynamax discrete EKF/UKF requires a Gaussian or deterministic "
-            f"state evolution. Got {type(evo).__name__}."
+            "cd_dynamax discrete EKF/UKF requires array-valued process covariance. "
+            "Received callable state_evolution.cov. Use a fixed covariance matrix, "
+            "or choose a backend that supports callable covariances."
         )
-    if not isinstance(obs, (LinearGaussianObservation, GaussianObservation)):
-        raise TypeError(
-            "cd_dynamax discrete EKF/UKF requires LinearGaussianObservation "
-            f"or GaussianObservation. Got {type(obs).__name__}."
+
+    if (
+        isinstance(evo, GaussianStateEvolution)
+        and not isinstance(evo, _ODEFlowStateEvolution)
+    ) or isinstance(obs, GaussianObservation):
+        warnings.warn(
+            "cd_dynamax discrete-time filters ignore absolute time arguments in "
+            "GaussianStateEvolution/GaussianObservation. For genuinely "
+            "time-varying discrete-time models, use a filter/backend that "
+            "preserves absolute time semantics, "
+            "such as EnKFConfig(filter_source='cuthbert').",
+            stacklevel=2,
         )
 
     initial_mean, initial_covariance = gaussian_moments(ic, state_dim)
     initial_mean = squeeze_leading_singletons(initial_mean, 1)
     initial_covariance = squeeze_leading_singletons(initial_covariance, 2)
-
-    if isinstance(evo, DeterministicStateEvolution):
-        process_cov = jnp.zeros_like(initial_covariance)
-    else:
-        if callable(evo.cov):
-            raise TypeError(
-                "cd_dynamax discrete EKF/UKF requires array-valued process covariance. "
-                "Received callable state_evolution.cov."
-            )
-        process_cov = covariance_matrix(evo.cov, state_dim)
 
     # ----- Dynamics function -----
     if isinstance(evo, LinearGaussianStateEvolution):
@@ -551,26 +571,19 @@ def gaussian_to_nlgssm_params(
             else jnp.zeros((state_dim, control_dim))
         )
 
-        def dynamics_function(x: jnp.ndarray, step: jnp.ndarray) -> jnp.ndarray:
+        def dynamics_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
             out = F @ x + b
-            if control_dim > 0:
-                out = out + B @ jnp.atleast_1d(controls[step])
+            if control_dim > 0 and u.size > 0:
+                out = out + (B @ jnp.reshape(u, (-1, 1))).ravel()
             return out
 
     else:
-
-        def dynamics_function(x: jnp.ndarray, step: jnp.ndarray) -> jnp.ndarray:
-            # cd-dynamax also predicts after the last update. Its UKF vmaps
-            # over copies of this input; one shared predicate keeps the ODE
-            # solve out of the terminal branch for every sigma point.
-            terminal = eqx.internal.unvmap_all(step == len(obs_times) - 1)
-            return jax.lax.cond(
-                terminal,
-                lambda: x,
-                lambda: jnp.atleast_1d(
-                    evo.F(x, controls[step], obs_times[step], obs_times[step + 1])
-                ),
-            )
+        # GaussianStateEvolution: arbitrary nonlinear F(x, u, t_now, t_next) with Gaussian noise.
+        def dynamics_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
+            # Discrete-time setting for EKF/UKF: ignore absolute time and pass dummy times.
+            t_now = jnp.array(0.0, dtype=x.dtype)
+            t_next = jnp.array(0.0, dtype=x.dtype)
+            return evo.F(x, u, t_now, t_next)
 
     # ----- Emission function -----
     if isinstance(obs, LinearGaussianObservation):
@@ -592,24 +605,56 @@ def gaussian_to_nlgssm_params(
             else jnp.zeros((dynamics.observation_dim, control_dim))
         )
 
-        def emission_function(x: jnp.ndarray, step: jnp.ndarray) -> jnp.ndarray:
+        def emission_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
             out = H @ x + d
-            if control_dim > 0:
-                out = out + D @ jnp.atleast_1d(controls[step])
+            if control_dim > 0 and u.size > 0:
+                out = out + (D @ jnp.reshape(u, (-1, 1))).ravel()
             return out
 
     else:
         # GaussianObservation: y_t ~ N(h(x_t, u_t, t), R) with arbitrary h.
-        def emission_function(x: jnp.ndarray, step: jnp.ndarray) -> jnp.ndarray:
-            return jnp.atleast_1d(obs.h(x, controls[step], obs_times[step]))
+        def emission_function(x: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
+            _t = jnp.array(0.0, dtype=x.dtype)
+            return obs.h(x, u, _t)  # warning: time is ignored
 
     return ParamsNLGSSM(
         initial_mean=initial_mean,
         initial_covariance=initial_covariance,
         dynamics_function=dynamics_function,
-        dynamics_covariance=process_cov,
+        dynamics_covariance=(
+            jnp.zeros_like(initial_covariance)
+            if cov is None
+            else covariance_matrix(cov, state_dim)
+        ),
         emission_function=emission_function,
         emission_covariance=covariance_matrix(
             cast(Covariance | jnp.ndarray, obs.R), dynamics.observation_dim
         ),
     )
+
+
+def prepare_nlgssm(
+    dynamics: DynamicalModel, obs_times: jax.Array, controls: jax.Array
+) -> tuple[ParamsNLGSSM, jax.Array]:
+    """Bind the actual integration interval only for ODE-flow transitions."""
+    params = gaussian_to_nlgssm_params(dynamics)
+    flow = dynamics.state_evolution
+    if not isinstance(flow, _ODEFlowStateEvolution):
+        return params, controls
+
+    def integrate(x, step):
+        # The backend predicts after every update, including the last one.
+        # All UKF sigma points share this step and must skip that final solve.
+        terminal = eqx.internal.unvmap_all(step == len(obs_times) - 1)
+        return jax.lax.cond(
+            terminal,
+            lambda: x,
+            lambda: flow.F(x, controls[step], obs_times[step], obs_times[step + 1]),
+        )
+
+    def observe(x, step):
+        return params.emission_function(x, controls[step])
+
+    return params._replace(
+        dynamics_function=integrate, emission_function=observe
+    ), jnp.arange(len(obs_times))

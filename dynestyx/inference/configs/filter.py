@@ -544,10 +544,12 @@ class EKFConfig(BaseFilterConfig):
 
     This is exact (but wasteful) for linear-Gaussian models.
 
-    The `cd_dynamax` backend evaluates nonlinear transition and observation
-    means at the supplied times and requires fixed noise covariances.
-    For a discretized ODE, its forward-mode Jacobians require a compatible
-    Diffrax adjoint, such as `diffrax.DirectAdjoint()`.
+    In the current interface with the `cd_dynamax` discrete-time backend,
+    time-varying models silently ignore absolute time arguments.
+    For genuinely time-varying discrete-time models, use a
+    backend/configuration that preserves absolute time semantics, such as
+    `EnKFConfig(filter_source="cuthbert")`. Only use
+    `filter_source="cd_dynamax"` for time-invariant models.
 
     Does not support missing observations (data cannot have NaNs).
 
@@ -680,11 +682,12 @@ class UKFConfig(BaseFilterConfig):
     The default parameters (`alpha`, `beta`, `kappa`) work well for most
     problems; they rarely need to be changed.
 
-    The `cd_dynamax` backend evaluates nonlinear transition and observation
-    means at the supplied times and requires fixed noise covariances.
-    With `Discretizer(ODEFlowConfig(...))`, each sigma point follows the
-    ODE flow between observations. Zero jitter gives a deterministic
-    transition. Positive jitter adds `jitter_scale**2 * I` per interval.
+    In the current interface with the `cd_dynamax` discrete-time backend,
+    time-varying models silently ignore absolute time arguments.
+    For genuinely time-varying discrete-time models, use a
+    backend/configuration that preserves absolute time semantics, such as
+    `EKFConfig(filter_source="cuthbert")`. Only use
+    `filter_source="cd_dynamax"` for time-invariant models.
 
     Does not support missing observations (data cannot have NaNs).
 

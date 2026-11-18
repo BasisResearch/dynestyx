@@ -482,13 +482,7 @@ OBS_FIELD_CALLABLES = {
 }
 
 
-def _nonlinear_params(model):
-    return gaussian_to_nlgssm_params(
-        model, jnp.arange(2), jnp.zeros((2, model.control_dim))
-    )
-
-
-@pytest.mark.parametrize("converter", [_lti_to_lgssm_params, _nonlinear_params])
+@pytest.mark.parametrize("converter", [_lti_to_lgssm_params, gaussian_to_nlgssm_params])
 @pytest.mark.parametrize("field", sorted(EVO_FIELD_CALLABLES))
 def test_cd_dynamax_discrete_rejects_callable_evolution_fields(converter, field):
     evo_kwargs = {"A": A_CONST, "cov": Q0, field: EVO_FIELD_CALLABLES[field]}
@@ -500,7 +494,7 @@ def test_cd_dynamax_discrete_rejects_callable_evolution_fields(converter, field)
     assert field in str(excinfo.value)
 
 
-@pytest.mark.parametrize("converter", [_lti_to_lgssm_params, _nonlinear_params])
+@pytest.mark.parametrize("converter", [_lti_to_lgssm_params, gaussian_to_nlgssm_params])
 @pytest.mark.parametrize("field", sorted(OBS_FIELD_CALLABLES))
 def test_cd_dynamax_discrete_rejects_callable_observation_fields(converter, field):
     obs_kwargs = {"H": H0, "R": R0, field: OBS_FIELD_CALLABLES[field]}

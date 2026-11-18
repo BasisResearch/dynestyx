@@ -2,7 +2,6 @@
 
 from typing import Any
 
-import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import lgssm_smoother
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
@@ -26,7 +25,7 @@ from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
     _prepare_inputs,
 )
-from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
+from dynestyx.inference.integrations.cd_dynamax.utils import prepare_nlgssm
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
@@ -49,10 +48,9 @@ def compute_cd_dynamax_discrete_smoother(
         params = _lti_to_lgssm_params(dynamics)
         return lgssm_smoother(params, emissions, inputs=inputs)
 
-    params_nl = gaussian_to_nlgssm_params(dynamics, obs_times, inputs)
-    steps = jnp.arange(len(obs_times))
+    params_nl, inputs = prepare_nlgssm(dynamics, obs_times, inputs)
     if isinstance(filter_config, EKFConfig):
-        return extended_kalman_smoother(params_nl, emissions, inputs=steps)
+        return extended_kalman_smoother(params_nl, emissions, inputs=inputs)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
             alpha=filter_config.alpha,
@@ -60,7 +58,7 @@ def compute_cd_dynamax_discrete_smoother(
             kappa=filter_config.kappa,
         )
         return unscented_kalman_smoother(
-            params_nl, emissions, hyperparams=hyperparams, inputs=steps
+            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
         )
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "

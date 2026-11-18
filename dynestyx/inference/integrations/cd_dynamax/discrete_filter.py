@@ -27,7 +27,7 @@ from dynestyx.inference.configs.filter import (
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
-    gaussian_to_nlgssm_params,
+    prepare_nlgssm,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
@@ -137,8 +137,7 @@ def compute_cd_dynamax_discrete_filter(
         return lgssm_filter(params, emissions, inputs=inputs)
 
     # EKF and UKF share the same nonlinear params representation.
-    params_nl = gaussian_to_nlgssm_params(dynamics, obs_times, inputs)
-    steps = jnp.arange(len(obs_times))
+    params_nl, inputs = prepare_nlgssm(dynamics, obs_times, inputs)
 
     if isinstance(filter_config, EKFConfig):
         obs_model = dynamics.observation_model
@@ -151,7 +150,7 @@ def compute_cd_dynamax_discrete_filter(
                 "use of automatic differentiation.",
                 stacklevel=2,
             )
-        return extended_kalman_filter(params_nl, emissions, inputs=steps)
+        return extended_kalman_filter(params_nl, emissions, inputs=inputs)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
             alpha=filter_config.alpha,
@@ -159,7 +158,7 @@ def compute_cd_dynamax_discrete_filter(
             kappa=filter_config.kappa,
         )
         return unscented_kalman_filter(
-            params_nl, emissions, hyperparams=hyperparams, inputs=steps
+            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
         )
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "

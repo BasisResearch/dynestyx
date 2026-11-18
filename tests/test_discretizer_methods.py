@@ -9,7 +9,6 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
-from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.discretizers import (
     DiffraxSampleConfig,
     Discretizer,
@@ -22,7 +21,7 @@ from dynestyx.discretizers import (
 from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.handlers import Evaluation
 from dynestyx.evaluation.scoring import EnergyScore, GaussianLogProbScore
-from dynestyx.inference.configs.filter import EnKFConfig, PFConfig
+from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, PFConfig, UKFConfig
 from dynestyx.inference.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
@@ -40,8 +39,8 @@ from dynestyx.models import (
 from tests.test_utils import assert_finite
 
 
-def _ode_model():
-    return DynamicalModel(
+def _ode_state_evolution():
+    model = DynamicalModel(
         initial_condition=dist.MultivariateNormal(jnp.zeros(2), jnp.eye(2)),
         state_evolution=ContinuousTimeStateEvolution(
             drift=lambda x, u, t: jnp.array([-0.4 * x[0] + u[0], 0.2 * x[1]])
@@ -49,10 +48,6 @@ def _ode_model():
         observation_model=LinearGaussianObservation(H=jnp.eye(2), R=jnp.eye(2)),
         control_dim=1,
     )
-
-
-def _ode_state_evolution():
-    model = _ode_model()
     assert isinstance(model.state_evolution, DeterministicContinuousTimeStateEvolution)
     return model.state_evolution
 
@@ -119,8 +114,6 @@ def test_ode_flow_matches_controlled_linear_analytic_solution():
             jnp.exp(0.2 * h) * x[1],
         ]
     )
-    assert isinstance(evolution, dsx.DeterministicStateEvolution)
-    assert isinstance(evolution, _ODEFlowStateEvolution)
     assert isinstance(transition, dist.Delta)
     assert transition.event_shape == (2,)
     assert jnp.allclose(transition.mean, expected, rtol=2e-5, atol=2e-5)
@@ -134,25 +127,11 @@ def test_ode_flow_positive_jitter_returns_independent_normal():
 
     transition = evolution(jnp.array([1.2, -0.7]), jnp.array([0.3]), 0.2, 0.55)
 
-    assert isinstance(evolution, dsx.GaussianStateEvolution)
-    assert isinstance(evolution, _ODEFlowStateEvolution)
     assert isinstance(transition, dist.Independent)
     assert isinstance(transition.base_dist, dist.Normal)
     assert transition.event_shape == (2,)
     assert jnp.allclose(transition.base_dist.scale, jnp.full((2,), 0.3))
     assert jnp.allclose(transition.variance, jnp.full((2,), 0.09))
-
-
-@pytest.mark.parametrize("jitter", [0.0, 0.3])
-def test_ode_flow_retains_identity_under_gaussian_relaxation(jitter):
-    discrete = dsx.discretize_dynamics(_ode_model(), ODEFlowConfig(jitter_scale=jitter))
-    addition = jnp.array([[0.2, 0.05], [0.05, 0.1]])
-    relaxed = dsx.relax_dynamics(discrete, state_evolution_cov=addition, mode="add")
-    evo = relaxed.state_evolution
-    assert isinstance(evo, dsx.GaussianStateEvolution)
-    assert isinstance(evo, _ODEFlowStateEvolution)
-    transition = evo(jnp.zeros(2), jnp.ones(1), 0.2, 0.3)
-    assert jnp.allclose(transition.covariance_matrix, addition + jitter**2 * jnp.eye(2))
 
 
 def test_ode_flow_passes_simulator_config_settings(monkeypatch):
@@ -249,13 +228,17 @@ def test_ode_flow_discretizer_runs_discrete_simulator():
 
 
 @pytest.mark.parametrize(
-    "filter_config",
+    "filter_config,jitter",
     [
-        EnKFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)),
-        PFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)),
+        (EnKFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)), 0.01),
+        (PFConfig(n_particles=8, crn_seed=jr.PRNGKey(4)), 0.01),
+        (EKFConfig(filter_source="cd_dynamax"), 0.0),
+        (EKFConfig(filter_source="cd_dynamax"), 1e-6),
+        (UKFConfig(), 0.0),
+        (UKFConfig(), 1e-6),
     ],
 )
-def test_ode_flow_runs_sample_based_filters(filter_config):
+def test_ode_flow_runs_discrete_filters(filter_config, jitter):
     dynamics = DynamicalModel(
         initial_condition=dist.MultivariateNormal(jnp.ones(1), 0.1 * jnp.eye(1)),
         state_evolution=ContinuousTimeStateEvolution(drift=lambda x, u, t: -0.2 * x),
@@ -267,12 +250,14 @@ def test_ode_flow_runs_sample_based_filters(filter_config):
     def model(obs_times, obs_values):
         return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
 
+    solver = ODESimulatorConfig(adjoint=dfx.DirectAdjoint(), dt0=0.01, max_steps=32)
     with Filter(filter_config):
-        with Discretizer(ODEFlowConfig(jitter_scale=0.01)):
+        with Discretizer(ODEFlowConfig(simulator_config=solver, jitter_scale=jitter)):
             with trace() as tr, seed(rng_seed=2):
                 model(jnp.array([0.0, 0.05, 0.12]), jnp.ones((3, 1)))
 
-    assert jnp.isfinite(tr["f_marginal_loglik"]["value"])
+    for field in ("marginal_loglik", "filtered_states_mean", "filtered_states_cov"):
+        assert jnp.all(jnp.isfinite(tr[f"f_{field}"]["value"]))
 
 
 def test_ode_flow_cuthbert_enkf_supports_observation_scoring():

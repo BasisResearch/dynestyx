@@ -1,5 +1,6 @@
 """Numerical discrete transitions induced by deterministic ODE flows."""
 
+from collections.abc import Callable
 from typing import ClassVar
 
 import equinox as eqx
@@ -35,6 +36,7 @@ class _ODEFlowEndpoint(eqx.Module):
 class _ODEFlowStateEvolution:
     """Shared identity for transitions whose mean is a numerical ODE flow."""
 
+    F: Callable
     _dynestyx_discretizer_preserves_state_shape: ClassVar[bool] = True
 
 
