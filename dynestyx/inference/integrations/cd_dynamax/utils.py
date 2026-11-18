@@ -14,10 +14,7 @@ from cd_dynamax import (
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
 
-from dynestyx.discretization.ode_flow import (
-    _DeterministicODEFlowStateEvolution,
-    _ODEFlowStateEvolution,
-)
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
@@ -498,24 +495,24 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     with either `LinearGaussianObservation` (H x + d + D u) or `GaussianObservation`
     (arbitrary h(x,u,t) with Gaussian noise).
 
-    For ODE flows, the input is (control, interval start, interval end).
     Used by EKF/UKF in discrete filters. When control_dim is 0, u has shape (0,)
     and the B@u / D@u terms are omitted.
     """
+    if isinstance(dynamics.state_evolution, _ODEFlowStateEvolution):
+        raise NotImplementedError(
+            "cd_dynamax discrete EKF/UKF does not yet support ODEFlowConfig. "
+            "ODE integration requires interval endpoints, and this adapter passes "
+            "zero for both times. Use EnKFConfig(filter_source='cuthbert') for an ODE flow."
+        )
     if not isinstance(
-        dynamics.state_evolution,
-        (
-            LinearGaussianStateEvolution,
-            GaussianStateEvolution,
-            _DeterministicODEFlowStateEvolution,
-        ),
+        dynamics.state_evolution, (LinearGaussianStateEvolution, GaussianStateEvolution)
     ) or not isinstance(
         dynamics.observation_model, (LinearGaussianObservation, GaussianObservation)
     ):
         raise TypeError(
             "gaussian_to_nlgssm_params expects a Gaussian DynamicalModel with "
-            "state_evolution LinearGaussianStateEvolution, GaussianStateEvolution, "
-            "or a discretized ODE flow, and observation_model either "
+            "state_evolution either LinearGaussianStateEvolution or "
+            "GaussianStateEvolution, and observation_model either "
             "LinearGaussianObservation or GaussianObservation."
         )
 
@@ -525,18 +522,14 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     state_dim = dynamics.state_dim
     control_dim = dynamics.control_dim
 
-    cov = None if isinstance(evo, _DeterministicODEFlowStateEvolution) else evo.cov
-    if callable(cov):
+    if callable(evo.cov):
         raise TypeError(
             "cd_dynamax discrete EKF/UKF requires array-valued process covariance. "
             "Received callable state_evolution.cov. Use a fixed covariance matrix, "
             "or choose a backend that supports callable covariances."
         )
 
-    if (
-        isinstance(evo, GaussianStateEvolution)
-        and not isinstance(evo, _ODEFlowStateEvolution)
-    ) or isinstance(obs, GaussianObservation):
+    if isinstance(evo, GaussianStateEvolution) or isinstance(obs, GaussianObservation):
         warnings.warn(
             "cd_dynamax discrete-time filters ignore absolute time arguments in "
             "GaussianStateEvolution/GaussianObservation. For genuinely "
@@ -575,12 +568,6 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             if control_dim > 0 and u.size > 0:
                 out = out + (B @ jnp.reshape(u, (-1, 1))).ravel()
             return out
-
-    elif isinstance(evo, _ODEFlowStateEvolution):
-
-        def dynamics_function(x, interval):
-            u, t_now, t_next = interval
-            return evo.F(x, u, t_now, t_next)
 
     else:
         # GaussianStateEvolution: arbitrary nonlinear F(x, u, t_now, t_next) with Gaussian noise.
@@ -626,16 +613,8 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
         initial_mean=initial_mean,
         initial_covariance=initial_covariance,
         dynamics_function=dynamics_function,
-        dynamics_covariance=(
-            jnp.zeros_like(initial_covariance)
-            if cov is None
-            else covariance_matrix(cov, state_dim)
-        ),
-        emission_function=(
-            (lambda x, interval: emission_function(x, interval[0]))
-            if isinstance(evo, _ODEFlowStateEvolution)
-            else emission_function
-        ),
+        dynamics_covariance=covariance_matrix(evo.cov, state_dim),
+        emission_function=emission_function,
         emission_covariance=covariance_matrix(
             cast(Covariance | jnp.ndarray, obs.R), dynamics.observation_dim
         ),

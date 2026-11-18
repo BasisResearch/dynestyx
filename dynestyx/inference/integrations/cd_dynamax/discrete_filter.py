@@ -19,14 +19,12 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Real
 
-from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
     KFConfig,
     UKFConfig,
 )
-from dynestyx.inference.configs.smoother import BaseSmootherConfig
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
     gaussian_to_nlgssm_params,
@@ -97,44 +95,27 @@ def _lti_to_lgssm_params(dynamics: DynamicalModel):
 
 def _prepare_inputs(
     dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig | BaseSmootherConfig,
+    obs_values: Real[Array, "obs_time observation_dim"],
     obs_times: Real[Array, " obs_time"],
     ctrl_times: Real[Array, " ctrl_time"] | None,
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None,
-):
-    """Pair the backend parameters with one input per observation."""
-    num_obs = len(obs_times)
+) -> tuple[
+    Real[Array, "obs_time observation_dim"],
+    Real[Array, "obs_time control_dim"],
+]:
+    """Prepare emissions and inputs arrays for cd-dynamax discrete filters."""
+    emissions = obs_values
+    t1 = emissions.shape[0]
     control_dim = dynamics.control_dim
     if ctrl_values is None:
-        inputs = jnp.zeros((num_obs, control_dim))
-    elif ctrl_values.shape[0] > num_obs:
+        inputs = jnp.zeros((t1, control_dim))
+    elif ctrl_values.shape[0] > t1:
         aligned_ctrl_times = cast(Real[Array, " ctrl_time"], ctrl_times)
         inds = jnp.searchsorted(aligned_ctrl_times, obs_times, side="left")
         inputs = ctrl_values[inds]
     else:
         inputs = ctrl_values
-
-    if isinstance(filter_config, KFConfig):
-        return _lti_to_lgssm_params(dynamics), inputs
-
-    params = gaussian_to_nlgssm_params(dynamics)
-    if isinstance(dynamics.state_evolution, _ODEFlowStateEvolution):
-        # cd-dynamax takes one array input per row. Use indices to keep the
-        # control and the interval endpoints in their original shapes and dtypes.
-        # At the final observation the grid ends, so the ODE interval is empty.
-        end_times = jnp.concatenate((obs_times[1:], obs_times[-1:]))
-
-        def at_step(fn):
-            def wrapped(x, k):
-                return fn(x, (inputs[k], obs_times[k], end_times[k]))
-
-            return wrapped
-
-        return params._replace(
-            dynamics_function=at_step(params.dynamics_function),
-            emission_function=at_step(params.emission_function),
-        ), jnp.arange(num_obs)
-    return params, inputs
+    return emissions, inputs
 
 
 def compute_cd_dynamax_discrete_filter(
@@ -147,12 +128,16 @@ def compute_cd_dynamax_discrete_filter(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
 ) -> Any:
     """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects)."""
-    params, inputs = _prepare_inputs(
-        dynamics, filter_config, obs_times, ctrl_times, ctrl_values
+    emissions, inputs = _prepare_inputs(
+        dynamics, obs_values, obs_times, ctrl_times, ctrl_values
     )
 
     if isinstance(filter_config, KFConfig):
-        return lgssm_filter(params, obs_values, inputs=inputs)
+        params = _lti_to_lgssm_params(dynamics)
+        return lgssm_filter(params, emissions, inputs=inputs)
+
+    # EKF and UKF share the same nonlinear params representation.
+    params_nl = gaussian_to_nlgssm_params(dynamics)
 
     if isinstance(filter_config, EKFConfig):
         obs_model = dynamics.observation_model
@@ -165,7 +150,7 @@ def compute_cd_dynamax_discrete_filter(
                 "use of automatic differentiation.",
                 stacklevel=2,
             )
-        return extended_kalman_filter(params, obs_values, inputs=inputs)
+        return extended_kalman_filter(params_nl, emissions, inputs=inputs)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
             alpha=filter_config.alpha,
@@ -173,7 +158,7 @@ def compute_cd_dynamax_discrete_filter(
             kappa=filter_config.kappa,
         )
         return unscented_kalman_filter(
-            params, obs_values, hyperparams=hyperparams, inputs=inputs
+            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
         )
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "

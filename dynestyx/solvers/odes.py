@@ -46,8 +46,8 @@ def solve_ode_interval(
     t1_arr = as_scalar_time_array(t1, name="t1", dtype=state_dtype)
     t1_arr = eqx.error_if(
         t1_arr,
-        t1_arr < t0_arr,
-        "ODE flow intervals require t1 >= t0.",
+        t1_arr <= t0_arr,
+        "ODE flow intervals require t1 > t0.",
     )
 
     def _drift(t, y, args):
