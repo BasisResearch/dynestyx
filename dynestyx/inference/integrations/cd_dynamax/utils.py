@@ -3,7 +3,6 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import equinox as eqx
-import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax import (
@@ -490,11 +489,7 @@ def dsx_to_cd_dynamax(
     return cd_dynamax_params, non_gaussian_flag
 
 
-def gaussian_to_nlgssm_params(
-    dynamics: DynamicalModel,
-    obs_times: jax.Array | None = None,
-    controls: jax.Array | None = None,
-) -> ParamsNLGSSM:
+def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     """Build ParamsNLGSSM from a Gaussian discrete-time DynamicalModel.
 
     Supports linear or nonlinear dynamics:
@@ -503,8 +498,7 @@ def gaussian_to_nlgssm_params(
     with either `LinearGaussianObservation` (H x + d + D u) or `GaussianObservation`
     (arbitrary h(x,u,t) with Gaussian noise).
 
-    ODE flows take a step index as the backend input. Their callbacks look up
-    the integration interval and aligned control from `obs_times` and `controls`.
+    For ODE flows, the input is (control, interval start, interval end).
     Used by EKF/UKF in discrete filters. When control_dim is 0, u has shape (0,)
     and the B@u / D@u terms are omitted.
     """
@@ -583,20 +577,10 @@ def gaussian_to_nlgssm_params(
             return out
 
     elif isinstance(evo, _ODEFlowStateEvolution):
-        if obs_times is None or controls is None:
-            raise ValueError(
-                "A discretized ODE flow requires observation times and aligned controls."
-            )
 
-        def dynamics_function(x: jnp.ndarray, step: jnp.ndarray) -> jnp.ndarray:
-            # cd_dynamax asks for a prediction even at the final observation.
-            # Skip that solve for all sigma points.
-            terminal = eqx.internal.unvmap_all(step == len(obs_times) - 1)
-            return jax.lax.cond(
-                terminal,
-                lambda: x,
-                lambda: evo.F(x, controls[step], obs_times[step], obs_times[step + 1]),
-            )
+        def dynamics_function(x, interval):
+            u, t_now, t_next = interval
+            return evo.F(x, u, t_now, t_next)
 
     else:
         # GaussianStateEvolution: arbitrary nonlinear F(x, u, t_now, t_next) with Gaussian noise.
@@ -648,8 +632,8 @@ def gaussian_to_nlgssm_params(
             else covariance_matrix(cov, state_dim)
         ),
         emission_function=(
-            (lambda x, step: emission_function(x, controls[step]))
-            if isinstance(evo, _ODEFlowStateEvolution) and controls is not None
+            (lambda x, interval: emission_function(x, interval[0]))
+            if isinstance(evo, _ODEFlowStateEvolution)
             else emission_function
         ),
         emission_covariance=covariance_matrix(

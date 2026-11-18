@@ -2,7 +2,6 @@
 
 from typing import Any
 
-import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import lgssm_smoother
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
@@ -14,7 +13,6 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
 )
 from jaxtyping import Array, Real
 
-from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.configs.filter import (
     EKFConfig,
     KFConfig,
@@ -24,10 +22,8 @@ from dynestyx.inference.configs.smoother import (
     BaseSmootherConfig,
 )
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
-    _lti_to_lgssm_params,
     _prepare_inputs,
 )
-from dynestyx.inference.integrations.cd_dynamax.utils import gaussian_to_nlgssm_params
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
@@ -42,19 +38,14 @@ def compute_cd_dynamax_discrete_smoother(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
 ) -> Any:
     """Pure-JAX cd-dynamax discrete smoother computation (no numpyro side-effects)."""
-    emissions, inputs = _prepare_inputs(
-        dynamics, obs_values, obs_times, ctrl_times, ctrl_values
+    params, inputs = _prepare_inputs(
+        dynamics, filter_config, obs_times, ctrl_times, ctrl_values
     )
 
     if isinstance(filter_config, KFConfig):
-        params = _lti_to_lgssm_params(dynamics)
-        return lgssm_smoother(params, emissions, inputs=inputs)
-
-    params_nl = gaussian_to_nlgssm_params(dynamics, obs_times, inputs)
-    if isinstance(dynamics.state_evolution, _ODEFlowStateEvolution):
-        inputs = jnp.arange(len(obs_times))
+        return lgssm_smoother(params, obs_values, inputs=inputs)
     if isinstance(filter_config, EKFConfig):
-        return extended_kalman_smoother(params_nl, emissions, inputs=inputs)
+        return extended_kalman_smoother(params, obs_values, inputs=inputs)
     if isinstance(filter_config, UKFConfig):
         hyperparams = UKFHyperParams(
             alpha=filter_config.alpha,
@@ -62,7 +53,7 @@ def compute_cd_dynamax_discrete_smoother(
             kappa=filter_config.kappa,
         )
         return unscented_kalman_smoother(
-            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
+            params, obs_values, hyperparams=hyperparams, inputs=inputs
         )
     raise ValueError(
         f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
