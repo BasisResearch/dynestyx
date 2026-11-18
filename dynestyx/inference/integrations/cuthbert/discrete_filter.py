@@ -19,7 +19,7 @@ from cuthbertlib.resampling import (
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
-from dynestyx.discretization.ode_flow import _DeterministicODEFlowStateEvolution
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.configs.filter import (
     BaseFilterConfig,
     EKFConfig,
@@ -38,6 +38,7 @@ from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import (
+    DeterministicStateEvolution,
     DynamicalModel,
     GaussianObservation,
     LinearGaussianObservation,
@@ -897,12 +898,15 @@ def _cuthbert_filter_kalman(
 def _cuthbert_filter_taylor_kf(
     dynamics: DynamicalModel, filter_kwargs: dict | None = None
 ):
-    if isinstance(dynamics.state_evolution, _DeterministicODEFlowStateEvolution):
-        raise ValueError(
+    evolution = dynamics.state_evolution
+    if isinstance(evolution, DeterministicStateEvolution):
+        message = (
             "The Cuthbert EKF requires a differentiable transition log density. "
-            "Set jitter_scale > 0 in ODEFlowConfig, or use "
-            "EnKFConfig() for a deterministic ODE flow."
+            "For deterministic transitions with Gaussian observations, use EnKFConfig()."
         )
+        if isinstance(evolution, _ODEFlowStateEvolution):
+            message += " To use the EKF with ODEFlowConfig, set jitter_scale > 0."
+        raise ValueError(message)
     if filter_kwargs is None:
         filter_kwargs = {}
 
