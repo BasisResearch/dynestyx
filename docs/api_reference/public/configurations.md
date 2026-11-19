@@ -95,7 +95,8 @@ See [Scoring configs](inference/configs/scoring_configs.md) for score and predic
 ## Migrating existing imports
 
 Update config imports from `dynestyx.inference.configs.<module>` to
-`dynestyx.configs.<module>`. Use `dynestyx.configs.scoring` for
+`dynestyx.configs.<module>`. For filters, change `dynestyx.inference.configs.filter`
+to `dynestyx.configs.filters`. Use `dynestyx.configs.scoring` for
 `ObservationScoringConfig` imports from `dynestyx.evaluation.configs` or
 `dynestyx.inference.scoring_configs`.
 

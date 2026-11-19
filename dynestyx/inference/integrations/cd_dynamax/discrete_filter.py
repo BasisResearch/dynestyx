@@ -19,7 +19,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Real
 
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     EKFConfig,
     KFConfig,

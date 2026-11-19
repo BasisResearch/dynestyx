@@ -13,7 +13,7 @@ from cuthbertlib.ensemble_kalman.localization import (
 )
 from jaxtyping import Array
 
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     ConstructCholInnovationCovariance,
     EnKFLocalizationConfig,
     EnKFLocalizationFunctions,

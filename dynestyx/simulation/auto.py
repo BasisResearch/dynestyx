@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
-from dynestyx.configs.filter import BaseFilterConfig
+from dynestyx.configs.filters import BaseFilterConfig
 from dynestyx.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,

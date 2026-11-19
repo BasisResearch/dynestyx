@@ -66,7 +66,7 @@ def _default_handlers(
     import numpyro.distributions as dist
 
     from dynestyx.configs.discretizer import DiffraxSampleConfig
-    from dynestyx.configs.filter import (
+    from dynestyx.configs.filters import (
         EnKFConfig,
         HMMConfig,
         KFConfig,

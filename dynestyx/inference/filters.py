@@ -13,7 +13,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,

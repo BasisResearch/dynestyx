@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
-from dynestyx.configs.filter import BaseFilterConfig
+from dynestyx.configs.filters import BaseFilterConfig
 from dynestyx.configs.simulator import SimulatorConfig
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes

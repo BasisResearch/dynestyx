@@ -11,7 +11,7 @@ from dynestyx.configs.discretizer import (
     MeanTrajectoryLinearizationConfig,
     ODEFlowConfig,
 )
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,

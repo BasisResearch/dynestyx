@@ -4,7 +4,7 @@ import abc
 import dataclasses
 from typing import Literal
 
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeEKFConfig,
     ContinuousTimeKFConfig,
     EKFConfig,
@@ -28,7 +28,7 @@ class BaseSmootherConfig(abc.ABC):
     Concrete smoother configs inherit from their corresponding filter configs,
     so backend selection, filter tuning, continuous-time solver options, and
     filter recording fields follow the same conventions as
-    `dynestyx.configs.filter`.
+    `dynestyx.configs.filters`.
 
     Config fields are immutable after construction. Use `dataclasses.replace`
     to create an updated config.

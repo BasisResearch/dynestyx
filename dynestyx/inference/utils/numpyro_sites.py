@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Float, Real
 
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     HMMConfig,

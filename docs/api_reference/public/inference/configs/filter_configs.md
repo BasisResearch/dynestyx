@@ -95,7 +95,7 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
 
 ## Discrete Time Configuration Classes
 
-::: dynestyx.configs.filter
+::: dynestyx.configs.filters
     options:
       members:
         - BaseFilterConfig
@@ -114,7 +114,7 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
 
 ## Continuous Time Configuration Classes
 
-::: dynestyx.configs.filter
+::: dynestyx.configs.filters
     options:
       members:
         - ContinuousTimeConfig
@@ -127,7 +127,7 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
 
 ## Discrete State-Space Configuration Classes
 
-::: dynestyx.configs.filter
+::: dynestyx.configs.filters
     options:
       members:
         - HMMConfig

@@ -19,7 +19,7 @@ from cuthbertlib.resampling import (
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
-from dynestyx.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     EKFConfig,
     EnKFConfig,
