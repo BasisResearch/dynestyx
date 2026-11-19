@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -5696,9 +5696,9 @@ policy's initial state must always be passed explicitly.</p>
 <code>build_cuthbert_filter</code> accepts (see above). Defaults to
 <code>_default_filter_config(dynamics)</code> when <code>None</code>. The online one-step
 update currently requires <code>filter_source="cuthbert"</code>. Its
-<code>record_filtered_states_mean</code>/<code>record_max_elems</code> fields gate
-whether the <code>filtered_states_mean</code> output is recorded, exactly
-as they do for <code>Filter</code> (see <code>dynestyx.utils.recording._should_record_field</code>).
+<code>record_filtered_*</code> and <code>record_max_elems</code> fields gate which
+<code>filtered_*</code> outputs are recorded, exactly as they do for
+<code>Filter</code> (see <code>dynestyx.utils.recording._should_record_field</code>).
 Must not be given together with <code>use_true_state=True</code>, which
 filters nothing.</p>
               </div>
@@ -5713,7 +5713,7 @@ filters nothing.</p>
                 <p>Give the policy the true state <span class="arithmatex">\(x_k\)</span> instead of a
 filtered belief, and run no filter at all. Defaults to <code>False</code>.
 Observations are still emitted and returned, but nothing consumes
-them, and <code>filtered_states_mean</code> is always <code>None</code>.</p>
+them, and every <code>filtered_*</code> output is always <code>None</code>.</p>
               </div>
             </td>
           </tr>
@@ -6072,8 +6072,8 @@ which is <span class="arithmatex">\([t_0, \dots, t_{N-1}]\)</span> under <code>"
         <p>Return a structured copy of this result.</p>
 <p>Converts fields as
 <a class="autorefs autorefs-internal" title="unflatten(layout: LayoutCollection) -> StructuredSimulatedResult" href="../../../developer/result_types/#dynestyx.types.SimulatedResult.unflatten">SimulatedResult.unflatten</a>
-does. <code>filtered_states_mean</code> is converted by <code>layout.state</code>, and
-<code>policy_states</code> is copied unchanged.</p>
+does. <code>filtered_states_mean</code> is converted by <code>layout.state</code>; the
+other <code>filtered_*</code> fields and <code>policy_states</code> are copied unchanged.</p>
 
 
     </div>
@@ -6102,7 +6102,8 @@ does. <code>filtered_states_mean</code> is converted by <code>layout.state</code
 
         <p>A <code>ControlledSimulatedResult</code> with structured values.</p>
 <p>Returned by <code>ControlledSimulatedResult.unflatten</code>. <code>filtered_states_mean</code>
-shares the structure of the state fields; <code>policy_states</code> is unchanged.
+shares the structure of the state fields; the other <code>filtered_*</code> fields
+and <code>policy_states</code> are unchanged.
 <code>flatten(layout)</code> converts back to a <code>ControlledSimulatedResult</code>.</p>
 
 
@@ -6232,7 +6233,7 @@ Raises <code>ValueError</code> if a structured field has no sublayout.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
         <script src="../../../../javascripts/mathjax.js"></script>
       

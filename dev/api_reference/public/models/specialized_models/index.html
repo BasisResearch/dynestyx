@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -5649,7 +5649,7 @@ argument mirrors the observation model contract <span class="arithmatex">\(p(y_t
                 <code>H</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="jax.experimental.sparse.JAXSparse">JAXSparse</span> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code>Array | JAXSparse | <span title="collections.abc.Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5670,7 +5670,7 @@ a sparse (e.g. <code>BCOO</code>) array for <code>EnKFConfig</code>/<code>PFConf
                 <code>R</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5687,7 +5687,7 @@ a sparse (e.g. <code>BCOO</code>) array for <code>EnKFConfig</code>/<code>PFConf
                 <code>D</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5705,7 +5705,7 @@ None, no control contribution is used.</p>
                 <code>bias</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5828,7 +5828,7 @@ observation noise covariance.</p>
                 <code>h</code>
             </td>
             <td>
-                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="State">State</span>, <span title="Control">Control</span>, <span title="Time">Time</span>], <span title="jax.Array">Array</span>]</code>
+                  <code><span title="collections.abc.Callable">Callable</span>[[State, Control, Time], Array]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5845,7 +5845,7 @@ function mapping <span class="arithmatex">\((x, u, t)\)</span> to the mean obser
                 <code>R</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6168,7 +6168,7 @@ covariance.</p>
                 <code>A</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6185,7 +6185,7 @@ covariance.</p>
                 <code>cov</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span></code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6202,7 +6202,7 @@ covariance.</p>
                 <code>B</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6220,7 +6220,7 @@ returning it.</p>
                 <code>bias</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span> | None</code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6343,7 +6343,7 @@ process-noise covariance (either constant or state/time dependent).</p>
                 <code>F</code>
             </td>
             <td>
-                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="State">State</span>, <span title="Control">Control</span>, <span title="Time">Time</span>, <span title="Time">Time</span>], <span title="State">State</span>]</code>
+                  <code><span title="collections.abc.Callable">Callable</span>[[State, Control, Time, Time], State]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6360,7 +6360,7 @@ function mapping <span class="arithmatex">\((x, u, t_k, t_{k+1})\)</span> to the
                 <code>cov</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | <span title="collections.abc.Callable">Callable</span>[[<span title="State">State</span>, <span title="Control">Control</span>, <span title="Time">Time</span>, <span title="Time">Time</span>], <span title="jax.Array">Array</span>]</code>
+                  <code>Array | <span title="collections.abc.Callable">Callable</span>[[State, Control, Time, Time], Array]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7013,7 +7013,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>A</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7029,7 +7029,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>L</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7045,7 +7045,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>H</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7061,7 +7061,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>R</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7078,7 +7078,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>B</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7095,7 +7095,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>b</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7112,7 +7112,7 @@ the noise term is <span class="arithmatex">\(L L^\top \, dt\)</span>.</p>
                 <code>D</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7129,7 +7129,7 @@ with shape <span class="arithmatex">\((d_y, d_u)\)</span>.</p>
                 <code>d</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7146,7 +7146,7 @@ with shape <span class="arithmatex">\((d_y, d_u)\)</span>.</p>
                 <code>initial_mean</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7163,7 +7163,7 @@ shape <span class="arithmatex">\((d_x,)\)</span>. Defaults to zeros.</p>
                 <code>initial_cov</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7252,7 +7252,7 @@ y_{t_k} &amp;\sim \mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
                 <code>A</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7269,7 +7269,7 @@ y_{t_k} &amp;\sim \mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
                 <code>Q</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7286,7 +7286,7 @@ y_{t_k} &amp;\sim \mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
                 <code>H</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7303,7 +7303,7 @@ y_{t_k} &amp;\sim \mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
                 <code>R</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span></code>
+                  <code>Array</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7320,7 +7320,7 @@ y_{t_k} &amp;\sim \mathcal{N}(H x_{t_k} + D u_{t_k} + d, R).
                 <code>B</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7337,7 +7337,7 @@ with shape <span class="arithmatex">\((d_x, d_u)\)</span>. If None, no transitio
                 <code>b</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7354,7 +7354,7 @@ with shape <span class="arithmatex">\((d_x, d_u)\)</span>. If None, no transitio
                 <code>D</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7371,7 +7371,7 @@ with shape <span class="arithmatex">\((d_y, d_u)\)</span>.</p>
                 <code>d</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7388,7 +7388,7 @@ with shape <span class="arithmatex">\((d_y, d_u)\)</span>.</p>
                 <code>initial_mean</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7405,7 +7405,7 @@ shape <span class="arithmatex">\((d_x,)\)</span>. Defaults to zeros.</p>
                 <code>initial_cov</code>
             </td>
             <td>
-                  <code><span title="jax.Array">Array</span> | None</code>
+                  <code>Array | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7557,7 +7557,7 @@ defaults to 0 when both are None.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
         <script src="../../../../javascripts/mathjax.js"></script>
       

@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -5807,9 +5807,11 @@ stateless policy. It must be initialized and passed explicitly if the policy req
 </table>
 <p>Array lengths are therefore identical and cannot identify which convention
 produced a result. Read <code>obs_times</code> and <code>ctrl_times</code> off the result
-rather than inferring alignment from shapes. With state estimation,
-<code>filtered_states_mean</code> also differs: <span class="arithmatex">\(N+1\)</span> beliefs under <code>"previous_transition"</code>
-(one per state), against <span class="arithmatex">\(N\)</span> under <code>"same_time"</code>. On the true state, it is <code>None</code>.</p>
+rather than inferring alignment from shapes. With state estimation, the
+recorded beliefs also differ: <code>filtered_states_mean</code> and the other <code>filtered_*</code>
+outputs hold <span class="arithmatex">\(N+1\)</span> beliefs under <code>"previous_transition"</code> (one per state), against
+<span class="arithmatex">\(N\)</span> under <code>"same_time"</code>. Which outputs are recorded follows the filter config's
+<code>record_filtered_*</code> fields, as for <code>Filter</code>. On the true state, they are all <code>None</code>.</p>
 <h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="discrete_control_loop_simulator/"><code>DiscreteControlLoopSimulator</code></a>: the closed-loop simulator and its result types, <code>ControlledSimulatedResult</code> and <code>StructuredControlledSimulatedResult</code>.</li>
@@ -5895,7 +5897,7 @@ rather than inferring alignment from shapes. With state estimation,
       <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["content.footnote.tooltips", "navigation.instant", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
         <script src="../../../javascripts/mathjax.js"></script>
       
