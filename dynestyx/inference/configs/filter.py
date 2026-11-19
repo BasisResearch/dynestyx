@@ -538,6 +538,10 @@ class PFConfig(PFBaseConfig):
 class RBPFConfig(BaseFilterConfig):
     r"""Rao-Blackwellized particle filter for switching linear dynamical systems.
 
+    With `dsx.plate`, all trajectories must share the SLDS initial-state,
+    transition, and observation model parameters. Filter trajectories
+    separately when they require different parameters.
+
     This filter samples particles over the discrete regime sequence and
     analytically marginalizes the continuous linear-Gaussian state with
     conditional Kalman updates.
@@ -557,11 +561,50 @@ class RBPFConfig(BaseFilterConfig):
             probabilities \(p(z_t \mid y_{1:t})\).
         filter_source (CDDynamaxOnlyFilterSource): Backend. Defaults to `"cd_dynamax"`.
 
-    References:
-        Fearnhead, P., & Clifford, P. (2003). On-line inference for hidden
-        Markov models via particle filters. Journal of the Royal Statistical
-        Society: Series B, 65(4), 887–899.
-        [DOI: 10.1111/1467-9868.00421](https://doi.org/10.1111/1467-9868.00421).
+    ??? note "Algorithm Reference"
+        Let \(z_t\) be the discrete regime, \(x_t\) the continuous state,
+        and \(y_t\) the observation. Conditional on a regime history
+        \(z_{1:t}^{(i)}\), the model is linear-Gaussian. Each particle
+        carries the Kalman filtered mean \(m_t^{(i)}\) and covariance
+        \(P_t^{(i)}\). With \(N\) particles and normalized weights \(w_t^{(i)}\),
+        the joint filtering distribution is approximated by the mixture
+
+        \[
+            p(z_t,x_t \mid y_{1:t}) \approx
+            \sum_{i=1}^{N} w_t^{(i)}\,
+            \mathbf{1}\{z_t=z_t^{(i)}\}\,
+            \mathcal{N}\!\left(x_t; m_t^{(i)},P_t^{(i)}\right).
+        \]
+
+        For a candidate next regime \(k\), let
+        \(g_t^{(i)}(k)=p(y_t \mid y_{1:t-1},z_{1:t-1}^{(i)},z_t=k)\)
+        be the Gaussian predictive density from the conditional Kalman step.
+        Let \(T_{jk}=p(z_t=k\mid z_{t-1}=j)\).
+
+        - With `proposal="prior"`, draw \(k\) from
+          \(T_{z_{t-1}^{(i)},:}\) and assign unnormalized weight
+          \(w_{t-1}^{(i)} g_t^{(i)}(k)\). Resample when the effective sample
+          size falls below `ess_threshold_ratio * n_particles`.
+        - With `proposal="optimal"`, enumerate all candidate regimes for each
+          particle and assign each branch unnormalized weight
+          \(w_{t-1}^{(i)} T_{z_{t-1}^{(i)},k} g_t^{(i)}(k)\).
+          Apply Fearnhead–Clifford resampling to return to \(N\) particles.
+
+        For either proposal, the sum of the unnormalized weights before
+        resampling estimates the predictive density of the current
+        observation. The marginal log-likelihood estimate sums the logs of
+        these normalizers over time.
+
+        References:
+
+        - Doucet, A., de Freitas, N., Murphy, K., & Russell, S. (2000).
+          Rao-Blackwellised Particle Filtering for Dynamic Bayesian Networks.
+          Proceedings of UAI, 176–183.
+          [Paper](https://www.cs.ubc.ca/~murphyk/papers/rbpf_uai00.pdf).
+        - Fearnhead, P., & Clifford, P. (2003). On-line inference for hidden
+          Markov models via particle filters. Journal of the Royal Statistical
+          Society: Series B, 65(4), 887–899.
+          [DOI: 10.1111/1467-9868.00421](https://doi.org/10.1111/1467-9868.00421).
     """
 
     n_particles: int = 1_000
