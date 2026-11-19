@@ -17,7 +17,7 @@ See [Comparing SDE discretization methods on Lorenz–63](../../../../deep_dives
 
 ## Configuration classes
 
-::: dynestyx.inference.configs.discretizer
+::: dynestyx.configs.discretizer
     options:
       members:
         - BaseDiscretizerConfig

@@ -4,7 +4,7 @@ import jax
 import jax.random as jr
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.simulator import SDESimulatorConfig
+from dynestyx.configs.simulator import SDESimulatorConfig
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import (
@@ -46,7 +46,7 @@ class SDESimulator(BaseSimulator):
     `dsx.sample(name, dynamics, predict_times=...)`. The active NumPyro seed
     supplies randomness, and the realized paths are then attached to the trace
     as deterministic sites. Pass an
-    [SDESimulatorConfig][dynestyx.inference.configs.simulator.SDESimulatorConfig]
+    [SDESimulatorConfig][dynestyx.configs.simulator.SDESimulatorConfig]
     to choose the SDE backend, solver, step-size controller, adjoint, step size,
     and Brownian-tree tolerance. Use
     [dsx.simulate][dynestyx.api.simulate] for standalone pure-JAX generation
@@ -108,7 +108,7 @@ class SDESimulator(BaseSimulator):
 
     Configurations and defaults
     ---------------------------
-    [SDESimulatorConfig][dynestyx.inference.configs.simulator.SDESimulatorConfig]
+    [SDESimulatorConfig][dynestyx.configs.simulator.SDESimulatorConfig]
     selects one of two backends:
 
     - `source="em_scan"` uses a fixed-step Euler--Maruyama `jax.lax.scan`.

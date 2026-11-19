@@ -13,12 +13,12 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
 )
 from jaxtyping import Array, Real
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filter import (
     EKFConfig,
     KFConfig,
     UKFConfig,
 )
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     BaseSmootherConfig,
 )
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (

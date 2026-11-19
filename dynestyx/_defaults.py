@@ -65,6 +65,13 @@ def _default_handlers(
     # Imports stay local: these interpretations themselves import this module.
     import numpyro.distributions as dist
 
+    from dynestyx.configs.discretizer import DiffraxSampleConfig
+    from dynestyx.configs.filter import (
+        EnKFConfig,
+        HMMConfig,
+        KFConfig,
+        PFConfig,
+    )
     from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
     from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
     from dynestyx.discretizers import (
@@ -73,13 +80,6 @@ def _default_handlers(
         discretize_dynamics,
     )
     from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-    from dynestyx.inference.configs.discretizer import DiffraxSampleConfig
-    from dynestyx.inference.configs.filter import (
-        EnKFConfig,
-        HMMConfig,
-        KFConfig,
-        PFConfig,
-    )
     from dynestyx.inference.filters import Filter
     from dynestyx.inference.latent.builder import LatentPathBuilder
     from dynestyx.models import (

@@ -13,18 +13,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
-from dynestyx.handlers import (
-    HandlesSelf,
-    _condition_intp,
-    _dynestyx_stack_kind,
-    _DynestyxStackKind,
-)
-from dynestyx.inference.checkers import (
-    _validate_batched_plate_alignment,
-    _validate_inference_supported_model_classes,
-    _validate_missing_observation_support,
-)
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filter import (
     BaseFilterConfig,
     ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
@@ -47,6 +36,17 @@ from dynestyx.inference.configs.filter import (
     PFResamplingConfig,
     TaperCovarianceFn,
     UKFConfig,
+)
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
+from dynestyx.inference.checkers import (
+    _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
+    _validate_missing_observation_support,
 )
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,

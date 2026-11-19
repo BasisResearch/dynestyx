@@ -21,7 +21,7 @@ import dynestyx as dsx
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
-from dynestyx.inference.configs.filter import EnKFConfig
+from dynestyx.configs.filter import EnKFConfig
 
 dynamics = dsx.DynamicalModel(
     initial_condition=dist.Delta(jnp.array([1.0, 2.0]), event_dim=1),

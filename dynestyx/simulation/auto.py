@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
-from dynestyx.inference.configs.filter import BaseFilterConfig
-from dynestyx.inference.configs.simulator import (
+from dynestyx.configs.filter import BaseFilterConfig
+from dynestyx.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
     SimulatorConfig,
@@ -54,9 +54,9 @@ class Simulator(BaseSimulator):
     seed supplies randomness; the rollout itself is computed with pure JAX and
     its realized arrays are then attached to the NumPyro trace. For
     continuous-time models, pass an
-    [ODESimulatorConfig][dynestyx.inference.configs.simulator.ODESimulatorConfig]
+    [ODESimulatorConfig][dynestyx.configs.simulator.ODESimulatorConfig]
     or
-    [SDESimulatorConfig][dynestyx.inference.configs.simulator.SDESimulatorConfig]
+    [SDESimulatorConfig][dynestyx.configs.simulator.SDESimulatorConfig]
     as `simulator_config` to control how the differential equation is solved.
     Use [dsx.simulate][dynestyx.api.simulate] instead when no NumPyro trace is
     needed and an explicit `rng_key` is more convenient.
@@ -132,7 +132,7 @@ class Simulator(BaseSimulator):
     Configurations and defaults
     ---------------------------
     `simulator_config` accepts a
-    [SimulatorConfig][dynestyx.inference.configs.simulator.SimulatorConfig] and
+    [SimulatorConfig][dynestyx.configs.simulator.SimulatorConfig] and
     forwards it to the selected continuous-time backend:
 
     - stochastic continuous-time models accept `SDESimulatorConfig`;

@@ -4,7 +4,7 @@
 
 The score rule objects themselves live on the companion [Scoring](../../evaluation/scoring.md) page.
 
-::: dynestyx.evaluation.configs
+::: dynestyx.configs.scoring
     options:
       members:
         - ObservationScoringConfig

@@ -6,6 +6,16 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
+from dynestyx.configs.discretizer import (
+    BaseDiscretizerConfig,
+    DiffraxSampleConfig,
+    DiscretizerConfig,
+    EulerMaruyamaConfig,
+    ExactAffineConfig,
+    LocalLinearizationConfig,
+    MeanTrajectoryLinearizationConfig,
+    ODEFlowConfig,
+)
 from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
 from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
 from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
@@ -15,16 +25,6 @@ from dynestyx.handlers import (
     _condition_intp,
     _dynestyx_stack_kind,
     _DynestyxStackKind,
-)
-from dynestyx.inference.configs.discretizer import (
-    BaseDiscretizerConfig,
-    DiffraxSampleConfig,
-    DiscretizerConfig,
-    EulerMaruyamaConfig,
-    ExactAffineConfig,
-    LocalLinearizationConfig,
-    MeanTrajectoryLinearizationConfig,
-    ODEFlowConfig,
 )
 from dynestyx.models import (
     AffineDrift,

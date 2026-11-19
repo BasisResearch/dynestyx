@@ -11,7 +11,7 @@ from jax import Array
 from jaxtyping import PRNGKeyArray, PyTree, Real
 from numpyro.distributions import Delta, Distribution
 
-from dynestyx.inference.configs.filter import BaseFilterConfig, PFConfig
+from dynestyx.configs.filter import BaseFilterConfig, PFConfig
 from dynestyx.inference.filters import _default_filter_config
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,

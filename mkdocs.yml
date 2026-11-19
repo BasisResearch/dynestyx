@@ -76,6 +76,7 @@ nav:
     - api_reference/index.md
     - Public API:
       - Overview: api_reference/public/index.md
+      - Configurations: api_reference/public/configurations.md
       - Models:
         - Core Models:
           - DynamicalModel: api_reference/public/models/core/dynamical_model.md

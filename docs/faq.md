@@ -139,7 +139,7 @@ parameters in `model`:
 
 ```python
 import jax.random as jr
-from dynestyx.inference.configs.mcmc import NUTSConfig
+from dynestyx.configs.mcmc import NUTSConfig
 from dynestyx.inference.mcmc import MCMCInference
 
 with dsx.Filter(filter_config=my_filter_config):

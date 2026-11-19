@@ -14,7 +14,7 @@ from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systema
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     EKFSmootherConfig,
     EnRTSSmootherConfig,
     KFSmootherConfig,

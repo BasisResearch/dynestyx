@@ -18,7 +18,7 @@ from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
 )
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filter import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,

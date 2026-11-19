@@ -4,7 +4,7 @@ import jax
 import jax.random as jr
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.simulator import ODESimulatorConfig
+from dynestyx.configs.simulator import ODESimulatorConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import (
@@ -44,7 +44,7 @@ class ODESimulator(BaseSimulator):
     `dsx.sample(name, dynamics, predict_times=...)`. The active NumPyro seed
     supplies randomness, and the computed arrays are then attached to the trace
     as deterministic sites. Pass an
-    [ODESimulatorConfig][dynestyx.inference.configs.simulator.ODESimulatorConfig]
+    [ODESimulatorConfig][dynestyx.configs.simulator.ODESimulatorConfig]
     to choose the Diffrax solver, step-size controller, adjoint, step size, and
     step limit. Use [dsx.simulate][dynestyx.api.simulate] for standalone
     pure-JAX generation without a NumPyro trace.
@@ -105,7 +105,7 @@ class ODESimulator(BaseSimulator):
     Configuration and defaults
     --------------------------
     ODEs are solved using Diffrax, and settings are controlled by
-    [ODESimulatorConfig][dynestyx.inference.configs.simulator.ODESimulatorConfig].
+    [ODESimulatorConfig][dynestyx.configs.simulator.ODESimulatorConfig].
     Its default settings are `diffrax.Tsit5()`,
     `diffrax.ConstantStepSize()`, `diffrax.RecursiveCheckpointAdjoint()`,
     `dt0=1e-3`, and `max_steps=100_000`. Pass different settings when the model

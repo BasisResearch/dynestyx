@@ -9,7 +9,7 @@ from jax import lax
 from jax.scipy.special import logsumexp
 from jaxtyping import Array, Bool, Float, Int, Real, Shaped
 
-from dynestyx.inference.configs.filter import HMMConfig
+from dynestyx.configs.filter import HMMConfig
 from dynestyx.models import DynamicalModel
 from dynestyx.models.core import DiscreteStateTransition
 from dynestyx.observation_missingness import (
