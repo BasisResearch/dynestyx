@@ -196,7 +196,7 @@ class EnRTSSmootherConfig(EnKFConfig, BaseSmootherConfig):
         perturb_measurements (bool | None): Whether to use stochastic
             perturbed-observation EnKF updates.
         inflation_delta (float | None): Ensemble inflation applied during the
-            forward pass.
+            forward pass. Defaults to `0.05`.
         localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
             Optional localization for the forward EnKF pass only.
         filter_source (FilterSource): Backend. Always `"cuthbert"`.

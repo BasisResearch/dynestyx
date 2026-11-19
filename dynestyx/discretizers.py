@@ -41,7 +41,7 @@ def _automatic_discretizer_config(
     | StochasticContinuousTimeStateEvolution,
 ) -> DiscretizerConfig:
     if isinstance(cte, DeterministicContinuousTimeStateEvolution):
-        return ODEFlowConfig()
+        return ODEFlowConfig(jitter_scale=1e-6)
     if (
         isinstance(cte.drift, AffineDrift)
         and cte.potential is None
@@ -122,7 +122,8 @@ def discretize_dynamics(
     observation-control alignment, and initial time. The state evolution uses
     the transition selected by `discretizer_config`.
 
-    When no config is provided, deterministic ODEs use their numerical flow,
+    When no config is provided, deterministic ODEs use their numerical flow
+    with a transition jitter scale of `1e-6`,
     affine SDEs with constant diffusion and no potential use an exact Gaussian
     transition, and other SDEs use Euler--Maruyama.
 
@@ -176,9 +177,10 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
             model(...)
     ```
 
-    When no config is provided, ODE models use their numerical flow, SDE models
-    with an affine drift use an exact Gaussian discretization, and other SDE
-    models use Euler--Maruyama.
+    When no config is provided, ODE models use their numerical flow with a
+    transition jitter scale of `1e-6`. Affine SDEs with constant diffusion and
+    no potential use an exact Gaussian transition, and other SDEs use
+    Euler--Maruyama.
 
     Attributes:
         discretizer_config: Explicit discretization config, or `None` for

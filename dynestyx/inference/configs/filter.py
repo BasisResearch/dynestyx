@@ -324,7 +324,7 @@ class EnKFConfig(EnKFBaseConfig):
     The primary tuning knob is `n_particles`, with more particles providing
     more accurate results at the cost of higher compute.
     If the ensemble collapses over long trajectories, increase
-    `inflation_delta` slightly (e.g. `0.05`–`0.2`).
+    `inflation_delta`.
 
     Supports missing observations via NaNs.
 
@@ -341,7 +341,7 @@ class EnKFConfig(EnKFBaseConfig):
             square-root variant. `None` defers to the backend default.
         inflation_delta (float | None): Scale ensemble anomalies by
             \(\sqrt{1 + \delta}\) before the update to prevent collapse.
-            `None` disables inflation.
+            Defaults to `0.05`. `None` disables inflation.
         localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
             Optional structured covariance localization. Distance-based
             localization provides built-in Gaussian and Gaspari-Cohn tapers or
@@ -410,6 +410,7 @@ class EnKFConfig(EnKFBaseConfig):
                 [Available Online](https://epubs.siam.org/doi/abs/10.1137/21M1434477).
     """
 
+    inflation_delta: float | None = 0.05
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
 

@@ -84,11 +84,13 @@ For missing observations, use [masked_observation_log_prob](../models/core/obser
 
 With no configuration, the method is chosen as follows:
 
-- a deterministic ODE is integrated with `ODEFlowConfig()`, producing a Delta transition at the numerical flow endpoint;
+- a deterministic ODE uses `ODEFlowConfig(jitter_scale=1e-6)`, producing a Normal transition centered at the numerical flow endpoint;
 - an `AffineDrift` with constant diffusion and no potential is discretized exactly; and
 - other SDE models use Euler--Maruyama discretization by default.
 
-Pass `ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)` to customize ODE integration; all Diffrax settings are taken from the nested `ODESimulatorConfig`.
+An explicit `ODEFlowConfig()` defaults to zero jitter and produces a Delta transition.
+Pass `ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)`
+to customize the solver and transition jitter.
 
 ## Local affine-Gaussian parameters
 
