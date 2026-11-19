@@ -23,6 +23,7 @@ from dynestyx.inference.integrations.cuthbert.discrete_filter import (
 from dynestyx.inference.utils.distribution_utils import (
     _cholesky_state_sequence_to_dists,
 )
+from dynestyx.inference.utils.numpyro_sites import filtered_state_outputs
 from dynestyx.models import (
     DynamicalModel,
     LayoutCollection,
@@ -31,7 +32,6 @@ from dynestyx.models import (
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import _ensure_trailing_dim, _tile_times
 from dynestyx.types import SimulatedResult, StructuredSimulatedResult
-from dynestyx.utils.recording import _should_record_field
 
 
 def filter_state_mean(state: Any) -> Real[Array, "..."]:
@@ -95,6 +95,25 @@ def filter_state_dist(state: Any, filter_config: BaseFilterConfig) -> Distributi
             "filter_state_dist currently only supports filter_source='cuthbert' only, got "
             f"{filter_config.filter_source!r}."
         )
+
+
+def _filtered_fields(
+    p_hats: Any, filter_config: BaseFilterConfig
+) -> dict[str, Real[Array, "..."]]:
+    """The `filtered_*` fields of a `ControlledSimulatedResult`.
+
+    Records the outputs `filter_config` asks for, as `Filter` does, with a
+    leading `n_simulations` axis of one.
+    """
+    fields = {
+        key: jnp.expand_dims(value, axis=0)
+        for key, value in filtered_state_outputs(p_hats, filter_config).items()
+    }
+    if "filtered_states_mean" in fields:
+        fields["filtered_states_mean"] = _ensure_trailing_dim(
+            fields["filtered_states_mean"]
+        )
+    return fields
 
 
 def _validate_policy_control(
@@ -176,6 +195,21 @@ class ControlledSimulatedResult(SimulatedResult):
     filtered_states_mean: (
         Real[Array, "n_simulations filtered_time state_dim"] | None
     ) = None
+    filtered_states_cov: (
+        Real[Array, "n_simulations filtered_time state_dim state_dim"] | None
+    ) = None
+    filtered_states_cov_diag: (
+        Real[Array, "n_simulations filtered_time state_dim"] | None
+    ) = None
+    filtered_states_chol_cov: (
+        Real[Array, "n_simulations filtered_time state_dim state_dim"] | None
+    ) = None
+    filtered_particles: (
+        Real[Array, "n_simulations filtered_time n_particles state_dim"] | None
+    ) = None
+    filtered_log_weights: (
+        Real[Array, "n_simulations filtered_time n_particles"] | None
+    ) = None
     policy_states: PyTree | None = None
 
     def unflatten(
@@ -185,8 +219,8 @@ class ControlledSimulatedResult(SimulatedResult):
 
         Converts fields as
         [SimulatedResult.unflatten][dynestyx.types.SimulatedResult.unflatten]
-        does. ``filtered_states_mean`` is converted by ``layout.state``, and
-        ``policy_states`` is copied unchanged.
+        does. ``filtered_states_mean`` is converted by ``layout.state``; the
+        other ``filtered_*`` fields and ``policy_states`` are copied unchanged.
         """
         return StructuredControlledSimulatedResult._from_flat(self, layout)
 
@@ -195,11 +229,17 @@ class StructuredControlledSimulatedResult(StructuredSimulatedResult):
     """A `ControlledSimulatedResult` with structured values.
 
     Returned by `ControlledSimulatedResult.unflatten`. `filtered_states_mean`
-    shares the structure of the state fields; `policy_states` is unchanged.
+    shares the structure of the state fields; the other `filtered_*` fields
+    and `policy_states` are unchanged.
     `flatten(layout)` converts back to a `ControlledSimulatedResult`.
     """
 
     filtered_states_mean: PyTree[Real[Array, "..."], " S"] | None = None
+    filtered_states_cov: Real[Array, "..."] | None = None
+    filtered_states_cov_diag: Real[Array, "..."] | None = None
+    filtered_states_chol_cov: Real[Array, "..."] | None = None
+    filtered_particles: Real[Array, "..."] | None = None
+    filtered_log_weights: Real[Array, "..."] | None = None
     policy_states: PyTree | None = None
 
     _field_sublayouts: ClassVar[dict[str, str]] = {
@@ -264,15 +304,15 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             `build_cuthbert_filter` accepts (see above). Defaults to
             `_default_filter_config(dynamics)` when `None`. The online one-step
             update currently requires `filter_source="cuthbert"`. Its
-            `record_filtered_states_mean`/`record_max_elems` fields gate
-            whether the `filtered_states_mean` output is recorded, exactly
-            as they do for `Filter` (see `dynestyx.utils.recording._should_record_field`).
+            `record_filtered_*` and `record_max_elems` fields gate which
+            `filtered_*` outputs are recorded, exactly as they do for
+            `Filter` (see `dynestyx.utils.recording._should_record_field`).
             Must not be given together with `use_true_state=True`, which
             filters nothing.
         use_true_state: Give the policy the true state $x_k$ instead of a
             filtered belief, and run no filter at all. Defaults to `False`.
             Observations are still emitted and returned, but nothing consumes
-            them, and `filtered_states_mean` is always `None`.
+            them, and every `filtered_*` output is always `None`.
         n_simulations: Currently only `1` is supported.
     """
 
@@ -593,17 +633,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
 
         # One filtered belief per observation, so N of them rather than one
         # per state: there is no y_N to condition x_N on.
-        mean_shape = filter_state_mean(p_hats).shape[1:]
-        record_mean = _should_record_field(
-            filter_config.record_filtered_states_mean,
-            (N, *mean_shape),
-            filter_config.record_max_elems,
-        )
-        filtered_states_mean = None
-        if record_mean:
-            filtered_states_mean = _ensure_trailing_dim(
-                jnp.expand_dims(filter_state_mean(p_hats), axis=0)
-            )
+        filtered = _filtered_fields(p_hats, filter_config)
 
         policy_states = None
         if s_0 is not None:
@@ -622,7 +652,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             obs_times=_tile_times(obs_times, 1),
             controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
             ctrl_times=_tile_times(ctrl_times, 1),
-            filtered_states_mean=filtered_states_mean,
+            **filtered,
             policy_states=policy_states,
         )
 
@@ -768,17 +798,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
         obs_times = times[1:]
         ctrl_times = times[:-1]
 
-        mean_shape = filter_state_mean(p_hat_0).shape
-        record_mean = _should_record_field(
-            filter_config.record_filtered_states_mean,
-            (N + 1, *mean_shape),
-            filter_config.record_max_elems,
-        )
-        filtered_states_mean = None
-        if record_mean:
-            filtered_states_mean = _ensure_trailing_dim(
-                jnp.expand_dims(filter_state_mean(p_hats), axis=0)
-            )
+        filtered = _filtered_fields(p_hats, filter_config)
 
         policy_states = None
         if s_0 is not None:
@@ -794,7 +814,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             obs_times=_tile_times(obs_times, 1),
             controls=_ensure_trailing_dim(jnp.expand_dims(us, axis=0)),
             ctrl_times=_tile_times(ctrl_times, 1),
-            filtered_states_mean=filtered_states_mean,
+            **filtered,
             policy_states=policy_states,
         )
 
