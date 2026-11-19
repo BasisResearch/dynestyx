@@ -23,6 +23,7 @@ from dynestyx.models.drifts import AffineDrift as _AffineDrift
 from dynestyx.models.mixed_state import (
     MixedStateDistribution,
     _extract_and_validate_mixed_state,
+    _validate_shared_slds_parameters,
 )
 
 
@@ -270,11 +271,12 @@ class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
 
     def __init__(
         self,
-        transition_matrix: Float[Array, "num_regimes num_regimes"],
-        A: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"],
-        cov: Float[Array, "num_regimes continuous_state_dim continuous_state_dim"],
-        B: Float[Array, "num_regimes continuous_state_dim control_dim"] | None = None,
-        bias: Float[Array, "num_regimes continuous_state_dim"] | None = None,
+        transition_matrix: Float[Array, "... num_regimes num_regimes"],
+        A: Float[Array, "... num_regimes continuous_state_dim continuous_state_dim"],
+        cov: Float[Array, "... num_regimes continuous_state_dim continuous_state_dim"],
+        B: Float[Array, "... num_regimes continuous_state_dim control_dim"]
+        | None = None,
+        bias: Float[Array, "... num_regimes continuous_state_dim"] | None = None,
         *,
         rounding: bool = False,
     ) -> None:
@@ -289,6 +291,14 @@ class SwitchingLinearGaussianStateEvolution(DiscreteTimeStateEvolution):
                 integer (ties to even) before validation. Defaults to False.
                 Nonfinite or out-of-range results raise an error.
         """
+        _validate_shared_slds_parameters(
+            "SwitchingLinearGaussianStateEvolution",
+            transition_matrix=(transition_matrix, 2),
+            A=(A, 3),
+            cov=(cov, 3),
+            B=(B, 3),
+            bias=(bias, 2),
+        )
         self.transition_matrix = transition_matrix
         self.A = A
         self.cov = cov

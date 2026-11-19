@@ -15,7 +15,10 @@ from dynestyx.models.covariances import (
     construct_gaussian,
     covariance_matrix,
 )
-from dynestyx.models.mixed_state import _extract_and_validate_mixed_state
+from dynestyx.models.mixed_state import (
+    _extract_and_validate_mixed_state,
+    _validate_shared_slds_parameters,
+)
 
 
 class LinearGaussianObservationParams(NamedTuple):
@@ -209,10 +212,10 @@ class SwitchingLinearGaussianObservation(ObservationModel):
 
     def __init__(
         self,
-        H: Float[Array, "num_regimes observation_dim continuous_state_dim"],
-        R: Float[Array, "num_regimes observation_dim observation_dim"],
-        D: Float[Array, "num_regimes observation_dim control_dim"] | None = None,
-        bias: Float[Array, "num_regimes observation_dim"] | None = None,
+        H: Float[Array, "... num_regimes observation_dim continuous_state_dim"],
+        R: Float[Array, "... num_regimes observation_dim observation_dim"],
+        D: Float[Array, "... num_regimes observation_dim control_dim"] | None = None,
+        bias: Float[Array, "... num_regimes observation_dim"] | None = None,
         *,
         rounding: bool = False,
     ) -> None:
@@ -226,6 +229,13 @@ class SwitchingLinearGaussianObservation(ObservationModel):
                 integer (ties to even) before validation. Defaults to False.
                 Nonfinite or out-of-range results raise an error.
         """
+        _validate_shared_slds_parameters(
+            "SwitchingLinearGaussianObservation",
+            H=(H, 3),
+            R=(R, 3),
+            D=(D, 3),
+            bias=(bias, 2),
+        )
         self.H = H
         self.R = R
         self.D = D

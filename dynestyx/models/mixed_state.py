@@ -7,6 +7,25 @@ from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray, Real
 from numpyro.distributions import constraints
 
 
+def _validate_shared_slds_parameters(
+    component: str, **parameters: tuple[Array | None, int]
+) -> None:
+    """Reject leading batch axes before constructing an SLDS component.
+
+    Constructor annotations leave leading axes unconstrained so this check can
+    give the same error with or without runtime type checking.
+    """
+    for name, (value, rank) in parameters.items():
+        if value is not None and value.ndim > rank:
+            raise ValueError(
+                "Plate-specific SLDS parameters are unsupported. "
+                f"`{component}.{name}` has shape {value.shape}, but expects "
+                f"a rank-{rank} array without leading plate axes. "
+                "Share the parameter across trajectories or filter each trajectory "
+                "separately with its own parameters."
+            )
+
+
 def _extract_and_validate_mixed_state(
     mixed_state: Real[Array, "*batch mixed_state_dim"],
     num_categories: int,
@@ -78,15 +97,21 @@ class MixedStateDistribution(dist.Distribution):
 
     def __init__(
         self,
-        categorical_probs: Float[Array, " num_categories"],
-        continuous_locs: Float[Array, "num_categories continuous_state_dim"],
+        categorical_probs: Float[Array, "... num_categories"],
+        continuous_locs: Float[Array, "... num_categories continuous_state_dim"],
         continuous_covs: Float[
-            Array, "num_categories continuous_state_dim continuous_state_dim"
+            Array, "... num_categories continuous_state_dim continuous_state_dim"
         ],
         validate_args: bool | None = None,
         *,
         rounding: bool = False,
     ) -> None:
+        _validate_shared_slds_parameters(
+            "MixedStateDistribution",
+            categorical_probs=(categorical_probs, 1),
+            continuous_locs=(continuous_locs, 2),
+            continuous_covs=(continuous_covs, 3),
+        )
         self.rounding = rounding
         self.categorical_probs = categorical_probs
         self.continuous_locs = continuous_locs

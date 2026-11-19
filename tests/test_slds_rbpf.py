@@ -187,46 +187,40 @@ def test_slds_rbpf_batched_predictive_trace_sites_are_finite():
     assert out["f_marginal_loglik"].shape[-1:] == (2,)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RBPF does not yet slice plate-specific switching parameters.",
+@pytest.mark.parametrize(
+    ("component", "parameter", "shared_value"),
+    [
+        (SwitchingLinearGaussianStateEvolution, "bias", jnp.zeros((2, 1))),
+        (SwitchingLinearGaussianObservation, "H", jnp.ones((2, 1, 1))),
+        (MixedStateDistribution, "categorical_probs", jnp.array([0.5, 0.5])),
+    ],
 )
-def test_slds_rbpf_plate_specific_bias_matches_separate_filters():
-    times = jnp.arange(3.0)
-    observations = jnp.ones((3, 1))
-    offsets = jnp.array([-1.0, 1.0])
-    key = jr.key(0)
-
-    def loglik(offset, obs_values):
-        # x_next = a[regime] * x + offset + noise, with unit noise variance.
-        unit = jnp.ones((2, 1, 1))
-        dynamics = DynamicalModel(
-            initial_condition=MixedStateDistribution(
-                jnp.array([0.5, 0.5]), jnp.zeros((2, 1)), unit
-            ),
-            state_evolution=SwitchingLinearGaussianStateEvolution(
-                transition_matrix=jnp.array([[0.9, 0.1], [0.1, 0.9]]),
-                A=jnp.array([0.4, 0.8]).reshape(2, 1, 1),
-                cov=unit,
-                bias=offset[..., None, None] * jnp.ones((2, 1)),
-            ),
-            observation_model=SwitchingLinearGaussianObservation(H=unit, R=unit),
-        )
-        result = dsx.sample("f", dynamics, obs_times=times, obs_values=obs_values)
-        assert result.marginal_loglik is not None
-        return result.marginal_loglik
-
+def test_slds_components_reject_plate_specific_parameters(
+    component, parameter, shared_value
+):
+    unit = jnp.ones((2, 1, 1))
+    kwargs = {
+        SwitchingLinearGaussianStateEvolution: {
+            "transition_matrix": jnp.array([[0.9, 0.1], [0.1, 0.9]]),
+            "A": unit,
+            "cov": unit,
+        },
+        SwitchingLinearGaussianObservation: {"H": unit, "R": unit},
+        MixedStateDistribution: {
+            "continuous_locs": jnp.zeros((2, 1)),
+            "continuous_covs": unit,
+        },
+    }[component]
     # The plate and the shared regime axis both have length two.
-    with Filter(RBPFConfig(n_particles=8, crn_seed=key)), dsx.plate("trajectories", 2):
-        plated = loglik(offsets, jnp.stack([observations, observations]))
-
-    separate = []
-    for offset, member_key in zip(offsets, jr.split(key, 2), strict=True):
-        with Filter(RBPFConfig(n_particles=8, crn_seed=member_key)):
-            separate.append(loglik(offset, observations))
-
-    assert plated.shape == (2,)
-    assert jnp.allclose(plated, jnp.stack(separate))
+    kwargs[parameter] = jnp.stack([shared_value, shared_value])
+    with (
+        dsx.plate("trajectories", 2),
+        pytest.raises(
+            ValueError,
+            match=rf"Plate-specific SLDS parameters are unsupported.*{component.__name__}\.{parameter}",
+        ),
+    ):
+        component(**kwargs)
 
 
 @pytest.mark.parametrize("scalar_observations", [False, True])
