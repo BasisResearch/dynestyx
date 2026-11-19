@@ -551,7 +551,7 @@ class RBPFConfig(BaseFilterConfig):
             and applies the optimal resampling scheme of Fearnhead and
             Clifford (2003).
         ess_threshold_ratio (float | None): Resampling threshold as a fraction
-            of `n_particles`. Defaults to `0.5` for the prior proposal.
+            of `n_particles`. The prior proposal uses the `PFConfig` default (`0.7`).
             Must be `None` for the optimal proposal, which does not use it.
         record_filtered_regime_probs (bool | None): Save filtered regime
             probabilities \(p(z_t \mid y_{1:t})\).
@@ -577,7 +577,9 @@ class RBPFConfig(BaseFilterConfig):
                 "leave it as None for proposal='optimal'."
             )
         if self.proposal == "prior" and self.ess_threshold_ratio is None:
-            object.__setattr__(self, "ess_threshold_ratio", 0.5)
+            object.__setattr__(
+                self, "ess_threshold_ratio", PFBaseConfig.ess_threshold_ratio
+            )
 
 
 @dataclasses.dataclass(frozen=True)
