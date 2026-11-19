@@ -162,9 +162,11 @@ $[t_0, \dots, t_{N-1}]$. They differ in exactly one place:
 
 Array lengths are therefore identical and cannot identify which convention
 produced a result. Read `obs_times` and `ctrl_times` off the result
-rather than inferring alignment from shapes. With state estimation,
-`filtered_states_mean` also differs: $N+1$ beliefs under `"previous_transition"`
-(one per state), against $N$ under `"same_time"`. On the true state, it is `None`.
+rather than inferring alignment from shapes. With state estimation, the
+recorded beliefs also differ: `filtered_states_mean` and the other `filtered_*`
+outputs hold $N+1$ beliefs under `"previous_transition"` (one per state), against
+$N$ under `"same_time"`. Which outputs are recorded follows the filter config's
+`record_filtered_*` fields, as for `Filter`. On the true state, they are all `None`.
 
 ## API
 
