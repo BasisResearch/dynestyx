@@ -88,9 +88,7 @@ With no configuration, the method is chosen as follows:
 - an `AffineDrift` with constant diffusion and no potential is discretized exactly; and
 - other SDE models use Euler--Maruyama discretization by default.
 
-An explicit `ODEFlowConfig()` defaults to zero jitter and produces a Delta transition.
-Pass `ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)`
-to customize the solver and transition jitter.
+An explicit `ODEFlowConfig()` defaults to zero jitter and produces a Delta transition. Pass `ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)` to customize the solver and transition jitter.
 
 ## Local affine-Gaussian parameters
 
