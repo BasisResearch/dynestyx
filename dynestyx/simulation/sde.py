@@ -55,10 +55,11 @@ class SDESimulator(BaseSimulator):
     Examples:
         Fast fixed-step Euler--Maruyama simulation:
 
+        >>> import dynestyx as dsx
         >>> def model(predict_times=None):
-        ...     dynamics = DynamicalModel(
+        ...     dynamics = dsx.DynamicalModel(
         ...         initial_condition=initial_dist,
-        ...         state_evolution=ContinuousTimeStateEvolution(
+        ...         state_evolution=dsx.ContinuousTimeStateEvolution(
         ...             drift=drift,
         ...             diffusion=diffusion,
         ...         ),
@@ -66,7 +67,7 @@ class SDESimulator(BaseSimulator):
         ...     )
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
         >>> config = dsx.configs.SDESimulatorConfig(source="em_scan", dt0=1e-3)
-        >>> with SDESimulator(config, n_simulations=4):
+        >>> with dsx.SDESimulator(config, n_simulations=4):
         ...     predictive = Predictive(
         ...         model, num_samples=10, condition_deterministic=False
         ...     )

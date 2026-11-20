@@ -23,11 +23,9 @@ handler receives the discretized dynamics:
 
 ```python
 import dynestyx as dsx
-from dynestyx.discretizers import Discretizer
-from dynestyx.inference.filters import Filter
 
-with Filter(dsx.configs.EnKFConfig(n_particles=100)):
-    with Discretizer(dsx.configs.MeanTrajectoryLinearizationConfig()):
+with dsx.Filter(dsx.configs.EnKFConfig(n_particles=100)):
+    with dsx.Discretizer(dsx.configs.MeanTrajectoryLinearizationConfig()):
         result = model(obs_times=obs_times, obs_values=obs_values)
 ```
 

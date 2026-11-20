@@ -63,7 +63,7 @@ def simulate(
             the model's state evolution. Discrete-time models do not accept a
             simulator configuration.
         control_policy: Optional control policy (see
-            `dynestyx.control.discrete_controller_simulators.PolicyCallable`).
+            `dynestyx.control.PolicyCallable`).
             When given, controls are computed online in closed loop via
             [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]
             instead of being drawn from the uncontrolled/`ctrl_values`

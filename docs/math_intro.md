@@ -38,11 +38,11 @@ Specifying the dynamical model in `dynestyx` follows a simple, unified interface
 
 The resulting constructor is simple, yet quite general:
 ```python 
-from dynestyx.models import DynamicalModel, ContinuousTimeStateEvolution
+import dynestyx as dsx
 
-dynamics = DynamicalModel(
+dynamics = dsx.DynamicalModel(
     initial_condition=dist.MultivariateNormal(...),
-    state_evolution=ContinuousTimeStateEvolution(
+    state_evolution=dsx.ContinuousTimeStateEvolution(
         drift=lambda x, u, t: ...,
         diffusion=dsx.FullDiffusion(...),
     ),

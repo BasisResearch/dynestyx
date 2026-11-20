@@ -64,10 +64,11 @@ class Simulator(BaseSimulator):
     Examples:
         Prior-predictive trajectories with automatic backend selection:
 
+        >>> import dynestyx as dsx
         >>> def model(predict_times=None):
-        ...     dynamics = DynamicalModel(...)
+        ...     dynamics = dsx.DynamicalModel(...)
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
-        >>> with Simulator(n_simulations=4):
+        >>> with dsx.Simulator(n_simulations=4):
         ...     predictive = Predictive(
         ...         model, num_samples=20, condition_deterministic=False
         ...     )
@@ -88,8 +89,8 @@ class Simulator(BaseSimulator):
         For posterior state rollouts, place the simulator outside the inference
         handler and retain deterministic sites from `Predictive`:
 
-        >>> with Simulator(n_simulations=100):
-        ...     with Filter():
+        >>> with dsx.Simulator(n_simulations=100):
+        ...     with dsx.Filter():
         ...         predictive = Predictive(
         ...             model,
         ...             posterior_samples=posterior_samples,
@@ -202,7 +203,7 @@ class Simulator(BaseSimulator):
         n_simulations: Number of independent trajectories drawn per model
             execution. Defaults to one and must be greater than or equal to one.
         control_policy: Optional control policy (see
-            `dynestyx.control.discrete_controller_simulators.PolicyCallable`).
+            `dynestyx.control.PolicyCallable`).
             When given, routing ignores `dynamics.state_evolution`'s type
             entirely and always uses
             [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]

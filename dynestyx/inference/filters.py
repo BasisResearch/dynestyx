@@ -214,11 +214,12 @@ class Filter(BaseLogFactorAdder):
     marginal log-likelihood as a NumPyro factor, allowing for downstream parameter inference.
 
     Examples:
+        >>> import dynestyx as dsx
         >>> def model(obs_times=None, obs_values=None):
-        ...     dynamics = DynamicalModel(...)
+        ...     dynamics = dsx.DynamicalModel(...)
         ...     return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
         >>> def filtered_model(t, y):
-        ...     with Filter(filter_config=KFConfig()):
+        ...     with dsx.Filter(filter_config=dsx.configs.KFConfig()):
         ...         return model(obs_times=t, obs_values=y)
 
     What this does

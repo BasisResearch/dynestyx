@@ -52,17 +52,18 @@ class ODESimulator(BaseSimulator):
     Examples:
         Prior-predictive ODE trajectories:
 
+        >>> import dynestyx as dsx
         >>> def model(predict_times=None):
-        ...     dynamics = DynamicalModel(
+        ...     dynamics = dsx.DynamicalModel(
         ...         initial_condition=initial_dist,
-        ...         state_evolution=ContinuousTimeStateEvolution(
+        ...         state_evolution=dsx.ContinuousTimeStateEvolution(
         ...             drift=lambda x, u, t: -rate * x,
         ...         ),
         ...         observation_model=observation,
         ...     )
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
         >>> config = dsx.configs.ODESimulatorConfig(dt0=1e-2)
-        >>> with ODESimulator(config, n_simulations=3):
+        >>> with dsx.ODESimulator(config, n_simulations=3):
         ...     predictive = Predictive(
         ...         model, num_samples=10, condition_deterministic=False
         ...     )
@@ -79,7 +80,7 @@ class ODESimulator(BaseSimulator):
         ...     rng_key=jr.PRNGKey(0),
         ...     predict_times=times,
         ...     n_simulations=3,
-        ...     simulator_config=ODESimulatorConfig(dt0=1e-2),
+        ...     simulator_config=dsx.configs.ODESimulatorConfig(dt0=1e-2),
         ... )
 
     What this does
