@@ -9,7 +9,7 @@ from numpyro.infer import SVI, Trace_ELBO
 from numpyro.infer.autoguide import AutoLowRankMultivariateNormal
 
 import dynestyx as dsx
-from dynestyx.inference.configs.filter import KFConfig
+from dynestyx.configs.filters import KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models.lti_dynamics import LTI_discrete
 from tests.test_utils import assert_finite, assert_tree_all_finite

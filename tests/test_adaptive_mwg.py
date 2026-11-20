@@ -8,7 +8,7 @@ from numpyro.infer.initialization import init_to_value
 
 import dynestyx.inference.integrations.blackjax.mcmc as blackjax_mcmc_module
 import dynestyx.inference.mcmc as mcmc_module
-from dynestyx.inference.configs.mcmc import (
+from dynestyx.configs.mcmc import (
     AdaptiveMWGConfig,
     NUTSConfig,
 )

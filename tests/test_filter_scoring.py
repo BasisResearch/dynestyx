@@ -11,16 +11,7 @@ from numpyro.handlers import seed, substitute, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
-from dynestyx.evaluation.configs import ObservationScoringConfig
-from dynestyx.evaluation.handlers import Evaluation
-from dynestyx.evaluation.observation_scoring import compute_observation_scores
-from dynestyx.evaluation.scoring import (
-    DawidSebastianiScore,
-    EnergyScore,
-    GaussianLogProbScore,
-    ObservationWiseCRPSScore,
-)
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
@@ -28,6 +19,15 @@ from dynestyx.inference.configs.filter import (
     ContinuousTimeUKFConfig,
     EnKFConfig,
     KFConfig,
+)
+from dynestyx.configs.scoring import ObservationScoringConfig
+from dynestyx.evaluation.handlers import Evaluation
+from dynestyx.evaluation.observation_scoring import compute_observation_scores
+from dynestyx.evaluation.scoring import (
+    DawidSebastianiScore,
+    EnergyScore,
+    GaussianLogProbScore,
+    ObservationWiseCRPSScore,
 )
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
@@ -116,7 +116,7 @@ def _make_observations():
     ctrl_values = jnp.sin(obs_times)[:, None]
     with SDESimulator(
         n_simulations=1,
-        simulator_config=dsx.SDESimulatorConfig(source="em_scan"),
+        simulator_config=dsx.configs.SDESimulatorConfig(source="em_scan"),
     ):
         samples = Predictive(
             _continuous_lti_model,
@@ -942,7 +942,7 @@ def test_evaluation_composes_with_filter_and_simulator_registration():
         ):
             with SDESimulator(
                 n_simulations=1,
-                simulator_config=dsx.SDESimulatorConfig(source="em_scan"),
+                simulator_config=dsx.configs.SDESimulatorConfig(source="em_scan"),
             ):
                 with Filter(filter_config=ContinuousTimeKFConfig()):
                     result = dsx.sample(

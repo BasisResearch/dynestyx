@@ -77,8 +77,7 @@ from dynestyx import (
     LatentPathBuilder,
     Simulator,
 )
-from dynestyx.discretizers import Discretizer
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
@@ -90,6 +89,7 @@ from dynestyx.inference.configs.filter import (
     PFConfig,
     UKFConfig,
 )
+from dynestyx.discretizers import Discretizer
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.hmm_filters import HMMConfig
 from tests.models import (

@@ -8,7 +8,7 @@ import pytest
 from numpyro.infer import MCMC, NUTS, BarkerMH, Predictive
 
 from dynestyx import DiscreteTimeSimulator
-from dynestyx.inference.configs.smoother import KFSmootherConfig, PFSmootherConfig
+from dynestyx.configs.smoother import KFSmootherConfig, PFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.models import discrete_time_lti_simplified_model

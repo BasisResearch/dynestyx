@@ -8,7 +8,7 @@ import pytest
 from numpyro.infer import Predictive
 
 from dynestyx import Simulator
-from dynestyx.inference.configs.mcmc import SGLDConfig
+from dynestyx.configs.mcmc import SGLDConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.mcmc import MCMCInference
 from tests.fixtures import _squeeze_sim_dims

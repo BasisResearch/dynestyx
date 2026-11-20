@@ -12,7 +12,8 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
-from dynestyx import ODESimulator, ODESimulatorConfig
+from dynestyx import ODESimulator
+from dynestyx.configs.simulator import ODESimulatorConfig
 from dynestyx.models import ContinuousTimeStateEvolution, DynamicalModel
 from dynestyx.models.observations import LinearGaussianObservation
 from tests.arviz_utils import save_posterior_plot

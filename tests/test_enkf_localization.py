@@ -15,13 +15,13 @@ from cuthbertlib.ensemble_kalman.localization import (
 )
 
 import dynestyx as dsx
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeEnKFConfig,
     EnKFConfig,
     EnKFLocalizationConfig,
     EnKFLocalizationFunctions,
 )
-from dynestyx.inference.configs.smoother import EnRTSSmootherConfig
+from dynestyx.configs.smoother import EnRTSSmootherConfig
 from dynestyx.inference.enkf_localization import resolve_enkf_localization
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,

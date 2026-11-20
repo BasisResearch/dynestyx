@@ -3,7 +3,7 @@ import jax.random as jr
 import numpyro.distributions as dist
 import pytest
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,

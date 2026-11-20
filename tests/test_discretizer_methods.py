@@ -9,6 +9,12 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from dynestyx.configs.filters import EnKFConfig, PFConfig
+from dynestyx.configs.scoring import ObservationScoringConfig
+from dynestyx.configs.simulator import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+)
 from dynestyx.discretizers import (
     DiffraxSampleConfig,
     Discretizer,
@@ -18,14 +24,8 @@ from dynestyx.discretizers import (
     ODEFlowConfig,
     discretize_state_evolution,
 )
-from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.handlers import Evaluation
 from dynestyx.evaluation.scoring import EnergyScore, GaussianLogProbScore
-from dynestyx.inference.configs.filter import EnKFConfig, PFConfig
-from dynestyx.inference.configs.simulator import (
-    ODESimulatorConfig,
-    SDESimulatorConfig,
-)
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.models import (

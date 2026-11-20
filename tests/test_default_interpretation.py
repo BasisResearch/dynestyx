@@ -20,11 +20,11 @@ from numpyro.optim import Adam
 
 import dynestyx as dsx
 from dynestyx._defaults import _default_handlers
+from dynestyx.configs.discretizer import DiffraxSampleConfig, ODEFlowConfig
+from dynestyx.configs.filters import EnKFConfig, HMMConfig, KFConfig, PFConfig
 from dynestyx.control import ControlledSimulatedResult, DiscreteControlLoopSimulator
 from dynestyx.handlers import _condition_intp
 from dynestyx.handlers import _DynestyxStackKind as Kind
-from dynestyx.inference.configs.discretizer import DiffraxSampleConfig, ODEFlowConfig
-from dynestyx.inference.configs.filter import EnKFConfig, HMMConfig, KFConfig, PFConfig
 from dynestyx.types import ConditionedResult, LatentStateResult
 
 
@@ -228,7 +228,7 @@ def test_default_hmm_filter_matches_explicit(caplog, entry, gaussian):
         _run(
             dynamics,
             entry=entry,
-            contexts=[dsx.Evaluation(dsx.ObservationScoringConfig())],
+            contexts=[dsx.Evaluation(dsx.configs.ObservationScoringConfig())],
             predictions=False,
         )
 
@@ -402,7 +402,7 @@ def test_partial_stacks_match_explicit(caplog, stage):
     factories = {
         "simulator": lambda: [dsx.Simulator()],
         "filter": lambda: [dsx.Filter(KFConfig(filter_source="cuthbert"))],
-        "evaluation": lambda: [dsx.Evaluation(dsx.ObservationScoringConfig())],
+        "evaluation": lambda: [dsx.Evaluation(dsx.configs.ObservationScoringConfig())],
     }
     explicit = (
         [dsx.Simulator(), dsx.LatentPathBuilder()]
@@ -411,7 +411,7 @@ def test_partial_stacks_match_explicit(caplog, stage):
     )
     if stage == "evaluation":
         explicit = [
-            dsx.Evaluation(dsx.ObservationScoringConfig()),
+            dsx.Evaluation(dsx.configs.ObservationScoringConfig()),
             dsx.Simulator(),
             dsx.Filter(EnKFConfig()),
         ]
@@ -517,7 +517,10 @@ def test_defaults_preserve_closed_loop_simulator(caplog, factory, observations):
 
 @pytest.mark.parametrize(
     "simulator",
-    [dsx.SDESimulator(), dsx.Simulator(simulator_config=dsx.SDESimulatorConfig())],
+    [
+        dsx.SDESimulator(),
+        dsx.Simulator(simulator_config=dsx.configs.SDESimulatorConfig()),
+    ],
 )
 def test_defaults_do_not_override_explicit_native_simulator(simulator):
     with pytest.raises(ValueError, match="explicit simulator.*continuous-time"):
@@ -525,7 +528,7 @@ def test_defaults_do_not_override_explicit_native_simulator(simulator):
 
 
 def test_explicit_native_simulator_prior_remains_native(caplog):
-    simulator = dsx.Simulator(simulator_config=dsx.SDESimulatorConfig(dt0=0.1))
+    simulator = dsx.Simulator(simulator_config=dsx.configs.SDESimulatorConfig(dt0=0.1))
     with caplog.at_level(logging.INFO, logger="dynestyx"):
         _run(_lti(True), contexts=[simulator], observations=False)
     assert isinstance(simulator.simulator, dsx.SDESimulator)
@@ -563,7 +566,7 @@ def test_default_evaluation_rejects_unsupported_observations():
     with pytest.raises(ValueError, match="Automatic Evaluation requires"):
         _run(
             _nonlinear(gaussian=False),
-            contexts=[dsx.Evaluation(dsx.ObservationScoringConfig())],
+            contexts=[dsx.Evaluation(dsx.configs.ObservationScoringConfig())],
         )
 
 

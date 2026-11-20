@@ -12,12 +12,12 @@ from jaxtyping import TypeCheckError
 from numpyro.handlers import seed
 
 import dynestyx as dsx
+from dynestyx.configs.filters import EKFConfig
 from dynestyx.control import (
     ControlledSimulatedResult,
     StructuredControlledSimulatedResult,
     filter_state_mean,
 )
-from dynestyx.inference.configs.filter import EKFConfig
 
 
 def _layouts():
