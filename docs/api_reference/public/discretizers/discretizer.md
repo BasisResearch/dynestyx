@@ -79,11 +79,16 @@ For missing observations, use [masked_observation_log_prob](../models/core/obser
 
 With no configuration, the method is chosen as follows:
 
-- a deterministic ODE is integrated with `dsx.configs.ODEFlowConfig()`, producing a Delta transition at the numerical flow endpoint;
-- an `AffineDrift` with constant diffusion and no potential is discretized exactly; and
-- other SDE models use Euler--Maruyama discretization by default.
+- Deterministic ODEs use `dsx.configs.ODEFlowConfig(jitter_scale=1e-6)` and
+  produce a Gaussian transition centered at the numerical flow endpoint.
+- Models with an `AffineDrift`, constant diffusion, and no potential are
+  discretized exactly.
+- Other SDE models use Euler--Maruyama discretization.
 
-Pass `dsx.configs.ODEFlowConfig(simulator_config=dsx.configs.ODESimulatorConfig(...), jitter_scale=...)` to customize ODE integration; all Diffrax settings are taken from the nested `ODESimulatorConfig`.
+An explicit `dsx.configs.ODEFlowConfig()` defaults to zero jitter and
+produces a Delta transition. To customize the solver, pass a
+`dsx.configs.ODESimulatorConfig` as `simulator_config`. Set `jitter_scale` to
+control the transition jitter.
 
 ## Local affine-Gaussian parameters
 

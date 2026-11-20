@@ -180,10 +180,10 @@ def test_ode_flow_rejects_invalid_jitter_scale(jitter_scale):
 
 def test_ode_flow_automatic_routing_and_config_type_errors():
     ode = _ode_state_evolution()
-    assert isinstance(
-        discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01),
-        dist.Delta,
-    )
+    transition = discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01)
+    assert isinstance(transition, dist.Independent)
+    assert isinstance(transition.base_dist, dist.Normal)
+    assert jnp.all(transition.base_dist.scale == 1e-6)
 
     with pytest.raises(TypeError, match="requires a stochastic"):
         discretize_state_evolution(ode, ExactAffineConfig())
