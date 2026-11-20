@@ -19,7 +19,7 @@ from dynestyx.configs.discretizer import (
 from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
 from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
 from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
-from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
+from dynestyx.discretization.ode_flow import ode_flow_state_evolution
 from dynestyx.handlers import (
     HandlesSelf,
     _condition_intp,
@@ -73,7 +73,7 @@ def discretize_state_evolution(
     resolved = _automatic_discretizer_config(cte) if config is None else config
     if isinstance(cte, DeterministicContinuousTimeStateEvolution):
         if isinstance(resolved, ODEFlowConfig):
-            return _ODEFlowStateEvolution(cte, resolved)
+            return ode_flow_state_evolution(cte, resolved)
         raise TypeError(
             f"{type(resolved).__name__} requires a stochastic continuous-time "
             "state evolution; got DeterministicContinuousTimeStateEvolution."
