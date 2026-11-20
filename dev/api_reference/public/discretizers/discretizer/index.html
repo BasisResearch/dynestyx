@@ -5724,11 +5724,11 @@ For missing observations, use <a href="../../models/core/observation_model/#mask
 <h2 id="automatic-routing">Automatic routing<a class="headerlink" href="#automatic-routing" title="Permanent link">&para;</a></h2>
 <p>With no configuration, the method is chosen as follows:</p>
 <ul>
-<li>a deterministic ODE is integrated with <code>ODEFlowConfig()</code>, producing a Delta transition at the numerical flow endpoint;</li>
+<li>a deterministic ODE uses <code>ODEFlowConfig(jitter_scale=1e-6)</code>, producing a Gaussian state evolution centered at the numerical flow endpoint;</li>
 <li>an <code>AffineDrift</code> with constant diffusion and no potential is discretized exactly; and</li>
 <li>other SDE models use Euler--Maruyama discretization by default.</li>
 </ul>
-<p>Pass <code>ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)</code> to customize ODE integration; all Diffrax settings are taken from the nested <code>ODESimulatorConfig</code>.</p>
+<p>An explicit <code>ODEFlowConfig()</code> defaults to zero jitter and produces a Delta transition. Pass <code>ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)</code> to customize the solver and transition jitter.</p>
 <h2 id="local-affine-gaussian-parameters">Local affine-Gaussian parameters<a class="headerlink" href="#local-affine-gaussian-parameters" title="Permanent link">&para;</a></h2>
 <p>Use <a href="../../models/core/drifts/#linearize_drift">linearize_drift</a> to construct
 a local affine drift, then discretize it with <code>ExactAffineConfig</code>. This
@@ -5810,7 +5810,8 @@ fixed over each interval. No linearization state is needed.</p>
 <p>Preserves the initial condition, observation model, control metadata,
 observation-control alignment, and initial time. The state evolution uses
 the transition selected by <code>discretizer_config</code>.</p>
-<p>When no config is provided, deterministic ODEs use their numerical flow,
+<p>When no config is provided, deterministic ODEs use their numerical flow
+with a transition jitter scale of <code>1e-6</code>,
 affine SDEs with constant diffusion and no potential use an exact Gaussian
 transition, and other SDEs use Euler--Maruyama.</p>
 

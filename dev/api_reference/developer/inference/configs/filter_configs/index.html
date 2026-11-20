@@ -6675,6 +6675,19 @@ the Cuthbert-backed discrete <code>EnKFConfig</code>.</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
+            <td><code><span title="dynestyx.inference.configs.filter.ContinuousTimeEnKFConfig.inflation_delta">inflation_delta</span></code></td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scale deviations from the ensemble mean by
+<span class="arithmatex">\(1 + \delta\)</span> for the observation update, after computing the step's
+log likelihood. Defaults to <code>0.05</code>. <code>None</code> disables inflation.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
             <td><code><span title="dynestyx.inference.configs.filter.ContinuousTimeEnKFConfig.filter_source">filter_source</span></code></td>
             <td>
                   <code><span title="dynestyx.inference.configs.filter.FilterSource">FilterSource</span></code>
@@ -7168,7 +7181,7 @@ use <code>PFConfig</code> instead.</p>
 <p>The primary tuning knob is <code>n_particles</code>, with more particles providing
 more accurate results at the cost of higher compute.
 If the ensemble collapses over long trajectories, increase
-<code>inflation_delta</code> slightly (e.g. <code>0.05</code>–<code>0.2</code>).</p>
+<code>inflation_delta</code>.</p>
 <p>Supports missing observations via NaNs.</p>
 
 
@@ -7229,9 +7242,9 @@ square-root variant. <code>None</code> defers to the backend default.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Scale ensemble anomalies by
-<span class="arithmatex">\(\sqrt{1 + \delta}\)</span> before the update to prevent collapse.
-<code>None</code> disables inflation.</p>
+                <p>Scale deviations from the ensemble mean by
+<span class="arithmatex">\(1 + \delta\)</span> after propagation, before scoring and updating.
+Defaults to <code>0.05</code>. <code>None</code> disables inflation.</p>
               </div>
             </td>
           </tr>

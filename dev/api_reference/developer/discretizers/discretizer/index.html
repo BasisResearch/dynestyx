@@ -5961,9 +5961,10 @@ context may then use the resulting <code>DiscreteTimeStateEvolution</code>:</p>
     <span class="k">with</span> <span class="n">Discretizer</span><span class="p">(</span><span class="n">MeanTrajectoryLinearizationConfig</span><span class="p">()):</span>
         <span class="n">model</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 </code></pre></div>
-<p>When no config is provided, ODE models use their numerical flow, SDE models
-with an affine drift use an exact Gaussian discretization, and other SDE
-models use Euler--Maruyama.</p>
+<p>When no config is provided, ODE models use their numerical flow with a
+transition jitter scale of <code>1e-6</code>. Affine SDEs with constant diffusion and
+no potential use an exact Gaussian transition, and other SDEs use
+Euler--Maruyama.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -6670,7 +6671,8 @@ after integrating the flow. Defaults to <code>0.0</code>.</p>
 <p>Preserves the initial condition, observation model, control metadata,
 observation-control alignment, and initial time. The state evolution uses
 the transition selected by <code>discretizer_config</code>.</p>
-<p>When no config is provided, deterministic ODEs use their numerical flow,
+<p>When no config is provided, deterministic ODEs use their numerical flow
+with a transition jitter scale of <code>1e-6</code>,
 affine SDEs with constant diffusion and no potential use an exact Gaussian
 transition, and other SDEs use Euler--Maruyama.</p>
 

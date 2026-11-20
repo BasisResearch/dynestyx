@@ -5804,7 +5804,7 @@ for ODEs. Their internal integration steps are independent of <code>predict_time
 An explicit <code>Discretizer</code> instead selects simulation of the discrete transitions.
 Automatic continuous-time filtering adds discretization: Kalman filtering uses
 the default discretizer, nonlinear SDE ensemble/particle filtering uses
-<code>DiffraxSampleConfig</code>, and ODE filtering uses <code>ODEFlowConfig</code>.
+<code>DiffraxSampleConfig</code>, and ODE filtering uses <code>ODEFlowConfig(jitter_scale=1e-6)</code>.
 Explicit inference handlers retain their continuous-time behavior, including when
 an automatic simulator is added. An explicit native simulator or solver config
 must remain compatible with the model reaching it; incompatible combinations
@@ -5813,9 +5813,8 @@ raise instead of changing that configuration.</p>
 observation time, and LPB with traced observation arrays needs fixed missingness
 metadata. A <a href="../inference/prepared_model/">PreparedModel</a> wrapper can prepare and
 retain that metadata; it can also be supplied through <code>missing_obs_metadata</code>.
-No default infers identity
-observations or adds numerical jitter. Equal state and observation dimensions
-alone do not imply noise-free observations.</p>
+Use an explicit observation model to specify noise-free measurements. Equal
+state and observation dimensions alone do not imply noise-free observations.</p>
 <p>For example, a model can request predictions without an explicit simulator:</p>
 <div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">numpyro</span><span class="o">.</span><span class="n">handlers</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">rng_seed</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
     <span class="n">prior</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="s2">"f"</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">predict_times</span><span class="o">=</span><span class="n">times</span><span class="p">)</span>
