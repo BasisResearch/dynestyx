@@ -22,10 +22,11 @@ Place `Discretizer` *inside* the inference or simulation context, so the outer
 handler receives the discretized dynamics:
 
 ```python
-import dynestyx as dsx
+from dynestyx import Discretizer, Filter
+from dynestyx.configs import EnKFConfig, MeanTrajectoryLinearizationConfig
 
-with dsx.Filter(dsx.configs.EnKFConfig(n_particles=100)):
-    with dsx.Discretizer(dsx.configs.MeanTrajectoryLinearizationConfig()):
+with Filter(EnKFConfig(n_particles=100)):
+    with Discretizer(MeanTrajectoryLinearizationConfig()):
         result = model(obs_times=obs_times, obs_values=obs_values)
 ```
 

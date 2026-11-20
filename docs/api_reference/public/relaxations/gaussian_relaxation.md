@@ -17,24 +17,35 @@ There are two ways to apply the same transformation:
 Use `GaussianRelaxation` with the [handler order](../handlers.md#handler-order):
 
 ```python
-import dynestyx as dsx
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 
-dynamics = dsx.DynamicalModel(
+import dynestyx as dsx
+from dynestyx import (
+    DeterministicObservation,
+    DeterministicStateEvolution,
+    DiagonalCovariance,
+    DynamicalModel,
+    Filter,
+    FullCovariance,
+    GaussianRelaxation,
+)
+from dynestyx.configs import EnKFConfig
+
+dynamics = DynamicalModel(
     initial_condition=dist.Delta(jnp.array([1.0, 2.0]), event_dim=1),
-    state_evolution=dsx.DeterministicStateEvolution(
+    state_evolution=DeterministicStateEvolution(
         lambda x, u, t_now, t_next: x + (t_next - t_now) * jnp.sin(x)
     ),
-    observation_model=dsx.DeterministicObservation(lambda x, u, t: x**2),
+    observation_model=DeterministicObservation(lambda x, u, t: x**2),
 )
 
-with dsx.Filter(dsx.configs.EnKFConfig()):
-    with dsx.GaussianRelaxation(
+with Filter(EnKFConfig()):
+    with GaussianRelaxation(
         initial_condition_cov=0.05,
-        state_evolution_cov=dsx.DiagonalCovariance(variance=jnp.array([0.01, 0.02])),
-        observation_model_cov=dsx.FullCovariance(0.1 * jnp.eye(2)),
+        state_evolution_cov=DiagonalCovariance(variance=jnp.array([0.01, 0.02])),
+        observation_model_cov=FullCovariance(0.1 * jnp.eye(2)),
     ):
         result = dsx.condition(
             "trajectory", dynamics,

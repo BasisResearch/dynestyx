@@ -215,11 +215,13 @@ class Filter(BaseLogFactorAdder):
 
     Examples:
         >>> import dynestyx as dsx
+        >>> from dynestyx import DynamicalModel, Filter
+        >>> from dynestyx.configs import KFConfig
         >>> def model(obs_times=None, obs_values=None):
-        ...     dynamics = dsx.DynamicalModel(...)
+        ...     dynamics = DynamicalModel(...)
         ...     return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
         >>> def filtered_model(t, y):
-        ...     with dsx.Filter(filter_config=dsx.configs.KFConfig()):
+        ...     with Filter(filter_config=KFConfig()):
         ...         return model(obs_times=t, obs_values=y)
 
     What this does
