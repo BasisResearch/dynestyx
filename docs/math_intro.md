@@ -78,9 +78,9 @@ There are two entry points:
 
 Both inspect the model and automatically select discrete-time, ODE, or SDE
 simulation. For a differential equation, pass the corresponding
-[`dsx.configs.ODESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+[`dsx.configs.ODESimulatorConfig`](api_reference/public/configurations/simulator_configs.md)
 or
-[`dsx.configs.SDESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+[`dsx.configs.SDESimulatorConfig`](api_reference/public/configurations/simulator_configs.md)
 through `simulator_config` to control the numerical solver. Discrete-time
 models do not require a simulator configuration. In every case,
 `n_simulations` specifies how many independent trajectories to generate.

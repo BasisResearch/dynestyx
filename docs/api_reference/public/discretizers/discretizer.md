@@ -32,7 +32,7 @@ with Filter(EnKFConfig(n_particles=100)):
 
 The configuration, here `MeanTrajectoryLinearizationConfig`, selects the
 discretization method. See
-[Discretizer configurations](../inference/configs/discretizer_configs.md) to
+[Discretizer configurations](../configurations/discretizer_configs.md) to
 compare them.
 
 ## Direct form

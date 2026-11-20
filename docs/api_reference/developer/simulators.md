@@ -9,6 +9,8 @@ For pure-JAX forward generation, user-facing code should prefer
 handler implementations used by `dsx.sample(...)` and by posterior rollout from
 `Filter`/`Smoother`.
 
+See [Simulator configurations](configurations/simulator_configs.md).
+
 !!! note "When to use each time argument"
     - **`predict_times`**: use this when you want rollout trajectories at specific
       times for simulation and/or post-filter rollout.

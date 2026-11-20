@@ -224,7 +224,7 @@ This returns a
 `dsx.simulate` auto-routes to the discrete-time, ODE, or SDE backend. For a
 differential equation, pass an
 [`ODESimulatorConfig` or
-`SDESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+`SDESimulatorConfig`](api_reference/public/configurations/simulator_configs.md)
 through `simulator_config`. The same `n_simulations` contract holds for all
 three lower-level simulators.
 

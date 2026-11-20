@@ -13,12 +13,13 @@ Discretizer configs specify the discretization method used by a `Discretizer` ha
 | `MeanTrajectoryLinearizationConfig` | General differentiable drift and diffusion | Gaussian density and samples | Joint mean/covariance ODE with Jacobians | Tracks the within-interval trajectory |
 | `DiffraxSampleConfig` | General SDE supported by a Brownian-increment Diffrax solver | Samples only | Numerical SDE solve | Accurate simulation, but no transition density |
 
-See [Comparing SDE discretization methods on Lorenz–63](../../../../deep_dives/sde_discretization_comparison.ipynb) for a worked comparison under a common EnKF and NUTS inference protocol.
+See [Comparing SDE discretization methods on Lorenz–63](../../../deep_dives/sde_discretization_comparison.ipynb) for a worked comparison under a common EnKF and NUTS inference protocol.
 
 ## Configuration classes
 
 ::: dynestyx.configs.discretizer
     options:
+      skip_local_inventory: true
       members:
         - BaseDiscretizerConfig
         - DiscretizerConfig

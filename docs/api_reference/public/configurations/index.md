@@ -12,7 +12,7 @@ filter_handler = dsx.Filter(filter_config=dsx.configs.EnKFConfig(n_particles=64)
 ## Filters
 
 Pass a filter config to `dsx.Filter(filter_config=...)`.
-See [Filter configurations](inference/configs/filter_configs.md) for algorithm and backend choices.
+See [Filter configurations](filter_configs.md) for algorithm and backend choices.
 
 ### Discrete-time filters
 
@@ -45,7 +45,7 @@ These filters handle continuous-time dynamics with discrete observations.
 ## Smoothers
 
 Pass a smoother config to `dsx.Smoother(smoother_config=...)`.
-See [Smoother configurations](inference/configs/smoother_configs.md) for supported backends and options.
+See [Smoother configurations](smoother_configs.md) for supported backends and options.
 
 - `dsx.configs.KFSmootherConfig`
 - `dsx.configs.EKFSmootherConfig`
@@ -58,7 +58,7 @@ See [Smoother configurations](inference/configs/smoother_configs.md) for support
 ## MCMC
 
 Pass a sampler config to `MCMCInference(mcmc_config=..., model=...)`.
-See [MCMC configurations](inference/configs/mcmc_configs.md) for sampler and backend options.
+See [MCMC configurations](mcmc_configs.md) for sampler and backend options.
 
 - `dsx.configs.NUTSConfig`
 - `dsx.configs.HMCConfig`
@@ -70,7 +70,7 @@ See [MCMC configurations](inference/configs/mcmc_configs.md) for sampler and bac
 ## Discretizers
 
 Pass a discretizer config to `dsx.Discretizer(discretizer_config=...)`.
-See [Discretizer configurations](inference/configs/discretizer_configs.md) for method selection and the `dsx.configs.DiscretizerConfig` type alias.
+See [Discretizer configurations](discretizer_configs.md) for method selection and the `dsx.configs.DiscretizerConfig` type alias.
 
 - `dsx.configs.ODEFlowConfig`
 - `dsx.configs.EulerMaruyamaConfig`
@@ -82,7 +82,7 @@ See [Discretizer configurations](inference/configs/discretizer_configs.md) for m
 ## Simulators
 
 Pass a simulator config to `dsx.Simulator(simulator_config=...)`.
-See [Simulator configurations](simulators/simulator_configs.md) for solver settings and the `dsx.configs.SimulatorConfig` type alias.
+See [Simulator configurations](simulator_configs.md) for solver settings and the `dsx.configs.SimulatorConfig` type alias.
 
 - `dsx.configs.ODESimulatorConfig`
 - `dsx.configs.SDESimulatorConfig`
@@ -90,4 +90,4 @@ See [Simulator configurations](simulators/simulator_configs.md) for solver setti
 ## Observation scoring
 
 Pass `dsx.configs.ObservationScoringConfig` to `dsx.Evaluation(observation_scoring_config=...)`.
-See [Scoring configs](inference/configs/scoring_configs.md) for score and predictive sample options.
+See [Scoring configs](scoring_configs.md) for score and predictive sample options.
