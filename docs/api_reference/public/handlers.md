@@ -21,6 +21,13 @@ with Filter(EKFConfig()):
 
 will implement the `dsx.sample` primitive using an extended Kalman filter. For more details, see the corresponding [developer API page](../developer/handlers.md).
 
+!!! warning "SLDS parameters must be shared across plate members"
+    With `Filter(RBPFConfig())`, `dsx.plate` can batch multiple observed
+    trajectories of a switching linear dynamical system. Every member must
+    share the initial-state, switching transition, and observation model
+    parameters. If trajectories need different parameters, filter them
+    separately. See the [SLDS tutorial](../../tutorials/gentle_intro/SLDS_generic_model_tutorial.ipynb).
+
 ## Default interpretations
 
 `sample` and `condition` supply missing inference and prediction handlers, and
