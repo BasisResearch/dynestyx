@@ -9,17 +9,17 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 from jaxtyping import Array, Real
 
+from dynestyx.configs.discretizer import (
+    BaseDiscretizerConfig,
+    EulerMaruyamaConfig,
+    LocalLinearizationConfig,
+    MeanTrajectoryLinearizationConfig,
+)
 from dynestyx.discretization.exact_affine import _affine_transition_parameters
 from dynestyx.discretization.numerics import (
     _finalize_covariance,
     _positive_interval,
     _symmetrize,
-)
-from dynestyx.inference.configs.discretizer import (
-    BaseDiscretizerConfig,
-    EulerMaruyamaConfig,
-    LocalLinearizationConfig,
-    MeanTrajectoryLinearizationConfig,
 )
 from dynestyx.models import (
     DiscreteTimeStateEvolution,

@@ -76,6 +76,14 @@ nav:
     - api_reference/index.md
     - Public API:
       - Overview: api_reference/public/index.md
+      - Configurations:
+        - Overview: api_reference/public/configurations/index.md
+        - Filter configurations: api_reference/public/configurations/filter_configs.md
+        - Smoother configurations: api_reference/public/configurations/smoother_configs.md
+        - MCMC configurations: api_reference/public/configurations/mcmc_configs.md
+        - Discretizer configurations: api_reference/public/configurations/discretizer_configs.md
+        - Simulator configurations: api_reference/public/configurations/simulator_configs.md
+        - Observation scoring configuration: api_reference/public/configurations/scoring_configs.md
       - Models:
         - Core Models:
           - DynamicalModel: api_reference/public/models/core/dynamical_model.md
@@ -94,16 +102,12 @@ nav:
           - LTI_discrete: api_reference/public/models/specialized/lti_discrete.md
       - Inference:
         - Filters: api_reference/public/inference/filters.md
-        - FilterConfigs: api_reference/public/inference/configs/filter_configs.md
         - LatentPathBuilder: api_reference/public/inference/latent_path_builder.md
         - PreparedModel: api_reference/public/inference/prepared_model.md
         - Smoothers: api_reference/public/inference/smoothers.md
-        - SmootherOptions: api_reference/public/inference/configs/smoother_configs.md
         - MCMC: api_reference/public/inference/mcmc.md
-        - MCMCConfigs: api_reference/public/inference/configs/mcmc_configs.md
       - Discretizers:
         - Discretizer: api_reference/public/discretizers/discretizer.md
-        - Discretizer Configurations: api_reference/public/inference/configs/discretizer_configs.md
       - Relaxations:
         - Gaussian relaxation: api_reference/public/relaxations/gaussian_relaxation.md
       - Handlers:
@@ -115,7 +119,6 @@ nav:
           - DiscreteTimeSimulator: api_reference/public/simulators/discrete_time_simulator.md
           - ODESimulator: api_reference/public/simulators/ode_simulator.md
           - SDESimulator: api_reference/public/simulators/sde_simulator.md
-          - Simulator Configurations: api_reference/public/simulators/simulator_configs.md
       - Closed-loop Control:
         - Overview: api_reference/public/control.md
         - DiscreteControlLoopSimulator: api_reference/public/control/discrete_control_loop_simulator.md
@@ -126,11 +129,17 @@ nav:
       - Result Types: api_reference/public/result_types.md
       - Evaluation:
         - Evaluation: api_reference/public/evaluation/handlers.md
-        - ScoringConfigs: api_reference/public/inference/configs/scoring_configs.md
         - Scoring: api_reference/public/evaluation/scoring.md
         - Plotting Utilities: api_reference/public/evaluation/plotting_utils.md
     - Developer API:
       - Overview: api_reference/developer/index.md
+      - Configurations:
+        - Filter configurations: api_reference/developer/configurations/filter_configs.md
+        - Smoother configurations: api_reference/developer/configurations/smoother_configs.md
+        - MCMC configurations: api_reference/developer/configurations/mcmc_configs.md
+        - Discretizer configurations: api_reference/developer/configurations/discretizer_configs.md
+        - Simulator configurations: api_reference/developer/configurations/simulator_configs.md
+        - Observation scoring configuration: api_reference/developer/configurations/scoring_configs.md
       - Models:
         - Core Models: api_reference/developer/models/core_models.md
         - Diffusions: api_reference/developer/models/diffusions.md
@@ -139,12 +148,9 @@ nav:
       - Inference:
         - Filters: api_reference/developer/inference/filters.md
         - Checkers: api_reference/developer/inference/checkers.md
-        - FilterConfigs: api_reference/developer/inference/configs/filter_configs.md
         - LatentPathBuilder: api_reference/developer/inference/latent_path_builder.md
         - Smoothers: api_reference/developer/inference/smoothers.md
-        - SmootherOptions: api_reference/developer/inference/configs/smoother_configs.md
         - MCMC: api_reference/developer/inference/mcmc.md
-        - MCMCConfigs: api_reference/developer/inference/configs/mcmc_configs.md
         - BlackJAX Integration: api_reference/developer/inference/blackjax_integration.md
       - Discretizers:
         - Discretizer: api_reference/developer/discretizers/discretizer.md
@@ -157,7 +163,6 @@ nav:
       - Result Types: api_reference/developer/result_types.md
       - Evaluation:
         - Evaluation: api_reference/developer/evaluation/handlers.md
-        - ScoringConfigs: api_reference/developer/inference/configs/scoring_configs.md
         - Scoring: api_reference/developer/evaluation/scoring.md
         - Plotting Utilities: api_reference/developer/evaluation/plotting_utils.md
   - FAQ: faq.md

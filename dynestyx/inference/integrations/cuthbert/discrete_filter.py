@@ -19,14 +19,14 @@ from cuthbertlib.resampling import (
 from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
-from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     EKFConfig,
     EnKFConfig,
     KFConfig,
     PFConfig,
 )
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,

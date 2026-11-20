@@ -10,12 +10,12 @@ import pytest
 from cuthbert.ensemble_kalman import ensemble_kalman_filter
 
 import dynestyx as dsx
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeEnKFConfig,
     EnKFConfig,
     EnKFLocalizationFunctions,
 )
-from dynestyx.inference.configs.smoother import EnRTSSmootherConfig
+from dynestyx.configs.smoother import EnRTSSmootherConfig
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
     compute_cuthbert_filter,

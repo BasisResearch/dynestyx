@@ -8,13 +8,13 @@ from numpyro.infer import Predictive
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Filter, Smoother
-from dynestyx.inference.checkers import _validate_missing_observation_support
-from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig, PFConfig
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.filters import EKFConfig, EnKFConfig, KFConfig, PFConfig
+from dynestyx.configs.smoother import (
     EKFSmootherConfig,
     EnRTSSmootherConfig,
     KFSmootherConfig,
 )
+from dynestyx.inference.checkers import _validate_missing_observation_support
 
 _EQX_ERRORS = (
     ValueError,
