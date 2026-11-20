@@ -91,7 +91,7 @@ filter_config = dsx.configs.EnKFConfig(
 )
 ```
 
-Projected forecast ensembles remain the raw ensemble even when the observation marginal is localized. For an `EnergyScore` intended to represent the localized Gaussian covariance, select `ObservationScoringConfig(sample_source="gaussian_moments")`.
+Projected forecast ensembles remain the raw ensemble even when the observation marginal is localized. For an `EnergyScore` intended to represent the localized Gaussian covariance, select `dsx.configs.ObservationScoringConfig(sample_source="gaussian_moments")`.
 
 ## Discrete Time Configuration Classes
 

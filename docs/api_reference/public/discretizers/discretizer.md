@@ -23,14 +23,11 @@ handler receives the discretized dynamics:
 
 ```python
 import dynestyx as dsx
-from dynestyx.discretizers import (
-    Discretizer,
-    MeanTrajectoryLinearizationConfig,
-)
-from dynestyx.inference.filters import EnKFConfig, Filter
+from dynestyx.discretizers import Discretizer
+from dynestyx.inference.filters import Filter
 
-with Filter(EnKFConfig(n_particles=100)):
-    with Discretizer(MeanTrajectoryLinearizationConfig()):
+with Filter(dsx.configs.EnKFConfig(n_particles=100)):
+    with Discretizer(dsx.configs.MeanTrajectoryLinearizationConfig()):
         result = model(obs_times=obs_times, obs_values=obs_values)
 ```
 
@@ -45,11 +42,10 @@ compare them.
 
 ```python
 import dynestyx as dsx
-from dynestyx.discretizers import EulerMaruyamaConfig
 
 discrete_dynamics = dsx.discretize_dynamics(
     continuous_dynamics,
-    EulerMaruyamaConfig(),
+    dsx.configs.EulerMaruyamaConfig(),
 )
 ```
 
@@ -84,11 +80,11 @@ For missing observations, use [masked_observation_log_prob](../models/core/obser
 
 With no configuration, the method is chosen as follows:
 
-- a deterministic ODE is integrated with `ODEFlowConfig()`, producing a Delta transition at the numerical flow endpoint;
+- a deterministic ODE is integrated with `dsx.configs.ODEFlowConfig()`, producing a Delta transition at the numerical flow endpoint;
 - an `AffineDrift` with constant diffusion and no potential is discretized exactly; and
 - other SDE models use Euler--Maruyama discretization by default.
 
-Pass `ODEFlowConfig(simulator_config=ODESimulatorConfig(...), jitter_scale=...)` to customize ODE integration; all Diffrax settings are taken from the nested `ODESimulatorConfig`.
+Pass `dsx.configs.ODEFlowConfig(simulator_config=dsx.configs.ODESimulatorConfig(...), jitter_scale=...)` to customize ODE integration; all Diffrax settings are taken from the nested `ODESimulatorConfig`.
 
 ## Local affine-Gaussian parameters
 
@@ -98,7 +94,6 @@ composition requires structurally constant additive diffusion:
 
 ```python
 import dynestyx as dsx
-from dynestyx.discretizers import ExactAffineConfig
 
 cte = continuous_dynamics.state_evolution
 local = dsx.StochasticContinuousTimeStateEvolution(
@@ -108,7 +103,7 @@ local = dsx.StochasticContinuousTimeStateEvolution(
     diffusion=cte.diffusion,
 )
 transition = dsx.discretize_state_evolution(
-    local, ExactAffineConfig(covariance_jitter=1e-8)
+    local, dsx.configs.ExactAffineConfig(covariance_jitter=1e-8)
 )
 params = transition.params_at(t_now, t_next)
 
@@ -127,7 +122,7 @@ Use `vmap` to evaluate parameters along a reference trajectory. Trajectory
 selection, observation linearization, and inference are handled separately.
 
 For time-invariant affine drift with constant additive diffusion and no
-potential term, discretization with `ExactAffineConfig(covariance_jitter=0)` produces a
+potential term, discretization with `dsx.configs.ExactAffineConfig(covariance_jitter=0)` produces a
 `LinearGaussianStateEvolution` whose `params_at(t_now, t_next)` method returns
 exact interval parameters up to floating-point error, assuming control is held
 fixed over each interval. No linearization state is needed.

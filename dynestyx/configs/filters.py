@@ -548,7 +548,7 @@ class EKFConfig(BaseFilterConfig):
     time-varying models silently ignore absolute time arguments.
     For genuinely time-varying discrete-time models, use a
     backend/configuration that preserves absolute time semantics, such as
-    `EnKFConfig(filter_source="cuthbert")`. Only use
+    `dsx.configs.EnKFConfig(filter_source="cuthbert")`. Only use
     `filter_source="cd_dynamax"` for time-invariant models.
 
     Does not support missing observations (data cannot have NaNs).
@@ -686,7 +686,7 @@ class UKFConfig(BaseFilterConfig):
     time-varying models silently ignore absolute time arguments.
     For genuinely time-varying discrete-time models, use a
     backend/configuration that preserves absolute time semantics, such as
-    `EKFConfig(filter_source="cuthbert")`. Only use
+    `dsx.configs.EKFConfig(filter_source="cuthbert")`. Only use
     `filter_source="cd_dynamax"` for time-invariant models.
 
     Does not support missing observations (data cannot have NaNs).
@@ -861,7 +861,7 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
     Attributes:
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
         resampling_method (PFResamplingConfig): Defaults to
-            `PFResamplingConfig(base_method="multinomial")`.
+            `dsx.configs.PFResamplingConfig(base_method="multinomial")`.
 
     ??? note "Algorithm Reference"
         The bootstrap version of the continuous-discrete PF is the same as the discrete-time PF version.

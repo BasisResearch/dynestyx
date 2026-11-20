@@ -165,14 +165,10 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
     context may then use the resulting `DiscreteTimeStateEvolution`:
 
     ```python
-    from dynestyx.discretizers import (
-        Discretizer,
-        EnKFConfig,
-        Filter,
-        MeanTrajectoryLinearizationConfig,
-    )
-    with Filter(EnKFConfig()):
-        with Discretizer(MeanTrajectoryLinearizationConfig()):
+    import dynestyx as dsx
+
+    with dsx.Filter(dsx.configs.EnKFConfig()):
+        with dsx.Discretizer(dsx.configs.MeanTrajectoryLinearizationConfig()):
             model(...)
     ```
 

@@ -21,7 +21,6 @@ import dynestyx as dsx
 import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
-from dynestyx.configs.filters import EnKFConfig
 
 dynamics = dsx.DynamicalModel(
     initial_condition=dist.Delta(jnp.array([1.0, 2.0]), event_dim=1),
@@ -31,7 +30,7 @@ dynamics = dsx.DynamicalModel(
     observation_model=dsx.DeterministicObservation(lambda x, u, t: x**2),
 )
 
-with dsx.Filter(EnKFConfig()):
+with dsx.Filter(dsx.configs.EnKFConfig()):
     with dsx.GaussianRelaxation(
         initial_condition_cov=0.05,
         state_evolution_cov=dsx.DiagonalCovariance(variance=jnp.array([0.01, 0.02])),

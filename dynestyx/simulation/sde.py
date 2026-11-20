@@ -65,7 +65,7 @@ class SDESimulator(BaseSimulator):
         ...         observation_model=observation,
         ...     )
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
-        >>> config = SDESimulatorConfig(source="em_scan", dt0=1e-3)
+        >>> config = dsx.configs.SDESimulatorConfig(source="em_scan", dt0=1e-3)
         >>> with SDESimulator(config, n_simulations=4):
         ...     predictive = Predictive(
         ...         model, num_samples=10, condition_deterministic=False
@@ -79,7 +79,7 @@ class SDESimulator(BaseSimulator):
         Use the Diffrax backend when a different SDE solver or step-size
         controller is required:
 
-        >>> config = SDESimulatorConfig(
+        >>> config = dsx.configs.SDESimulatorConfig(
         ...     source="diffrax",
         ...     solver=diffrax.EulerHeun(),
         ...     dt0=1e-3,

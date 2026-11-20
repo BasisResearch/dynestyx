@@ -61,7 +61,7 @@ class ODESimulator(BaseSimulator):
         ...         observation_model=observation,
         ...     )
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
-        >>> config = ODESimulatorConfig(dt0=1e-2)
+        >>> config = dsx.configs.ODESimulatorConfig(dt0=1e-2)
         >>> with ODESimulator(config, n_simulations=3):
         ...     predictive = Predictive(
         ...         model, num_samples=10, condition_deterministic=False

@@ -38,9 +38,9 @@ These filters handle continuous-time dynamics with discrete observations.
 
 ### Localization and resampling
 
-- `dsx.configs.EnKFLocalizationConfig` for distance-based covariance tapering via `EnKFConfig(localization=...)`
-- `dsx.configs.EnKFLocalizationFunctions` for custom localization callbacks via `EnKFConfig(localization=...)`
-- `dsx.configs.PFResamplingConfig` for resampling options via `PFConfig(resampling_method=...)`
+- `dsx.configs.EnKFLocalizationConfig` for distance-based covariance tapering via `dsx.configs.EnKFConfig(localization=...)`
+- `dsx.configs.EnKFLocalizationFunctions` for custom localization callbacks via `dsx.configs.EnKFConfig(localization=...)`
+- `dsx.configs.PFResamplingConfig` for resampling options via `dsx.configs.PFConfig(resampling_method=...)`
 
 ## Smoothers
 
@@ -91,16 +91,3 @@ See [Simulator configurations](simulators/simulator_configs.md) for solver setti
 
 Pass `dsx.configs.ObservationScoringConfig` to `dsx.Evaluation(observation_scoring_config=...)`.
 See [Scoring configs](inference/configs/scoring_configs.md) for score and predictive sample options.
-
-## Migrating existing imports
-
-Update config imports from `dynestyx.inference.configs.<module>` to
-`dynestyx.configs.<module>`. For filters, change `dynestyx.inference.configs.filter`
-to `dynestyx.configs.filters`. Use `dynestyx.configs.scoring` for
-`ObservationScoringConfig` imports from `dynestyx.evaluation.configs` or
-`dynestyx.inference.scoring_configs`.
-
-Use `dsx.configs` for `ODESimulatorConfig`, `SDESimulatorConfig`,
-`SimulatorConfig`, and `ObservationScoringConfig` previously accessed directly
-on `dsx`. The previous paths still resolve during the transition and emit a
-`DeprecationWarning`.

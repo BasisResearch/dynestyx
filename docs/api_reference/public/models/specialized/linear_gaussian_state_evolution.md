@@ -40,8 +40,8 @@
     Each parameter may instead be a callable `(t_now, t_next) -> value`,
     e.g. the exact discretization of a continuous-time LTI SDE on an
     irregular time grid. Time-varying models are supported by the simulators
-    and by `KFConfig(filter_source="cuthbert")` /
-    `KFSmootherConfig(filter_source="cuthbert")`.
+    and by `dsx.configs.KFConfig(filter_source="cuthbert")` /
+    `dsx.configs.KFSmootherConfig(filter_source="cuthbert")`.
 
     ```python
     import jax.numpy as jnp

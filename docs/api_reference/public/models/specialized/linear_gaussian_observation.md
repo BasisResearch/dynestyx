@@ -39,8 +39,8 @@
 ??? example "Time-varying observation model"
     Each parameter may instead be a callable `(t,) -> value` evaluated at the
     observation time. Time-varying models are supported by the simulators and
-    by `KFConfig(filter_source="cuthbert")` /
-    `KFSmootherConfig(filter_source="cuthbert")`.
+    by `dsx.configs.KFConfig(filter_source="cuthbert")` /
+    `dsx.configs.KFSmootherConfig(filter_source="cuthbert")`.
 
     ```python
     import jax.numpy as jnp

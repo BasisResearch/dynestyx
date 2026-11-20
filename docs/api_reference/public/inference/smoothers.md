@@ -5,12 +5,12 @@
 ## Usage
 
 ```python
+import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Smoother
-from dynestyx.configs.smoother import KFSmootherConfig
 
 with DiscreteTimeSimulator(n_simulations=4):
     with Smoother(
-        smoother_config=KFSmootherConfig(
+        smoother_config=dsx.configs.KFSmootherConfig(
             filter_source="cd_dynamax",
             record_smoothed_states_mean=True,
         )
