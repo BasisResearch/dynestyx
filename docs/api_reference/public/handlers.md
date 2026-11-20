@@ -74,7 +74,7 @@ for ODEs. Their internal integration steps are independent of `predict_times`.
 An explicit `Discretizer` instead selects simulation of the discrete transitions.
 Automatic continuous-time filtering adds discretization: Kalman filtering uses
 the default discretizer, nonlinear SDE ensemble/particle filtering uses
-`DiffraxSampleConfig`, and ODE filtering uses `ODEFlowConfig`.
+`DiffraxSampleConfig`, and ODE filtering uses `ODEFlowConfig(jitter_scale=1e-6)`.
 Explicit inference handlers retain their continuous-time behavior, including when
 an automatic simulator is added. An explicit native simulator or solver config
 must remain compatible with the model reaching it; incompatible combinations
@@ -84,9 +84,8 @@ Existing limitations still apply: LPB predictions must be at or after the final
 observation time, and LPB with traced observation arrays needs fixed missingness
 metadata. A [PreparedModel](inference/prepared_model.md) wrapper can prepare and
 retain that metadata; it can also be supplied through `missing_obs_metadata`.
-No default infers identity
-observations or adds numerical jitter. Equal state and observation dimensions
-alone do not imply noise-free observations.
+Use an explicit observation model to specify noise-free measurements. Equal
+state and observation dimensions alone do not imply noise-free observations.
 
 For example, a model can request predictions without an explicit simulator:
 
