@@ -84,7 +84,7 @@ For missing observations, use [masked_observation_log_prob](../models/core/obser
 
 With no configuration, the method is chosen as follows:
 
-- a deterministic ODE uses `ODEFlowConfig(jitter_scale=1e-6)`, producing a Normal transition centered at the numerical flow endpoint;
+- a deterministic ODE uses `ODEFlowConfig(jitter_scale=1e-6)`, producing a Gaussian state evolution centered at the numerical flow endpoint;
 - an `AffineDrift` with constant diffusion and no potential is discretized exactly; and
 - other SDE models use Euler--Maruyama discretization by default.
 
