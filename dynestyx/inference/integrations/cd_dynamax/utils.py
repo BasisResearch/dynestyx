@@ -15,6 +15,7 @@ from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
 from jaxtyping import Array, Real
 
+from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
@@ -522,6 +523,12 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
     Used by EKF/UKF in discrete filters. When control_dim is 0, u has shape (0,)
     and the B@u / D@u terms are omitted.
     """
+    if isinstance(dynamics.state_evolution, _ODEFlowStateEvolution):
+        raise NotImplementedError(
+            "cd_dynamax discrete EKF/UKF does not yet support ODEFlowConfig. "
+            "ODE integration requires interval endpoints, and this adapter passes "
+            "zero for both times. Use EnKFConfig(filter_source='cuthbert') for an ODE flow."
+        )
     if not isinstance(
         dynamics.state_evolution, (LinearGaussianStateEvolution, GaussianStateEvolution)
     ) or not isinstance(

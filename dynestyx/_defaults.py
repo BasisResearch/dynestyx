@@ -66,7 +66,6 @@ def _default_handlers(
     import numpyro.distributions as dist
 
     from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
-    from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
     from dynestyx.discretizers import (
         Discretizer,
         _automatic_discretizer_config,
@@ -111,11 +110,6 @@ def _default_handlers(
                 _ConfiguredGaussianStateEvolution,
                 DeterministicContinuousTimeStateEvolution,
             ),
-        ) or (
-            # An already-discretized ODE flow has a transition density only
-            # when its configured jitter adds nonzero process noise.
-            isinstance(evolution, _ODEFlowStateEvolution)
-            and evolution.config.jitter_scale > 0
         )
         # Choose LPB only for small sample sites with matching dimensions.
         # Count observations per trajectory, without multiplying by plate sizes.

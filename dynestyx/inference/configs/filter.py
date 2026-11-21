@@ -264,7 +264,7 @@ class EnKFBaseConfig(BaseFilterConfig):
         default_factory=lambda: jr.PRNGKey(0)
     )
     perturb_measurements: bool | None = None
-    inflation_delta: float | None = None
+    inflation_delta: float | None = 0.05
     localization: EnKFLocalizationConfig | EnKFLocalizationFunctions | None = None
     recorded_filtered_states_cov_jitter: float = (
         1e-5  # this is good for float32, may want to reduce for float64
@@ -325,7 +325,7 @@ class EnKFConfig(EnKFBaseConfig):
     The primary tuning knob is `n_particles`, with more particles providing
     more accurate results at the cost of higher compute.
     If the ensemble collapses over long trajectories, increase
-    `inflation_delta` slightly (e.g. `0.05`–`0.2`).
+    `inflation_delta`.
 
     Supports missing observations via NaNs.
 
@@ -340,9 +340,9 @@ class EnKFConfig(EnKFBaseConfig):
         perturb_measurements (bool | None): Add noise to observations before
             the ensemble update (stochastic EnKF). Set `False` for the
             square-root variant. `None` defers to the backend default.
-        inflation_delta (float | None): Scale ensemble anomalies by
-            \(\sqrt{1 + \delta}\) before the update to prevent collapse.
-            `None` disables inflation.
+        inflation_delta (float | None): Scale deviations from the ensemble mean by
+            \(1 + \delta\) after propagation, before scoring and updating.
+            Defaults to `0.05`. `None` disables inflation.
         localization (EnKFLocalizationConfig | EnKFLocalizationFunctions | None):
             Optional structured covariance localization. Distance-based
             localization provides built-in Gaussian and Gaspari-Cohn tapers or
@@ -907,6 +907,9 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
     `ContinuousTimeConfig` for solver options.
 
     Attributes:
+        inflation_delta (float | None): Scale deviations from the ensemble mean by
+            \(1 + \delta\) for the observation update, after computing the step's
+            log likelihood. Defaults to `0.05`. `None` disables inflation.
         filter_source (FilterSource): Backend. Defaults to `"cd_dynamax"`.
 
     ??? note "Algorithm Reference"
