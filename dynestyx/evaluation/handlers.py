@@ -10,7 +10,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, Real
 
 from dynestyx._defaults import _complete_defaults
-from dynestyx.evaluation.configs import ObservationScoringConfig
+from dynestyx.configs.scoring import ObservationScoringConfig
 from dynestyx.evaluation.observation_scoring import build_evaluation_result
 from dynestyx.handlers import (
     HandlesSelf,

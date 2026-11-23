@@ -9,7 +9,7 @@ import numpyro.distributions as dist
 import pytest
 from numpyro.infer.initialization import init_to_value
 
-from dynestyx.inference.configs.mcmc import AdaptiveMetropolisConfig
+from dynestyx.configs.mcmc import AdaptiveMetropolisConfig
 from dynestyx.inference.integrations.blackjax.adaptive_metropolis import (
     adaptive_metropolis,
     proposal_covariance,

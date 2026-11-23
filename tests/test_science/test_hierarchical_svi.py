@@ -14,7 +14,7 @@ from numpyro.infer.autoguide import AutoLowRankMultivariateNormal
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator
-from dynestyx.inference.configs.filter import KFConfig
+from dynestyx.configs.filters import KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models.lti_dynamics import LTI_discrete
 from tests.arviz_utils import save_posterior_plot

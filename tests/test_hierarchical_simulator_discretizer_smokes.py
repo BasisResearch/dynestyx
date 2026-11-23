@@ -20,9 +20,8 @@ from dynestyx import (
     LatentPathBuilder,
     ODESimulator,
     SDESimulator,
-    SDESimulatorConfig,
 )
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEnKFConfig,
     EKFConfig,
@@ -30,6 +29,7 @@ from dynestyx.inference.configs.filter import (
     KFConfig,
     PFConfig,
 )
+from dynestyx.configs.simulator import SDESimulatorConfig
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DiracIdentityObservation,

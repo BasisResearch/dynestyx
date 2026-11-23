@@ -63,7 +63,7 @@ def _sde_model(*, predict_times=None):
 
 
 def test_odesimulator_accepts_structured_config():
-    config = dsx.ODESimulatorConfig(dt0=1e-2, max_steps=10_000)
+    config = dsx.configs.ODESimulatorConfig(dt0=1e-2, max_steps=10_000)
     predict_times = jnp.array([0.0, 0.5, 1.0])
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
@@ -86,12 +86,15 @@ def test_odesimulator_accepts_structured_config():
 
 
 def test_odesimulator_config_forwards_throw_setting():
-    assert dsx.ODESimulatorConfig().diffeqsolve_settings["throw"] is True
-    assert dsx.ODESimulatorConfig(throw=False).diffeqsolve_settings["throw"] is False
+    assert dsx.configs.ODESimulatorConfig().diffeqsolve_settings["throw"] is True
+    assert (
+        dsx.configs.ODESimulatorConfig(throw=False).diffeqsolve_settings["throw"]
+        is False
+    )
 
 
 def test_sdesimulator_accepts_structured_config():
-    config = dsx.SDESimulatorConfig(dt0=5e-2, source="em_scan")
+    config = dsx.configs.SDESimulatorConfig(dt0=5e-2, source="em_scan")
     predict_times = jnp.array([0.0, 0.5, 1.0])
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
@@ -114,8 +117,8 @@ def test_sdesimulator_accepts_structured_config():
 
 
 def test_simulator_routes_backend_specific_configs():
-    ode_config = dsx.ODESimulatorConfig(dt0=1e-2, max_steps=10_000)
-    sde_config = dsx.SDESimulatorConfig(dt0=5e-2, source="em_scan")
+    ode_config = dsx.configs.ODESimulatorConfig(dt0=1e-2, max_steps=10_000)
+    sde_config = dsx.configs.SDESimulatorConfig(dt0=5e-2, source="em_scan")
     predict_times = jnp.array([0.0, 0.5, 1.0])
 
     with trace() as ode_trace, seed(rng_seed=jr.PRNGKey(0)):
@@ -145,7 +148,7 @@ def test_simulator_rejects_mismatched_config_for_routed_backend(warm_cache):
     with pytest.raises(ValueError, match="Pass an SDESimulatorConfig instead"):
         with trace(), seed(rng_seed=jr.PRNGKey(0)):
             with dsx.Simulator(
-                simulator_config=dsx.ODESimulatorConfig(),
+                simulator_config=dsx.configs.ODESimulatorConfig(),
                 n_simulations=1,
             ):
                 if warm_cache:
@@ -155,7 +158,7 @@ def test_simulator_rejects_mismatched_config_for_routed_backend(warm_cache):
     with pytest.raises(ValueError, match="Pass an ODESimulatorConfig instead"):
         with trace(), seed(rng_seed=jr.PRNGKey(1)):
             with dsx.Simulator(
-                simulator_config=dsx.SDESimulatorConfig(),
+                simulator_config=dsx.configs.SDESimulatorConfig(),
                 n_simulations=1,
             ):
                 if warm_cache:
@@ -166,19 +169,19 @@ def test_simulator_rejects_mismatched_config_for_routed_backend(warm_cache):
 def test_odesimulator_uses_default_structured_config():
     simulator = dsx.ODESimulator()
 
-    assert isinstance(simulator.simulator_config, dsx.ODESimulatorConfig)
+    assert isinstance(simulator.simulator_config, dsx.configs.ODESimulatorConfig)
     assert simulator.simulator_config.dt0 == 1e-3
 
 
 def test_sdesimulator_uses_default_structured_config():
     simulator = dsx.SDESimulator()
 
-    assert isinstance(simulator.simulator_config, dsx.SDESimulatorConfig)
+    assert isinstance(simulator.simulator_config, dsx.configs.SDESimulatorConfig)
     assert simulator.simulator_config.source == "em_scan"
 
 
 def test_sdesimulator_config_rejects_tol_vbt_not_smaller_than_dt0():
-    config = dsx.SDESimulatorConfig(
+    config = dsx.configs.SDESimulatorConfig(
         dt0=1e-2,
         tol_vbt=1e-2,
         source="diffrax",

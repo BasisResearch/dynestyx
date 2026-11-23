@@ -12,6 +12,13 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from dynestyx.configs.filters import (
+    EKFConfig,
+    EnKFConfig,
+    KFConfig,
+    PFConfig,
+    UKFConfig,
+)
 from dynestyx.control.discrete_controller_simulators import (
     ControlledSimulatedResult,
     DiscreteControlLoopSimulator,
@@ -28,13 +35,6 @@ from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaConfig,
     discretize_state_evolution,
-)
-from dynestyx.inference.configs.filter import (
-    EKFConfig,
-    EnKFConfig,
-    KFConfig,
-    PFConfig,
-    UKFConfig,
 )
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
@@ -1472,7 +1472,7 @@ def test_dsx_simulate_with_control_policy_rejects_ctrl_values():
 
 
 def test_dsx_simulate_with_control_policy_rejects_simulator_config():
-    from dynestyx.inference.configs.simulator import SDESimulatorConfig
+    from dynestyx.configs.simulator import SDESimulatorConfig
 
     dynamics = _lti_1d()
     predict_times = jnp.arange(0.0, 5.0)

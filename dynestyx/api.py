@@ -9,10 +9,10 @@ import jax.numpy as jnp
 import jax.random as jr
 from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
+from dynestyx.configs.filters import BaseFilterConfig
+from dynestyx.configs.simulator import SimulatorConfig
 from dynestyx.handlers import _validate_and_prepare
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.configs.filter import BaseFilterConfig
-from dynestyx.inference.configs.simulator import SimulatorConfig
 from dynestyx.inference.state_paths.reconstruct import reconstruct_state_path
 from dynestyx.inference.state_paths.score import compute_state_path_log_prob
 from dynestyx.models import DynamicalModel
@@ -64,7 +64,7 @@ def simulate(
             the model's state evolution. Discrete-time models do not accept a
             simulator configuration.
         control_policy: Optional control policy (see
-            `dynestyx.control.discrete_controller_simulators.PolicyCallable`).
+            `dynestyx.control.PolicyCallable`).
             When given, controls are computed online in closed loop via
             [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]
             instead of being drawn from the uncontrolled/`ctrl_values`

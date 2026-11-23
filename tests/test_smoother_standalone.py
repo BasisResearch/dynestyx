@@ -8,7 +8,7 @@ import optax
 import pytest
 
 import dynestyx as dsx
-from dynestyx.inference.configs.smoother import KFSmootherConfig
+from dynestyx.configs.smoother import KFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from dynestyx.types import ConditionedResult
 from tests.test_utils import assert_finite

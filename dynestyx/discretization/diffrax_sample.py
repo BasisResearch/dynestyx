@@ -12,7 +12,7 @@ import numpyro.distributions as dist
 from jaxtyping import Array, PRNGKeyArray, Real
 from numpyro.distributions import constraints
 
-from dynestyx.inference.configs.discretizer import DiffraxSampleConfig
+from dynestyx.configs.discretizer import DiffraxSampleConfig
 from dynestyx.models import (
     DiscreteTimeStateEvolution,
     StochasticContinuousTimeStateEvolution,

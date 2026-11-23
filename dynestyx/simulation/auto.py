@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from jaxtyping import Array, PRNGKeyArray, PyTree, Real
 
-from dynestyx.inference.configs.filter import BaseFilterConfig
-from dynestyx.inference.configs.simulator import (
+from dynestyx.configs.filters import BaseFilterConfig
+from dynestyx.configs.simulator import (
     ODESimulatorConfig,
     SDESimulatorConfig,
     SimulatorConfig,
@@ -54,9 +54,9 @@ class Simulator(BaseSimulator):
     seed supplies randomness; the rollout itself is computed with pure JAX and
     its realized arrays are then attached to the NumPyro trace. For
     continuous-time models, pass an
-    [ODESimulatorConfig][dynestyx.inference.configs.simulator.ODESimulatorConfig]
+    [ODESimulatorConfig][dynestyx.configs.simulator.ODESimulatorConfig]
     or
-    [SDESimulatorConfig][dynestyx.inference.configs.simulator.SDESimulatorConfig]
+    [SDESimulatorConfig][dynestyx.configs.simulator.SDESimulatorConfig]
     as `simulator_config` to control how the differential equation is solved.
     Use [dsx.simulate][dynestyx.api.simulate] instead when no NumPyro trace is
     needed and an explicit `rng_key` is more convenient.
@@ -64,10 +64,11 @@ class Simulator(BaseSimulator):
     Examples:
         Prior-predictive trajectories with automatic backend selection:
 
+        >>> import dynestyx as dsx
         >>> def model(predict_times=None):
-        ...     dynamics = DynamicalModel(...)
+        ...     dynamics = dsx.DynamicalModel(...)
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
-        >>> with Simulator(n_simulations=4):
+        >>> with dsx.Simulator(n_simulations=4):
         ...     predictive = Predictive(
         ...         model, num_samples=20, condition_deterministic=False
         ...     )
@@ -88,8 +89,8 @@ class Simulator(BaseSimulator):
         For posterior state rollouts, place the simulator outside the inference
         handler and retain deterministic sites from `Predictive`:
 
-        >>> with Simulator(n_simulations=100):
-        ...     with Filter():
+        >>> with dsx.Simulator(n_simulations=100):
+        ...     with dsx.Filter():
         ...         predictive = Predictive(
         ...             model,
         ...             posterior_samples=posterior_samples,
@@ -132,7 +133,7 @@ class Simulator(BaseSimulator):
     Configurations and defaults
     ---------------------------
     `simulator_config` accepts a
-    [SimulatorConfig][dynestyx.inference.configs.simulator.SimulatorConfig] and
+    [SimulatorConfig][dynestyx.configs.simulator.SimulatorConfig] and
     forwards it to the selected continuous-time backend:
 
     - stochastic continuous-time models accept `SDESimulatorConfig`;
@@ -202,7 +203,7 @@ class Simulator(BaseSimulator):
         n_simulations: Number of independent trajectories drawn per model
             execution. Defaults to one and must be greater than or equal to one.
         control_policy: Optional control policy (see
-            `dynestyx.control.discrete_controller_simulators.PolicyCallable`).
+            `dynestyx.control.PolicyCallable`).
             When given, routing ignores `dynamics.state_evolution`'s type
             entirely and always uses
             [DiscreteControlLoopSimulator][dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator]

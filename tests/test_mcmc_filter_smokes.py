@@ -5,8 +5,8 @@ import jax.random as jr
 from numpyro.infer import Predictive
 
 from dynestyx import Simulator
-from dynestyx.inference.configs.filter import PFConfig
-from dynestyx.inference.configs.mcmc import (
+from dynestyx.configs.filters import PFConfig
+from dynestyx.configs.mcmc import (
     AdaptiveMetropolisConfig,
     AdaptiveMWGConfig,
     HMCConfig,
