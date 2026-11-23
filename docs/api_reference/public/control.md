@@ -11,6 +11,55 @@ Both conventions (with and without state estimation) are described below.
 In the following, $s_0$ is `simulate`'s `initial_policy_state`: `None` by default, for a
 stateless policy. It must be initialized and passed explicitly if the policy requires it. By default, the loop runs with state estimation; pass `use_true_state=True` to run it on the true state instead.
 
+## Plant and filter dynamics
+
+The `dynamics` argument is the **plant model**. It generates the initial
+state, subsequent states, and observations. By default the state estimator
+uses the same model. Pass `filter_dynamics` to give the estimator its own
+prior, transition model, and observation model.
+
+For example, simulate a deterministic integrator and use Gaussian relaxation
+to give its state estimator process and measurement noise.
+
+```python
+import jax.numpy as jnp
+from jax import random
+from numpyro.distributions import Delta
+
+import dynestyx as dsx
+from dynestyx.inference.configs.filter import EKFConfig
+
+plant = dsx.DynamicalModel(
+    initial_condition=Delta(jnp.array([2.0]), event_dim=1),
+    state_evolution=dsx.DeterministicStateEvolution(
+        lambda x, u, t, t_next: x + (t_next - t) * u
+    ),
+    observation_model=dsx.DiracIdentityObservation(),
+    control_dim=1,
+    observation_control_alignment="previous_transition",
+)
+result = dsx.simulate(
+    plant,
+    filter_dynamics=dsx.relax_dynamics(
+        plant,
+        initial_condition_cov=0.4,
+        state_evolution_cov=0.05,
+        observation_model_cov=0.2,
+    ),
+    filter_config=EKFConfig(),
+    control_policy=lambda belief, t, t_next, s: (-0.5 * belief.mean, s),
+    rng_key=random.key(0),
+    predict_times=jnp.arange(6.0),
+)
+```
+
+Changing the filter can change the policy's controls and therefore the
+realized plant trajectory. Both simulator handlers also accept
+`filter_dynamics` at construction. The models must be discrete-time and
+agree on state, observation, and control dimensions, initial sample shape,
+and resolved observation-control alignment. If the filter model specifies
+`t0`, it must equal the first prediction time.
+
 
 ## `previous_transition` convention (default for closed-loop control)
 
@@ -41,7 +90,7 @@ At each step, the true state $x_k$ is passed to the policy as a
 
 ### With an estimated state
 
-Notation:
+Let $p_0$ be the plant prior and $q_0$ be the filter prior, which defaults to $p_0$.
 
 $$
 \begin{aligned}
@@ -57,7 +106,7 @@ The loop is:
 $$
 \begin{aligned}
 & \text{Times} = [t_0, \dots, t_{N}]\\
-&x_0 \sim p_0, \quad \hat{p}_0 = p_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
+&x_0 \sim p_0, \quad \hat{p}_0 = q_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
 &\text{for } k = 0,\dots N-1:\\
 &\quad u_{k}, s_{k+1} =\pi(\hat{p}_{k}, t_{k}, t_{k+1}, s_k)
   \quad \text{Select the control}\\
