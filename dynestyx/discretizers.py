@@ -6,17 +6,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Real
 
-from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
-from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
-from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
-from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
-from dynestyx.handlers import (
-    HandlesSelf,
-    _condition_intp,
-    _dynestyx_stack_kind,
-    _DynestyxStackKind,
-)
-from dynestyx.inference.configs.discretizer import (
+from dynestyx.configs.discretizer import (
     BaseDiscretizerConfig,
     DiffraxSampleConfig,
     DiscretizerConfig,
@@ -25,6 +15,16 @@ from dynestyx.inference.configs.discretizer import (
     LocalLinearizationConfig,
     MeanTrajectoryLinearizationConfig,
     ODEFlowConfig,
+)
+from dynestyx.discretization.diffrax_sample import _DiffraxSampleStateEvolution
+from dynestyx.discretization.exact_affine import _ExactAffineStateEvolution
+from dynestyx.discretization.gaussian import _ConfiguredGaussianStateEvolution
+from dynestyx.discretization.ode_flow import ode_flow_state_evolution
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
 )
 from dynestyx.models import (
     AffineDrift,
@@ -41,7 +41,7 @@ def _automatic_discretizer_config(
     | StochasticContinuousTimeStateEvolution,
 ) -> DiscretizerConfig:
     if isinstance(cte, DeterministicContinuousTimeStateEvolution):
-        return ODEFlowConfig()
+        return ODEFlowConfig(jitter_scale=1e-6)
     if (
         isinstance(cte.drift, AffineDrift)
         and cte.potential is None
@@ -73,7 +73,7 @@ def discretize_state_evolution(
     resolved = _automatic_discretizer_config(cte) if config is None else config
     if isinstance(cte, DeterministicContinuousTimeStateEvolution):
         if isinstance(resolved, ODEFlowConfig):
-            return _ODEFlowStateEvolution(cte, resolved)
+            return ode_flow_state_evolution(cte, resolved)
         raise TypeError(
             f"{type(resolved).__name__} requires a stochastic continuous-time "
             "state evolution; got DeterministicContinuousTimeStateEvolution."
@@ -122,7 +122,8 @@ def discretize_dynamics(
     observation-control alignment, and initial time. The state evolution uses
     the transition selected by `discretizer_config`.
 
-    When no config is provided, deterministic ODEs use their numerical flow,
+    When no config is provided, deterministic ODEs use their numerical flow
+    with a transition jitter scale of `1e-6`,
     affine SDEs with constant diffusion and no potential use an exact Gaussian
     transition, and other SDEs use Euler--Maruyama.
 
@@ -165,20 +166,18 @@ class Discretizer(ObjectInterpretation, HandlesSelf):
     context may then use the resulting `DiscreteTimeStateEvolution`:
 
     ```python
-    from dynestyx.discretizers import (
-        Discretizer,
-        EnKFConfig,
-        Filter,
-        MeanTrajectoryLinearizationConfig,
-    )
+    from dynestyx import Discretizer, Filter
+    from dynestyx.configs import EnKFConfig, MeanTrajectoryLinearizationConfig
+
     with Filter(EnKFConfig()):
         with Discretizer(MeanTrajectoryLinearizationConfig()):
             model(...)
     ```
 
-    When no config is provided, ODE models use their numerical flow, SDE models
-    with an affine drift use an exact Gaussian discretization, and other SDE
-    models use Euler--Maruyama.
+    When no config is provided, ODE models use their numerical flow with a
+    transition jitter scale of `1e-6`. Affine SDEs with constant diffusion and
+    no potential use an exact Gaussian transition, and other SDEs use
+    Euler--Maruyama.
 
     Attributes:
         discretizer_config: Explicit discretization config, or `None` for

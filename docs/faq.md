@@ -39,9 +39,9 @@ Omit `ctrl_times` and `ctrl_values` when the model has no controls.
 - **HMM**: Use the HMM filter with an `HMMConfig`.
 
 ```python
-from dynestyx.inference.filters import HMMConfig
+import dynestyx as dsx
 
-with dsx.Filter(filter_config=HMMConfig()):
+with dsx.Filter(filter_config=dsx.configs.HMMConfig()):
     model(obs_times=obs_times, obs_values=obs_values)
 ```
 
@@ -70,11 +70,11 @@ with dsx.Filter():
   for marginalized inference. The continuous-time EnKF is the default filter.
 
 ```python
-# Explicit latent path
-from dynestyx.discretizers import EulerMaruyamaConfig
+import dynestyx as dsx
 
+# Explicit latent path
 with dsx.LatentPathBuilder():
-    with dsx.Discretizer(EulerMaruyamaConfig()):
+    with dsx.Discretizer(dsx.configs.EulerMaruyamaConfig()):
         model(obs_times=obs_times, obs_values=obs_values)
 
 # Marginalized latent path
@@ -96,10 +96,10 @@ with dsx.Filter():
   model when `dirac_observation=True`:
 
 ```python
-from dynestyx.discretizers import EulerMaruyamaConfig
+import dynestyx as dsx
 
 with dsx.LatentPathBuilder():
-    with dsx.Discretizer(EulerMaruyamaConfig()):
+    with dsx.Discretizer(dsx.configs.EulerMaruyamaConfig()):
         model(
             obs_times=obs_times,
             obs_values=obs_values,
@@ -139,12 +139,13 @@ parameters in `model`:
 
 ```python
 import jax.random as jr
-from dynestyx.inference.configs.mcmc import NUTSConfig
+
+import dynestyx as dsx
 from dynestyx.inference.mcmc import MCMCInference
 
 with dsx.Filter(filter_config=my_filter_config):
     inference = MCMCInference(
-        mcmc_config=NUTSConfig(
+        mcmc_config=dsx.configs.NUTSConfig(
             num_samples=1_000,
             num_warmup=1_000,
             num_chains=1,
@@ -223,7 +224,7 @@ This returns a
 `dsx.simulate` auto-routes to the discrete-time, ODE, or SDE backend. For a
 differential equation, pass an
 [`ODESimulatorConfig` or
-`SDESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+`SDESimulatorConfig`](api_reference/public/configurations/simulator_configs.md)
 through `simulator_config`. The same `n_simulations` contract holds for all
 three lower-level simulators.
 

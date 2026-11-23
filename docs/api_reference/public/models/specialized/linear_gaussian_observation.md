@@ -11,7 +11,7 @@
     observation form is what lets filtering backends use fast Kalman-family
     methods; see [Filters](../../inference/filters.md), especially `KFConfig`
     and `EnKFConfig` (or `ContinuousTimeKFConfig` / `ContinuousTimeEnKFConfig`)
-    in [FilterConfigs](../../inference/configs/filter_configs.md).
+    in [FilterConfigs](../../configurations/filter_configs.md).
 
     Without this exploitable structure, parameter inference that marginalizes
     latent trajectories often relies on particle filters (`PFConfig` and
@@ -39,8 +39,8 @@
 ??? example "Time-varying observation model"
     Each parameter may instead be a callable `(t,) -> value` evaluated at the
     observation time. Time-varying models are supported by the simulators and
-    by `KFConfig(filter_source="cuthbert")` /
-    `KFSmootherConfig(filter_source="cuthbert")`.
+    by `dsx.configs.KFConfig(filter_source="cuthbert")` /
+    `dsx.configs.KFSmootherConfig(filter_source="cuthbert")`.
 
     ```python
     import jax.numpy as jnp

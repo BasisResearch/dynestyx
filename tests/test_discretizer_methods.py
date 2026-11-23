@@ -9,6 +9,12 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from dynestyx.configs.filters import EnKFConfig, PFConfig
+from dynestyx.configs.scoring import ObservationScoringConfig
+from dynestyx.configs.simulator import (
+    ODESimulatorConfig,
+    SDESimulatorConfig,
+)
 from dynestyx.discretizers import (
     DiffraxSampleConfig,
     Discretizer,
@@ -18,21 +24,17 @@ from dynestyx.discretizers import (
     ODEFlowConfig,
     discretize_state_evolution,
 )
-from dynestyx.evaluation.configs import ObservationScoringConfig
 from dynestyx.evaluation.handlers import Evaluation
 from dynestyx.evaluation.scoring import EnergyScore, GaussianLogProbScore
-from dynestyx.inference.configs.filter import EnKFConfig, PFConfig
-from dynestyx.inference.configs.simulator import (
-    ODESimulatorConfig,
-    SDESimulatorConfig,
-)
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DeterministicContinuousTimeStateEvolution,
+    DeterministicStateEvolution,
     DynamicalModel,
     FullDiffusion,
+    GaussianStateEvolution,
     LinearGaussianObservation,
     StochasticContinuousTimeStateEvolution,
 )
@@ -114,6 +116,7 @@ def test_ode_flow_matches_controlled_linear_analytic_solution():
             jnp.exp(0.2 * h) * x[1],
         ]
     )
+    assert isinstance(evolution, DeterministicStateEvolution)
     assert isinstance(transition, dist.Delta)
     assert transition.event_shape == (2,)
     assert jnp.allclose(transition.mean, expected, rtol=2e-5, atol=2e-5)
@@ -127,6 +130,7 @@ def test_ode_flow_positive_jitter_returns_independent_normal():
 
     transition = evolution(jnp.array([1.2, -0.7]), jnp.array([0.3]), 0.2, 0.55)
 
+    assert isinstance(evolution, GaussianStateEvolution)
     assert isinstance(transition, dist.Independent)
     assert isinstance(transition.base_dist, dist.Normal)
     assert transition.event_shape == (2,)
@@ -176,10 +180,10 @@ def test_ode_flow_rejects_invalid_jitter_scale(jitter_scale):
 
 def test_ode_flow_automatic_routing_and_config_type_errors():
     ode = _ode_state_evolution()
-    assert isinstance(
-        discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01),
-        dist.Delta,
-    )
+    transition = discretize_state_evolution(ode)(jnp.ones(2), jnp.ones(1), 0.0, 0.01)
+    assert isinstance(transition, dist.Independent)
+    assert isinstance(transition.base_dist, dist.Normal)
+    assert jnp.all(transition.base_dist.scale == 1e-6)
 
     with pytest.raises(TypeError, match="requires a stochastic"):
         discretize_state_evolution(ode, ExactAffineConfig())

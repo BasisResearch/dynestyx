@@ -17,12 +17,12 @@ from dynestyx import (
     Simulator,
     Smoother,
 )
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeEnKFConfig,
     EnKFConfig,
     HMMConfig,
 )
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
     EKFSmootherConfig,
@@ -410,11 +410,9 @@ def test_smoother_rejects_filter_configs_as_invalid_input(invalid_config):
                     obs_times=obs_times,
                     obs_values=obs_values,
                 )
-    assert (
-        "Expected a smoother config class from dynestyx.inference.configs.smoother"
-        in str(exc_info.value)
-        or "smoother_config" in str(exc_info.value)
-    )
+    assert "Expected a smoother config class from dynestyx.configs.smoother" in str(
+        exc_info.value
+    ) or "smoother_config" in str(exc_info.value)
 
 
 def test_continuous_time_kf_smoother_type_option_smoke():

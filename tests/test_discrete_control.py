@@ -1,5 +1,6 @@
 """Tests for DiscreteControlLoopSimulator and compute_cuthbert_filter_update."""
 
+import dataclasses
 import warnings
 
 import equinox as eqx
@@ -11,6 +12,13 @@ import pytest
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
+from dynestyx.configs.filters import (
+    EKFConfig,
+    EnKFConfig,
+    KFConfig,
+    PFConfig,
+    UKFConfig,
+)
 from dynestyx.control.discrete_controller_simulators import (
     ControlledSimulatedResult,
     DiscreteControlLoopSimulator,
@@ -27,13 +35,6 @@ from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaConfig,
     discretize_state_evolution,
-)
-from dynestyx.inference.configs.filter import (
-    EKFConfig,
-    EnKFConfig,
-    KFConfig,
-    PFConfig,
-    UKFConfig,
 )
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
@@ -890,6 +891,87 @@ def test_record_filtered_states_mean_gating(filter_config, expect_present):
     assert ("f_filtered_states_mean" in tr) is expect_present
 
 
+_GAUSSIAN_OUTPUTS = (
+    "filtered_states_mean",
+    "filtered_states_cov",
+    "filtered_states_cov_diag",
+    "filtered_states_chol_cov",
+)
+_PARTICLE_OUTPUTS = (
+    "filtered_states_mean",
+    "filtered_states_cov",
+    "filtered_states_cov_diag",
+    "filtered_particles",
+    "filtered_log_weights",
+)
+
+
+def _record_belief(config, record):
+    """``config`` with every filtered-belief ``record_*`` flag set to ``record``."""
+    return dataclasses.replace(
+        config,
+        record_filtered_states_mean=record,
+        record_filtered_states_cov=record,
+        record_filtered_states_cov_diag=record,
+        record_filtered_states_chol_cov=record,
+        record_filtered_particles=record,
+        record_filtered_log_weights=record,
+    )
+
+
+@pytest.mark.parametrize(
+    ("filter_config", "outputs"),
+    [
+        (KFConfig(filter_source="cuthbert"), _GAUSSIAN_OUTPUTS),
+        (EKFConfig(), _GAUSSIAN_OUTPUTS),
+        (EnKFConfig(n_particles=_n_particles(64)), _GAUSSIAN_OUTPUTS),
+        (PFConfig(n_particles=_n_particles(64)), _PARTICLE_OUTPUTS),
+    ],
+)
+def test_records_the_belief_outputs_filter_records(filter_config, outputs):
+    """The closed loop records the same filtered outputs Filter does, one
+    belief per grid time, and they agree with each other."""
+    T = 6
+    result = dsx.simulate(
+        _lti_1d(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(float(T)),
+        control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
+        filter_config=_record_belief(filter_config, True),
+    )
+    all_outputs = set(_GAUSSIAN_OUTPUTS) | set(_PARTICLE_OUTPUTS)
+    for name in all_outputs:
+        value = getattr(result, name)
+        assert (value is not None) is (name in outputs), name
+        if value is not None:
+            assert value.shape[:2] == (1, T), name
+            assert jnp.all(jnp.isfinite(value)), name
+    cov = result.filtered_states_cov[0]
+    assert cov.shape == (T, 1, 1)
+    assert jnp.allclose(
+        result.filtered_states_cov_diag[0], jnp.diagonal(cov, axis1=1, axis2=2)
+    )
+    if result.filtered_states_chol_cov is not None:
+        chol = result.filtered_states_chol_cov[0]
+        assert jnp.allclose(chol @ jnp.swapaxes(chol, 1, 2), cov, atol=1e-5)
+    if result.filtered_particles is not None:
+        weights = jax.nn.softmax(result.filtered_log_weights[0], axis=-1)
+        mean = jnp.sum(weights[..., None] * result.filtered_particles[0], axis=-2)
+        assert jnp.allclose(mean, result.filtered_states_mean[0], atol=1e-5)
+
+
+def test_unrequested_belief_outputs_are_omitted():
+    result = dsx.simulate(
+        _lti_1d(),
+        rng_key=jr.PRNGKey(0),
+        predict_times=jnp.arange(5.0),
+        control_policy=_LinearPolicy(K=jnp.array([[0.5]])),
+        filter_config=_record_belief(PFConfig(n_particles=_n_particles(64)), False),
+    )
+    for name in set(_GAUSSIAN_OUTPUTS) | set(_PARTICLE_OUTPUTS):
+        assert getattr(result, name) is None, name
+
+
 def test_stateless_policy_runs_without_crashing_and_omits_policy_states():
     """Regression test: a stateless policy (no initial_policy_state given,
     s_0=None) previously crashed (jnp.expand_dims(None, axis=0)) when
@@ -1294,7 +1376,7 @@ def test_dsx_simulate_with_control_policy_rejects_ctrl_values():
 
 
 def test_dsx_simulate_with_control_policy_rejects_simulator_config():
-    from dynestyx.inference.configs.simulator import SDESimulatorConfig
+    from dynestyx.configs.simulator import SDESimulatorConfig
 
     dynamics = _lti_1d()
     predict_times = jnp.arange(0.0, 5.0)

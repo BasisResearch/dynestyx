@@ -11,7 +11,7 @@ from numpyro import handlers
 from numpyro.infer import init_to_median
 from numpyro.infer.util import initialize_model, potential_energy
 
-from dynestyx.inference.configs.mcmc import (
+from dynestyx.configs.mcmc import (
     AdaptiveMetropolisConfig,
     AdaptiveMWGConfig,
     BaseMCMCConfig,

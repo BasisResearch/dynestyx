@@ -305,7 +305,7 @@ def simulate_boundary_orbit_gif(
         rng_key=jr.PRNGKey(seed),
         predict_times=obs_times,
         n_simulations=n_particles,
-        simulator_config=dsx.SDESimulatorConfig(dt0=dt),
+        simulator_config=dsx.configs.SDESimulatorConfig(dt0=dt),
     )
     if simulation.states is None:
         raise RuntimeError("SDE simulation returned no state trajectories.")

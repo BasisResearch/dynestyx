@@ -31,7 +31,7 @@ from dynestyx.handlers import _DynestyxStackKind as Kind
         ),
         (dsx.ODESimulator(), Kind.SIMULATOR),
         (dsx.SDESimulator(), Kind.SIMULATOR),
-        (dsx.Evaluation(dsx.ObservationScoringConfig()), Kind.EVALUATION),
+        (dsx.Evaluation(dsx.configs.ObservationScoringConfig()), Kind.EVALUATION),
     ],
 )
 def test_interpretation_kind(interpretation, kind):

@@ -15,7 +15,9 @@ For **hierarchical** models with multiple trajectories, use `plate` together
 with NumPyro sampling inside the plate context. For example,
 
 ```python
-with Filter(EKFConfig()):
+import dynestyx as dsx
+
+with dsx.Filter(dsx.configs.EKFConfig()):
     dsx.sample("f", dynamical_model, obs_times=obs_times, obs_values=obs_values)
 ```
 
@@ -44,7 +46,7 @@ logging.getLogger("dynestyx").setLevel(logging.INFO)
 | Observations and prediction times | Apply both rules |
 | An incomplete observation or control pair | Raise an input-validation error |
 
-Categorical latent states select exact HMM filtering with `HMMConfig()`.
+Categorical latent states select exact HMM filtering with `dsx.configs.HMMConfig()`.
 For other models, `sample` selects `LatentPathBuilder()` when observation and state
 dimensions match, `T * observation_dim < 1,000`, and the transition is known to
 have a density or the model is a native ODE. This initial size heuristic uses
@@ -74,7 +76,7 @@ for ODEs. Their internal integration steps are independent of `predict_times`.
 An explicit `Discretizer` instead selects simulation of the discrete transitions.
 Automatic continuous-time filtering adds discretization: Kalman filtering uses
 the default discretizer, nonlinear SDE ensemble/particle filtering uses
-`DiffraxSampleConfig`, and ODE filtering uses `ODEFlowConfig`.
+`DiffraxSampleConfig`, and ODE filtering uses `ODEFlowConfig(jitter_scale=1e-6)`.
 Explicit inference handlers retain their continuous-time behavior, including when
 an automatic simulator is added. An explicit native simulator or solver config
 must remain compatible with the model reaching it; incompatible combinations
@@ -84,17 +86,19 @@ Existing limitations still apply: LPB predictions must be at or after the final
 observation time, and LPB with traced observation arrays needs fixed missingness
 metadata. A [PreparedModel](inference/prepared_model.md) wrapper can prepare and
 retain that metadata; it can also be supplied through `missing_obs_metadata`.
-No default infers identity
-observations or adds numerical jitter. Equal state and observation dimensions
-alone do not imply noise-free observations.
+Use an explicit observation model to specify noise-free measurements. Equal
+state and observation dimensions alone do not imply noise-free observations.
 
 For example, a model can request predictions without an explicit simulator:
 
 ```python
+import dynestyx as dsx
+import numpyro
+
 with numpyro.handlers.seed(rng_seed=0):
     prior = dsx.sample("f", dynamics, predict_times=times)
 
-with numpyro.handlers.seed(rng_seed=1), Filter(KFConfig(filter_source="cuthbert")):
+with numpyro.handlers.seed(rng_seed=1), dsx.Filter(dsx.configs.KFConfig(filter_source="cuthbert")):
     posterior = dsx.sample(
         "f", discrete_dynamics,
         obs_times=times, obs_values=observations,

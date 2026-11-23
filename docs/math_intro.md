@@ -38,11 +38,11 @@ Specifying the dynamical model in `dynestyx` follows a simple, unified interface
 
 The resulting constructor is simple, yet quite general:
 ```python 
-from dynestyx.models import DynamicalModel, ContinuousTimeStateEvolution
+import dynestyx as dsx
 
-dynamics = DynamicalModel(
+dynamics = dsx.DynamicalModel(
     initial_condition=dist.MultivariateNormal(...),
-    state_evolution=ContinuousTimeStateEvolution(
+    state_evolution=dsx.ContinuousTimeStateEvolution(
         drift=lambda x, u, t: ...,
         diffusion=dsx.FullDiffusion(...),
     ),
@@ -78,9 +78,9 @@ There are two entry points:
 
 Both inspect the model and automatically select discrete-time, ODE, or SDE
 simulation. For a differential equation, pass the corresponding
-[`dsx.ODESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+[`dsx.configs.ODESimulatorConfig`](api_reference/public/configurations/simulator_configs.md)
 or
-[`dsx.SDESimulatorConfig`](api_reference/public/simulators/simulator_configs.md)
+[`dsx.configs.SDESimulatorConfig`](api_reference/public/configurations/simulator_configs.md)
 through `simulator_config` to control the numerical solver. Discrete-time
 models do not require a simulator configuration. In every case,
 `n_simulations` specifies how many independent trajectories to generate.
@@ -93,7 +93,7 @@ import jax.random as jr
 from numpyro.infer import Predictive
 
 predict_times = jnp.arange(0.0, 1.0, 0.1)
-simulator_config = dsx.SDESimulatorConfig(source="em_scan", dt0=1e-3)
+simulator_config = dsx.configs.SDESimulatorConfig(source="em_scan", dt0=1e-3)
 
 with dsx.Simulator(
     simulator_config=simulator_config,

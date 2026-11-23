@@ -17,7 +17,7 @@ _STAGES = [
     dsx.GaussianRelaxation,
     dsx.Filter,
     dsx.Simulator,
-    lambda: dsx.Evaluation(dsx.ObservationScoringConfig()),
+    lambda: dsx.Evaluation(dsx.configs.ObservationScoringConfig()),
 ]
 
 

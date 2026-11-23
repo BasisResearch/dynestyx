@@ -132,8 +132,8 @@ class LinearGaussianObservation(ObservationModel):
                 matrix with shape $(d_y, d_x)$, or a callable `(t,)` returning it. May be
                 a sparse (e.g. `BCOO`) array for `EnKFConfig`/`PFConfig`/`EKFConfig`
                 (EKF works but likely gives no efficiency gain, warns) and for
-                `KFConfig(filter_source="cd_dynamax")`; raises for
-                `KFConfig(filter_source="cuthbert")`, which cannot support a sparse `H`.
+                `dsx.configs.KFConfig(filter_source="cd_dynamax")`; raises for
+                `dsx.configs.KFConfig(filter_source="cuthbert")`, which cannot support a sparse `H`.
             R (jax.Array | Callable): Observation noise covariance with shape
                 $(d_y, d_y)$, or a callable `(t,)` returning it.
             D (jax.Array | Callable | None): Optional control matrix with

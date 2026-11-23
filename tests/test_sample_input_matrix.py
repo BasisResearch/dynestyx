@@ -25,7 +25,7 @@ import pytest
 from numpyro.handlers import seed, trace
 
 from dynestyx import DiscreteTimeSimulator, Filter, SDESimulator, Simulator
-from dynestyx.inference.configs.filter import ContinuousTimeEKFConfig, EKFConfig
+from dynestyx.configs.filters import ContinuousTimeEKFConfig, EKFConfig
 from tests.models import (
     jumpy_controls_model,
     jumpy_controls_model_ode,

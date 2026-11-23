@@ -24,9 +24,9 @@ from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator
-from dynestyx.inference.configs.filter import EKFConfig, EnKFConfig, KFConfig
-from dynestyx.inference.configs.mcmc import NUTSConfig
-from dynestyx.inference.configs.smoother import EKFSmootherConfig, KFSmootherConfig
+from dynestyx.configs.filters import EKFConfig, EnKFConfig, KFConfig
+from dynestyx.configs.mcmc import NUTSConfig
+from dynestyx.configs.smoother import EKFSmootherConfig, KFSmootherConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,

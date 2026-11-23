@@ -2,15 +2,17 @@
 
 `Smoother` computes posterior smoothing distributions \(p(x_t \mid y_{1:T})\) and adds the corresponding marginal log-likelihood factor for parameter inference, mirroring `Filter` semantics.
 
+See [Smoother configurations](../configurations/smoother_configs.md).
+
 ## Usage
 
 ```python
+import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Smoother
-from dynestyx.inference.configs.smoother import KFSmootherConfig
 
 with DiscreteTimeSimulator(n_simulations=4):
     with Smoother(
-        smoother_config=KFSmootherConfig(
+        smoother_config=dsx.configs.KFSmootherConfig(
             filter_source="cd_dynamax",
             record_smoothed_states_mean=True,
         )

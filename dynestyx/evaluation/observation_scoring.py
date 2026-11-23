@@ -8,7 +8,7 @@ import numpyro
 import numpyro.distributions as dist
 from jaxtyping import Array, Float
 
-from dynestyx.evaluation.configs import ObservationScoringConfig
+from dynestyx.configs.scoring import ObservationScoringConfig
 from dynestyx.evaluation.scoring import EnergyScore
 from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 from dynestyx.types import EvaluationResult

@@ -3,6 +3,6 @@
 Internal API reference for MCMC configuration dataclasses used by inference dispatchers and
 backend integrations.
 
-::: dynestyx.inference.configs.mcmc
+::: dynestyx.configs.mcmc
     options:
       filters: []
