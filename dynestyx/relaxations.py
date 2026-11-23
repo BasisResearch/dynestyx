@@ -277,9 +277,10 @@ class GaussianRelaxation(ObjectInterpretation, HandlesSelf):
     Discretizer. Arguments and covariance units match :func:`relax_dynamics`.
 
     Example:
-        >>> with Filter(config):
-        ...     with GaussianRelaxation(observation_model_cov=0.1):
-        ...         result = condition("trajectory", dynamics, obs_times=t, obs_values=y)
+        >>> import dynestyx as dsx
+        >>> with dsx.Filter(config):
+        ...     with dsx.GaussianRelaxation(observation_model_cov=0.1):
+        ...         result = dsx.condition("trajectory", dynamics, obs_times=t, obs_values=y)
     """
 
     def __init__(

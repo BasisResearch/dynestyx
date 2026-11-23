@@ -2,6 +2,8 @@
 
 `Evaluation` consumes the `ConditionedResult` forwarded by an inner `Filter`, computes the configured evaluations, and attaches an `EvaluationResult` to it.
 
+See [Observation scoring configuration](../configurations/scoring_configs.md).
+
 ```python
 with Evaluation(observation_scoring_config=scoring_config):
     with Filter(filter_config=filter_config):

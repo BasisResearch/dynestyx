@@ -15,7 +15,7 @@ import numpyro
 import numpyro.distributions as dist
 from jaxtyping import Array, Float, Real
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,

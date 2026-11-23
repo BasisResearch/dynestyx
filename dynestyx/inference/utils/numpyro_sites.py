@@ -5,14 +5,14 @@ import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Float, Real
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     HMMConfig,
     PFConfig,
     _config_to_record_kwargs,
 )
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     BaseSmootherConfig,
     PFSmootherConfig,
     _config_to_smoother_record_kwargs,
@@ -171,12 +171,38 @@ def _add_continuous_filter_sites(name: str, filtered, record_kwargs: dict) -> No
         numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
 
 
+def filtered_state_outputs(
+    states: object, filter_config: BaseFilterConfig
+) -> dict[str, Array]:
+    """Requested outputs of a discrete-time filter, keyed by output name.
+
+    The keys are the ``filtered_*`` names the outputs are recorded under, e.g.
+    ``filtered_states_cov_diag``. An output is included if its ``record_*``
+    field in ``filter_config`` is ``True``, or if it is ``None`` and the
+    output has at most ``record_max_elems`` elements.
+
+    Args:
+        states: Time-stacked filter states in the format returned by the
+            backend that ``filter_config`` selects.
+        filter_config: Configuration of a discrete-time, non-HMM filter.
+
+    Returns:
+        The requested outputs, each with a leading time axis.
+    """
+    record_kwargs = _config_to_record_kwargs(filter_config)
+    if isinstance(filter_config, PFConfig):
+        return _cuthbert_pf_outputs(states, record_kwargs)
+    return _gaussian_filter_outputs(states, record_kwargs)
+
+
+def _register_outputs(name: str, outputs: dict[str, Array]) -> None:
+    """Register each output as the deterministic site ``{name}_{key}``."""
+    for key, value in outputs.items():
+        numpyro.deterministic(f"{name}_{key}", value)
+
+
 def _add_cuthbert_pf_sites(name: str, states, record_kwargs: dict) -> None:
     """Register requested outputs from a Cuthbert particle filter.
-
-    If a mean or covariance is requested, the function computes weighted
-    moments from the particles and their log weights. Scalar-state particles
-    receive a trailing state dimension before they are recorded.
 
     Args:
         name: Prefix for each NumPyro site name.
@@ -186,6 +212,24 @@ def _add_cuthbert_pf_sites(name: str, states, record_kwargs: dict) -> None:
 
     Returns:
         None.
+    """
+    _register_outputs(name, _cuthbert_pf_outputs(states, record_kwargs))
+
+
+def _cuthbert_pf_outputs(states, record_kwargs: dict) -> dict[str, Array]:
+    """Requested outputs from a Cuthbert particle filter.
+
+    If a mean or covariance is requested, the function computes weighted
+    moments from the particles and their log weights. Scalar-state particles
+    receive a trailing state dimension before they are recorded.
+
+    Args:
+        states: Particle-filter result with `particles` and `log_weights`
+            arrays.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        The requested outputs, keyed by output name.
     """
     log_weights = states.log_weights
     particles = states.particles
@@ -228,27 +272,26 @@ def _add_cuthbert_pf_sites(name: str, states, record_kwargs: dict) -> None:
             "...tj,...tk->...tjk", filtered_means, filtered_means
         )
 
+    outputs = {}
     if add_particles:
-        numpyro.deterministic(f"{name}_filtered_particles", particles)
+        outputs["filtered_particles"] = particles
     if add_log_weights:
-        numpyro.deterministic(f"{name}_filtered_log_weights", log_weights)
+        outputs["filtered_log_weights"] = log_weights
     if add_mean:
-        numpyro.deterministic(f"{name}_filtered_states_mean", filtered_means)
+        outputs["filtered_states_mean"] = filtered_means
     if add_filtered_states_cov:
-        numpyro.deterministic(f"{name}_filtered_states_cov", filtered_covariances)
+        outputs["filtered_states_cov"] = filtered_covariances
     if add_filtered_states_cov_diag:
-        diag_cov = jnp.diagonal(filtered_covariances, axis1=1, axis2=2)
-        numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+        outputs["filtered_states_cov_diag"] = jnp.diagonal(
+            filtered_covariances, axis1=1, axis2=2
+        )
+    return outputs
 
 
 def _add_gaussian_filter_sites(
     name: str, states, filter_config: BaseFilterConfig, record_kwargs: dict
 ) -> None:
     """Register requested outputs from a discrete-time Gaussian filter.
-
-    Results from cd-dynamax expose `filtered_means` and
-    `filtered_covariances`. Cuthbert results expose `mean` and `chol_cov`; this
-    function derives the full covariance or its diagonal only when requested.
 
     Args:
         name: Prefix for each NumPyro site name.
@@ -260,13 +303,31 @@ def _add_gaussian_filter_sites(
     Returns:
         None.
     """
+    _register_outputs(name, _gaussian_filter_outputs(states, record_kwargs))
+
+
+def _gaussian_filter_outputs(states, record_kwargs: dict) -> dict[str, Array]:
+    """Requested outputs from a discrete-time Gaussian filter.
+
+    Results from cd-dynamax expose `filtered_means` and
+    `filtered_covariances`. Cuthbert results expose `mean` and `chol_cov`; this
+    function derives the full covariance or its diagonal only when requested.
+
+    Args:
+        states: Gaussian-filter result in the format returned by its backend.
+        record_kwargs: Resolved recording flags and maximum element count.
+
+    Returns:
+        The requested outputs, keyed by output name.
+    """
     max_elems = record_kwargs["record_max_elems"]
+    outputs = {}
 
     if hasattr(states, "filtered_means"):
         means = states.filtered_means
         covs = states.filtered_covariances
         if means is None:
-            return
+            return outputs
         t_len, state_dim = means.shape
         add_mean = _should_record_field(
             record_kwargs["record_filtered_states_mean"], means.shape, max_elems
@@ -282,12 +343,11 @@ def _add_gaussian_filter_sites(
             max_elems,
         )
         if add_mean:
-            numpyro.deterministic(f"{name}_filtered_states_mean", means)
+            outputs["filtered_states_mean"] = means
         if add_cov and covs is not None:
-            numpyro.deterministic(f"{name}_filtered_states_cov", covs)
+            outputs["filtered_states_cov"] = covs
         if add_cov_diag and covs is not None:
-            diag_cov = jnp.diagonal(covs, axis1=1, axis2=2)
-            numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+            outputs["filtered_states_cov_diag"] = jnp.diagonal(covs, axis1=1, axis2=2)
     elif hasattr(states, "mean"):
         mean = states.mean
         chol_cov = states.chol_cov
@@ -313,18 +373,20 @@ def _add_gaussian_filter_sites(
         )
 
         if add_mean:
-            numpyro.deterministic(f"{name}_filtered_states_mean", mean)
+            outputs["filtered_states_mean"] = mean
         if add_chol_cov:
-            numpyro.deterministic(f"{name}_filtered_states_chol_cov", chol_cov)
+            outputs["filtered_states_chol_cov"] = chol_cov
 
         if add_filtered_states_cov or add_filtered_states_cov_diag:
             filtered_cov = covariance_from_cholesky(chol_cov)
 
         if add_filtered_states_cov:
-            numpyro.deterministic(f"{name}_filtered_states_cov", filtered_cov)
+            outputs["filtered_states_cov"] = filtered_cov
         if add_filtered_states_cov_diag:
-            diag_cov = jnp.diagonal(filtered_cov, axis1=1, axis2=2)
-            numpyro.deterministic(f"{name}_filtered_states_cov_diag", diag_cov)
+            outputs["filtered_states_cov_diag"] = jnp.diagonal(
+                filtered_cov, axis1=1, axis2=2
+            )
+    return outputs
 
 
 def _add_cuthbert_pf_smoother_sites(name: str, states, record_kwargs: dict) -> None:

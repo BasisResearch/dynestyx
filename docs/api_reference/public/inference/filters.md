@@ -4,6 +4,8 @@ One of the principal functions of a dynamical systems inference engine is *filte
 
 Where supported, `Filter` includes one-step-ahead predictive-observation outputs from the filter in its `ConditionedResult` via `include_predicted_observations`. 
 
+See [Filter configurations](../configurations/filter_configs.md).
+
 ::: dynestyx.inference.filters
     options:
       members:

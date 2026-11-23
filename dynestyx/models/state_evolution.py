@@ -22,10 +22,9 @@ from dynestyx.models.drifts import AffineDrift as _AffineDrift
 
 
 class AffineDrift(_AffineDrift):
-    """Deprecated alias for `dynestyx.models.drifts.AffineDrift`.
+    """Deprecated alias for `dsx.AffineDrift`.
 
-    Deprecated: import `AffineDrift` from `dynestyx.models.drifts` (or
-    `dynestyx`) instead. This alias will be removed in v0.5.0.
+    This alias will be removed in v0.5.0.
     """
 
     def __check_init__(self) -> None:

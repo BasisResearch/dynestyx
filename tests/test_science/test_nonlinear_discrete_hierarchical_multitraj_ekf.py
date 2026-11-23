@@ -13,7 +13,7 @@ from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator
-from dynestyx.inference.configs.filter import EKFConfig
+from dynestyx.configs.filters import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import DynamicalModel, GaussianStateEvolution
 from dynestyx.models.observations import LinearGaussianObservation

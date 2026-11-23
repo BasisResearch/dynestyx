@@ -150,14 +150,15 @@ class DiscreteTimeSimulator(BaseSimulator):
     standalone pure-JAX generation without a NumPyro trace.
 
     Examples:
+        >>> import dynestyx as dsx
         >>> def model(predict_times=None):
-        ...     dynamics = DynamicalModel(
+        ...     dynamics = dsx.DynamicalModel(
         ...         initial_condition=initial_dist,
         ...         state_evolution=transition,
         ...         observation_model=observation,
         ...     )
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
-        >>> with DiscreteTimeSimulator(n_simulations=3):
+        >>> with dsx.DiscreteTimeSimulator(n_simulations=3):
         ...     predictive = Predictive(
         ...         model, num_samples=10, condition_deterministic=False
         ...     )

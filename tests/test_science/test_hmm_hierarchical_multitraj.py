@@ -13,7 +13,7 @@ from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator
-from dynestyx.inference.configs.filter import HMMConfig
+from dynestyx.configs.filters import HMMConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import DynamicalModel
 from tests.arviz_utils import save_posterior_plot

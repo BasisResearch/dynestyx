@@ -13,18 +13,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
-from dynestyx.handlers import (
-    HandlesSelf,
-    _condition_intp,
-    _dynestyx_stack_kind,
-    _DynestyxStackKind,
-)
-from dynestyx.inference.checkers import (
-    _validate_batched_plate_alignment,
-    _validate_inference_supported_model_classes,
-    _validate_missing_observation_support,
-)
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
@@ -47,6 +36,17 @@ from dynestyx.inference.configs.filter import (
     PFResamplingConfig,
     TaperCovarianceFn,
     UKFConfig,
+)
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
+from dynestyx.inference.checkers import (
+    _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
+    _validate_missing_observation_support,
 )
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
@@ -214,6 +214,9 @@ class Filter(BaseLogFactorAdder):
     marginal log-likelihood as a NumPyro factor, allowing for downstream parameter inference.
 
     Examples:
+        >>> import dynestyx as dsx
+        >>> from dynestyx import DynamicalModel, Filter
+        >>> from dynestyx.configs import KFConfig
         >>> def model(obs_times=None, obs_values=None):
         ...     dynamics = DynamicalModel(...)
         ...     return dsx.sample("f", dynamics, obs_times=obs_times, obs_values=obs_values)
@@ -238,7 +241,7 @@ class Filter(BaseLogFactorAdder):
     There are several different filters available in `dynestyx`, each with their own strengths and weaknesses.
     What filters are applicable to a given model depends heavily on any special structure of the model (for example, linear and/or Gaussian observations).
     For a summary table of all config classes and when to use them, see
-    [Available filter configurations](configs/filter_configs.md).
+    [Available filter configurations](../configurations/filter_configs.md).
 
     Defaults
     --------

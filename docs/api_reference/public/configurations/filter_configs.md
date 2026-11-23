@@ -8,9 +8,9 @@ Create an updated config with `dataclasses.replace` instead of assigning to its 
 ```python
 from dataclasses import replace
 
-from dynestyx.inference.configs.filter import EnKFConfig
+import dynestyx as dsx
 
-config = EnKFConfig(n_particles=30)
+config = dsx.configs.EnKFConfig(n_particles=30)
 larger_ensemble = replace(config, n_particles=100)
 ```
 
@@ -39,14 +39,14 @@ Nested objects such as `extra_filter_kwargs` dictionaries are not recursively fr
 
 Localization is a common technique in EnKFs, related to the issue of estimating a covariance matrix from a few samples. The (cuthbert, discrete-time) EnKF supports localization via covariance tapering via pairwise distances, or direct control over localization functions, using `EnKFLocalizationConfig` for the former and `EnKFLocalizationFunctions` for the latter. For localization in a deterministic continuous-time dynamics, combine `EnKFConfig` with an ODE-flow `Discretizer`.
 
-For a worked example with a custom differentiable taper, see [Learning EnKF localization with proper scoring rules](../../../../deep_dives/l96_localization_hyperparameter_scoring.ipynb). For the mathematical definitions of the taper functions and the factorization of the localized innovation covariance, see [Cuthbert's covariance localization reference](https://state-space-models.github.io/cuthbert/api_cuthbertlib/ensemble_kalman/localization/).
+For a worked example with a custom differentiable taper, see [Learning EnKF localization with proper scoring rules](../../../deep_dives/l96_localization_hyperparameter_scoring.ipynb). For the mathematical definitions of the taper functions and the factorization of the localized innovation covariance, see [Cuthbert's covariance localization reference](https://state-space-models.github.io/cuthbert/api_cuthbertlib/ensemble_kalman/localization/).
 
 Dynestyx offers a few built-in taper functions for commonly-used correlation functions, namely `"gaspari_cohn"` and `"gaussian"`. Supplying `observation_distances` localizes both the state–observation cross covariance and the observation marginal covariance; omitting it localizes only the cross covariance. A callable taper receives a distance matrix and may close over differentiable JAX parameters:
 
 ```python
 import jax.numpy as jnp
 
-from dynestyx.inference.filters import EnKFConfig, EnKFLocalizationConfig
+import dynestyx as dsx
 
 
 def gaussian_taper(distances):
@@ -54,19 +54,20 @@ def gaussian_taper(distances):
     return jnp.exp(-0.5 * (distances / length_scale) ** 2)
 
 
-localization = EnKFLocalizationConfig(
+localization = dsx.configs.EnKFLocalizationConfig(
     state_observation_distances=cross_distances,
     observation_distances=observation_distances,
     taper=gaussian_taper,
 )
-filter_config = EnKFConfig(localization=localization)
+filter_config = dsx.configs.EnKFConfig(localization=localization)
 ```
 
 For advanced usage, one may provide directly the functions that modify the covariance and cross-covariance. [Cuthbert's localization tutorial](https://state-space-models.github.io/cuthbert/examples/enkf_localization_l96/) shows how to construct these callbacks from distance-based tapers and explains their role in the EnKF update:
 
 ```python
 from cuthbertlib.ensemble_kalman import construct_tapered_chol_innovation_covariance
-from dynestyx.inference.filters import EnKFConfig, EnKFLocalizationFunctions
+
+import dynestyx as dsx
 
 
 def modify_cross_covariance(cross_covariance, model_inputs):
@@ -81,8 +82,8 @@ def modify_predicted_observation_covariance(covariance, model_inputs):
     return observation_taper * covariance
 
 
-filter_config = EnKFConfig(
-    localization=EnKFLocalizationFunctions(
+filter_config = dsx.configs.EnKFConfig(
+    localization=dsx.configs.EnKFLocalizationFunctions(
         modify_cross_covariance=modify_cross_covariance,
         construct_chol_innovation_covariance=construct_chol_innovation_covariance,
         modify_predicted_observation_covariance=modify_predicted_observation_covariance,
@@ -90,11 +91,11 @@ filter_config = EnKFConfig(
 )
 ```
 
-Projected forecast ensembles remain the raw ensemble even when the observation marginal is localized. For an `EnergyScore` intended to represent the localized Gaussian covariance, select `ObservationScoringConfig(sample_source="gaussian_moments")`.
+Projected forecast ensembles remain the raw ensemble even when the observation marginal is localized. For an `EnergyScore` intended to represent the localized Gaussian covariance, select `dsx.configs.ObservationScoringConfig(sample_source="gaussian_moments")`.
 
 ## Discrete Time Configuration Classes
 
-::: dynestyx.inference.configs.filter
+::: dynestyx.configs.filters
     options:
       members:
         - BaseFilterConfig
@@ -102,6 +103,7 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
         - EKFConfig
         - UKFConfig
         - PFConfig
+        - PFResamplingConfig
         - TaperCovarianceFn
         - ModifyCrossCovariance
         - ConstructCholInnovationCovariance
@@ -112,20 +114,20 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
 
 ## Continuous Time Configuration Classes
 
-::: dynestyx.inference.configs.filter
+::: dynestyx.configs.filters
     options:
       members:
         - ContinuousTimeConfig
         - ContinuousTimeKFConfig
         - ContinuousTimeEKFConfig
-        - ContinuousTimeKFConfig
-        - ContinuousTimePFConfig
+        - ContinuousTimeUKFConfig
+        - ContinuousTimeDPFConfig
         - ContinuousTimeEnKFConfig
 
 
 ## Discrete State-Space Configuration Classes
 
-::: dynestyx.inference.configs.filter
+::: dynestyx.configs.filters
     options:
       members:
         - HMMConfig

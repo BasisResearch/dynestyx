@@ -8,7 +8,7 @@ import pytest
 from numpyro.infer import MCMC, NUTS, Predictive
 
 from dynestyx import Simulator
-from dynestyx.inference.configs.smoother import ContinuousTimeKFSmootherConfig
+from dynestyx.configs.smoother import ContinuousTimeKFSmootherConfig
 from dynestyx.inference.smoothers import Smoother
 from tests.arviz_utils import hdi_bounds, save_posterior_plot
 from tests.models import continuous_time_lti_simplified_model

@@ -222,7 +222,7 @@ def test_simulate_ode_accepts_structured_config():
         rng_key=jr.PRNGKey(1),
         predict_times=predict_times,
         n_simulations=2,
-        simulator_config=dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
+        simulator_config=dsx.configs.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
     )
     assert isinstance(result, dsx.SimulatedResult)
     assert result.times is not None
@@ -243,7 +243,7 @@ def test_simulate_sde_accepts_structured_config():
         rng_key=jr.PRNGKey(2),
         predict_times=predict_times,
         n_simulations=2,
-        simulator_config=dsx.SDESimulatorConfig(
+        simulator_config=dsx.configs.SDESimulatorConfig(
             dt0=0.01,
             tol_vbt=0.005,
             max_steps=2_000,
@@ -339,13 +339,13 @@ def test_discrete_simulator_backend_rejects_missing_ctrl_times():
         pytest.param(
             _make_ode_dynamics,
             jnp.linspace(0.0, 1.0, 6),
-            dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
+            dsx.configs.ODESimulatorConfig(dt0=0.05, max_steps=1_000),
             id="ode",
         ),
         pytest.param(
             _make_sde_dynamics,
             jnp.linspace(0.0, 0.5, 5),
-            dsx.SDESimulatorConfig(
+            dsx.configs.SDESimulatorConfig(
                 dt0=0.01,
                 tol_vbt=0.005,
                 max_steps=2_000,
@@ -637,10 +637,10 @@ def test_discrete_simulator_time_fields_tile_across_simulations():
 @pytest.mark.parametrize(
     ("make_dynamics", "simulator_config"),
     [
-        (_make_ode_dynamics, dsx.ODESimulatorConfig(dt0=0.05, max_steps=1_000)),
+        (_make_ode_dynamics, dsx.configs.ODESimulatorConfig(dt0=0.05, max_steps=1_000)),
         (
             _make_sde_dynamics,
-            dsx.SDESimulatorConfig(dt0=0.01, max_steps=2_000, source="em_scan"),
+            dsx.configs.SDESimulatorConfig(dt0=0.01, max_steps=2_000, source="em_scan"),
         ),
     ],
     ids=["ode", "sde"],

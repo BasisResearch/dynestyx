@@ -20,8 +20,9 @@ def flatten_draws(arr: Shaped[Array, "..."]) -> Shaped[Array, "..."]:
         Array of shape ``(num_samples * n_sim, ...)``.
 
     Example:
-        >>> states = samples["f_states"]      # (num_samples, n_sim, T, state_dim)
-        >>> draws = flatten_draws(states)      # (num_samples * n_sim, T, state_dim)
+        >>> import dynestyx as dsx
+        >>> states = samples["f_states"]  # (num_samples, n_sim, T, state_dim)
+        >>> draws = dsx.flatten_draws(states)  # (num_samples * n_sim, T, state_dim)
         >>> lo, hi = jnp.percentile(draws, jnp.array([5.0, 95.0]), axis=0)
     """
     return arr.reshape((-1,) + arr.shape[2:])

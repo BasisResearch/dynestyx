@@ -534,16 +534,17 @@ class plate(ObjectInterpretation):
         plotting/credible intervals.
 
     Examples:
+        >>> import dynestyx as dsx
         >>> with dsx.plate("trajectories", M):
         ...     theta = numpyro.sample("theta", dist.Normal(0, 1))  # shape (M,)
-        ...     dynamics = DynamicalModel(...)  # built from theta
+        ...     dynamics = dsx.DynamicalModel(...)  # built from theta
         ...     dsx.sample("f", dynamics, obs_times=t, obs_values=y)
 
         >>> with dsx.plate("groups", G):
         ...     beta = numpyro.sample("beta", dist.Normal(0, 1))  # shape (G,)
         ...     with dsx.plate("trajectories", M):
         ...         alpha = numpyro.sample("alpha", dist.Normal(beta, 1))  # shape (M, G)
-        ...         dynamics = DynamicalModel(...)  # built from alpha
+        ...         dynamics = dsx.DynamicalModel(...)  # built from alpha
         ...         dsx.sample("f", dynamics, obs_times=t, obs_values=y)
 
     Sharp edges:

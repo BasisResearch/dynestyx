@@ -9,7 +9,7 @@ from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Discretizer, Filter, SDESimulator
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
