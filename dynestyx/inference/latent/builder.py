@@ -15,6 +15,7 @@ from effectful.ops.syntax import ObjectInterpretation, implements
 from jax.core import Tracer
 from jaxtyping import Array, Bool, Int, PRNGKeyArray, Real
 
+from dynestyx.configs.simulator import ODESimulatorConfig
 from dynestyx.handlers import (
     HandlesSelf,
     _condition_intp,
@@ -22,7 +23,6 @@ from dynestyx.handlers import (
     _DynestyxStackKind,
 )
 from dynestyx.inference.checkers import _validate_inference_supported_model_classes
-from dynestyx.inference.configs.simulator import ODESimulatorConfig
 from dynestyx.inference.posterior_rollout import (
     _final_times_for_rollout,
     _validate_future_only_predict_times,

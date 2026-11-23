@@ -21,13 +21,13 @@ from dynestyx import (
     Filter,
     ODESimulator,
     SDESimulator,
-    SDESimulatorConfig,
 )
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
     KFConfig,
 )
+from dynestyx.configs.simulator import SDESimulatorConfig
 from tests.models import (
     continuous_time_stochastic_l63_model,
     discrete_time_lti_simplified_model,

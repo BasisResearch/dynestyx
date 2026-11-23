@@ -182,7 +182,7 @@ class ImExDrift(eqx.Module):
     Wherever a plain `Drift`-shaped callable `(x, u, t) -> R^{d_x}` is
     expected, an `ImExDrift` instance may be used directly. When used with a
     solver that doesn't request diffrax's `MultiTerm` (i.e. not an IMEX
-    solver), `dynestyx.solvers.odes.solve_ode_state_path` emits a warning
+    solver), `dynestyx.solvers.solve_ode_state_path` emits a warning
     naming the solver, since the explicit/implicit split goes unused.
 
     Attributes:

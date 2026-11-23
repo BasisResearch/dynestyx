@@ -11,18 +11,7 @@ from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.handlers import (
-    HandlesSelf,
-    _condition_intp,
-    _dynestyx_stack_kind,
-    _DynestyxStackKind,
-)
-from dynestyx.inference.checkers import (
-    _validate_batched_plate_alignment,
-    _validate_inference_supported_model_classes,
-    _validate_missing_observation_support,
-)
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     BaseSmootherConfig,
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
@@ -33,6 +22,17 @@ from dynestyx.inference.configs.smoother import (
     KFSmootherConfig,
     PFSmootherConfig,
     UKFSmootherConfig,
+)
+from dynestyx.handlers import (
+    HandlesSelf,
+    _condition_intp,
+    _dynestyx_stack_kind,
+    _DynestyxStackKind,
+)
+from dynestyx.inference.checkers import (
+    _validate_batched_plate_alignment,
+    _validate_inference_supported_model_classes,
+    _validate_missing_observation_support,
 )
 from dynestyx.inference.integrations.cd_dynamax.continuous_smoother import (
     compute_continuous_smoother,
@@ -266,7 +266,7 @@ class Smoother(BaseSmootherLogFactorAdder):
             )
             raise ValueError(
                 f"Invalid smoother config: {type(config).__name__}. "
-                "Expected a smoother config class from dynestyx.inference.configs.smoother. "
+                "Expected a smoother config class from dynestyx.configs.smoother. "
                 f"Valid types: {valid}"
             )
         if isinstance(config, EnRTSSmootherConfig) and (

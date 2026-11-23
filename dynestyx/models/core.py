@@ -382,7 +382,7 @@ class ContinuousTimeStateEvolution(_FrozenModule):
     Note:
         For IMEX (implicit-explicit) diffrax solvers (e.g. `diffrax.KenCarp3/4/5`,
         `diffrax.Sil3`), pass an `ImExDrift` instance as `drift` instead of a
-        plain callable; see `dynestyx.models.drifts.ImExDrift`.
+        plain callable; see `dsx.ImExDrift`.
     """
 
     drift: Drift | None = None

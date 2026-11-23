@@ -11,7 +11,7 @@ from numpyro.infer import init_to_value
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, LatentPathBuilder, ODESimulator
-from dynestyx.inference.configs.mcmc import NUTSConfig
+from dynestyx.configs.mcmc import NUTSConfig
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.models import (
     ContinuousTimeStateEvolution,

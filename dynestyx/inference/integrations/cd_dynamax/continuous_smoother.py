@@ -14,7 +14,7 @@ from cd_dynamax import (
 )
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     ContinuousTimeEKFSmootherConfig,
     ContinuousTimeKFSmootherConfig,
 )

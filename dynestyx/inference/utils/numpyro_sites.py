@@ -5,14 +5,14 @@ import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Float, Real
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     HMMConfig,
     PFConfig,
     _config_to_record_kwargs,
 )
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     BaseSmootherConfig,
     PFSmootherConfig,
     _config_to_smoother_record_kwargs,

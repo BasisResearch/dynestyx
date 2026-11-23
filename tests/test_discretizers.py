@@ -8,12 +8,12 @@ from numpyro.handlers import seed, trace
 from numpyro.infer import Predictive
 
 import dynestyx as dsx
+from dynestyx.configs.filters import EKFConfig
 from dynestyx.discretizers import (
     Discretizer,
     EulerMaruyamaConfig,
     discretize_state_evolution,
 )
-from dynestyx.inference.configs.filter import EKFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.models import (
     ContinuousTimeStateEvolution,

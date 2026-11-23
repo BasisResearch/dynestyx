@@ -1,5 +1,7 @@
 # Simulator
 
+See [Simulator configurations](../configurations/simulator_configs.md).
+
 ::: dynestyx.simulation.auto.Simulator
     options:
       show_root_heading: false

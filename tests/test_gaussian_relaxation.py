@@ -13,7 +13,7 @@ from jaxtyping import Array, Float
 from numpyro.handlers import seed
 
 import dynestyx as dsx
-from dynestyx.inference.configs.filter import EKFConfig, KFConfig
+from dynestyx.configs.filters import EKFConfig, KFConfig
 from dynestyx.inference.utils.plate_utils import _slice_dynamics_for_plate_member
 
 

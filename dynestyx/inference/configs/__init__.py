@@ -1,1 +1,1 @@
-"""Configuration subpackage for inference and simulation."""
+"""Compatibility package for config modules moved to :mod:`dynestyx.configs`."""

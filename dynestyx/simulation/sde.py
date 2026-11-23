@@ -4,7 +4,7 @@ import jax
 import jax.random as jr
 from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.simulator import SDESimulatorConfig
+from dynestyx.configs.simulator import SDESimulatorConfig
 from dynestyx.models import DynamicalModel, StochasticContinuousTimeStateEvolution
 from dynestyx.simulation.base import BaseSimulator
 from dynestyx.simulation.utils import (
@@ -46,7 +46,7 @@ class SDESimulator(BaseSimulator):
     `dsx.sample(name, dynamics, predict_times=...)`. The active NumPyro seed
     supplies randomness, and the realized paths are then attached to the trace
     as deterministic sites. Pass an
-    [SDESimulatorConfig][dynestyx.inference.configs.simulator.SDESimulatorConfig]
+    [SDESimulatorConfig][dynestyx.configs.simulator.SDESimulatorConfig]
     to choose the SDE backend, solver, step-size controller, adjoint, step size,
     and Brownian-tree tolerance. Use
     [dsx.simulate][dynestyx.api.simulate] for standalone pure-JAX generation
@@ -55,18 +55,19 @@ class SDESimulator(BaseSimulator):
     Examples:
         Fast fixed-step Euler--Maruyama simulation:
 
+        >>> import dynestyx as dsx
         >>> def model(predict_times=None):
-        ...     dynamics = DynamicalModel(
+        ...     dynamics = dsx.DynamicalModel(
         ...         initial_condition=initial_dist,
-        ...         state_evolution=ContinuousTimeStateEvolution(
+        ...         state_evolution=dsx.ContinuousTimeStateEvolution(
         ...             drift=drift,
         ...             diffusion=diffusion,
         ...         ),
         ...         observation_model=observation,
         ...     )
         ...     dsx.sample("f", dynamics, predict_times=predict_times)
-        >>> config = SDESimulatorConfig(source="em_scan", dt0=1e-3)
-        >>> with SDESimulator(config, n_simulations=4):
+        >>> config = dsx.configs.SDESimulatorConfig(source="em_scan", dt0=1e-3)
+        >>> with dsx.SDESimulator(config, n_simulations=4):
         ...     predictive = Predictive(
         ...         model, num_samples=10, condition_deterministic=False
         ...     )
@@ -79,7 +80,7 @@ class SDESimulator(BaseSimulator):
         Use the Diffrax backend when a different SDE solver or step-size
         controller is required:
 
-        >>> config = SDESimulatorConfig(
+        >>> config = dsx.configs.SDESimulatorConfig(
         ...     source="diffrax",
         ...     solver=diffrax.EulerHeun(),
         ...     dt0=1e-3,
@@ -108,7 +109,7 @@ class SDESimulator(BaseSimulator):
 
     Configurations and defaults
     ---------------------------
-    [SDESimulatorConfig][dynestyx.inference.configs.simulator.SDESimulatorConfig]
+    [SDESimulatorConfig][dynestyx.configs.simulator.SDESimulatorConfig]
     selects one of two backends:
 
     - `source="em_scan"` uses a fixed-step Euler--Maruyama `jax.lax.scan`.

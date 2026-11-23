@@ -83,13 +83,12 @@ data and infer parameters with a filter plus NUTS (no explicit state sampling):
 
 ```python
 from numpyro.infer import MCMC, NUTS
-from dynestyx.inference.filters import ContinuousTimeEnKFConfig
 
 obs_times = samples["f_times"][0, 0]
 obs_values = samples["f_observations"][0, 0]
 
 def inference_model():
-    with dsx.Filter(filter_config=ContinuousTimeEnKFConfig(n_particles=25)):
+    with dsx.Filter(filter_config=dsx.configs.ContinuousTimeEnKFConfig(n_particles=25)):
         model(obs_times=obs_times, obs_values=obs_values)
 
 mcmc = MCMC(NUTS(inference_model), num_warmup=100, num_samples=100)

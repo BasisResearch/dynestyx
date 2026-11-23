@@ -251,7 +251,7 @@ def test_latent_path_builder_sample_ode_reconstructs_state_path():
     obs_times = jnp.array([0.0, 1.0, 2.0])
     obs_values = jnp.array([0.1, 0.1, 0.1])
     state_path_params = jnp.array(0.1)
-    ode_simulator_config = dsx.ODESimulatorConfig(dt0=0.25, max_steps=100)
+    ode_simulator_config = dsx.configs.ODESimulatorConfig(dt0=0.25, max_steps=100)
     latent_path_builder = dsx.LatentPathBuilder(
         ode_simulator_config=ode_simulator_config
     )
@@ -761,7 +761,9 @@ def test_latent_path_builder_transform_reparam_matches_manual_noncentered_model(
         "f_state_path_params_base": jnp.array([[0.1, -0.2]]),
     }
 
-    with dsx.LatentPathBuilder(ode_simulator_config=dsx.ODESimulatorConfig(dt0=0.05)):
+    with dsx.LatentPathBuilder(
+        ode_simulator_config=dsx.configs.ODESimulatorConfig(dt0=0.05)
+    ):
         reparam_log_density, reparam_trace = log_density(
             reparam_model,
             (),
@@ -817,7 +819,7 @@ def test_latent_path_builder_plated_odes_use_member_initial_condition_sites():
 
     with trace() as tr, seed(rng_seed=jr.PRNGKey(0)):
         with dsx.LatentPathBuilder(
-            ode_simulator_config=dsx.ODESimulatorConfig(dt0=0.05)
+            ode_simulator_config=dsx.configs.ODESimulatorConfig(dt0=0.05)
         ):
             with dsx.plate("members", 2):
                 dynamics = dsx.DynamicalModel(

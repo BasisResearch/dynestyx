@@ -14,12 +14,12 @@ from numpyro import handlers
 from numpyro.infer import Predictive, init_to_median
 
 from dynestyx import Simulator
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     ContinuousTimeEnKFConfig,
     EKFConfig,
     PFConfig,
 )
-from dynestyx.inference.configs.mcmc import (
+from dynestyx.configs.mcmc import (
     HMCConfig,
     MALAConfig,
     NUTSConfig,
