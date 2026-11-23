@@ -1358,6 +1358,102 @@ def test_dsx_simulate_with_control_policy_forwards_filter_config():
     assert jnp.all(jnp.isfinite(result.filtered_states_mean))
 
 
+@pytest.mark.parametrize("handler", [None, dsx.Simulator, DiscreteControlLoopSimulator])
+def test_relaxed_filter_dynamics_with_deterministic_plant(handler):
+    plant = DynamicalModel(
+        initial_condition=dist.Delta(jnp.array([2.0]), event_dim=1),
+        state_evolution=dsx.DeterministicStateEvolution(
+            lambda x, u, t, t_next: x + (t_next - t) * u
+        ),
+        observation_model=dsx.DiracIdentityObservation(),
+        control_dim=1,
+        observation_control_alignment="previous_transition",
+    )
+    filter_prior_model = eqx.tree_at(
+        lambda model: model.initial_condition,
+        plant,
+        dist.Delta(jnp.zeros(1), event_dim=1),
+    )
+    filter_dynamics = dsx.relax_dynamics(
+        filter_prior_model,
+        initial_condition_cov=0.4,
+        state_evolution_cov=0.05,
+        observation_model_cov=0.2,
+    )
+    policy = _simple_policy()
+    config = EKFConfig(
+        record_filtered_states_mean=True, record_filtered_states_cov=True
+    )
+    times = jnp.arange(3.0)
+    if handler is None:
+        result = dsx.simulate(
+            plant,
+            predict_times=times,
+            rng_key=jr.key(0),
+            control_policy=policy,
+            filter_dynamics=filter_dynamics,
+            filter_config=config,
+        )
+    else:
+        with (
+            seed(rng_seed=0),
+            handler(
+                control_policy=policy,
+                filter_dynamics=filter_dynamics,
+                filter_config=config,
+            ),
+        ):
+            result = dsx.condition("trajectory", plant, predict_times=times)
+
+    assert isinstance(result, ControlledSimulatedResult)
+    assert result.states is not None and result.observations is not None
+    assert result.controls is not None and result.filtered_states_mean is not None
+    assert result.filtered_states_cov is not None
+    # The zero filter prior gives u_0 = 0. The first observation is still 2.
+    gain = 0.45 / 0.65
+    assert jnp.allclose(result.controls[0, :, 0], jnp.array([0.0, -gain]))
+    assert jnp.allclose(result.states[0, :, 0], jnp.array([2.0, 2.0, 2.0 - gain]))
+    assert jnp.array_equal(result.observations, result.states[:, 1:])
+    assert jnp.allclose(
+        result.filtered_states_mean[0, :2, 0], jnp.array([0.0, 2 * gain])
+    )
+    assert jnp.allclose(
+        result.filtered_states_cov[0, :2, 0, 0], jnp.array([0.4, 0.2 * gain])
+    )
+
+
+def test_shared_filter_dynamics_match_when_explicit():
+    dynamics = _lti_1d()
+    simulator = dsx.Simulator(control_policy=_simple_policy())
+    explicit = dsx.Simulator(control_policy=_simple_policy(), filter_dynamics=dynamics)
+    times = jnp.arange(3.0)
+    key = jr.key(0)
+    implicit_result = simulator.simulate(dynamics, rng_key=key, predict_times=times)
+    explicit_result = explicit.simulate(dynamics, rng_key=key, predict_times=times)
+    assert jax.tree.all(jax.tree.map(jnp.array_equal, implicit_result, explicit_result))
+
+
+def test_filter_dynamics_start_time_is_checked_under_jit():
+    dynamics = _lti_1d()
+
+    @eqx.filter_jit
+    def states(filter_t0):
+        filter_dynamics = eqx.tree_at(
+            lambda model: model.t0, dynamics, filter_t0, is_leaf=lambda x: x is None
+        )
+        return dsx.simulate(
+            dynamics,
+            filter_dynamics=filter_dynamics,
+            control_policy=_simple_policy(),
+            rng_key=jr.key(0),
+            predict_times=jnp.arange(3.0),
+        ).states
+
+    assert_finite(states(jnp.asarray(0.0)), (1, 3, 1), where="states")
+    with pytest.raises(eqx.EquinoxRuntimeError, match=r"filter_dynamics\.t0"):
+        jax.block_until_ready(states(jnp.asarray(1.0)))
+
+
 def test_dsx_simulate_with_control_policy_rejects_ctrl_values():
     dynamics = _lti_1d()
     predict_times = jnp.arange(0.0, 5.0)

@@ -18,8 +18,9 @@ state, subsequent states, and observations. By default the state estimator
 uses the same model. Pass `filter_dynamics` to give the estimator its own
 prior, transition model, and observation model.
 
-For example, simulate a deterministic integrator and use Gaussian relaxation
-to give its state estimator process and measurement noise.
+For example, use `relax_dynamics` to give the filter a Gaussian prior and
+process and measurement noise while simulating a deterministic plant.
+The three covariance arguments below are variances.
 
 ```python
 import jax.numpy as jnp
@@ -38,19 +39,22 @@ plant = dsx.DynamicalModel(
     control_dim=1,
     observation_control_alignment="previous_transition",
 )
+filter_dynamics = dsx.relax_dynamics(
+    plant,
+    initial_condition_cov=0.4,
+    state_evolution_cov=0.05,
+    observation_model_cov=0.2,
+)
 result = dsx.simulate(
     plant,
-    filter_dynamics=dsx.relax_dynamics(
-        plant,
-        initial_condition_cov=0.4,
-        state_evolution_cov=0.05,
-        observation_model_cov=0.2,
-    ),
+    filter_dynamics=filter_dynamics,
     filter_config=EKFConfig(),
     control_policy=lambda belief, t, t_next, s: (-0.5 * belief.mean, s),
     rng_key=random.key(0),
     predict_times=jnp.arange(6.0),
 )
+# The policy halves the state at each step: 2, 1, 0.5, 0.25, ...
+# Each simulated observation equals the corresponding plant state.
 ```
 
 Changing the filter can change the policy's controls and therefore the

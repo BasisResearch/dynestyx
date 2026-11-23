@@ -441,9 +441,7 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             )
 
         filter_dynamics = self.filter_dynamics
-        if filter_dynamics is None:
-            filter_dynamics = dynamics
-        else:
+        if filter_dynamics is not None:
             if filter_dynamics.continuous_time:
                 raise ValueError("filter_dynamics must be a discrete-time model.")
             for dim in ("state_dim", "observation_dim", "control_dim"):
@@ -467,11 +465,12 @@ class DiscreteControlLoopSimulator(BaseSimulator):
                     "filter_dynamics.observation_control_alignment must match the "
                     "plant's resolved alignment."
                 )
+        filter_model = filter_dynamics if filter_dynamics is not None else dynamics
 
         filter_config = (
             self.filter_config
             if self.filter_config is not None
-            else _default_filter_config(filter_dynamics)
+            else _default_filter_config(filter_model)
         )
         if filter_config.filter_source != "cuthbert":
             # TODO: lift this restriction once cd-dynamax filter sources support
@@ -495,13 +494,13 @@ class DiscreteControlLoopSimulator(BaseSimulator):
             )
         result = self._online_control_loop_previous_transition(
             dynamics,
-            filter_dynamics=filter_dynamics,
+            filter_dynamics=filter_model,
             rng_key=rng_key,
             times=times,
             filter_config=filter_config,
             initial_policy_state=initial_policy_state,
         )
-        if self.filter_dynamics is not None and filter_dynamics.t0 is not None:
+        if filter_dynamics is not None and filter_dynamics.t0 is not None:
             # Keep the check live under JIT even if the caller selects one output.
             result = eqx.error_if(
                 result,
