@@ -13,14 +13,9 @@ stateless policy. It must be initialized and passed explicitly if the policy req
 
 ## Plant and filter dynamics
 
-The `dynamics` argument is the **plant model**. It generates the initial
-state, subsequent states, and observations. By default the state estimator
-uses the same model. Pass `filter_dynamics` to give the estimator its own
-prior, transition model, and observation model.
+The `dynamics` argument is the **plant model**. It generates the initial state, subsequent states, and observations. By default the state estimator uses the same model. Pass `filter_dynamics` to give the estimator its own prior, transition model, and observation model.
 
-For example, use `relax_dynamics` to give the filter a Gaussian prior and
-process and measurement noise while simulating a deterministic plant.
-The three covariance arguments below are variances.
+For example, use `relax_dynamics` to give the filter a Gaussian prior and process and measurement noise while simulating a deterministic plant. The three covariance arguments below are variances.
 
 ```python
 import jax.numpy as jnp
@@ -57,12 +52,7 @@ result = dsx.simulate(
 # Each simulated observation equals the corresponding plant state.
 ```
 
-Changing the filter can change the policy's controls and therefore the
-realized plant trajectory. Both simulator handlers also accept
-`filter_dynamics` at construction. The models must be discrete-time and
-agree on state, observation, and control dimensions, initial sample shape,
-and resolved observation-control alignment. If the filter model specifies
-`t0`, it must equal the first prediction time.
+Changing the filter can change the policy's controls and therefore the realized plant trajectory. Both simulator handlers also accept `filter_dynamics` at construction. The models must be discrete-time and agree on state, observation, and control dimensions, initial sample shape, and resolved observation-control alignment. If the filter model specifies `t0`, it must equal the first prediction time.
 
 
 ## `previous_transition` convention (default for closed-loop control)
