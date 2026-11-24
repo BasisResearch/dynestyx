@@ -42,6 +42,7 @@ def simulate(
     simulator_config: SimulatorConfig | None = None,
     control_policy: PolicyCallable | None = None,
     filter_config: BaseFilterConfig | None = None,
+    filter_dynamics: DynamicalModel | None = None,
     use_true_state: bool = False,
     initial_policy_state: PyTree | None = None,
 ) -> SimulatedResult:
@@ -50,7 +51,7 @@ def simulate(
     The simulation runs on the grid specified by `predict_times`.
 
     Args:
-        dynamics: Dynamical model to simulate.
+        dynamics: Dynamical model to simulate. In closed loop, this is the plant.
         rng_key: JAX pseudorandom number generator key.
         ctrl_times: Times associated with `ctrl_values`. If controls are
             provided, these times must match `predict_times` for models with
@@ -79,6 +80,9 @@ def simulate(
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
+        filter_dynamics: Optional model for closed-loop state estimation.
+            Defaults to the plant. Requires `control_policy` and
+            `use_true_state=False`.
         use_true_state: Run the closed loop on the true state instead of a
             filtered belief, forwarded to `DiscreteControlLoopSimulator` when
             `control_policy` is given; ignored otherwise. `filter_config` must be left
@@ -125,6 +129,7 @@ def simulate(
         simulator_config=simulator_config,
         control_policy=control_policy,
         filter_config=filter_config,
+        filter_dynamics=filter_dynamics,
         use_true_state=use_true_state,
     )
     _, simulation_key = jr.split(rng_key)
