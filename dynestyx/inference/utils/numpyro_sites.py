@@ -56,7 +56,8 @@ def register_filter_sites(
     if isinstance(filter_config, tuple(ContinuousTimeConfigs)):
         _add_continuous_filter_sites(name, states, record_kwargs)
     elif isinstance(filter_config, PFConfig) or (
-        isinstance(filter_config, CustomFilterConfig) and states.particles is not None
+        isinstance(filter_config, CustomFilterConfig)
+        and getattr(states, "particles", None) is not None
     ):
         _add_cuthbert_pf_sites(name, states, record_kwargs)
     else:
@@ -236,10 +237,10 @@ def _cuthbert_pf_outputs(states, record_kwargs: dict) -> dict[str, Array]:
     """
     log_weights = states.log_weights
     particles = states.particles
-    if particles.ndim == 2:
+    if particles.ndim == log_weights.ndim:
         particles = particles[..., None]
     max_elems = record_kwargs["record_max_elems"]
-    t_len, n_particles, state_dim = particles.shape
+    *batch_time, _, state_dim = particles.shape
 
     add_particles = _should_record_field(
         record_kwargs["record_filtered_particles"], particles.shape, max_elems
@@ -248,15 +249,19 @@ def _cuthbert_pf_outputs(states, record_kwargs: dict) -> dict[str, Array]:
         record_kwargs["record_filtered_log_weights"], log_weights.shape, max_elems
     )
     add_mean = _should_record_field(
-        record_kwargs["record_filtered_states_mean"], (t_len, state_dim), max_elems
+        record_kwargs["record_filtered_states_mean"],
+        (*batch_time, state_dim),
+        max_elems,
     )
     add_filtered_states_cov = _should_record_field(
         record_kwargs["record_filtered_states_cov"],
-        (t_len, state_dim, state_dim),
+        (*batch_time, state_dim, state_dim),
         max_elems,
     )
     add_filtered_states_cov_diag = _should_record_field(
-        record_kwargs["record_filtered_states_cov_diag"], (t_len, state_dim), max_elems
+        record_kwargs["record_filtered_states_cov_diag"],
+        (*batch_time, state_dim),
+        max_elems,
     )
 
     need_filtered_means = (
@@ -264,8 +269,8 @@ def _cuthbert_pf_outputs(states, record_kwargs: dict) -> dict[str, Array]:
     )
 
     if need_filtered_means:
-        w = jax.nn.softmax(log_weights, axis=1)[..., None]
-        filtered_means = jnp.sum(particles * w, axis=1)
+        w = jax.nn.softmax(log_weights, axis=-1)[..., None]
+        filtered_means = jnp.sum(particles * w, axis=-2)
 
     if add_filtered_states_cov or add_filtered_states_cov_diag:
         second_mom = jnp.einsum(
@@ -286,7 +291,7 @@ def _cuthbert_pf_outputs(states, record_kwargs: dict) -> dict[str, Array]:
         outputs["filtered_states_cov"] = filtered_covariances
     if add_filtered_states_cov_diag:
         outputs["filtered_states_cov_diag"] = jnp.diagonal(
-            filtered_covariances, axis1=1, axis2=2
+            filtered_covariances, axis1=-2, axis2=-1
         )
     return outputs
 
@@ -331,18 +336,18 @@ def _gaussian_filter_outputs(states, record_kwargs: dict) -> dict[str, Array]:
         covs = states.filtered_covariances
         if means is None:
             return outputs
-        t_len, state_dim = means.shape
+        *batch_time, state_dim = means.shape
         add_mean = _should_record_field(
             record_kwargs["record_filtered_states_mean"], means.shape, max_elems
         )
         add_cov = _should_record_field(
             record_kwargs["record_filtered_states_cov"],
-            (t_len, state_dim, state_dim),
+            (*batch_time, state_dim, state_dim),
             max_elems,
         )
         add_cov_diag = _should_record_field(
             record_kwargs["record_filtered_states_cov_diag"],
-            (t_len, state_dim),
+            (*batch_time, state_dim),
             max_elems,
         )
         if add_mean:
@@ -350,7 +355,7 @@ def _gaussian_filter_outputs(states, record_kwargs: dict) -> dict[str, Array]:
         if add_cov and covs is not None:
             outputs["filtered_states_cov"] = covs
         if add_cov_diag and covs is not None:
-            outputs["filtered_states_cov_diag"] = jnp.diagonal(covs, axis1=1, axis2=2)
+            outputs["filtered_states_cov_diag"] = jnp.diagonal(covs, axis1=-2, axis2=-1)
     elif hasattr(states, "mean"):
         mean = states.mean
         chol_cov = states.chol_cov

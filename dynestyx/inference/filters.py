@@ -49,7 +49,11 @@ from dynestyx.inference.checkers import (
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.custom_filter import compute_custom_filter, custom_distributions
+from dynestyx.inference.custom_filter import (
+    FilterOutputs,
+    compute_custom_filter,
+    custom_distributions,
+)
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
@@ -470,7 +474,7 @@ class Filter(BaseLogFactorAdder):
                     cast(jax.Array, states),
                     cast(HMMConfig, config),
                 )
-            elif _is_batched:
+            elif _is_batched and not isinstance(config, CustomFilterConfig):
                 # TODO: support per-field recording for batched (plate) states
                 numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
@@ -487,7 +491,7 @@ class Filter(BaseLogFactorAdder):
             times=times,
             states=states,
             extra_outputs=(states.extra_outputs or {})
-            if isinstance(config, CustomFilterConfig)
+            if isinstance(states, FilterOutputs)
             else {},
             dists=filtered_dists,
             predicted_observations=predictions,

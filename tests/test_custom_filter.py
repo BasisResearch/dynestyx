@@ -158,3 +158,71 @@ def test_keys_and_nested_plates():
     assert a.extra_outputs["prior"].shape == (3, 2, 4, 1)
     np.testing.assert_array_equal(a.extra_outputs["prior"], b.extra_outputs["prior"])
     assert np.unique(a.extra_outputs["prior"]).size == 24
+
+
+def test_parallel_custom_cuthbert_filter():
+    from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+        build_cuthbert_filter,
+    )
+
+    def build(model):
+        algorithm, _ = build_cuthbert_filter(
+            model, KFConfig(filter_source="cuthbert"), None, want_parallel=True
+        )
+        return algorithm
+
+    def collect(state):
+        return FilterOutputs(
+            state.log_normalizing_constant,
+            state.mean,
+            state.chol_cov @ state.chol_cov.T,
+        )
+
+    model = make_model(0.8)
+    data = dict(obs_times=jnp.arange(3.0), obs_values=jnp.array([[0.1], [0.2], [0.3]]))
+    with dsx.Filter(
+        CustomFilterConfig(build_filter=build, gather_outputs=collect, parallel=True)
+    ):
+        result = dsx.condition("x", model, **data)
+    with dsx.Filter(KFConfig(filter_source="cuthbert", associative=False)):
+        exact = dsx.condition("x", model, **data)
+    np.testing.assert_allclose(
+        result.log_normalizing_constant, exact.log_normalizing_constant, atol=1e-5
+    )
+
+
+def test_plated_custom_particles_recording():
+    particles = jnp.array([[-1.0], [1.0]])
+    weights = jnp.log(jnp.array([0.25, 0.75]))
+
+    def build(model):
+        return SplitFilter(
+            lambda x, *, key: particles,
+            lambda state, x, *, key: state,
+            lambda state, x, *, key: state,
+        )
+
+    config = CustomFilterConfig(
+        build_filter=build,
+        gather_outputs=lambda prior, out: FilterOutputs(
+            jnp.array(0.0), particles=out, log_weights=weights
+        ),
+    )
+    with (
+        trace() as sites,
+        seed(rng_seed=0),
+        dsx.Filter(config),
+        dsx.plate("members", 2),
+    ):
+        dsx.sample(
+            "x",
+            make_model(0.8),
+            obs_times=jnp.arange(3.0),
+            obs_values=jnp.zeros((2, 3, 1)),
+        )
+    np.testing.assert_allclose(
+        sites["x_filtered_states_mean"]["value"], jnp.full((2, 3, 1), 0.5)
+    )
+    np.testing.assert_allclose(
+        sites["x_filtered_states_cov_diag"]["value"], jnp.full((2, 3, 1), 0.75)
+    )

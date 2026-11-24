@@ -77,7 +77,9 @@ def _split(key, count):
 
 
 def _prepend(first, tail):
-    return jax.tree.map(lambda x, xs: jnp.concatenate((jnp.asarray(x)[None], xs)), first, tail)
+    return jax.tree.map(
+        lambda x, xs: jnp.concatenate((jnp.asarray(x)[None], xs)), first, tail
+    )
 
 
 def run_filter_steps(
