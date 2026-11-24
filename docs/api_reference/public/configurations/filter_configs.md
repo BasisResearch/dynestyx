@@ -57,7 +57,7 @@ For parallel filtering, each prepared element must also be a valid operand for c
 
 Implement `gather_outputs(prior, filtered)` for a split filter or `gather_outputs(filtered)` for a combined filter. Return `FilterOutputs` with `log_normalizing_constant` set to $\ell_k=\sum_{j=1}^k\log Z_j$ and either the mean and covariance of $q_k$ or its particles and log weights. The last $\ell_k$ becomes `result.marginal_loglik`. Optional `predicted_observations` describe $p(y_k\mid y_{1:k-1})$ before the update and support observation scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`, with leading plate dimensions followed by observation time.
 
-[Build a Gauss–Hermite filter](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
+[Build a custom filter with Dynestyx](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
 
 ## EnKF localization
 

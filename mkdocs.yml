@@ -55,7 +55,7 @@ nav:
         - Tracking a spiraling object with an EKF: tutorials/state_space_models/ekf_spiral.ipynb
         - Online learning of an MLP with an EKF: tutorials/state_space_models/ekf_mlp.ipynb
     - Deep Dives:
-      - Build a Gauss–Hermite Filter: deep_dives/custom_gauss_hermite_filter.ipynb
+      - Build a Custom Filter with Dynestyx: deep_dives/custom_gauss_hermite_filter.ipynb
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
       - Associative Cuthbert KF scaling: deep_dives/discrete_time_kf_associative_scaling.ipynb
       - Comparing MCMC algorithms with MCMCInference: deep_dives/mcmc_inference_algorithm_comparison.ipynb
