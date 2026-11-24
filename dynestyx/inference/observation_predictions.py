@@ -48,14 +48,14 @@ type SupportedObservationPredictionConfig = (
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PredictedObservationOutputs:
-    """Canonical predicted-observation outputs for Dynestyx filters."""
+    """Predicted observations for one step or a plate- and time-indexed history."""
 
-    mean: Float[Array, "*plate time observation_dim"] | None = None
-    cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
-    obs_cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
-    ensemble: Float[Array, "*plate time n_members observation_dim"] | None = None
-    obs_ensemble: Float[Array, "*plate time n_members observation_dim"] | None = None
-    noise_cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
+    mean: Float[Array, "*batch_time observation_dim"] | None = None
+    cov: Float[Array, "*batch_time observation_dim observation_dim"] | None = None
+    obs_cov: Float[Array, "*batch_time observation_dim observation_dim"] | None = None
+    ensemble: Float[Array, "*batch_time n_members observation_dim"] | None = None
+    obs_ensemble: Float[Array, "*batch_time n_members observation_dim"] | None = None
+    noise_cov: Float[Array, "*batch_time observation_dim observation_dim"] | None = None
 
 
 def _gaussian_mean_and_covariance(

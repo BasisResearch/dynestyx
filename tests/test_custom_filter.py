@@ -13,6 +13,7 @@ from numpyro.handlers import seed, trace
 import dynestyx as dsx
 from dynestyx.configs import CustomFilterConfig, KFConfig
 from dynestyx.inference.custom_filter import FilterOutputs, SplitFilter
+from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 
 
 class Belief(NamedTuple):
@@ -141,7 +142,13 @@ def test_keys_and_nested_plates():
         build_filter=build,
         crn_seed=jax.random.key(5),
         gather_outputs=lambda prior, filtered: FilterOutputs(
-            jnp.array(0.0), filtered, jnp.eye(1), extra_outputs={"prior": prior}
+            jnp.array(0.0),
+            filtered,
+            jnp.eye(1),
+            predicted_observations=PredictedObservationOutputs(
+                mean=prior, cov=jnp.eye(1)
+            ),
+            extra_outputs={"prior": prior},
         ),
     )
 
@@ -155,6 +162,9 @@ def test_keys_and_nested_plates():
             )
 
     a, b = run(), run()
+    np.testing.assert_array_equal(
+        a.predicted_observations.mean, a.extra_outputs["prior"]
+    )
     assert a.extra_outputs["prior"].shape == (3, 2, 4, 1)
     np.testing.assert_array_equal(a.extra_outputs["prior"], b.extra_outputs["prior"])
     assert np.unique(a.extra_outputs["prior"]).size == 24
