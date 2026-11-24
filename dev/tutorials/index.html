@@ -1221,10 +1221,127 @@
   <a href="#gallery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Gallery
+        Featured Examples
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#all-examples-and-deep-dives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        All Examples and Deep Dives
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="All Examples and Deep Dives">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#examples_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#closed-loop-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Closed-loop control
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-space-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State-space models
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deep-dives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deep Dives
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deep Dives">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#filtering-and-predictive-scoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filtering and predictive scoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameter-inference-and-identifiability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter inference and identifiability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#learning-dynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Learning dynamics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#partial-differential-equations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Partial differential equations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -5796,19 +5913,228 @@
 <li><a href="gentle_intro/03_filtering_mll_no_numpyro/">Filtering and marginal likelihood without NumPyro</a> - Use <code>dsx.condition</code> to return filter results directly.</li>
 <li><a href="gentle_intro/05_svi_no_numpyro/">Differentiable optimization without NumPyro</a> - Optimize filter marginal likelihoods and explicit latent-path log densities with JAX and Optax.</li>
 </ul>
-<h2 id="gallery">Gallery<a class="headerlink" href="#gallery" title="Permanent link">&para;</a></h2>
+<h2 id="gallery">Featured Examples<a class="headerlink" href="#gallery" title="Permanent link">&para;</a></h2>
+<div class="grid cards">
 <ul>
-<li><a href="sde_non_gaussian_observations/">SDEs with Non-Gaussian Observations</a></li>
-<li><a href="../deep_dives/sde_discretization_comparison/">Comparing SDE Discretization Methods on Lorenz–63</a></li>
-<li><a href="../deep_dives/l63_covariance_inflation_scoring/">Tuning EnKF covariance inflation with scoring rules</a></li>
-<li><a href="../deep_dives/l96_localization_hyperparameter_scoring/">Learning EnKF localization with scoring rules</a></li>
-<li><a href="../deep_dives/mcmc_inference_algorithm_comparison/">Comparing Different MCMC Algorithms</a></li>
-<li><a href="../deep_dives/l63_speedup_dirac_vs_enkf/">HUGE speedups if you assume perfect observations</a></li>
-<li><a href="../deep_dives/fhn_sparse_id/">SINDy (Sparse identification of non-linear dynamics)</a></li>
-<li><a href="../deep_dives/continuous_time_lti_profile_likelihood/">Continuous-time LTI profile likelihood</a></li>
-<li><a href="../deep_dives/lti_identifiability_canonicalization/">LTI identifiability and canonical parameterization</a></li>
-<li><a href="../deep_dives/gp_drift/">GP prior on drift: learning FitzHugh–Nagumo dynamics</a></li>
+<li>
+<p><img alt="Latent trajectory above observed Poisson counts and their expected rate" src="../assets/gallery/sde_non_gaussian_observations.png" /></p>
+<p><strong><a href="sde_non_gaussian_observations/">SDEs with non-Gaussian observations</a></strong></p>
+<p>Fit a continuous-time latent process to Poisson count observations with variational inference.</p>
+<!-- Thumbnail source: notebook cell 7, output 0 (zero-based indices). Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Lorenz–63 posterior densities with true rho marked and the Euler–Maruyama peak far to its left" src="../assets/gallery/sde_discretization_comparison.png" /></p>
+<p><strong><a href="../deep_dives/sde_discretization_comparison/">Comparing SDE discretizations on Lorenz–63</a></strong></p>
+<p>See how the discretization method changes parameter recovery and sampling efficiency.</p>
+<!-- Thumbnail source: cell posterior-figure, output 0. Removed the original legend and labeled the Euler–Maruyama peak and true rho directly. -->
+</li>
+<li>
+<p><img alt="Gaussian log score versus inflation with the best grid point and optimizer result near the peak" src="../assets/gallery/l63_covariance_inflation_scoring.png" /></p>
+<p><strong><a href="../deep_dives/l63_covariance_inflation_scoring/">Tuning EnKF covariance inflation with scoring rules</a></strong></p>
+<p>Tune ensemble covariance inflation for Lorenz–63 by scoring predictions on held-out observations.</p>
+<!-- Thumbnail source: cell 10e1febf, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Observed and latent Lorenz–96 sites beside an illustrative taper that gives nearby state–observation pairs greater weight" src="../assets/gallery/l96_localization_hyperparameter_scoring.png" /></p>
+<p><strong><a href="../deep_dives/l96_localization_hyperparameter_scoring/">Learning EnKF localization with scoring rules</a></strong></p>
+<p>Use predictive scores to select how far an observation can influence nearby states on the Lorenz–96 ring.</p>
+<!-- Thumbnail source: cell 075d6d45, output 0. Retained the ring, state–observation taper and shared scale at illustrative length 2.5. -->
+</li>
+<li>
+<p><img alt="Seven samplers ranked by effective samples per second, with adaptive Metropolis-within-Gibbs first in this run" src="../assets/gallery/mcmc_inference_algorithm_comparison.png" /></p>
+<p><strong><a href="../deep_dives/mcmc_inference_algorithm_comparison/">Comparing MCMC algorithms</a></strong></p>
+<p>Compare posterior estimates and sampling efficiency across NumPyro and BlackJAX samplers.</p>
+<!-- Thumbnail source: cell b1f40fe8, output 11. Replotted all seven saved ESS/s values on a logarithmic axis. -->
+</li>
+<li>
+<p><img alt="Gradient matching takes 4.65 seconds and EnKF takes 116.35 seconds in one full-state, low-noise run" src="../assets/gallery/l63_speedup_dirac_vs_enkf.png" /></p>
+<p><strong><a href="../deep_dives/l63_speedup_dirac_vs_enkf/">Faster Lorenz–63 inference with full-state observations</a></strong></p>
+<p>Compare gradient matching and ensemble Kalman filtering when every state coordinate is observed with little noise.</p>
+<!-- Thumbnail source: cells 8 and 10, output 1 in each (zero-based indices). Replotted the two reported runtimes as bars. -->
+</li>
+<li>
+<p><img alt="True and inferred FitzHugh–Nagumo coefficients show similar patterns of nonzero terms" src="../assets/gallery/fhn_sparse_id.png" /></p>
+<p><strong><a href="../deep_dives/fhn_sparse_id/">Sparse identification of FitzHugh–Nagumo dynamics</a></strong></p>
+<p>Recover the active polynomial terms of a nonlinear dynamical system from noisy observations.</p>
+<!-- Thumbnail source: notebook cell 25, output 0 (zero-based indices). Retained both heatmaps and their common color scale. -->
+</li>
+<li>
+<p><img alt="Exact Kalman and stochastic filter likelihood profiles peak near the true continuous-time drift parameter" src="../assets/gallery/continuous_time_lti_profile_likelihood.png" /></p>
+<p><strong><a href="../deep_dives/continuous_time_lti_profile_likelihood/">Continuous-time LTI profile likelihood</a></strong></p>
+<p>Compare approximate filter likelihoods against the exact continuous-discrete Kalman filter.</p>
+<!-- Thumbnail source: cell 7519c00c, output 0. Retained the saved profiles and shortened the legend to the exact CD-KF, stochastic CD-DPF, and true alpha. -->
+</li>
+<li>
+<p><img alt="Split posterior clusters for two full-model coefficients beside overlapping densities for one canonical coefficient" src="../assets/gallery/lti_identifiability_canonicalization.png" /></p>
+<p><strong><a href="../deep_dives/lti_identifiability_canonicalization/">LTI identifiability and canonical parameterization</a></strong></p>
+<p>See how equivalent state-space models can have different parameters and compare their posteriors in canonical coordinates.</p>
+<!-- Thumbnail sources: cells bbb5a659 and 6075ca12, outputs 2 and 0 respectively. Retained the leftmost panel from each. -->
+</li>
+<li>
+<p><img alt="True and fitted maps of the first FitzHugh–Nagumo drift component on a shared color scale" src="../assets/gallery/gp_drift.png" /></p>
+<p><strong><a href="../deep_dives/gp_drift/">Learning FitzHugh–Nagumo drift with a Gaussian process</a></strong></p>
+<p>Use a Gaussian process prior to learn a nonlinear drift field from noisy trajectories.</p>
+<!-- Thumbnail source: notebook cell 20, output 1 (zero-based indices). Retained the first true and MAP drift panels and their shared color scale. -->
+</li>
 </ul>
+</div>
+<h2 id="all-examples-and-deep-dives">All Examples and Deep Dives<a class="headerlink" href="#all-examples-and-deep-dives" title="Permanent link">&para;</a></h2>
+<h3 id="examples_1">Examples<a class="headerlink" href="#examples_1" title="Permanent link">&para;</a></h3>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="Three simulated Lorenz–63 state coordinates above a noisy view of the first coordinate" src="../assets/gallery/quick_example.png" /></p>
+<p><strong><a href="../quick_example/">Quick example: Lorenz–63</a></strong></p>
+<!-- Thumbnail source: cell 03a43c82, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Latent trajectory above observed Poisson counts and their expected rate" src="../assets/gallery/sde_non_gaussian_observations.png" /></p>
+<p><strong><a href="sde_non_gaussian_observations/">SDEs with non-Gaussian observations</a></strong></p>
+</li>
+</ul>
+</div>
+<h4 id="closed-loop-control">Closed-loop control<a class="headerlink" href="#closed-loop-control" title="Permanent link">&para;</a></h4>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="Closed-loop states approach zero under feedback, with control inputs shown below" src="../assets/gallery/controller_demo.png" /></p>
+<p><strong><a href="control/controller_demo/">Controller basics</a></strong></p>
+<!-- Thumbnail source: cell 538926f3, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="State norms and controller inputs for a two-dimensional system with and without optimized feedback" src="../assets/gallery/control_optimization.png" /></p>
+<p><strong><a href="control/control_optimization/">Optimizing a controller</a></strong></p>
+<!-- Thumbnail source: cell 5d6197c9, output 0. Retained the state norm and control input panels. -->
+</li>
+<li>
+<p><img alt="Observed and hidden state coordinates under MPPI and without control, with MPPI inputs below" src="../assets/gallery/mpc_demo.png" /></p>
+<p><strong><a href="control/mpc_demo/">MPPI-inspired model predictive control</a></strong></p>
+<!-- Thumbnail source: cell 5dbcf7d2, output 0. Trimmed and padded. -->
+</li>
+</ul>
+</div>
+<h4 id="state-space-models">State-space models<a class="headerlink" href="#state-space-models" title="Permanent link">&para;</a></h4>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="Kalman-filtered object path and uncertainty ellipses alongside noisy position measurements" src="../assets/gallery/kf_tracking.png" /></p>
+<p><strong><a href="state_space_models/kf_tracking/">Object tracking with a Kalman filter</a></strong></p>
+<!-- Thumbnail source: cell 2cbb6d25, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Online estimates of two regression weights approach the offline estimates over time" src="../assets/gallery/kf_linreg.png" /></p>
+<p><strong><a href="state_space_models/kf_linreg/">Online linear regression with a Kalman filter</a></strong></p>
+<!-- Thumbnail source: cell 1bd0dad6, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="NUTS posterior histogram for a model parameter with the true value and SGD estimate marked" src="../assets/gallery/lgssm_learning.png" /></p>
+<p><strong><a href="state_space_models/lgssm_learning/">Parameter estimation for linear Gaussian state-space models</a></strong></p>
+<!-- Thumbnail source: cell 43c86dff, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Extended Kalman filter estimates and uncertainty ellipses follow a curling trajectory through noisy measurements" src="../assets/gallery/ekf_spiral.png" /></p>
+<p><strong><a href="state_space_models/ekf_spiral/">Tracking a spiraling object with an extended Kalman filter</a></strong></p>
+<!-- Thumbnail source: cell fca4aee3, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Neural-network posterior predictions follow the target curve after seeing 200 observations" src="../assets/gallery/ekf_mlp.png" /></p>
+<p><strong><a href="state_space_models/ekf_mlp/">Online learning of a neural network with an extended Kalman filter</a></strong></p>
+<!-- Thumbnail source: cell ee4d1279, output 3. Trimmed and padded. -->
+</li>
+</ul>
+</div>
+<h3 id="deep-dives">Deep Dives<a class="headerlink" href="#deep-dives" title="Permanent link">&para;</a></h3>
+<h4 id="filtering-and-predictive-scoring">Filtering and predictive scoring<a class="headerlink" href="#filtering-and-predictive-scoring" title="Permanent link">&para;</a></h4>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="Runtime and speedup curves compare sequential and associative Kalman filtering across sequence lengths" src="../assets/gallery/discrete_time_kf_associative_scaling.png" /></p>
+<p><strong><a href="../deep_dives/discrete_time_kf_associative_scaling/">Scaling the associative Cuthbert Kalman filter</a></strong></p>
+<!-- Thumbnail source: cell plot-results, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Grouped bars compare state-recovery error and 90 percent interval coverage across filters" src="../assets/gallery/filtering_deterministic_processes.png" /></p>
+<p><strong><a href="../deep_dives/filtering_deterministic_processes/">Filtering deterministic processes</a></strong></p>
+<!-- Thumbnail source: cell summarize-state-recovery, output 1. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Four time-series panels compare predictive scores for two observation models" src="../assets/gallery/observation_scoring_with_cuthbert_enkf.png" /></p>
+<p><strong><a href="../deep_dives/observation_scoring_with_cuthbert_enkf/">Observation scoring with a Cuthbert EnKF</a></strong></p>
+<!-- Thumbnail source: cell 3aeb0829, output 1. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Gaussian log score versus inflation with the best grid point and optimizer result near the peak" src="../assets/gallery/l63_covariance_inflation_scoring.png" /></p>
+<p><strong><a href="../deep_dives/l63_covariance_inflation_scoring/">Tuning EnKF covariance inflation with scoring rules</a></strong></p>
+</li>
+<li>
+<p><img alt="Observed and latent Lorenz–96 sites beside an illustrative taper that gives nearby state–observation pairs greater weight" src="../assets/gallery/l96_localization_hyperparameter_scoring.png" /></p>
+<p><strong><a href="../deep_dives/l96_localization_hyperparameter_scoring/">Learning EnKF localization with scoring rules</a></strong></p>
+</li>
+</ul>
+</div>
+<h4 id="parameter-inference-and-identifiability">Parameter inference and identifiability<a class="headerlink" href="#parameter-inference-and-identifiability" title="Permanent link">&para;</a></h4>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="Gradient matching takes 4.65 seconds and EnKF takes 116.35 seconds in one full-state, low-noise run" src="../assets/gallery/l63_speedup_dirac_vs_enkf.png" /></p>
+<p><strong><a href="../deep_dives/l63_speedup_dirac_vs_enkf/">Faster Lorenz–63 inference with full-state observations</a></strong></p>
+</li>
+<li>
+<p><img alt="Seven samplers ranked by effective samples per second, with adaptive Metropolis-within-Gibbs first in this run" src="../assets/gallery/mcmc_inference_algorithm_comparison.png" /></p>
+<p><strong><a href="../deep_dives/mcmc_inference_algorithm_comparison/">Comparing MCMC algorithms</a></strong></p>
+</li>
+<li>
+<p><img alt="Lorenz–63 posterior densities with true rho marked and the Euler–Maruyama peak far to its left" src="../assets/gallery/sde_discretization_comparison.png" /></p>
+<p><strong><a href="../deep_dives/sde_discretization_comparison/">Comparing SDE discretizations on Lorenz–63</a></strong></p>
+</li>
+<li>
+<p><img alt="Discrete-time parameter likelihood profiles from several filters with the simulated parameter marked" src="../assets/gallery/discrete_time_lti_profile_likelihood.png" /></p>
+<p><strong><a href="../deep_dives/discrete_time_lti_profile_likelihood/">Discrete-time LTI profile likelihood</a></strong></p>
+<!-- Thumbnail source: notebook cell 15 (zero-based), output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Exact Kalman and stochastic filter likelihood profiles peak near the true continuous-time drift parameter" src="../assets/gallery/continuous_time_lti_profile_likelihood.png" /></p>
+<p><strong><a href="../deep_dives/continuous_time_lti_profile_likelihood/">Continuous-time LTI profile likelihood</a></strong></p>
+</li>
+<li>
+<p><img alt="Split posterior clusters for two full-model coefficients beside overlapping densities for one canonical coefficient" src="../assets/gallery/lti_identifiability_canonicalization.png" /></p>
+<p><strong><a href="../deep_dives/lti_identifiability_canonicalization/">LTI identifiability and canonical parameterization</a></strong></p>
+</li>
+</ul>
+</div>
+<h4 id="learning-dynamics">Learning dynamics<a class="headerlink" href="#learning-dynamics" title="Permanent link">&para;</a></h4>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="True and inferred FitzHugh–Nagumo coefficients show similar patterns of nonzero terms" src="../assets/gallery/fhn_sparse_id.png" /></p>
+<p><strong><a href="../deep_dives/fhn_sparse_id/">Sparse identification of FitzHugh–Nagumo dynamics</a></strong></p>
+</li>
+<li>
+<p><img alt="Predator and prey phase-space loop with the true trajectory, noisy observations, and inferred uncertainty" src="../assets/gallery/lv_uode.png" /></p>
+<p><strong><a href="../deep_dives/lv_uode/">Learning Lotka–Volterra dynamics with a universal ODE</a></strong></p>
+<!-- Thumbnail source: cell d5fa65a1, output 1. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="True and fitted maps of the first FitzHugh–Nagumo drift component on a shared color scale" src="../assets/gallery/gp_drift.png" /></p>
+<p><strong><a href="../deep_dives/gp_drift/">Learning FitzHugh–Nagumo drift with a Gaussian process</a></strong></p>
+</li>
+</ul>
+</div>
+<h4 id="partial-differential-equations">Partial differential equations<a class="headerlink" href="#partial-differential-equations" title="Permanent link">&para;</a></h4>
+<div class="grid cards">
+<ul>
+<li>
+<p><img alt="Space-time heatmap showing an initial temperature peak spreading and fading" src="../assets/gallery/heat_equation_inference.png" /></p>
+<p><strong><a href="../deep_dives/pde/heat_equation_inference/">Heat equation: Inferring an initial condition</a></strong></p>
+<!-- Thumbnail source: cell a44a243e, output 0. Trimmed and padded. -->
+</li>
+<li>
+<p><img alt="Space-time heatmap of the KPP reaction–diffusion solution reconstructed at an inferred rate" src="../assets/gallery/reaction_diffusion_inference.png" /></p>
+<p><strong><a href="../deep_dives/pde/reaction_diffusion_inference/">Reaction–diffusion equation: Inferring a reaction rate</a></strong></p>
+<!-- Thumbnail source: cell ffca77e2, output 0. Trimmed and padded. -->
+</li>
+</ul>
+</div>
 
 
 

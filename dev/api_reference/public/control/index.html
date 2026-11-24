@@ -4133,6 +4133,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#plant-and-filter-dynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plant and filter dynamics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#previous_transition-convention-default-for-closed-loop-control" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5875,6 +5886,43 @@ and raises a warning if the alignment is not specified. <code>"same_time"</code>
 <p>Both conventions (with and without state estimation) are described below.</p>
 <p>In the following, <span class="arithmatex">\(s_0\)</span> is <code>simulate</code>'s <code>initial_policy_state</code>: <code>None</code> by default, for a
 stateless policy. It must be initialized and passed explicitly if the policy requires it. By default, the loop runs with state estimation; pass <code>use_true_state=True</code> to run it on the true state instead.</p>
+<h2 id="plant-and-filter-dynamics">Plant and filter dynamics<a class="headerlink" href="#plant-and-filter-dynamics" title="Permanent link">&para;</a></h2>
+<p>When you call <code>dsx.simulate</code> with a <code>control_policy</code>, <code>dynamics</code> is the <strong>plant model</strong> that generates the simulated states and observations. By default, the state estimator uses that same model to turn observations into the beliefs passed to the policy. Pass <code>filter_dynamics</code> to give the estimator a different model, such as a Gaussian-relaxed version of the plant.</p>
+<p>For example, use <code>relax_dynamics</code> to give the filter a Gaussian prior and process and measurement noise while simulating a deterministic plant. The three covariance arguments below are variances.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jax</span><span class="w"> </span><span class="kn">import</span> <span class="n">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Delta</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dynestyx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dsx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dynestyx.configs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EKFConfig</span>
+
+<span class="n">plant</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">DynamicalModel</span><span class="p">(</span>
+    <span class="n">initial_condition</span><span class="o">=</span><span class="n">Delta</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">2.0</span><span class="p">]),</span> <span class="n">event_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="n">state_evolution</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">DeterministicStateEvolution</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">t_next</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="p">(</span><span class="n">t_next</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span>
+    <span class="p">),</span>
+    <span class="n">observation_model</span><span class="o">=</span><span class="n">dsx</span><span class="o">.</span><span class="n">DiracIdentityObservation</span><span class="p">(),</span>
+    <span class="n">control_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">observation_control_alignment</span><span class="o">=</span><span class="s2">"previous_transition"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">filter_dynamics</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">relax_dynamics</span><span class="p">(</span>
+    <span class="n">plant</span><span class="p">,</span>
+    <span class="n">initial_condition_cov</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+    <span class="n">state_evolution_cov</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">observation_model_cov</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">dsx</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span>
+    <span class="n">plant</span><span class="p">,</span>
+    <span class="n">filter_dynamics</span><span class="o">=</span><span class="n">filter_dynamics</span><span class="p">,</span>
+    <span class="n">filter_config</span><span class="o">=</span><span class="n">EKFConfig</span><span class="p">(),</span>
+    <span class="n">control_policy</span><span class="o">=</span><span class="k">lambda</span> <span class="n">belief</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">t_next</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">belief</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span> <span class="n">s</span><span class="p">),</span>
+    <span class="n">rng_key</span><span class="o">=</span><span class="n">random</span><span class="o">.</span><span class="n">key</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+    <span class="n">predict_times</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">6.0</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="c1"># The policy halves the state at each step: 2, 1, 0.5, 0.25, ...</span>
+<span class="c1"># Each simulated observation equals the corresponding plant state.</span>
+</code></pre></div>
+<p>Changing the filter can change the policy's controls and therefore the realized plant trajectory. Both simulator handlers also accept <code>filter_dynamics</code> at construction. The models must be discrete-time and agree on state, observation, and control dimensions, initial sample shape, and resolved observation-control alignment. If the filter model specifies <code>t0</code>, it must equal the first prediction time.</p>
 <h2 id="previous_transition-convention-default-for-closed-loop-control"><code>previous_transition</code> convention (default for closed-loop control)<a class="headerlink" href="#previous_transition-convention-default-for-closed-loop-control" title="Permanent link">&para;</a></h2>
 <p>In this convention, the control <span class="arithmatex">\(u_k\)</span> drives the transition into the next state
 <span class="arithmatex">\(x_{k+1}\)</span> and generates the observation <span class="arithmatex">\(y_{k+1}\)</span>. Hence, <span class="arithmatex">\(y_0\)</span> never exists.</p>
@@ -5896,7 +5944,7 @@ stateless policy. It must be initialized and passed explicitly if the policy req
 <p>At each step, the true state <span class="arithmatex">\(x_k\)</span> is passed to the policy as a
 <a href="https://num.pyro.ai/en/stable/distributions.html#delta"><code>Delta</code></a> distribution (its <code>.mean</code> is the state itself).</p>
 <h3 id="with-an-estimated-state">With an estimated state<a class="headerlink" href="#with-an-estimated-state" title="Permanent link">&para;</a></h3>
-<p>Notation:</p>
+<p>Let <span class="arithmatex">\(p_0\)</span> be the plant prior and <span class="arithmatex">\(q_0\)</span> be the filter prior, which defaults to <span class="arithmatex">\(p_0\)</span>.</p>
 <div class="arithmatex">\[
 \begin{aligned}
 \tilde{p}_k &amp;\approx p(x_k \mid y_1, \dots, y_{k-1},\ u_0, \dots, u_{k-1})
@@ -5909,7 +5957,7 @@ stateless policy. It must be initialized and passed explicitly if the policy req
 <div class="arithmatex">\[
 \begin{aligned}
 &amp; \text{Times} = [t_0, \dots, t_{N}]\\
-&amp;x_0 \sim p_0, \quad \hat{p}_0 = p_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
+&amp;x_0 \sim p_0, \quad \hat{p}_0 = q_0, \quad s_0 \text{ given} \quad \text{Initialization step} \\
 &amp;\text{for } k = 0,\dots N-1:\\
 &amp;\quad u_{k}, s_{k+1} =\pi(\hat{p}_{k}, t_{k}, t_{k+1}, s_k)
   \quad \text{Select the control}\\

@@ -5898,13 +5898,27 @@ policy's initial state must always be passed explicitly.</p>
               <div class="doc-md-description">
                 <p>Selects the filtering algorithm; any config
 <code>build_cuthbert_filter</code> accepts (see above). Defaults to
-<code>_default_filter_config(dynamics)</code> when <code>None</code>. The online one-step
+the default for the filter model when <code>None</code>. The online one-step
 update currently requires <code>filter_source="cuthbert"</code>. Its
 <code>record_filtered_*</code> and <code>record_max_elems</code> fields gate which
 <code>filtered_*</code> outputs are recorded, exactly as they do for
 <code>Filter</code> (see <code>dynestyx.utils.recording._should_record_field</code>).
 Must not be given together with <code>use_true_state=True</code>, which
 filters nothing.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="dynestyx.control.discrete_controller_simulators.DiscreteControlLoopSimulator.filter_dynamics">filter_dynamics</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional model for the initial belief and filter updates.
+Defaults to the plant. A separate model must be discrete-time and
+match the plant's dimensions, initial sample shape, and resolved
+observation-control alignment. If set, its <code>t0</code> must match
+<code>predict_times[0]</code>. Requires <code>use_true_state=False</code>.</p>
               </div>
             </td>
           </tr>
@@ -5990,7 +6004,7 @@ them, and every <code>filtered_*</code> output is always <code>None</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Discrete-time dynamical model.</p>
+                <p>Discrete-time plant model generating states and observations.</p>
               </div>
             </td>
             <td>

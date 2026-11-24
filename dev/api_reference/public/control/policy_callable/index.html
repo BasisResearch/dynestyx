@@ -5820,7 +5820,7 @@ depends on <code>use_true_state</code> and on the convention.</p>
 <li>under <code>same_time</code>, <span class="arithmatex">\(\tilde x_k\)</span> is the predicted state <span class="arithmatex">\(\hat{x}_{k|k-1}\)</span></li>
 <li>under <code>previous_transition</code>, <span class="arithmatex">\(\tilde x_k\)</span> is the filtered state <span class="arithmatex">\(\hat{x}_{k|k}\)</span></li>
 </ul>
-<p>where <span class="arithmatex">\(\hat{x}_{k|j}\)</span> is the state estimate at time <span class="arithmatex">\(t_k\)</span> given observations up to time <span class="arithmatex">\(t_j\)</span>. At <span class="arithmatex">\(k=0\)</span>, this is the model's initial-state distribution <span class="arithmatex">\(p_0\)</span>.</p>
+<p>where <span class="arithmatex">\(\hat{x}_{k|j}\)</span> is the state estimate at time <span class="arithmatex">\(t_k\)</span> given observations up to time <span class="arithmatex">\(t_j\)</span>. At <span class="arithmatex">\(k=0\)</span>, the estimate is initialized from the filter model's prior.</p>
 <p>With <code>use_true_state=True</code> there is no filtering: <span class="arithmatex">\(\tilde x_k\)</span>
 is a <code>Delta</code> centered on the true state <span class="arithmatex">\(x_k\)</span>.</p>
 <p>It is always a NumPyro <code>Distribution</code>.
