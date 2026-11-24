@@ -13,7 +13,7 @@ stateless policy. It must be initialized and passed explicitly if the policy req
 
 ## Plant and filter dynamics
 
-The `dynamics` argument is the **plant model**. It generates the initial state, subsequent states, and observations. By default the state estimator uses the same model. Pass `filter_dynamics` to give the estimator its own prior, transition model, and observation model.
+When you call `dsx.simulate` with a `control_policy`, `dynamics` is the **plant model** that generates the simulated states and observations. By default, the state estimator uses that same model to turn observations into the beliefs passed to the policy. Pass `filter_dynamics` to give the estimator a different model, such as a Gaussian-relaxed version of the plant.
 
 For example, use `relax_dynamics` to give the filter a Gaussian prior and process and measurement noise while simulating a deterministic plant. The three covariance arguments below are variances.
 
@@ -23,7 +23,7 @@ from jax import random
 from numpyro.distributions import Delta
 
 import dynestyx as dsx
-from dynestyx.inference.configs.filter import EKFConfig
+from dynestyx.configs import EKFConfig
 
 plant = dsx.DynamicalModel(
     initial_condition=Delta(jnp.array([2.0]), event_dim=1),
