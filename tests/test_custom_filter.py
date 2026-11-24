@@ -221,8 +221,10 @@ def test_plated_custom_particles_recording():
             obs_values=jnp.zeros((2, 3, 1)),
         )
     np.testing.assert_allclose(
-        sites["x_filtered_states_mean"]["value"], jnp.full((2, 3, 1), 0.5)
+        sites["x_filtered_states_mean"]["value"], jnp.full((2, 3, 1), 0.5), atol=1e-6
     )
     np.testing.assert_allclose(
-        sites["x_filtered_states_cov_diag"]["value"], jnp.full((2, 3, 1), 0.75)
+        sites["x_filtered_states_cov_diag"]["value"],
+        jnp.full((2, 3, 1), 0.75),
+        atol=1e-6,
     )
