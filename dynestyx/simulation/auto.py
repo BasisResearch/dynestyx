@@ -212,6 +212,9 @@ class Simulator(BaseSimulator):
         filter_config: Filter configuration forwarded to
             `DiscreteControlLoopSimulator` when `control_policy` is given;
             ignored otherwise.
+        filter_dynamics: Optional model for closed-loop state estimation.
+            Defaults to the plant. Requires `control_policy` and
+            `use_true_state=False`.
         use_true_state: Forwarded to `DiscreteControlLoopSimulator` when
             `control_policy` is given; ignored otherwise. Runs the closed loop
             on the true state, with no filtering.
@@ -225,12 +228,16 @@ class Simulator(BaseSimulator):
         n_simulations: int = 1,
         control_policy: PolicyCallable | None = None,
         filter_config: BaseFilterConfig | None = None,
+        filter_dynamics: DynamicalModel | None = None,
         use_true_state: bool = False,
     ) -> None:
         super().__init__(n_simulations=n_simulations)
+        if filter_dynamics is not None and control_policy is None:
+            raise ValueError("filter_dynamics requires control_policy.")
         self.simulator_config = simulator_config
         self.control_policy = control_policy
         self.filter_config = filter_config
+        self.filter_dynamics = filter_dynamics
         self.use_true_state = use_true_state
         self.simulator: BaseSimulator | None = None
 
@@ -250,6 +257,7 @@ class Simulator(BaseSimulator):
                 self.simulator = DiscreteControlLoopSimulator(
                     control_policy=self.control_policy,
                     filter_config=self.filter_config,
+                    filter_dynamics=self.filter_dynamics,
                     use_true_state=self.use_true_state,
                     n_simulations=self.n_simulations,
                 )
