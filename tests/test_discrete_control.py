@@ -48,10 +48,12 @@ from dynestyx.models import (
     ContinuousTimeStateEvolution,
     DynamicalModel,
     FullDiffusion,
+    ObservationControlAlignment,
     StochasticContinuousTimeStateEvolution,
 )
 from dynestyx.models.lti_dynamics import LTI_discrete
 from dynestyx.models.observations import LinearGaussianObservation
+from dynestyx.types import ConditionedResult
 from tests.fixtures import _n_particles
 from tests.test_utils import (
     assert_finite,
@@ -1420,6 +1422,63 @@ def test_relaxed_filter_dynamics_with_deterministic_plant(handler):
     assert jnp.allclose(
         result.filtered_states_cov[0, :2, 0, 0], jnp.array([0.4, 0.2 * gain])
     )
+
+
+def test_online_filter_dynamics_match_offline_with_fixed_control():
+    plant = _lti_1d()
+    a, q = 0.8, 0.2
+    filter_dynamics = _lti_1d(A=a, Q=q, R=0.3)
+    config = KFConfig(
+        filter_source="cuthbert",
+        record_filtered_states_mean=True,
+        record_filtered_states_cov=True,
+    )
+    online = dsx.simulate(
+        plant,
+        filter_dynamics=filter_dynamics,
+        control_policy=lambda x_hat, t_now, t_next, s: (jnp.array([0.3]), s),
+        filter_config=config,
+        rng_key=jr.key(0),
+        predict_times=jnp.arange(6.0),
+    )
+    assert isinstance(online, ControlledSimulatedResult)
+    assert online.obs_times is not None and online.observations is not None
+    assert online.controls is not None and online.filtered_states_mean is not None
+    assert online.filtered_states_cov is not None
+
+    # The batch filter starts with an update at t_1. Propagate the prior
+    # through the first transition so both filters update the same belief.
+    prior = filter_dynamics.initial_condition
+    assert isinstance(prior, dist.MultivariateNormal)
+    first_prediction = dist.MultivariateNormal(
+        a * prior.mean + online.controls[0, 0],
+        a**2 * prior.covariance_matrix + q * jnp.eye(1),
+    )
+    # Offline conditioning uses same-time control records. The fixed control
+    # makes the value at each observation identical to the preceding input.
+    offline_dynamics = eqx.tree_at(
+        lambda model: (model.initial_condition, model.observation_control_alignment),
+        filter_dynamics,
+        (first_prediction, ObservationControlAlignment.SAME_TIME),
+    )
+    obs_times = online.obs_times[0]
+    with dsx.Filter(config):
+        offline = dsx.condition(
+            "trajectory",
+            offline_dynamics,
+            obs_times=obs_times,
+            obs_values=online.observations[0],
+            ctrl_times=obs_times,
+            ctrl_values=online.controls[0],
+        )
+
+    assert isinstance(offline, ConditionedResult)
+    assert offline.dists is not None and offline.times is not None
+    assert jnp.array_equal(offline.times, obs_times)
+    offline_mean = jnp.stack([belief.mean for belief in offline.dists])
+    offline_cov = jnp.stack([belief.covariance_matrix for belief in offline.dists])
+    assert jnp.allclose(offline_mean, online.filtered_states_mean[0, 1:], atol=1e-6)
+    assert jnp.allclose(offline_cov, online.filtered_states_cov[0, 1:], atol=1e-6)
 
 
 def test_shared_filter_dynamics_match_when_explicit():
