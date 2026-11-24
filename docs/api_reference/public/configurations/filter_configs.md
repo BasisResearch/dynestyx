@@ -37,25 +37,25 @@ Nested objects such as `extra_filter_kwargs` dictionaries are not recursively fr
 
 ## Custom filters
 
-Pass `CustomFilterConfig(build_filter=..., gather_outputs=...)` to `dsx.Filter`.
-The factory receives one model, including the current values of any inferred parameters.
-Return a `SplitFilter(initialize, predict, update)` from
-`dynestyx.inference.custom_filter`, or a Cuthbert-style filter with
-`init_prepare`, `filter_prepare`, and `filter_combine`.
+Dynestyx also allows the use of custom filters, conforming to a “predict/update” interface (a `SplitFilter`), or a “combined” interface (corresponding roughly to how `cuthbert` filters are implemented). Pass `CustomFilterConfig(build_filter=..., gather_outputs=...)` to `dsx.Filter`. The `build_filter` argument provides a factory that takes a `DynamicalModel` and returns the corresponding filter object.
 
-For a split filter, `initialize(inputs, *, key)` returns the prior at the first
-observation. `predict(filtered, inputs, *, key)` returns the prior at each later
-observation, and `update(prior, inputs, *, key)` returns the next filtered carry.
-Inputs contain `y`, `time`, `time_prev`, `u`, `u_prev`, and `is_first_step`.
-At the first observation the previous time and control equal their current values.
-For a fused filter, initialization receives only the key and preparation receives
-these inputs. Set `parallel=True` to use an associative fused filter.
+### Split filters
 
-Return `FilterOutputs` from `gather_outputs(prior, filtered)` or, for fused
-filters, `gather_outputs(filtered)`. Supply cumulative log likelihood and either
-Gaussian moments or weighted particles. Optional observation predictions support
-scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`,
-with leading plate dimensions followed by observation time.
+Return a `SplitFilter(initialize, predict, update)` from `dynestyx.inference.custom_filter`. Write $q_k^-(x)$ for the predictive belief about $x_k$ before observing $y_k$, and $q_k(x)$ for the filtered belief after observing it. Each callback works with your chosen representation of these beliefs, such as a Gaussian mean and covariance or a set of weighted particles.
+
+1. `initialize(inputs, *, key)` returns the prior $q_1^-(x)=p(x_1=x)$ at the first observation time, with cumulative log likelihood initialized to zero. Dynestyx passes this prior directly to `update` for the first observation.
+2. `predict(filtered, inputs, *, key)` propagates the previous filtered belief through the model transition. For $k>1$, return a representation or approximation of $q_k^-(x)=\int p(x_k=x\mid x_{k-1}=z,u_{k-1})\,q_{k-1}(z)\,dz$. The interval endpoints are `inputs.time_prev` and `inputs.time`, and its control is `inputs.u_prev`.
+3. `update(prior, inputs, *, key)` conditions the predictive belief on `inputs.y`. With observation likelihood $g_k(x)=p(y_k\mid x_k=x,u_k)$, the predictive probability or density of the observation is $Z_k=\int g_k(x)\,q_k^-(x)\,dx$. Return a filtered state representing $q_k(x)=g_k(x)\,q_k^-(x)/Z_k$ and carry forward the cumulative log likelihood $\ell_k=\ell_{k-1}+\log Z_k$. Approximate filters use their own approximations to these integrals.
+
+### Combined filters
+
+A combined filter implements `init_prepare(*, key)`, `filter_prepare(inputs, *, key)`, and `filter_combine(previous, prepared)`. Initialization returns a state $s_0$ encoding the initial prior and $\ell_0=0$. At observation $k$, preparation builds an element $e_k$ using only the current step inputs and its key. For example, $e_k$ can hold the observation and the parameters needed to evaluate the transition and observation likelihood. The combine operation computes $s_k=s_{k-1}\otimes e_k$, which must encode the filtered belief $q_k$ and cumulative log likelihood $\ell_k$ defined above. Use `inputs.is_first_step` to assimilate $y_1$ directly into the initial prior.
+
+For parallel filtering, each prepared element must also be a valid operand for combining adjacent observation blocks. Combining a block for $i$ through $j$ with one for $j+1$ through $k$ must summarize the block for $i$ through $k$, with $(a\otimes b)\otimes c=a\otimes(b\otimes c)$. A prefix $s_0\otimes e_1\otimes\cdots\otimes e_k$ then gives the same filtered state regardless of grouping. Set `associative=True` on the filter object and `parallel=True` on the config to use this execution mode.
+
+### Gathering outputs
+
+Implement `gather_outputs(prior, filtered)` for a split filter or `gather_outputs(filtered)` for a combined filter. Return `FilterOutputs` with `log_normalizing_constant` set to $\ell_k=\sum_{j=1}^k\log Z_j$ and either the mean and covariance of $q_k$ or its particles and log weights. The last $\ell_k$ becomes `result.marginal_loglik`. Optional `predicted_observations` describe $p(y_k\mid y_{1:k-1})$ before the update and support observation scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`, with leading plate dimensions followed by observation time.
 
 [Build a Gauss–Hermite filter](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
 
