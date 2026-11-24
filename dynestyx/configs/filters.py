@@ -4,13 +4,15 @@ import abc
 import dataclasses
 import math
 from collections.abc import Callable
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 
 import jax.numpy as jnp
 import jax.random as jr
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
+from dynestyx.inference.filter_types import CombinedSteps, FilterOutputs, SplitSteps
+from dynestyx.models import DynamicalModel
 from dynestyx.utils.validation import _validate_nonnegative_float
 
 ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
@@ -255,7 +257,7 @@ class BaseFilterConfig(abc.ABC):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class CustomFilterConfig(BaseFilterConfig):
+class CustomFilterConfig[Algorithm, Gather](BaseFilterConfig):
     """Bind a model to a split or fused filter and project each completed step.
 
     build_filter(model) returns a SplitFilter or a Cuthbert-style filter.
@@ -264,8 +266,35 @@ class CustomFilterConfig(BaseFilterConfig):
     Set parallel=True for an associative fused filter.
     """
 
-    build_filter: Callable
-    gather_outputs: Callable
+    # The dataclass supplies __init__, including the inherited recording options.
+    # Pair its two callbacks for static checking while preserving that constructor.
+    if TYPE_CHECKING:
+
+        @overload
+        def __new__[P, S](
+            cls,
+            *args: object,
+            build_filter: Callable[[DynamicalModel], SplitSteps[P, S]],
+            gather_outputs: Callable[[P, S], FilterOutputs],
+            **kwargs: object,
+        ) -> (
+            "CustomFilterConfig[SplitSteps[P, S], Callable[[P, S], FilterOutputs]]"
+        ): ...
+        @overload
+        def __new__[E, S](
+            cls,
+            *args: object,
+            build_filter: Callable[[DynamicalModel], CombinedSteps[E, S]],
+            gather_outputs: Callable[[S], FilterOutputs],
+            **kwargs: object,
+        ) -> (
+            "CustomFilterConfig[CombinedSteps[E, S], Callable[[S], FilterOutputs]]"
+        ): ...
+        def __new__(cls, *args: object, **kwargs: object):
+            return super().__new__(cls)
+
+    build_filter: Callable[[DynamicalModel], Algorithm]
+    gather_outputs: Gather
     parallel: bool = False
 
 

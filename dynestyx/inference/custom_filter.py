@@ -1,56 +1,37 @@
 """Step contracts and observation-aligned execution for user-defined filters."""
 
 from collections.abc import Callable
-from typing import Any, NamedTuple
+from typing import cast, overload
 
 import jax
 import jax.numpy as jnp
 from cuthbert.inference import Filter as CuthbertFilter
 from cuthbert.utils import dummy_leading_element
-from jax import Array
+from jaxtyping import Array, PRNGKeyArray, Real, Shaped
+from numpyro.distributions import Distribution
 
-from dynestyx.inference.observation_predictions import PredictedObservationOutputs
+from dynestyx.configs.filters import CustomFilterConfig
+from dynestyx.inference.filter_types import CombinedSteps, SplitSteps
+from dynestyx.inference.filter_types import FilterInputs as FilterInputs
+from dynestyx.inference.filter_types import FilterOutputs as FilterOutputs
+from dynestyx.inference.filter_types import (
+    PredictedObservationOutputs as PredictedObservationOutputs,
+)
+from dynestyx.inference.filter_types import SplitFilter as SplitFilter
 from dynestyx.inference.utils.distribution_utils import (
     _gaussian_sequence_to_dists,
     _particle_sequence_to_dists,
 )
+from dynestyx.models import DynamicalModel
 
 
-class FilterInputs(NamedTuple):
-    """Observation and controls for the interval ending at time."""
-
-    y: Array
-    u: Array
-    u_prev: Array
-    time: Array
-    time_prev: Array
-    is_first_step: Array
-
-
-class SplitFilter(NamedTuple):
-    """initialize(inputs, *, key) and predict(filtered, inputs, *, key) return priors.
-
-    update(prior, inputs, *, key) returns the filtered carry.
-    """
-
-    initialize: Callable
-    predict: Callable
-    update: Callable
-
-
-class FilterOutputs(NamedTuple):
-    """One gathered step. Supply Gaussian moments or particles and log weights."""
-
-    log_normalizing_constant: Array
-    filtered_means: Array | None = None
-    filtered_covariances: Array | None = None
-    particles: Array | None = None
-    log_weights: Array | None = None
-    predicted_observations: PredictedObservationOutputs | None = None
-    extra_outputs: dict[str, Array] | None = None
-
-
-def step_inputs(dynamics, times, ys, ctrl_times, controls):
+def step_inputs(
+    dynamics: DynamicalModel,
+    times: Real[Array, " time"],
+    ys: Shaped[Array, "time observation_dim"],
+    ctrl_times: Real[Array, " control_time"] | None,
+    controls: Real[Array, "control_time control_dim"] | None,
+) -> FilterInputs:
     length = len(times)
     if not length:
         raise ValueError("Filtering requires at least one observation.")
@@ -72,50 +53,87 @@ def step_inputs(dynamics, times, ys, ctrl_times, controls):
     )
 
 
-def _split(key, count):
-    return (None,) * count if key is None else jax.random.split(key, count)
+def _split(key: PRNGKeyArray | None) -> tuple[PRNGKeyArray | None, PRNGKeyArray | None]:
+    if key is None:
+        return None, None
+    left, right = jax.random.split(key)
+    return left, right
 
 
-def _prepend(first, tail):
+def _prepend[T](first: T, tail: T) -> T:
     return jax.tree.map(
         lambda x, xs: jnp.concatenate((jnp.asarray(x)[None], xs)), first, tail
     )
 
 
-def run_filter_steps(
-    algorithm, inputs, key, gather, *, parallel=False, include_initial=False
-):
+@overload
+def run_filter_steps[P, S, O](
+    algorithm: SplitSteps[P, S],
+    inputs: FilterInputs,
+    key: PRNGKeyArray | None,
+    gather: Callable[[P, S], O],
+    *,
+    parallel: bool = False,
+    include_initial: bool = False,
+) -> O: ...
+
+
+@overload
+def run_filter_steps[E, S, O](
+    algorithm: CombinedSteps[E, S],
+    inputs: FilterInputs,
+    key: PRNGKeyArray | None,
+    gather: Callable[[S], O],
+    *,
+    parallel: bool = False,
+    include_initial: bool = False,
+) -> O: ...
+
+
+def run_filter_steps[P, S, E, O](
+    algorithm: SplitSteps[P, S] | CombinedSteps[E, S],
+    inputs: FilterInputs,
+    key: PRNGKeyArray | None,
+    gather: Callable[[P, S], O] | Callable[[S], O],
+    *,
+    parallel: bool = False,
+    include_initial: bool = False,
+) -> O:
     """Collect projections in a sequential scan or from associative prefix states."""
-    init_key, scan_key = _split(key, 2)
+    init_key, scan_key = _split(key)
     keys = None if scan_key is None else jax.random.split(scan_key, len(inputs.y))
     first = jax.tree.map(lambda xs: xs[0], inputs)
     if hasattr(algorithm, "filter_combine"):
-        initial = algorithm.init_prepare(key=init_key)
+        fused = cast(CombinedSteps[E, S], algorithm)
+        project = cast(Callable[[S], O], gather)
+        initial = fused.init_prepare(key=init_key)
         if isinstance(algorithm, CuthbertFilter) and hasattr(initial, "model_inputs"):
-            initial = initial._replace(model_inputs=dummy_leading_element(inputs))
+            initial = getattr(initial, "_replace")(
+                model_inputs=dummy_leading_element(inputs)
+            )
         if parallel:
-            if not algorithm.associative:
+            if not getattr(algorithm, "associative", False):
                 raise ValueError("Parallel filtering requires an associative combine.")
             prepared = jax.vmap(
-                lambda x, k: algorithm.filter_prepare(x, key=k),
+                lambda x, k: fused.filter_prepare(x, key=k),
                 in_axes=(0, None if keys is None else 0),
             )(inputs, keys)
             prefixes = jax.lax.associative_scan(
-                jax.vmap(algorithm.filter_combine), _prepend(initial, prepared)
+                jax.vmap(fused.filter_combine), _prepend(initial, prepared)
             )
             if not include_initial:
                 prefixes = jax.tree.map(lambda xs: xs[1:], prefixes)
-            return jax.vmap(gather)(prefixes)
+            return jax.vmap(project)(prefixes)
 
-        def combine(state, args):
+        def combine(
+            state: S, args: tuple[FilterInputs, PRNGKeyArray | None]
+        ) -> tuple[S, O]:
             x, k = args
-            updated = algorithm.filter_combine(
-                state, algorithm.filter_prepare(x, key=k)
-            )
-            return updated, gather(updated)
+            updated = fused.filter_combine(state, fused.filter_prepare(x, key=k))
+            return updated, project(updated)
 
         _, history = jax.lax.scan(combine, initial, (inputs, keys))
-        return _prepend(gather(initial), history) if include_initial else history
+        return _prepend(project(initial), history) if include_initial else history
 
     if parallel:
         raise ValueError("Parallel filtering requires an associative combine.")
@@ -124,18 +142,22 @@ def run_filter_steps(
         for name in ("initialize", "predict", "update")
     ):
         raise TypeError("Expected a split filter or a prepare/combine filter.")
-    prior = algorithm.initialize(first, key=init_key)
+    split = cast(SplitSteps[P, S], algorithm)
+    project_split = cast(Callable[[P, S], O], gather)
+    prior = split.initialize(first, key=init_key)
     first_key = None if keys is None else keys[0]
-    _, update_key = _split(first_key, 2)
-    updated = algorithm.update(prior, first, key=update_key)
-    first_output = gather(prior, updated)
+    _, update_key = _split(first_key)
+    updated = split.update(prior, first, key=update_key)
+    first_output = project_split(prior, updated)
 
-    def step(filtered, args):
+    def step(
+        filtered: S, args: tuple[FilterInputs, PRNGKeyArray | None]
+    ) -> tuple[S, O]:
         x, k = args
-        pred_key, upd_key = _split(k, 2)
-        predicted = algorithm.predict(filtered, x, key=pred_key)
-        updated = algorithm.update(predicted, x, key=upd_key)
-        return updated, gather(predicted, updated)
+        pred_key, upd_key = _split(k)
+        predicted = split.predict(filtered, x, key=pred_key)
+        updated = split.update(predicted, x, key=upd_key)
+        return updated, project_split(predicted, updated)
 
     if len(inputs.y) == 1:
         return jax.tree.map(lambda x: jnp.asarray(x)[None], first_output)
@@ -144,10 +166,18 @@ def run_filter_steps(
     return _prepend(first_output, history)
 
 
-def compute_custom_filter(dynamics, config, times, values, ctrl_times, controls, key):
+def compute_custom_filter(
+    dynamics: DynamicalModel,
+    config: CustomFilterConfig,
+    times: Real[Array, " time"],
+    values: Shaped[Array, "time observation_dim"],
+    ctrl_times: Real[Array, " control_time"] | None,
+    controls: Real[Array, "control_time control_dim"] | None,
+    key: PRNGKeyArray | None,
+) -> FilterOutputs:
     inputs = step_inputs(dynamics, times, values, ctrl_times, controls)
 
-    def gather(*states: Any):
+    def gather(*states: object) -> FilterOutputs:
         output = config.gather_outputs(*states)
         if not isinstance(output, FilterOutputs):
             raise TypeError("gather_outputs must return FilterOutputs.")
@@ -162,7 +192,9 @@ def compute_custom_filter(dynamics, config, times, values, ctrl_times, controls,
     )
 
 
-def custom_distributions(outputs, plate_shapes):
+def custom_distributions(
+    outputs: FilterOutputs, plate_shapes: tuple[int, ...]
+) -> list[Distribution]:
     gaussian = (
         outputs.filtered_means is not None,
         outputs.filtered_covariances is not None,
@@ -174,7 +206,11 @@ def custom_distributions(outputs, plate_shapes):
             outputs.filtered_covariances,
             plate_shapes=plate_shapes,
         )
-    if all(particles) and not any(gaussian):
+    if (
+        outputs.particles is not None
+        and outputs.log_weights is not None
+        and not any(gaussian)
+    ):
         return _particle_sequence_to_dists(
             outputs.particles, outputs.log_weights, plate_shapes=plate_shapes
         )

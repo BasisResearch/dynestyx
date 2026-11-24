@@ -1,6 +1,7 @@
 """Custom step contracts through the public filtering entry points."""
 
-from typing import NamedTuple
+from collections.abc import Callable
+from typing import NamedTuple, assert_type
 
 import jax
 import jax.numpy as jnp
@@ -8,6 +9,7 @@ import numpy as np
 import numpyro.distributions as dist
 import pytest
 from cuthbert.inference import Filter as Fused
+from jaxtyping import PRNGKeyArray
 from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
@@ -79,15 +81,18 @@ def gather(state):
     )
 
 
-@pytest.mark.parametrize("factory", [algorithm, fused])
+@pytest.mark.parametrize(
+    "config",
+    [
+        CustomFilterConfig(
+            build_filter=algorithm,
+            gather_outputs=lambda prior, filtered: gather(filtered),
+        ),
+        CustomFilterConfig(build_filter=fused, gather_outputs=gather),
+    ],
+)
 @pytest.mark.parametrize("length", [1, 3])
-def test_filter_contracts(factory, length):
-    config = CustomFilterConfig(
-        build_filter=factory,
-        gather_outputs=(lambda prior, state: gather(state))
-        if factory is algorithm
-        else gather,
-    )
+def test_filter_contracts(config, length):
     data = dict(
         obs_times=jnp.array([1.0, 2.0, 4.0])[:length],
         obs_values=jnp.array([[0.1], [0.8], [-0.3]])[:length],
@@ -128,29 +133,35 @@ def test_filter_contracts(factory, length):
 
 
 def test_keys_and_nested_plates():
-    def build(model):
-        def update(prior, x, *, key):
-            return prior + jax.random.normal(key, (1,))
+    class Filtered(NamedTuple):
+        mean: jax.Array
+
+    def build(model: dsx.DynamicalModel) -> SplitFilter[jax.Array, Filtered]:
+        def noise(key: PRNGKeyArray | None) -> jax.Array:
+            assert key is not None
+            return jax.random.normal(key, (1,))
 
         return SplitFilter(
-            lambda x, *, key: jax.random.normal(key, (1,)),
-            lambda state, x, *, key: state + jax.random.normal(key, (1,)),
-            update,
+            lambda x, *, key: noise(key),
+            lambda state, x, *, key: state.mean + noise(key),
+            lambda prior, x, *, key: Filtered(prior + noise(key)),
         )
 
-    config = CustomFilterConfig(
-        build_filter=build,
-        crn_seed=jax.random.key(5),
-        gather_outputs=lambda prior, filtered: FilterOutputs(
+    def collect(prior: jax.Array, filtered: Filtered) -> FilterOutputs:
+        return FilterOutputs(
             jnp.array(0.0),
-            filtered,
+            filtered.mean,
             jnp.eye(1),
             predicted_observations=PredictedObservationOutputs(
                 mean=prior, cov=jnp.eye(1)
             ),
             extra_outputs={"prior": prior},
-        ),
+        )
+
+    config = CustomFilterConfig(
+        build_filter=build, crn_seed=jax.random.key(5), gather_outputs=collect
     )
+    assert_type(config.gather_outputs, Callable[[jax.Array, Filtered], FilterOutputs])
 
     def run():
         with dsx.Filter(config), dsx.plate("outer", 2), dsx.plate("inner", 3):

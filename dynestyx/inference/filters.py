@@ -443,7 +443,12 @@ class Filter(BaseLogFactorAdder):
 
         return filtered_dists
 
-    def _finish_custom(self, config, outputs, plate_shapes):
+    def _finish_custom(
+        self,
+        config: BaseFilterConfig,
+        outputs: FilterOutputs,
+        plate_shapes: tuple[int, ...],
+    ) -> list[numpyro.distributions.Distribution]:
         self.marginal_loglik = outputs.log_normalizing_constant[..., -1]
         self.filtered_states = outputs
         self.predicted_observations = outputs.predicted_observations

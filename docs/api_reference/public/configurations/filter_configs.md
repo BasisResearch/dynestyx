@@ -41,7 +41,7 @@ Dynestyx also allows the use of custom filters, conforming to a “predict/updat
 
 ### Split filters
 
-Return a `SplitFilter(initialize, predict, update)` from `dynestyx.inference.custom_filter`. Write $q_k^-(x)$ for the predictive belief about $x_k$ before observing $y_k$, and $q_k(x)$ for the filtered belief after observing it. Each callback works with your chosen representation of these beliefs, such as a Gaussian mean and covariance or a set of weighted particles.
+Return a `SplitFilter(initialize, predict, update)` from `dynestyx.inference.custom_filter`. Write $q_k^-(x)$ for the predictive belief about $x_k$ before observing $y_k$, and $q_k(x)$ for the filtered belief after observing it. Each callback works with your chosen representation of these beliefs, such as a Gaussian mean and covariance or a set of weighted particles. Annotate the factory return type as `SplitFilter[Prior, Filtered]` using the types returned by `predict` and `update`, respectively. The corresponding gather callback has signature `(Prior, Filtered) -> FilterOutputs`.
 
 1. `initialize(inputs, *, key)` returns the prior $q_1^-(x)=p(x_1=x)$ at the first observation time, with cumulative log likelihood initialized to zero. Dynestyx passes this prior directly to `update` for the first observation.
 2. `predict(filtered, inputs, *, key)` propagates the previous filtered belief through the model transition. For $k>1$, return a representation or approximation of $q_k^-(x)=\int p(x_k=x\mid x_{k-1}=z,u_{k-1})\,q_{k-1}(z)\,dz$. The interval endpoints are `inputs.time_prev` and `inputs.time`, and its control is `inputs.u_prev`.
