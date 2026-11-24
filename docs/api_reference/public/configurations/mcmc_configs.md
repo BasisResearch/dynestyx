@@ -11,7 +11,7 @@ defaults and behavior. To retain that behavior, change existing
 `AdaptiveMetropolisConfig` now selects the joint method and has no
 `max_adaptation` option. Both methods support only the BlackJAX backend.
 
-::: dynestyx.inference.configs.mcmc
+::: dynestyx.configs.mcmc
     options:
       members:
         - BaseMCMCConfig

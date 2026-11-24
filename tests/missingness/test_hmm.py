@@ -9,7 +9,7 @@ from numpyro.infer import MCMC, NUTS, Predictive
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, Filter
-from dynestyx.inference.configs.filter import HMMConfig
+from dynestyx.configs.filters import HMMConfig
 from dynestyx.inference.hmm_filters import compute_hmm_filter, hmm_log_components
 from dynestyx.models import DynamicalModel
 from dynestyx.observation_missingness import prepare_observation_views

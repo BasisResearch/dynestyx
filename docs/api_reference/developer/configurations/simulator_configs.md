@@ -8,21 +8,21 @@ simulator configuration.
 
 ## `SimulatorConfig`
 
-::: dynestyx.inference.configs.simulator.SimulatorConfig
+::: dynestyx.configs.simulator.SimulatorConfig
     options:
       show_root_heading: false
       show_root_toc_entry: true
 
 ## `ODESimulatorConfig`
 
-::: dynestyx.inference.configs.simulator.ODESimulatorConfig
+::: dynestyx.configs.simulator.ODESimulatorConfig
     options:
       show_root_heading: false
       show_root_toc_entry: true
 
 ## `SDESimulatorConfig`
 
-::: dynestyx.inference.configs.simulator.SDESimulatorConfig
+::: dynestyx.configs.simulator.SDESimulatorConfig
     options:
       show_root_heading: false
       show_root_toc_entry: true

@@ -6,8 +6,8 @@ import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
 
-from dynestyx.inference.configs.discretizer import ODEFlowConfig
-from dynestyx.inference.configs.simulator import ODESimulatorConfig
+from dynestyx.configs.discretizer import ODEFlowConfig
+from dynestyx.configs.simulator import ODESimulatorConfig
 from dynestyx.models import (
     DeterministicContinuousTimeStateEvolution,
     DeterministicStateEvolution,

@@ -8,7 +8,7 @@ import optax
 import pytest
 
 import dynestyx as dsx
-from dynestyx.inference.configs.filter import EnKFConfig, KFConfig
+from dynestyx.configs.filters import EnKFConfig, KFConfig
 from dynestyx.inference.filters import Filter
 from dynestyx.types import ConditionedResult
 from tests.test_utils import assert_finite

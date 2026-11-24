@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpyro
 from jaxtyping import Array, Real, Shaped
 
-from dynestyx.inference.configs.filter import (
+from dynestyx.configs.filters import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
     DiscreteTimeConfigs,
@@ -17,7 +17,7 @@ from dynestyx.inference.configs.filter import (
     PFConfig,
     RBPFConfig,
 )
-from dynestyx.inference.configs.smoother import (
+from dynestyx.configs.smoother import (
     BaseSmootherConfig,
     ContinuousTimeSmootherConfigs,
     DiscreteTimeSmootherConfigs,

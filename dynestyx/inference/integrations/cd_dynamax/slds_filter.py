@@ -14,7 +14,7 @@ from cd_dynamax.dynamax.slds.inference import (
 )
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real
 
-from dynestyx.inference.configs.filter import RBPFConfig
+from dynestyx.configs.filters import RBPFConfig
 from dynestyx.inference.integrations.cd_dynamax.utils import _prepare_inputs
 from dynestyx.models import (
     DynamicalModel,

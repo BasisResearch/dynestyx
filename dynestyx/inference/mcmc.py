@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from numpyro.infer import HMC, MCMC, NUTS
 
-from dynestyx.inference.configs.mcmc import (
+from dynestyx.configs.mcmc import (
     AdaptiveMetropolisConfig,
     AdaptiveMWGConfig,
     BaseMCMCConfig,

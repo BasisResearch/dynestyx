@@ -7,8 +7,7 @@ from numpyro.infer import Predictive
 
 import dynestyx as dsx
 from dynestyx import DiscreteTimeSimulator, DynamicalModel, Filter
-from dynestyx.inference.configs.mcmc import NUTSConfig
-from dynestyx.inference.filters import RBPFConfig
+from dynestyx.configs import NUTSConfig, RBPFConfig
 from dynestyx.inference.mcmc import MCMCInference
 from dynestyx.models import (
     MixedStateDistribution,

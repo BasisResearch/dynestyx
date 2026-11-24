@@ -15,14 +15,16 @@ For **hierarchical** models with multiple trajectories, use `plate` together
 with NumPyro sampling inside the plate context. For example,
 
 ```python
-with Filter(EKFConfig()):
+import dynestyx as dsx
+
+with dsx.Filter(dsx.configs.EKFConfig()):
     dsx.sample("f", dynamical_model, obs_times=obs_times, obs_values=obs_values)
 ```
 
 will implement the `dsx.sample` primitive using an extended Kalman filter. For more details, see the corresponding [developer API page](../developer/handlers.md).
 
 !!! warning "SLDS parameters must be shared across plate members"
-    With `Filter(RBPFConfig())`, `dsx.plate` can batch multiple observed
+    With `dsx.Filter(dsx.configs.RBPFConfig())`, `dsx.plate` can batch multiple observed
     trajectories of a switching linear dynamical system. Every member must
     share the initial-state, switching transition, and observation model
     parameters. If trajectories need different parameters, filter them
@@ -51,7 +53,7 @@ logging.getLogger("dynestyx").setLevel(logging.INFO)
 | Observations and prediction times | Apply both rules |
 | An incomplete observation or control pair | Raise an input-validation error |
 
-Categorical latent states select exact HMM filtering with `HMMConfig()`.
+Categorical latent states select exact HMM filtering with `dsx.configs.HMMConfig()`.
 For other models, `sample` selects `LatentPathBuilder()` when observation and state
 dimensions match, `T * observation_dim < 1,000`, and the transition is known to
 have a density or the model is a native ODE. This initial size heuristic uses
@@ -97,10 +99,13 @@ state and observation dimensions alone do not imply noise-free observations.
 For example, a model can request predictions without an explicit simulator:
 
 ```python
+import dynestyx as dsx
+import numpyro
+
 with numpyro.handlers.seed(rng_seed=0):
     prior = dsx.sample("f", dynamics, predict_times=times)
 
-with numpyro.handlers.seed(rng_seed=1), Filter(KFConfig(filter_source="cuthbert")):
+with numpyro.handlers.seed(rng_seed=1), dsx.Filter(dsx.configs.KFConfig(filter_source="cuthbert")):
     posterior = dsx.sample(
         "f", discrete_dynamics,
         obs_times=times, obs_values=observations,
