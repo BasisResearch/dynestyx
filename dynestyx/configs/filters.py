@@ -254,6 +254,21 @@ class BaseFilterConfig(abc.ABC):
     crn_seed: PRNGKeyArray | None = None
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class CustomFilterConfig(BaseFilterConfig):
+    """Bind a model to a split or fused filter and project each completed step.
+
+    build_filter(model) returns a SplitFilter or a Cuthbert-style filter.
+    gather_outputs(prior, filtered) for split filters, or gather_outputs(state)
+    for fused filters, returns dynestyx.inference.custom_filter.FilterOutputs.
+    Set parallel=True for an associative fused filter.
+    """
+
+    build_filter: Callable
+    gather_outputs: Callable
+    parallel: bool = False
+
+
 @dataclasses.dataclass(frozen=True)
 class EnKFBaseConfig(BaseFilterConfig):
     """Shared options for discrete- and continuous-time EnKF configs."""

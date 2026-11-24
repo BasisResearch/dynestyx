@@ -35,6 +35,30 @@ Nested objects such as `extra_filter_kwargs` dictionaries are not recursively fr
 | `ContinuousTimeEnKFConfig` | Continuous-discrete | High-dimensional or expensive models with lower-dimensional structure and Gaussian observations (approximate). Performs reasonably as a default. *(default)* |
 | `ContinuousTimeDPFConfig`  | Continuous-discrete | Applicable for arbitrary state-space models, but quite expensive and noisy estimates (asymptotically exact in the limit of infinite particles, approximate in practice). |
 
+## Custom filters
+
+Pass `CustomFilterConfig(build_filter=..., gather_outputs=...)` to `dsx.Filter`.
+The factory receives one model, including the current values of any inferred parameters.
+Return a `SplitFilter(initialize, predict, update)` from
+`dynestyx.inference.custom_filter`, or a Cuthbert-style filter with
+`init_prepare`, `filter_prepare`, and `filter_combine`.
+
+For a split filter, `initialize(inputs, *, key)` returns the prior at the first
+observation. `predict(filtered, inputs, *, key)` returns the prior at each later
+observation, and `update(prior, inputs, *, key)` returns the next filtered carry.
+Inputs contain `y`, `time`, `time_prev`, `u`, `u_prev`, and `is_first_step`.
+At the first observation the previous time and control equal their current values.
+For a fused filter, initialization receives only the key and preparation receives
+these inputs. Set `parallel=True` to use an associative fused filter.
+
+Return `FilterOutputs` from `gather_outputs(prior, filtered)` or, for fused
+filters, `gather_outputs(filtered)`. Supply cumulative log likelihood and either
+Gaussian moments or weighted particles. Optional observation predictions support
+scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`,
+with leading plate dimensions followed by observation time.
+
+[Build a Gauss–Hermite filter](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
+
 ## EnKF localization
 
 Localization is a common technique in EnKFs, related to the issue of estimating a covariance matrix from a few samples. The (cuthbert, discrete-time) EnKF supports localization via covariance tapering via pairwise distances, or direct control over localization functions, using `EnKFLocalizationConfig` for the former and `EnKFLocalizationFunctions` for the latter. For localization in a deterministic continuous-time dynamics, combine `EnKFConfig` with an ODE-flow `Discretizer`.

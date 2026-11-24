@@ -45,6 +45,7 @@ type SupportedObservationPredictionConfig = (
 )
 
 
+@jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True)
 class PredictedObservationOutputs:
     """Canonical predicted-observation outputs for Dynestyx filters."""

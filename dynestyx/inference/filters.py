@@ -22,6 +22,7 @@ from dynestyx.configs.filters import (
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
+    CustomFilterConfig,
     DiscreteTimeConfigs,
     EKFConfig,
     EnKFConfig,
@@ -48,6 +49,7 @@ from dynestyx.inference.checkers import (
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
+from dynestyx.inference.custom_filter import compute_custom_filter, custom_distributions
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
@@ -362,6 +364,11 @@ class Filter(BaseLogFactorAdder):
             if ctrl_values is not None:
                 ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
+        if isinstance(config, CustomFilterConfig):
+            outputs = compute_custom_filter(
+                dynamics, config, obs_times, obs_values, ctrl_times, ctrl_values, key
+            )
+            return self._finish_custom(config, outputs, ())
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
@@ -432,6 +439,13 @@ class Filter(BaseLogFactorAdder):
 
         return filtered_dists
 
+    def _finish_custom(self, config, outputs, plate_shapes):
+        self.marginal_loglik = outputs.log_normalizing_constant[..., -1]
+        self.filtered_states = outputs
+        self.predicted_observations = outputs.predicted_observations
+        self._filter_config_used = config
+        return custom_distributions(outputs, plate_shapes)
+
     def _build_infer_result(
         self,
         times: Real[Array, "*time_plate time"] | None,
@@ -472,6 +486,9 @@ class Filter(BaseLogFactorAdder):
             marginal_loglik=marginal_loglik,
             times=times,
             states=states,
+            extra_outputs=(states.extra_outputs or {})
+            if isinstance(config, CustomFilterConfig)
+            else {},
             dists=filtered_dists,
             predicted_observations=predictions,
             _register_numpyro_sites=_register,
@@ -510,7 +527,13 @@ class Filter(BaseLogFactorAdder):
         # Determine the compute function (dispatch before vmap).
         output_kind: str
         uses_preprocessed_obs = False
-        if dynamics.continuous_time:
+        if isinstance(config, CustomFilterConfig):
+            output_kind = "custom"
+
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                return compute_custom_filter(dyn, config, ot, ov, ct, cv, k)
+
+        elif dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
                 raise ValueError(
@@ -698,6 +721,8 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
+        if output_kind == "custom":
+            return self._finish_custom(config, outputs, plate_shapes)
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
             states = outputs

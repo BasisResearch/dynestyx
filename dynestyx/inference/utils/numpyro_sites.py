@@ -8,6 +8,7 @@ from jaxtyping import Array, Float, Real
 from dynestyx.configs.filters import (
     BaseFilterConfig,
     ContinuousTimeConfigs,
+    CustomFilterConfig,
     HMMConfig,
     PFConfig,
     _config_to_record_kwargs,
@@ -54,7 +55,9 @@ def register_filter_sites(
 
     if isinstance(filter_config, tuple(ContinuousTimeConfigs)):
         _add_continuous_filter_sites(name, states, record_kwargs)
-    elif isinstance(filter_config, PFConfig):
+    elif isinstance(filter_config, PFConfig) or (
+        isinstance(filter_config, CustomFilterConfig) and states.particles is not None
+    ):
         _add_cuthbert_pf_sites(name, states, record_kwargs)
     else:
         _add_gaussian_filter_sites(name, states, filter_config, record_kwargs)
