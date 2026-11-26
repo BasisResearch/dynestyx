@@ -7,10 +7,11 @@ from jaxtyping import Array, Float, Real
 
 from dynestyx.configs.filters import (
     BaseFilterConfig,
+    CombineFilterConfig,
     ContinuousTimeConfigs,
-    CustomFilterConfig,
     HMMConfig,
     PFConfig,
+    SplitFilterConfig,
     _config_to_record_kwargs,
 )
 from dynestyx.configs.smoother import (
@@ -56,7 +57,7 @@ def register_filter_sites(
     if isinstance(filter_config, tuple(ContinuousTimeConfigs)):
         _add_continuous_filter_sites(name, states, record_kwargs)
     elif isinstance(filter_config, PFConfig) or (
-        isinstance(filter_config, CustomFilterConfig)
+        isinstance(filter_config, (SplitFilterConfig, CombineFilterConfig))
         and getattr(states, "particles", None) is not None
     ):
         _add_cuthbert_pf_sites(name, states, record_kwargs)

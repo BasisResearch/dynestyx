@@ -12,12 +12,12 @@ from dynestyx.configs.discretizer import (
     ODEFlowConfig,
 )
 from dynestyx.configs.filters import (
+    CombineFilterConfig,
     ContinuousTimeDPFConfig,
     ContinuousTimeEKFConfig,
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
-    CustomFilterConfig,
     EKFConfig,
     EnKFConfig,
     EnKFLocalizationConfig,
@@ -26,6 +26,7 @@ from dynestyx.configs.filters import (
     KFConfig,
     PFConfig,
     PFResamplingConfig,
+    SplitFilterConfig,
     UKFConfig,
 )
 from dynestyx.configs.mcmc import (
@@ -71,6 +72,7 @@ def __dir__() -> list[str]:
 __all__ = [
     "AdaptiveMetropolisConfig",
     "AdaptiveMWGConfig",
+    "CombineFilterConfig",
     "ContinuousTimeDPFConfig",
     "ContinuousTimeEKFConfig",
     "ContinuousTimeEKFSmootherConfig",
@@ -78,7 +80,6 @@ __all__ = [
     "ContinuousTimeKFConfig",
     "ContinuousTimeKFSmootherConfig",
     "ContinuousTimeUKFConfig",
-    "CustomFilterConfig",
     "DiffraxSampleConfig",
     "DiscretizerConfig",
     "EKFConfig",
@@ -106,6 +107,7 @@ __all__ = [
     "SDESimulatorConfig",
     "SGLDConfig",
     "SimulatorConfig",
+    "SplitFilterConfig",
     "UKFConfig",
     "UKFSmootherConfig",
 ]

@@ -10,7 +10,7 @@ from cuthbert.utils import dummy_leading_element
 from jaxtyping import Array, PRNGKeyArray, Real, Shaped
 from numpyro.distributions import Distribution
 
-from dynestyx.configs.filters import CustomFilterConfig
+from dynestyx.configs.filters import CombineFilterConfig, SplitFilterConfig
 from dynestyx.inference.filter_types import CombinedSteps, SplitSteps
 from dynestyx.inference.filter_types import FilterInputs as FilterInputs
 from dynestyx.inference.filter_types import FilterOutputs as FilterOutputs
@@ -107,7 +107,11 @@ def run_filter_steps[P, S, E, O](
         fused = cast(CombinedSteps[E, S], algorithm)
         project = cast(Callable[[S], O], gather)
         initial = fused.init_prepare(key=init_key)
-        if isinstance(algorithm, CuthbertFilter) and hasattr(initial, "model_inputs"):
+        if (
+            isinstance(algorithm, CuthbertFilter)
+            and hasattr(initial, "_replace")
+            and getattr(initial, "model_inputs", False) is None
+        ):
             initial = getattr(initial, "_replace")(
                 model_inputs=dummy_leading_element(inputs)
             )
@@ -168,7 +172,7 @@ def run_filter_steps[P, S, E, O](
 
 def compute_custom_filter(
     dynamics: DynamicalModel,
-    config: CustomFilterConfig,
+    config: SplitFilterConfig | CombineFilterConfig,
     times: Real[Array, " time"],
     values: Shaped[Array, "time observation_dim"],
     ctrl_times: Real[Array, " control_time"] | None,
@@ -177,8 +181,7 @@ def compute_custom_filter(
 ) -> FilterOutputs:
     inputs = step_inputs(dynamics, times, values, ctrl_times, controls)
 
-    def gather(*states: object) -> FilterOutputs:
-        output = config.gather_outputs(*states)
+    def checked(output: FilterOutputs) -> FilterOutputs:
         if not isinstance(output, FilterOutputs):
             raise TypeError("gather_outputs must return FilterOutputs.")
         if jnp.ndim(output.log_normalizing_constant) != 0:
@@ -187,8 +190,19 @@ def compute_custom_filter(
             output = output._replace(predicted_observations=None)
         return output
 
+    if isinstance(config, SplitFilterConfig):
+        return run_filter_steps(
+            config.build_filter(dynamics),
+            inputs,
+            key,
+            lambda prior, filtered: checked(config.gather_outputs(prior, filtered)),
+        )
     return run_filter_steps(
-        config.build_filter(dynamics), inputs, key, gather, parallel=config.parallel
+        config.build_filter(dynamics),
+        inputs,
+        key,
+        lambda filtered: checked(config.gather_outputs(filtered)),
+        parallel=config.parallel,
     )
 
 

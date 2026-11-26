@@ -4,14 +4,22 @@ import abc
 import dataclasses
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
+from functools import partial
+from typing import Any, ClassVar, Literal, Protocol
 
 import jax.numpy as jnp
 import jax.random as jr
+from cuthbert.inference import Filter as CuthbertFilter
 from cuthbertlib.types import ScalarArrayLike
 from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
-from dynestyx.inference.filter_types import CombinedSteps, FilterOutputs, SplitSteps
+from dynestyx.inference.filter_types import (
+    CombinedSteps,
+    FilterInputs,
+    FilterOutputs,
+    SplitFilter,
+    SplitSteps,
+)
 from dynestyx.models import DynamicalModel
 from dynestyx.utils.validation import _validate_nonnegative_float
 
@@ -256,46 +264,127 @@ class BaseFilterConfig(abc.ABC):
     crn_seed: PRNGKeyArray | None = None
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class CustomFilterConfig[Algorithm, Gather](BaseFilterConfig):
-    """Bind a model to a split or fused filter and project each completed step.
+def _require_steps(
+    config: BaseFilterConfig, base: type, names: tuple[str, ...]
+) -> None:
+    missing = [
+        name for name in names if getattr(type(config), name) is getattr(base, name)
+    ]
+    if missing:
+        raise TypeError(
+            f"{type(config).__name__} must implement {', '.join(missing)} or override build_filter(model)."
+        )
 
-    build_filter(model) returns a SplitFilter or a Cuthbert-style filter.
-    gather_outputs(prior, filtered) for split filters, or gather_outputs(state)
-    for fused filters, returns dynestyx.inference.custom_filter.FilterOutputs.
-    Set parallel=True for an associative fused filter.
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class SplitFilterConfig[Prior, Filtered](BaseFilterConfig):
+    """Implement prediction, update, and a projection of each completed step.
+
+    The default builder binds the current model once per filter run. Override it
+    to return an existing split filter or precompute model-dependent quantities.
     """
 
-    # The dataclass supplies __init__, including the inherited recording options.
-    # Pair its two callbacks for static checking while preserving that constructor.
-    if TYPE_CHECKING:
+    def initialize(
+        self,
+        model: DynamicalModel,
+        inputs: FilterInputs,
+        /,
+        *,
+        key: PRNGKeyArray | None,
+    ) -> Prior:
+        """Return the prior at the first observation time."""
+        raise NotImplementedError
 
-        @overload
-        def __new__[P, S](
-            cls,
-            *args: object,
-            build_filter: Callable[[DynamicalModel], SplitSteps[P, S]],
-            gather_outputs: Callable[[P, S], FilterOutputs],
-            **kwargs: object,
-        ) -> (
-            "CustomFilterConfig[SplitSteps[P, S], Callable[[P, S], FilterOutputs]]"
-        ): ...
-        @overload
-        def __new__[E, S](
-            cls,
-            *args: object,
-            build_filter: Callable[[DynamicalModel], CombinedSteps[E, S]],
-            gather_outputs: Callable[[S], FilterOutputs],
-            **kwargs: object,
-        ) -> (
-            "CustomFilterConfig[CombinedSteps[E, S], Callable[[S], FilterOutputs]]"
-        ): ...
-        def __new__(cls, *args: object, **kwargs: object):
-            return super().__new__(cls)
+    def predict(
+        self,
+        model: DynamicalModel,
+        filtered: Filtered,
+        inputs: FilterInputs,
+        /,
+        *,
+        key: PRNGKeyArray | None,
+    ) -> Prior:
+        """Propagate the last filtered belief to the current observation time."""
+        raise NotImplementedError
 
-    build_filter: Callable[[DynamicalModel], Algorithm]
-    gather_outputs: Gather
+    def update(
+        self,
+        model: DynamicalModel,
+        prior: Prior,
+        inputs: FilterInputs,
+        /,
+        *,
+        key: PRNGKeyArray | None,
+    ) -> Filtered:
+        """Condition the prior on the current observation."""
+        raise NotImplementedError
+
+    def build_filter(self, model: DynamicalModel) -> SplitSteps[Prior, Filtered]:
+        _require_steps(self, SplitFilterConfig, ("initialize", "predict", "update"))
+        return SplitFilter(
+            partial(self.initialize, model),
+            partial(self.predict, model),
+            partial(self.update, model),
+        )
+
+    @abc.abstractmethod
+    def gather_outputs(self, prior: Prior, filtered: Filtered, /) -> FilterOutputs:
+        """Select the evidence, belief, and diagnostics to retain for this observation."""
+        ...
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class CombineFilterConfig[Prepared, Filtered](BaseFilterConfig):
+    """Implement Cuthbert-style preparation, combination, and output projection.
+
+    Alternatively override build_filter(model) to return a Cuthbert filter.
+    Set parallel=True to request associative execution. Method-defined filters
+    declare associative=True on their class when their combine supports it.
+    """
+
     parallel: bool = False
+    associative: ClassVar[bool] = False
+
+    def init_prepare(
+        self, model: DynamicalModel, /, *, key: PRNGKeyArray | None
+    ) -> Filtered:
+        """Prepare the initial scan state."""
+        raise NotImplementedError
+
+    def filter_prepare(
+        self,
+        model: DynamicalModel,
+        inputs: FilterInputs,
+        /,
+        *,
+        key: PRNGKeyArray | None,
+    ) -> Prepared:
+        """Prepare this observation independently of the previous state."""
+        raise NotImplementedError
+
+    def filter_combine(
+        self, model: DynamicalModel, previous: Filtered, prepared: Prepared, /
+    ) -> Filtered:
+        """Combine the previous state and the prepared observation."""
+        raise NotImplementedError
+
+    def build_filter(self, model: DynamicalModel) -> CombinedSteps[Prepared, Filtered]:
+        _require_steps(
+            self,
+            CombineFilterConfig,
+            ("init_prepare", "filter_prepare", "filter_combine"),
+        )
+        return CuthbertFilter(
+            init_prepare=partial(self.init_prepare, model),
+            filter_prepare=partial(self.filter_prepare, model),
+            filter_combine=partial(self.filter_combine, model),
+            associative=self.associative,
+        )
+
+    @abc.abstractmethod
+    def gather_outputs(self, filtered: Filtered, /) -> FilterOutputs:
+        """Select the evidence, belief, and diagnostics to retain for this observation."""
+        ...
 
 
 @dataclasses.dataclass(frozen=True)

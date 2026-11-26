@@ -15,6 +15,7 @@ from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.configs.filters import (
     BaseFilterConfig,
+    CombineFilterConfig,
     ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
@@ -22,7 +23,6 @@ from dynestyx.configs.filters import (
     ContinuousTimeEnKFConfig,
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
-    CustomFilterConfig,
     DiscreteTimeConfigs,
     EKFConfig,
     EnKFConfig,
@@ -35,6 +35,7 @@ from dynestyx.configs.filters import (
     ModifyPredictedObservationCovariance,
     PFConfig,
     PFResamplingConfig,
+    SplitFilterConfig,
     TaperCovarianceFn,
     UKFConfig,
 )
@@ -368,7 +369,7 @@ class Filter(BaseLogFactorAdder):
             if ctrl_values is not None:
                 ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
-        if isinstance(config, CustomFilterConfig):
+        if isinstance(config, (SplitFilterConfig, CombineFilterConfig)):
             outputs = compute_custom_filter(
                 dynamics, config, obs_times, obs_values, ctrl_times, ctrl_values, key
             )
@@ -479,7 +480,9 @@ class Filter(BaseLogFactorAdder):
                     cast(jax.Array, states),
                     cast(HMMConfig, config),
                 )
-            elif _is_batched and not isinstance(config, CustomFilterConfig):
+            elif _is_batched and not isinstance(
+                config, (SplitFilterConfig, CombineFilterConfig)
+            ):
                 # TODO: support per-field recording for batched (plate) states
                 numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
@@ -536,7 +539,7 @@ class Filter(BaseLogFactorAdder):
         # Determine the compute function (dispatch before vmap).
         output_kind: str
         uses_preprocessed_obs = False
-        if isinstance(config, CustomFilterConfig):
+        if isinstance(config, (SplitFilterConfig, CombineFilterConfig)):
             output_kind = "custom"
 
             def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
