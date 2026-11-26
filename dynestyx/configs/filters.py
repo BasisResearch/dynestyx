@@ -5,7 +5,7 @@ import dataclasses
 import math
 from collections.abc import Callable
 from functools import partial
-from typing import Any, ClassVar, Literal, Protocol
+from typing import Any, ClassVar, Literal, Protocol, cast
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -20,6 +20,7 @@ from dynestyx.inference.filter_types import (
     SplitFilter,
     SplitSteps,
 )
+from dynestyx.inference.integrations.cd_dynamax.filter_steps import CDFilter
 from dynestyx.models import DynamicalModel
 from dynestyx.utils.validation import _validate_nonnegative_float
 
@@ -262,6 +263,10 @@ class BaseFilterConfig(abc.ABC):
     filter_source: FilterSource | None = None
     cov_rescaling: float | None = None
     crn_seed: PRNGKeyArray | None = None
+
+    def build_filter(self, model: DynamicalModel) -> SplitSteps | CombinedSteps:
+        """Bind a filtering algorithm to one model before scanning observations."""
+        raise ValueError(f"Invalid filter config: {type(self).__name__}")
 
 
 def _require_steps(
@@ -545,6 +550,14 @@ class EnKFConfig(EnKFBaseConfig):
 
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
+    def build_filter(self, model: DynamicalModel) -> CuthbertFilter:
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+            _config_to_filter_kwargs,
+            _cuthbert_filter_enkf,
+        )
+
+        return _cuthbert_filter_enkf(model, _config_to_filter_kwargs(self, model))
+
 
 @dataclasses.dataclass(frozen=True)
 class PFResamplingConfig:
@@ -665,6 +678,14 @@ class PFConfig(PFBaseConfig):
 
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
+    def build_filter(self, model: DynamicalModel) -> CuthbertFilter:
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+            _config_to_filter_kwargs,
+            _cuthbert_filter_pf,
+        )
+
+        return _cuthbert_filter_pf(model, _config_to_filter_kwargs(self, model))
+
 
 @dataclasses.dataclass(frozen=True)
 class EKFConfig(BaseFilterConfig):
@@ -718,6 +739,20 @@ class EKFConfig(BaseFilterConfig):
 
     filter_source: CuthbertOrCDDynamaxFilterSource = "cuthbert"
     filter_emission_order: FilterEmissionOrder = "first"
+
+    def build_filter(self, model: DynamicalModel) -> CDFilter | CuthbertFilter:
+        if self.filter_source == "cd_dynamax":
+            from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+                build_discrete_filter,
+            )
+
+            return build_discrete_filter(model, self)
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+            _config_to_filter_kwargs,
+            _cuthbert_filter_taylor_kf,
+        )
+
+        return _cuthbert_filter_taylor_kf(model, _config_to_filter_kwargs(self, model))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -802,6 +837,20 @@ class KFConfig(BaseFilterConfig):
                 "filter_source='cuthbert'."
             )
 
+    def build_filter(self, model: DynamicalModel) -> CDFilter | CuthbertFilter:
+        if self.filter_source == "cd_dynamax":
+            from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+                build_discrete_filter,
+            )
+
+            return build_discrete_filter(model, self)
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+            _config_to_filter_kwargs,
+            _cuthbert_filter_kalman,
+        )
+
+        return _cuthbert_filter_kalman(model, _config_to_filter_kwargs(self, model))
+
 
 @dataclasses.dataclass(frozen=True)
 class UKFConfig(BaseFilterConfig):
@@ -858,6 +907,13 @@ class UKFConfig(BaseFilterConfig):
     kappa: int = 1
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+            build_discrete_filter,
+        )
+
+        return build_discrete_filter(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeConfig:
@@ -889,6 +945,14 @@ class ContinuousTimeConfig:
     diffeqsolve_max_steps: int = 1_000
     diffeqsolve_dt0: float = 0.01
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
+
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            ContinuousTimeFilterConfig,
+            build_continuous_filter,
+        )
+
+        return build_continuous_filter(model, cast(ContinuousTimeFilterConfig, self))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -927,6 +991,8 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     """
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+    build_filter = ContinuousTimeConfig.build_filter
 
 
 @dataclasses.dataclass(frozen=True)
@@ -976,6 +1042,8 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
                 "discrete EnKFConfig instead."
             )
 
+    build_filter = ContinuousTimeConfig.build_filter
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
@@ -1009,6 +1077,8 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
 
+    build_filter = ContinuousTimeConfig.build_filter
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
@@ -1037,6 +1107,8 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
+    build_filter = ContinuousTimeConfig.build_filter
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
@@ -1064,6 +1136,8 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     """
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+    build_filter = ContinuousTimeConfig.build_filter
 
 
 DiscreteTimeConfigs: tuple[type, ...] = (

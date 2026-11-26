@@ -192,7 +192,7 @@ def compute_cuthbert_smoother(
         store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
     )
 
-    filter_kwargs = _config_to_filter_kwargs(smoother_config)
+    filter_kwargs = _config_to_filter_kwargs(smoother_config, dynamics)
 
     if isinstance(smoother_config, KFSmootherConfig):
         smoother_obj = kalman.build_smoother(

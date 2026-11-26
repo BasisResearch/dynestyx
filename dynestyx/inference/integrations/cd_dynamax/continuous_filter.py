@@ -2,19 +2,19 @@
 
 from typing import Any
 
-import jax
-import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax import (
-    ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
 )
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.inference import (
     KFHyperParams,
 )
-from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.models import (
-    PosteriorGSSMFiltered,
+from cd_dynamax.src.continuous_discrete_nonlinear_gaussian_ssm.models import (
+    build_filter_hyperparams,
+)
+from cd_dynamax.src.continuous_discrete_nonlinear_ssm.inference_dpf import (
+    build_dpf_hyperparams,
 )
 from jaxtyping import Array, PRNGKeyArray, Real
 
@@ -25,6 +25,14 @@ from dynestyx.configs.filters import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
 )
+from dynestyx.inference.custom_filter import step_inputs
+from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+    ensemble_filter,
+    linear_filter,
+    nonlinear_filter,
+    particle_filter,
+)
+from dynestyx.inference.integrations.cd_dynamax.filter_steps import CDFilter
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
@@ -46,29 +54,8 @@ ContinuousTimeFilterConfig = (
 )
 
 
-def _config_to_cd_dynamax_filter_kwargs(
-    config: ContinuousTimeFilterConfig,
-    params: Any,
-    obs_values: Real[Array, "obs_time observation_dim"],
-    obs_times: Real[Array, "obs_time 1"],
-    ctrl_values: Real[Array, "ctrl_time control_dim"],
-    key: PRNGKeyArray | None,
-    output_fields: list[str] | None,
-) -> dict[str, Any]:
-    """Build the filter_kwargs dict passed to cd_dynamax_model.filter()."""
-
-    # cd-dynamax uses the legacy PRNG key interface, but newer numpyro uses typed keys.
-    # We should convert accordingly.
-    # https://docs.jax.dev/en/latest/jax.random.html#module-jax.random
-    if key is not None and jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
-        key = jax.random.key_data(key)
-
+def _hyperparams(config: ContinuousTimeFilterConfig):
     base = {
-        "params": params,
-        "emissions": obs_values,
-        "t_emissions": obs_times,
-        "inputs": ctrl_values,
-        "key": key,
         "filter_state_order": config.filter_state_order,
         "filter_state_cov_rescaling": config.cov_rescaling
         if config.cov_rescaling is not None
@@ -77,8 +64,6 @@ def _config_to_cd_dynamax_filter_kwargs(
         "diffeqsolve_dt0": config.diffeqsolve_dt0,
         "diffeqsolve_kwargs": config.diffeqsolve_kwargs,
         "extra_filter_kwargs": config.extra_filter_kwargs,
-        "warn": config.warn,
-        "output_fields": output_fields,
     }
     if isinstance(config, ContinuousTimeEnKFConfig):
         base["filter_type"] = "EnKF"
@@ -93,7 +78,6 @@ def _config_to_cd_dynamax_filter_kwargs(
     elif isinstance(config, ContinuousTimeEKFConfig):
         base["filter_type"] = "EKF"
         base["filter_emission_order"] = config.filter_emission_order
-        base["filter_num_iter"] = 1
     elif isinstance(config, ContinuousTimeUKFConfig):
         base["filter_type"] = "UKF"
         base["extra_filter_kwargs"] = {
@@ -107,7 +91,6 @@ def _config_to_cd_dynamax_filter_kwargs(
             raise ValueError(
                 "Only multinomial resampling is supported for CD-Dynamax DPF."
             )
-        base["filter_type"] = "DPF"
         base["N_particles"] = config.n_particles
         base["extra_filter_kwargs"] = {
             "resample_method": config.resampling_method.differential_method,
@@ -115,70 +98,8 @@ def _config_to_cd_dynamax_filter_kwargs(
             "ess_threshold_ratio": config.ess_threshold_ratio,
             **config.extra_filter_kwargs,
         }
-    return base
-
-
-def _continuous_filter_output_fields(
-    filter_config: ContinuousTimeFilterConfig,
-) -> list[str] | None:
-    """Select the CD-Dynamax posterior fields required for this run."""
-    if isinstance(filter_config, ContinuousTimeDPFConfig):
-        return None
-
-    output_fields = [
-        "marginal_loglik",
-        "filtered_means",
-        "filtered_covariances",
-    ]
-    if not wants_observation_prediction_diagnostics(filter_config):
-        return output_fields
-
-    output_fields.extend(
-        [
-            "y_pred_mean",
-            "y_pred_cov",
-            "y_obs_pred_mean",
-            "y_obs_pred_cov",
-        ]
-    )
-    if isinstance(filter_config, ContinuousTimeEnKFConfig):
-        output_fields.extend(["y_ens_pred", "y_obs_ens_pred"])
-    return output_fields
-
-
-def _run_linear_kf(
-    dynamics: DynamicalModel,
-    obs_times: Real[Array, "obs_time 1"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_values: Real[Array, "ctrl_time control_dim"],
-    filter_config: ContinuousTimeKFConfig,
-    *,
-    output_fields: list[str] | None,
-) -> PosteriorGSSMFiltered:
-    """Run exact continuous-discrete KF (AffineLinearDrift + constant diffusion + LinearGaussianObservation)."""
-    params = dsx_to_cdlgssm_params(dynamics)
-    cd_model = ContDiscreteLinearGaussianSSM(
-        state_dim=dynamics.state_dim,
-        emission_dim=dynamics.observation_dim,
-        input_dim=dynamics.control_dim,
-    )
-    filter_hyperparams = KFHyperParams(
-        diffeqsolve_settings={
-            "dt0": filter_config.diffeqsolve_dt0,
-            "max_steps": filter_config.diffeqsolve_max_steps,
-            **filter_config.diffeqsolve_kwargs,
-        }
-    )
-    filtered = cd_model.filter(
-        params=params,
-        emissions=obs_values,
-        t_emissions=obs_times,
-        filter_hyperparams=filter_hyperparams,
-        inputs=ctrl_values,
-        output_fields=output_fields,
-        warn=filter_config.warn,
-    )
-    return filtered
+        return build_dpf_hyperparams(**base)
+    return build_filter_hyperparams(**base)
 
 
 def compute_continuous_filter(
@@ -192,64 +113,50 @@ def compute_continuous_filter(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
 ) -> Any:
     """Pure-JAX continuous-time filter computation (no numpyro side-effects)."""
-    obs_times_arr = jnp.asarray(obs_times)
-    if obs_times_arr.ndim == 1:
-        obs_times_arr = obs_times_arr[:, None]
+    inputs = step_inputs(dynamics, obs_times, obs_values, ctrl_times, ctrl_values)
+    if key is None and isinstance(
+        filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
+    ):
+        raise ValueError(
+            f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, or run inside a NumPyro seeded context."
+        )
+    return filter_config.build_filter(dynamics).run(inputs, key)
 
-    control_dim = dynamics.control_dim
-    ctrl_vals = (
-        ctrl_values
-        if ctrl_values is not None
-        else jnp.zeros((obs_times_arr.shape[0], control_dim))
-    )
-    output_fields = _continuous_filter_output_fields(filter_config)
 
+def build_continuous_filter(
+    dynamics: DynamicalModel, filter_config: ContinuousTimeFilterConfig
+) -> CDFilter:
+    diagnostics = wants_observation_prediction_diagnostics(filter_config)
     if isinstance(filter_config, ContinuousTimeKFConfig):
-        filtered = _run_linear_kf(
-            dynamics,
-            obs_times_arr,
-            obs_values,
-            ctrl_vals,
-            filter_config,
-            output_fields=output_fields,
+        params = dsx_to_cdlgssm_params(dynamics)
+        hp = KFHyperParams(
+            diffeqsolve_settings={
+                "dt0": filter_config.diffeqsolve_dt0,
+                "max_steps": filter_config.diffeqsolve_max_steps,
+                **filter_config.diffeqsolve_kwargs,
+            }
         )
-    else:
-        if isinstance(
-            filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
-        ):
-            if key is None:
-                raise ValueError(
-                    f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, "
-                    "or run inside a NumPyro seeded context (e.g., with numpyro.handlers.seed)."
-                )
-
-        if isinstance(filter_config, ContinuousTimeDPFConfig):
-            cd_dynamax_model: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
-        else:
-            cd_dynamax_model = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dynamics.state_dim,
-                emission_dim=dynamics.observation_dim,
-                input_dim=dynamics.control_dim,
-            )
-
-        params, _ = dsx_to_cd_dynamax(dynamics, cd_model=cd_dynamax_model)
-        filter_kwargs = _config_to_cd_dynamax_filter_kwargs(
-            filter_config,
-            params,
-            obs_values,
-            obs_times_arr,
-            ctrl_vals,
-            key,
-            output_fields,
+        return linear_filter(
+            params, hp, diagnostics, filter_config.warn, dynamics.control_dim
         )
 
-        filtered = cd_dynamax_model.filter(**filter_kwargs)  # type: ignore
-
-    return filtered
+    model_cls = (
+        ContDiscreteNonlinearSSM
+        if isinstance(filter_config, ContinuousTimeDPFConfig)
+        else ContDiscreteNonlinearGaussianSSM
+    )
+    model = model_cls(
+        state_dim=dynamics.state_dim,
+        emission_dim=dynamics.observation_dim,
+        input_dim=dynamics.control_dim,
+    )
+    params, _ = dsx_to_cd_dynamax(dynamics, cd_model=model)
+    hp = _hyperparams(filter_config)
+    if isinstance(filter_config, ContinuousTimeDPFConfig):
+        return particle_filter(params, hp)
+    if isinstance(filter_config, ContinuousTimeEnKFConfig):
+        return ensemble_filter(params, hp, diagnostics, filter_config.warn)
+    return nonlinear_filter(params, hp, diagnostics, filter_config.warn)
 
 
 def run_continuous_filter(
