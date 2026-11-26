@@ -1,5 +1,6 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF."""
 
+import dataclasses
 import warnings
 from typing import Any, cast
 
@@ -128,72 +129,88 @@ def compute_cd_dynamax_discrete_filter(
 ) -> Any:
     """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects)."""
     inputs = step_inputs(dynamics, obs_times, obs_values, ctrl_times, ctrl_values)
-    return build_discrete_filter(dynamics, filter_config).run(inputs, None)
-
-
-def build_discrete_filter(
-    dynamics: DynamicalModel, filter_config: BaseFilterConfig
-) -> CDFilter:
-    if isinstance(filter_config, KFConfig):
-        params, _ = kf.preprocess_params_and_inputs(
-            _lti_to_lgssm_params(dynamics), 0, jnp.empty((0, dynamics.control_dim))
-        )
-        F, B, b, Q, H, D, d, R = kf._get_params(params, 0, 0)
-
-        def predict(moments, x):
-            return kf._predict(*moments, F, B, b, Q, x.u_prev)
-
-        def condition(moments, x):
-            mean, cov = moments
-            obs_mean = H @ mean + D @ x.u + d
-            increment = kf.MVN(obs_mean, R + H @ cov @ cast(Array, H).T).log_prob(x.y)
-            return increment, kf._condition_on(mean, cov, H, D, d, R, x.u, x.y), {}
-
-        return gaussian_filter(
-            (params.initial.mean, params.initial.cov),
-            predict,
-            condition,
-            kf.PosteriorGSSMFiltered,
-        )
-
-    params_nl = gaussian_to_nlgssm_params(dynamics)
-    f, h = params_nl.dynamics_function, params_nl.emission_function
-    Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
-    if isinstance(filter_config, EKFConfig):
-        if isinstance(
-            dynamics.observation_model, LinearGaussianObservation
-        ) and isinstance(dynamics.observation_model.H, jax_sparse.JAXSparse):
-            warnings.warn(
-                "A sparse observation matrix H was passed to EKFConfig. This works correctly, but likely gives no efficiency gain due to internal use of automatic differentiation.",
-                stacklevel=2,
-            )
-        F, H = jax.jacfwd(f), jax.jacfwd(h)
-
-        def predict(moments, x):
-            return ekf._predict(*moments, f, F, Q, x.u_prev)
-
-        def condition(moments, x):
-            m, P = moments
-            J = H(m, x.u)
-            increment = ekf.MVN(h(m, x.u), J @ P @ J.T + R).log_prob(x.y)
-            return increment, ekf._condition_on(m, P, h, H, R, x.u, x.y, 1), {}
-
-    elif isinstance(filter_config, UKFConfig):
-        n = dynamics.state_dim
-        scale = ukf._compute_lambda(filter_config.alpha, filter_config.kappa, n)
-        wm, wc = ukf._compute_weights(n, filter_config.alpha, filter_config.beta, scale)
-
-        def predict(moments, x):
-            m, P, _ = ukf._predict(*moments, f, Q, scale, wm, wc, x.u_prev)
-            return m, P
-
-        def condition(moments, x):
-            ll, m, P = ukf._condition_on(*moments, h, R, scale, wm, wc, x.u, x.y)
-            return ll, (m, P), {}
-    else:
+    if not isinstance(filter_config, (KFConfig, EKFConfig, UKFConfig)):
         raise ValueError(
             f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}"
         )
+    if filter_config.filter_source != "cd_dynamax":
+        filter_config = dataclasses.replace(filter_config, filter_source="cd_dynamax")
+    algorithm = filter_config.build_filter(dynamics)
+    if not isinstance(algorithm, CDFilter):
+        raise TypeError("Expected a CD-Dynamax split filter.")
+    return algorithm.run(inputs, None)
+
+
+def build_kf(dynamics: DynamicalModel) -> CDFilter:
+    params, _ = kf.preprocess_params_and_inputs(
+        _lti_to_lgssm_params(dynamics), 0, jnp.empty((0, dynamics.control_dim))
+    )
+    F, B, b, Q, H, D, d, R = kf._get_params(params, 0, 0)
+
+    def predict(moments, x):
+        return kf._predict(*moments, F, B, b, Q, x.u_prev)
+
+    def condition(moments, x):
+        mean, cov = moments
+        obs_mean = H @ mean + D @ x.u + d
+        increment = kf.MVN(obs_mean, R + H @ cov @ cast(Array, H).T).log_prob(x.y)
+        return increment, kf._condition_on(mean, cov, H, D, d, R, x.u, x.y), {}
+
+    return gaussian_filter(
+        (params.initial.mean, params.initial.cov),
+        predict,
+        condition,
+        kf.PosteriorGSSMFiltered,
+    )
+
+
+def build_ekf(dynamics: DynamicalModel) -> CDFilter:
+    params_nl = gaussian_to_nlgssm_params(dynamics)
+    f, h = params_nl.dynamics_function, params_nl.emission_function
+    Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
+    if isinstance(dynamics.observation_model, LinearGaussianObservation) and isinstance(
+        dynamics.observation_model.H, jax_sparse.JAXSparse
+    ):
+        warnings.warn(
+            "A sparse observation matrix H was passed to EKFConfig. This works correctly, but likely gives no efficiency gain due to internal use of automatic differentiation.",
+            stacklevel=2,
+        )
+    F, H = jax.jacfwd(f), jax.jacfwd(h)
+
+    def predict(moments, x):
+        return ekf._predict(*moments, f, F, Q, x.u_prev)
+
+    def condition(moments, x):
+        m, P = moments
+        J = H(m, x.u)
+        increment = ekf.MVN(h(m, x.u), J @ P @ J.T + R).log_prob(x.y)
+        return increment, ekf._condition_on(m, P, h, H, R, x.u, x.y, 1), {}
+
+    return gaussian_filter(
+        (params_nl.initial_mean, params_nl.initial_covariance),
+        predict,
+        condition,
+        kf.PosteriorGSSMFiltered,
+        save_forecasts=True,
+    )
+
+
+def build_ukf(dynamics: DynamicalModel, config: UKFConfig) -> CDFilter:
+    params_nl = gaussian_to_nlgssm_params(dynamics)
+    f, h = params_nl.dynamics_function, params_nl.emission_function
+    Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
+    n = dynamics.state_dim
+    scale = ukf._compute_lambda(config.alpha, config.kappa, n)
+    wm, wc = ukf._compute_weights(n, config.alpha, config.beta, scale)
+
+    def predict(moments, x):
+        m, P, _ = ukf._predict(*moments, f, Q, scale, wm, wc, x.u_prev)
+        return m, P
+
+    def condition(moments, x):
+        ll, m, P = ukf._condition_on(*moments, h, R, scale, wm, wc, x.u, x.y)
+        return ll, (m, P), {}
+
     return gaussian_filter(
         (params_nl.initial_mean, params_nl.initial_covariance),
         predict,

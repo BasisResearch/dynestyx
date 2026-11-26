@@ -5,7 +5,7 @@ import dataclasses
 import math
 from collections.abc import Callable
 from functools import partial
-from typing import Any, ClassVar, Literal, Protocol, cast
+from typing import Any, ClassVar, Literal, Protocol
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -743,10 +743,10 @@ class EKFConfig(BaseFilterConfig):
     def build_filter(self, model: DynamicalModel) -> CDFilter | CuthbertFilter:
         if self.filter_source == "cd_dynamax":
             from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
-                build_discrete_filter,
+                build_ekf,
             )
 
-            return build_discrete_filter(model, self)
+            return build_ekf(model)
         from dynestyx.inference.integrations.cuthbert.discrete_filter import (
             _config_to_filter_kwargs,
             _cuthbert_filter_taylor_kf,
@@ -840,10 +840,10 @@ class KFConfig(BaseFilterConfig):
     def build_filter(self, model: DynamicalModel) -> CDFilter | CuthbertFilter:
         if self.filter_source == "cd_dynamax":
             from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
-                build_discrete_filter,
+                build_kf,
             )
 
-            return build_discrete_filter(model, self)
+            return build_kf(model)
         from dynestyx.inference.integrations.cuthbert.discrete_filter import (
             _config_to_filter_kwargs,
             _cuthbert_filter_kalman,
@@ -909,10 +909,10 @@ class UKFConfig(BaseFilterConfig):
 
     def build_filter(self, model: DynamicalModel) -> CDFilter:
         from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
-            build_discrete_filter,
+            build_ukf,
         )
 
-        return build_discrete_filter(model, self)
+        return build_ukf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -945,14 +945,6 @@ class ContinuousTimeConfig:
     diffeqsolve_max_steps: int = 1_000
     diffeqsolve_dt0: float = 0.01
     diffeqsolve_kwargs: dict = dataclasses.field(default_factory=dict)
-
-    def build_filter(self, model: DynamicalModel) -> CDFilter:
-        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
-            ContinuousTimeFilterConfig,
-            build_continuous_filter,
-        )
-
-        return build_continuous_filter(model, cast(ContinuousTimeFilterConfig, self))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -992,7 +984,10 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
-    build_filter = ContinuousTimeConfig.build_filter
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import build_kf
+
+        return build_kf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1042,7 +1037,12 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
                 "discrete EnKFConfig instead."
             )
 
-    build_filter = ContinuousTimeConfig.build_filter
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+            build_enkf,
+        )
+
+        return build_enkf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1077,7 +1077,12 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
 
-    build_filter = ContinuousTimeConfig.build_filter
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+            build_dpf,
+        )
+
+        return build_dpf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1107,7 +1112,12 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
-    build_filter = ContinuousTimeConfig.build_filter
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+            build_ekf,
+        )
+
+        return build_ekf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1137,7 +1147,12 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
-    build_filter = ContinuousTimeConfig.build_filter
+    def build_filter(self, model: DynamicalModel) -> CDFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+            build_ukf,
+        )
+
+        return build_ukf(model, self)
 
 
 DiscreteTimeConfigs: tuple[type, ...] = (

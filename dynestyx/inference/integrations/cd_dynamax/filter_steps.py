@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -12,21 +11,23 @@ from dynestyx.inference.filter_types import FilterInputs, Initialize, Predict, U
 
 type History = tuple[Array, dict[str, Array]]
 type Moments = tuple[Array, Array]
+type GaussianPrior = tuple[Moments, Array]
+type GaussianState = tuple[Moments, Array, dict[str, Array]]
 
 
 @dataclass(frozen=True)
-class CDFilter[P, S]:
+class CDFilter[P, S, Posterior]:
     """Split steps and their projection into a native CD-Dynamax posterior."""
 
     initialize: Initialize[P]
     predict: Predict[P, S]
     update: Update[P, S]
     gather_outputs: Callable[[P, S], History]
-    posterior_type: type
+    posterior_type: Callable[..., Posterior]
     forecast: Callable[[Moments, FilterInputs], Moments] | None = None
     ensemble_keys: bool = False
 
-    def run(self, inputs: FilterInputs, key: PRNGKeyArray | None) -> Any:
+    def run(self, inputs: FilterInputs, key: PRNGKeyArray | None) -> Posterior:
         from dynestyx.inference.custom_filter import run_filter_steps, run_split_steps
 
         if key is not None and jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
@@ -61,24 +62,35 @@ class CDFilter[P, S]:
         return self.posterior_type(marginal_loglik=ll[-1], **fields)
 
 
-def gaussian_filter(
-    initial, predict_moments, condition, posterior_type, *, save_forecasts=False
-):
+def gaussian_filter[Posterior](
+    initial: Moments,
+    predict_moments: Callable[[Moments, FilterInputs], Moments],
+    condition: Callable[
+        [Moments, FilterInputs], tuple[Array, Moments, dict[str, Array]]
+    ],
+    posterior_type: Callable[..., Posterior],
+    *,
+    save_forecasts: bool = False,
+) -> CDFilter[GaussianPrior, GaussianState, Posterior]:
     """condition returns the likelihood increment, filtered moments and diagnostics."""
 
-    def initialize(x, *, key):
+    def initialize(x: FilterInputs, *, key: PRNGKeyArray | None) -> GaussianPrior:
         return initial, jnp.zeros((), dtype=initial[0].dtype)
 
-    def predict(filtered, x, *, key):
+    def predict(
+        filtered: GaussianState, x: FilterInputs, *, key: PRNGKeyArray | None
+    ) -> GaussianPrior:
         moments, ll, _ = filtered
         return predict_moments(moments, x), ll
 
-    def update(prior, x, *, key):
+    def update(
+        prior: GaussianPrior, x: FilterInputs, *, key: PRNGKeyArray | None
+    ) -> GaussianState:
         moments, ll = prior
         increment, filtered, diagnostics = condition(moments, x)
         return filtered, ll + increment, diagnostics
 
-    def gather(prior, filtered):
+    def gather(prior: GaussianPrior, filtered: GaussianState) -> History:
         (mean, cov), ll, diagnostics = filtered
         fields = dict(filtered_means=mean, filtered_covariances=cov, **diagnostics)
         if save_forecasts:
