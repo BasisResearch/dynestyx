@@ -26,6 +26,7 @@ from dynestyx.configs.filters import (
     EnKFConfig,
     KFConfig,
     PFConfig,
+    PFResamplingConfig,
 )
 from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.custom_filter import FilterInputs as CuthbertInputs
@@ -122,51 +123,6 @@ def _probe_state_independent_observation_noise(
         _check_state_independent_noise(chol0, probe_d1, obs_dim)
 
 
-def _config_to_filter_kwargs(config: BaseFilterConfig, model: DynamicalModel) -> dict:
-    """Build filter_kwargs dict from config dataclass."""
-    kwargs = dict(config.extra_filter_kwargs)
-    if isinstance(config, PFConfig):
-        kwargs["n_filter_particles"] = config.n_particles
-        kwargs["ess_threshold"] = config.ess_threshold_ratio
-        kwargs["resampling_base_method"] = config.resampling_method.base_method
-        kwargs["resampling_differential_method"] = (
-            config.resampling_method.differential_method
-        )
-    elif isinstance(config, EnKFConfig):
-        kwargs.setdefault(
-            "store_predicted_ensemble", config.include_predicted_observations
-        )
-        if (
-            config.localization is not None
-            and "_resolved_enkf_localization" not in kwargs
-        ):
-            kwargs["_resolved_enkf_localization"] = resolve_enkf_localization(
-                config.localization,
-                state_dim=model.state_dim,
-                observation_dim=model.observation_dim,
-            )
-        reserved_hooks = {
-            "modify_cross_covariance",
-            "construct_chol_innovation_covariance",
-            "modify_predicted_observation_covariance",
-        }
-        conflicts = sorted(reserved_hooks.intersection(kwargs))
-        if conflicts:
-            raise ValueError(
-                "EnKF localization callback names are reserved in "
-                f"extra_filter_kwargs: {', '.join(conflicts)}. Use "
-                "EnKFLocalizationFunctions via EnKFConfig.localization instead."
-            )
-        kwargs["n_particles"] = config.n_particles
-        kwargs["ensemble_subspace"] = config.ensemble_subspace
-        kwargs["inflation"] = (
-            config.inflation_delta if config.inflation_delta is not None else 0.0
-        )
-        if config.perturb_measurements is not None:
-            kwargs["perturbed_obs"] = config.perturb_measurements
-    return kwargs
-
-
 def _drop_cuthbert_dummy_step(states, *, obs_len: int):
     """Drop cuthbert's leading dummy state from every time-indexed leaf."""
     raw_len = obs_len + 1
@@ -206,23 +162,13 @@ def build_cuthbert_filter(
         raise ValueError(
             f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' or run inside a NumPyro seeded context."
         )
+    kwargs = {**filter_config.extra_filter_kwargs, **(extra_filter_kwargs or {})}
     if isinstance(filter_config, EnKFConfig):
-        # The low-level online builder only stores predicted ensembles on request.
-        extra_filter_kwargs = {
-            "store_predicted_ensemble": filter_config.extra_filter_kwargs.get(
-                "store_predicted_ensemble", False
-            ),
-            **(extra_filter_kwargs or {}),
-        }
-    if extra_filter_kwargs or filter_config.filter_source != "cuthbert":
-        filter_config = dataclasses.replace(
-            filter_config,
-            filter_source="cuthbert",
-            extra_filter_kwargs={
-                **filter_config.extra_filter_kwargs,
-                **(extra_filter_kwargs or {}),
-            },
-        )
+        # Online control has no history to record unless requested.
+        kwargs.setdefault("store_predicted_ensemble", False)
+    filter_config = dataclasses.replace(
+        filter_config, filter_source="cuthbert", extra_filter_kwargs=kwargs
+    )
     filter_obj = filter_config.build_filter(dynamics)
     if not isinstance(filter_obj, CuthbertFilter):
         raise TypeError("Expected a Cuthbert filter.")
@@ -520,9 +466,34 @@ def run_discrete_filter(
     return marginal_loglik, states, filtered_dists
 
 
-def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
-    if filter_kwargs is None:
-        filter_kwargs = {}
+def _pf_resampling_fn(method: PFResamplingConfig):
+    base_method = method.base_method
+    if base_method == "systematic":
+        base_resampling_fn = systematic.resampling
+    elif base_method == "multinomial":
+        base_resampling_fn = multinomial.resampling
+    else:
+        raise ValueError(
+            f"Unsupported cuthbert PF base resampling method: {base_method!r}. "
+            "Expected one of: 'systematic', 'multinomial'."
+        )
+
+    differential_method = method.differential_method
+    if differential_method == "stop_gradient":
+        base_resampling_fn = stop_gradient_decorator(base_resampling_fn)
+    elif differential_method == "straight_through":
+        pass
+    else:
+        raise ValueError(
+            "Unsupported cuthbert PF differential resampling method: "
+            f"{differential_method!r}. Expected one of: "
+            "'stop_gradient', 'straight_through'."
+        )
+
+    return base_resampling_fn
+
+
+def build_pf(dynamics: DynamicalModel, config: PFConfig) -> CuthbertFilter:
 
     def init_sample(key):
         return dynamics.initial_condition.sample(key)
@@ -541,57 +512,35 @@ def _cuthbert_filter_pf(dynamics: DynamicalModel, filter_kwargs: dict | None = N
         edist = dynamics.observation_model(x, mi.u, mi.time)
         return jnp.asarray(edist.log_prob(mi.y)).sum()
 
-    ess_threshold = filter_kwargs.get("ess_threshold", 0.7)
-    base_method = filter_kwargs.get("resampling_base_method", "systematic")
-    if base_method == "systematic":
-        base_resampling_fn = systematic.resampling
-    elif base_method == "multinomial":
-        base_resampling_fn = multinomial.resampling
-    else:
-        raise ValueError(
-            f"Unsupported cuthbert PF base resampling method: {base_method!r}. "
-            "Expected one of: 'systematic', 'multinomial'."
-        )
-
-    differential_method = filter_kwargs.get(
-        "resampling_differential_method", "stop_gradient"
+    resampling_fn = adaptive.ess_decorator(
+        _pf_resampling_fn(config.resampling_method), config.ess_threshold_ratio
     )
-    if differential_method == "stop_gradient":
-        base_resampling_fn = stop_gradient_decorator(base_resampling_fn)
-    elif differential_method == "straight_through":
-        pass
-    else:
-        raise ValueError(
-            "Unsupported cuthbert PF differential resampling method: "
-            f"{differential_method!r}. Expected one of: "
-            "'stop_gradient', 'straight_through'."
-        )
-
-    resampling_fn = adaptive.ess_decorator(base_resampling_fn, ess_threshold)
-
-    pf = particle_filter.build_filter(
+    return particle_filter.build_filter(
         init_sample=init_sample,  # type: ignore
         propagate_sample=propagate_sample,  # type: ignore
         log_potential=log_potential,  # type: ignore
-        n_filter_particles=int(filter_kwargs.get("n_filter_particles", 1_000)),
+        n_filter_particles=config.n_particles,
         resampling_fn=resampling_fn,  # type: ignore
     )
-    return pf
 
 
-def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None = None):
-    if filter_kwargs is None:
-        filter_kwargs = {}
+def build_enkf(dynamics: DynamicalModel, config: EnKFConfig) -> CuthbertFilter:
+    options = config.extra_filter_kwargs
 
     state_dim = dynamics.state_dim
     obs_dim = dynamics.observation_dim
 
     localization_kwargs = {}
-    resolved_localization = filter_kwargs.get("_resolved_enkf_localization")
-    n_particles = int(filter_kwargs.get("n_particles", 30))
-    ensemble_subspace = filter_kwargs.get("ensemble_subspace")
+    resolved_localization = options.get("_resolved_enkf_localization")
+    if resolved_localization is None and config.localization is not None:
+        resolved_localization = resolve_enkf_localization(
+            config.localization, state_dim=state_dim, observation_dim=obs_dim
+        )
+    ensemble_subspace = config.ensemble_subspace
     if ensemble_subspace is None:
-        ensemble_subspace = n_particles < obs_dim and resolved_localization is None
+        ensemble_subspace = (
+            config.n_particles < obs_dim and resolved_localization is None
+        )
     if resolved_localization is not None:
         if resolved_localization.modify_cross_covariance is not None:
             localization_kwargs["modify_cross_covariance"] = (
@@ -688,12 +637,16 @@ def _cuthbert_filter_enkf(dynamics: DynamicalModel, filter_kwargs: dict | None =
         init_sample=init_sample,  # type: ignore
         get_dynamics=get_dynamics,  # type: ignore
         get_observations=get_observations,  # type: ignore
-        n_particles=n_particles,
+        n_particles=config.n_particles,
         ensemble_subspace=bool(ensemble_subspace),
-        inflation=filter_kwargs.get("inflation", jnp.array(0.0)),
-        perturbed_obs=bool(filter_kwargs.get("perturbed_obs", True)),
+        inflation=config.inflation_delta if config.inflation_delta is not None else 0.0,
+        perturbed_obs=config.perturb_measurements
+        if config.perturb_measurements is not None
+        else bool(options.get("perturbed_obs", True)),
         store_predicted_ensemble=bool(
-            filter_kwargs.get("store_predicted_ensemble", False)
+            options.get(
+                "store_predicted_ensemble", config.include_predicted_observations
+            )
         ),
         **localization_kwargs,
     )
@@ -794,11 +747,7 @@ def _kalman_observation_params_builder(
     return get_observation_params
 
 
-def _cuthbert_filter_kalman(
-    dynamics: DynamicalModel, filter_kwargs: dict | None = None
-):
-    if filter_kwargs is None:
-        filter_kwargs = {}
+def build_kf(dynamics: DynamicalModel) -> CuthbertFilter:
 
     if not (
         isinstance(dynamics.state_evolution, LinearGaussianStateEvolution)
@@ -847,9 +796,7 @@ def _cuthbert_filter_kalman(
     )
 
 
-def _cuthbert_filter_taylor_kf(
-    dynamics: DynamicalModel, filter_kwargs: dict | None = None
-):
+def build_ekf(dynamics: DynamicalModel, config: EKFConfig) -> CuthbertFilter:
     evolution = dynamics.state_evolution
     if isinstance(evolution, DeterministicStateEvolution):
         message = (
@@ -859,8 +806,6 @@ def _cuthbert_filter_taylor_kf(
         if isinstance(evolution, _ODEFlowStateEvolution):
             message += " To use the EKF with ODEFlowConfig, set jitter_scale > 0."
         raise ValueError(message)
-    if filter_kwargs is None:
-        filter_kwargs = {}
 
     obs_model = dynamics.observation_model
     if isinstance(obs_model, LinearGaussianObservation) and isinstance(
@@ -872,8 +817,6 @@ def _cuthbert_filter_taylor_kf(
             "use of automatic differentiation.",
             stacklevel=2,
         )
-
-    rtol = filter_kwargs.get("rtol", None)
 
     dist0 = dynamics.initial_condition
     state_dim = dynamics.state_dim
@@ -922,13 +865,12 @@ def _cuthbert_filter_taylor_kf(
 
         return log_potential, jnp.atleast_1d(jnp.asarray(state.mean))
 
-    kf = taylor.build_filter(
+    return taylor.build_filter(
         init_log_density,
         x0_lin,
         get_dynamics_log_density,  # type: ignore
         get_observation_func,  # type: ignore
         associative=False,
-        rtol=rtol,
+        rtol=config.extra_filter_kwargs.get("rtol"),
         ignore_nan_dims=True,
     )
-    return kf

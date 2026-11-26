@@ -8,7 +8,6 @@ import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax.dynamax.linear_gaussian_ssm import inference as kf
-from cd_dynamax.dynamax.linear_gaussian_ssm.models import LinearGaussianSSM
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm import inference_ekf as ekf
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm import inference_ukf as ukf
 from jax.experimental import sparse as jax_sparse
@@ -32,64 +31,57 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
-    Covariance,
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.models.covariances import covariance_matrix
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
-    """Build dynamax ParamsLGSSM from LinearGaussianSSM.initialize for an LTI model."""
-    state_dim = dynamics.state_dim
-    emission_dim = dynamics.observation_dim
-    control_dim = dynamics.control_dim
-
-    if (
-        isinstance(dynamics.state_evolution, LinearGaussianStateEvolution)
-        and isinstance(dynamics.observation_model, LinearGaussianObservation)
-        and isinstance(dynamics.initial_condition, dist.MultivariateNormal)
+    """Translate constant model matrices into the backend's typed parameter record."""
+    evo, obs, prior = (
+        dynamics.state_evolution,
+        dynamics.observation_model,
+        dynamics.initial_condition,
+    )
+    if not (
+        isinstance(evo, LinearGaussianStateEvolution)
+        and isinstance(obs, LinearGaussianObservation)
+        and isinstance(prior, dist.MultivariateNormal)
     ):
-        evo = dynamics.state_evolution
-        obs = dynamics.observation_model
-        ic = dynamics.initial_condition
-        _require_constant_linear_gaussian_fields(
-            evo,
-            ("A", "B", "bias", "cov"),
-            where="The cd_dynamax discrete Kalman filter",
+        raise TypeError(
+            "filter_type='kf' expects a DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation and initial_condition as MultivariateNormal."
         )
-        _require_constant_linear_gaussian_fields(
-            obs,
-            ("H", "D", "bias", "R"),
-            where="The cd_dynamax discrete Kalman filter",
-        )
-        model = LinearGaussianSSM(
-            state_dim=state_dim,
-            emission_dim=emission_dim,
-            input_dim=control_dim,
-            has_dynamics_bias=evo.bias is not None,
-            has_emissions_bias=obs.bias is not None,
-        )
-        params, _ = model.initialize(
-            initial_mean=squeeze_leading_singletons(ic.loc, 1),
-            initial_covariance=squeeze_leading_singletons(ic.covariance_matrix, 2),
-            dynamics_weights=evo.A,
-            dynamics_bias=evo.bias,
-            dynamics_input_weights=evo.B,
-            dynamics_covariance=covariance_matrix(
-                cast(Covariance | Array, evo.cov), state_dim
-            ),
-            emission_weights=obs.H,
-            emission_bias=obs.bias,
-            emission_input_weights=obs.D,
-            emission_covariance=covariance_matrix(
-                cast(Covariance | Array, obs.R), emission_dim
-            ),
-        )
-        return params
-    raise TypeError(
-        "filter_type='kf' expects a DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation and initial_condition as MultivariateNormal."
+    where = "The cd_dynamax discrete Kalman filter"
+    _require_constant_linear_gaussian_fields(
+        evo, ("A", "B", "bias", "cov"), where=where
+    )
+    _require_constant_linear_gaussian_fields(obs, ("H", "D", "bias", "R"), where=where)
+    A, B, b, Q = evo.params_at(0, 1)
+    H, D, d, R = obs.params_at(0)
+    # Use the backend's zero defaults for absent control matrices and offsets.
+    state_dim, obs_dim, control_dim = (
+        dynamics.state_dim,
+        dynamics.observation_dim,
+        dynamics.control_dim,
+    )
+    return kf.ParamsLGSSM(
+        initial=kf.ParamsLGSSMInitial(
+            squeeze_leading_singletons(prior.loc, 1),
+            squeeze_leading_singletons(prior.covariance_matrix, 2),
+        ),
+        dynamics=kf.ParamsLGSSMDynamics(
+            weights=A,
+            bias=jnp.zeros(state_dim) if b is None else b,
+            input_weights=jnp.zeros((state_dim, control_dim)) if B is None else B,
+            cov=Q,
+        ),
+        emissions=kf.ParamsLGSSMEmissions(
+            weights=H,
+            bias=jnp.zeros(obs_dim) if d is None else d,
+            input_weights=jnp.zeros((obs_dim, control_dim)) if D is None else D,
+            cov=R,
+        ),
     )
 
 
@@ -142,10 +134,9 @@ def compute_cd_dynamax_discrete_filter(
 
 
 def build_kf(dynamics: DynamicalModel) -> CDFilter:
-    params, _ = kf.preprocess_params_and_inputs(
-        _lti_to_lgssm_params(dynamics), 0, jnp.empty((0, dynamics.control_dim))
-    )
-    F, B, b, Q, H, D, d, R = kf._get_params(params, 0, 0)
+    params = _lti_to_lgssm_params(dynamics)
+    F, b, B, Q = params.dynamics
+    H, d, D, R = params.emissions
 
     def predict(moments, x):
         return kf._predict(*moments, F, B, b, Q, x.u_prev)
@@ -160,7 +151,6 @@ def build_kf(dynamics: DynamicalModel) -> CDFilter:
         (params.initial.mean, params.initial.cov),
         predict,
         condition,
-        kf.PosteriorGSSMFiltered,
     )
 
 
@@ -190,7 +180,6 @@ def build_ekf(dynamics: DynamicalModel) -> CDFilter:
         (params_nl.initial_mean, params_nl.initial_covariance),
         predict,
         condition,
-        kf.PosteriorGSSMFiltered,
         save_forecasts=True,
     )
 
@@ -215,7 +204,6 @@ def build_ukf(dynamics: DynamicalModel, config: UKFConfig) -> CDFilter:
         (params_nl.initial_mean, params_nl.initial_covariance),
         predict,
         condition,
-        kf.PosteriorGSSMFiltered,
         save_forecasts=True,
     )
 
@@ -231,19 +219,7 @@ def run_discrete_filter(
     ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
     **kwargs,
 ) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
-    """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).
-
-    Pure computation — no numpyro side-effects. Callers are responsible for
-    registering numpyro.factor / numpyro.deterministic if needed.
-
-    Returns:
-        tuple of:
-            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
-            - posterior: CD-Dynamax posterior object with filtered_means and
-              filtered_covariances attributes.
-            - filtered_dists: list of MultivariateNormal distributions p(x_t | y_{1:t})
-              at each obs time, for posterior rollout.
-    """
+    """Return the evidence, native posterior, and observation-aligned beliefs."""
     posterior = compute_cd_dynamax_discrete_filter(
         dynamics,
         filter_config,
@@ -253,14 +229,11 @@ def run_discrete_filter(
         ctrl_values=ctrl_values,
     )
 
-    filtered_dists = _posterior_sequence_to_dists(
+    return (
+        posterior.marginal_loglik,
         posterior,
-        means_attr="filtered_means",
-        covariances_attr="filtered_covariances",
-        particle_mode=False,
-        missing="empty",
+        _posterior_sequence_to_dists(posterior, missing="empty"),
     )
-    return posterior.marginal_loglik, posterior, filtered_dists
 
 
 __all__ = [

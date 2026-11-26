@@ -10,7 +10,6 @@ from cuthbert import smoother as cuthbert_smoother
 from cuthbert.ensemble_kalman import ensemble_rts_smoother
 from cuthbert.gaussian import kalman, taylor
 from cuthbert.smc import backward_sampler
-from cuthbertlib.resampling import multinomial, stop_gradient_decorator, systematic
 from cuthbertlib.smc.smoothing import exact_sampling, mcmc, tracing
 from jaxtyping import Array, PRNGKeyArray, Real
 
@@ -22,9 +21,9 @@ from dynestyx.configs.smoother import (
 )
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
-    _config_to_filter_kwargs,
     _drop_cuthbert_dummy_step,
     _kalman_dynamics_params_builder,
+    _pf_resampling_fn,
     compute_cuthbert_filter,
 )
 from dynestyx.inference.integrations.utils import (
@@ -125,35 +124,6 @@ def _pf_log_potential(dynamics: DynamicalModel):
     return log_potential
 
 
-def _pf_resampling_fn(filter_kwargs: dict):
-    base_method = filter_kwargs.get("resampling_base_method", "systematic")
-    if base_method == "systematic":
-        base_resampling_fn = systematic.resampling
-    elif base_method == "multinomial":
-        base_resampling_fn = multinomial.resampling
-    else:
-        raise ValueError(
-            f"Unsupported cuthbert PF base resampling method: {base_method!r}. "
-            "Expected one of: 'systematic', 'multinomial'."
-        )
-
-    differential_method = filter_kwargs.get(
-        "resampling_differential_method", "stop_gradient"
-    )
-    if differential_method == "stop_gradient":
-        base_resampling_fn = stop_gradient_decorator(base_resampling_fn)
-    elif differential_method == "straight_through":
-        pass
-    else:
-        raise ValueError(
-            "Unsupported cuthbert PF differential resampling method: "
-            f"{differential_method!r}. Expected one of: "
-            "'stop_gradient', 'straight_through'."
-        )
-
-    return base_resampling_fn
-
-
 def _pf_backward_sampling_fn(config: PFSmootherConfig):
     method = config.pf_backward_sampling_method
     if method == "tracing":
@@ -192,8 +162,6 @@ def compute_cuthbert_smoother(
         store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
     )
 
-    filter_kwargs = _config_to_filter_kwargs(smoother_config, dynamics)
-
     if isinstance(smoother_config, KFSmootherConfig):
         smoother_obj = kalman.build_smoother(
             get_dynamics_params=_kalman_get_dynamics_params(dynamics)
@@ -204,7 +172,7 @@ def compute_cuthbert_smoother(
     elif isinstance(smoother_config, EKFSmootherConfig):
         smoother_obj = taylor.build_smoother(
             _taylor_get_dynamics_log_density(dynamics),
-            rtol=filter_kwargs.get("rtol", None),
+            rtol=smoother_config.extra_filter_kwargs.get("rtol"),
             ignore_nan_dims=True,
         )
         smoothed_states = cuthbert_smoother(
@@ -229,7 +197,7 @@ def compute_cuthbert_smoother(
         smoother_obj = backward_sampler.build_smoother(
             log_potential=_pf_log_potential(dynamics),
             backward_sampling_fn=_pf_backward_sampling_fn(smoother_config),
-            resampling_fn=_pf_resampling_fn(filter_kwargs),
+            resampling_fn=_pf_resampling_fn(smoother_config.resampling_method),
             n_smoother_particles=n_smoother_particles,
         )
         smoothed_states = cuthbert_smoother(

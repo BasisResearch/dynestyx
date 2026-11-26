@@ -216,9 +216,9 @@ def _particle_sequence_to_dists(
 def _posterior_sequence_to_dists(
     posterior,
     *,
-    means_attr: str,
-    covariances_attr: str,
-    particle_mode: bool,
+    means_attr: str = "filtered_means",
+    covariances_attr: str = "filtered_covariances",
+    particle_mode: bool = False,
     plate_shapes: tuple[int, ...] = (),
     missing: MissingPolicy = "raise",
     missing_message: str | None = None,

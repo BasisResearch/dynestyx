@@ -551,12 +551,9 @@ class EnKFConfig(EnKFBaseConfig):
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def build_filter(self, model: DynamicalModel) -> CuthbertFilter:
-        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
-            _config_to_filter_kwargs,
-            _cuthbert_filter_enkf,
-        )
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_enkf
 
-        return _cuthbert_filter_enkf(model, _config_to_filter_kwargs(self, model))
+        return build_enkf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -679,12 +676,9 @@ class PFConfig(PFBaseConfig):
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
     def build_filter(self, model: DynamicalModel) -> CuthbertFilter:
-        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
-            _config_to_filter_kwargs,
-            _cuthbert_filter_pf,
-        )
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_pf
 
-        return _cuthbert_filter_pf(model, _config_to_filter_kwargs(self, model))
+        return build_pf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -747,12 +741,9 @@ class EKFConfig(BaseFilterConfig):
             )
 
             return build_ekf(model)
-        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
-            _config_to_filter_kwargs,
-            _cuthbert_filter_taylor_kf,
-        )
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_ekf
 
-        return _cuthbert_filter_taylor_kf(model, _config_to_filter_kwargs(self, model))
+        return build_ekf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -844,12 +835,9 @@ class KFConfig(BaseFilterConfig):
             )
 
             return build_kf(model)
-        from dynestyx.inference.integrations.cuthbert.discrete_filter import (
-            _config_to_filter_kwargs,
-            _cuthbert_filter_kalman,
-        )
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_kf
 
-        return _cuthbert_filter_kalman(model, _config_to_filter_kwargs(self, model))
+        return build_kf(model)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -985,7 +973,9 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
     def build_filter(self, model: DynamicalModel) -> CDFilter:
-        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import build_kf
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            build_kf,
+        )
 
         return build_kf(model, self)
 
@@ -1038,7 +1028,7 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
             )
 
     def build_filter(self, model: DynamicalModel) -> CDFilter:
-        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
             build_enkf,
         )
 
@@ -1078,7 +1068,7 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
     )
 
     def build_filter(self, model: DynamicalModel) -> CDFilter:
-        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
             build_dpf,
         )
 
@@ -1113,7 +1103,7 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
     def build_filter(self, model: DynamicalModel) -> CDFilter:
-        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
             build_ekf,
         )
 
@@ -1148,7 +1138,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
     def build_filter(self, model: DynamicalModel) -> CDFilter:
-        from dynestyx.inference.integrations.cd_dynamax.continuous_steps import (
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
             build_ukf,
         )
 

@@ -5,10 +5,15 @@ from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import PosteriorGSSMFiltered
+from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
+    PosteriorCDNLSSMFiltered,
+)
 from jaxtyping import Array, PRNGKeyArray
 
 from dynestyx.inference.filter_types import FilterInputs, Initialize, Predict, Update
 
+CDPosterior = PosteriorGSSMFiltered | PosteriorCDNLSSMFiltered
 type History = tuple[Array, dict[str, Array]]
 type Moments = tuple[Array, Array]
 type GaussianPrior = tuple[Moments, Array]
@@ -62,16 +67,15 @@ class CDFilter[P, S, Posterior]:
         return self.posterior_type(marginal_loglik=ll[-1], **fields)
 
 
-def gaussian_filter[Posterior](
+def gaussian_filter(
     initial: Moments,
     predict_moments: Callable[[Moments, FilterInputs], Moments],
     condition: Callable[
         [Moments, FilterInputs], tuple[Array, Moments, dict[str, Array]]
     ],
-    posterior_type: Callable[..., Posterior],
     *,
     save_forecasts: bool = False,
-) -> CDFilter[GaussianPrior, GaussianState, Posterior]:
+) -> CDFilter[GaussianPrior, GaussianState, PosteriorGSSMFiltered]:
     """condition returns the likelihood increment, filtered moments and diagnostics."""
 
     def initialize(x: FilterInputs, *, key: PRNGKeyArray | None) -> GaussianPrior:
@@ -102,6 +106,6 @@ def gaussian_filter[Posterior](
         predict,
         update,
         gather,
-        posterior_type,
+        PosteriorGSSMFiltered,
         forecast=predict_moments if save_forecasts else None,
     )
