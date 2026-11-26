@@ -126,7 +126,14 @@ def compute_cd_dynamax_discrete_filter(
             f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}"
         )
     if filter_config.filter_source != "cd_dynamax":
-        filter_config = dataclasses.replace(filter_config, filter_source="cd_dynamax")
+        if isinstance(filter_config, KFConfig):
+            filter_config = dataclasses.replace(
+                filter_config, filter_source="cd_dynamax", associative=False
+            )
+        else:
+            filter_config = dataclasses.replace(
+                filter_config, filter_source="cd_dynamax"
+            )
     algorithm = filter_config.build_filter(dynamics)
     if not isinstance(algorithm, CDFilter):
         raise TypeError("Expected a CD-Dynamax split filter.")

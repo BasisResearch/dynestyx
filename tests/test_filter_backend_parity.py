@@ -24,14 +24,20 @@ from cuthbert.filtering import filter as cuthbert_filter
 
 import dynestyx as dsx
 from dynestyx import configs
+from dynestyx.inference.custom_filter import step_inputs
 from dynestyx.inference.filter_types import FilterInputs
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
+    compute_cd_dynamax_discrete_filter,
 )
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
     gaussian_to_nlgssm_params,
+)
+from dynestyx.inference.integrations.cuthbert.discrete_filter import (
+    build_cuthbert_filter,
+    run_cuthbert_steps,
 )
 
 TIMES = jnp.array([0.0, 0.1, 0.25, 0.3])
@@ -57,6 +63,17 @@ def check_posterior(model, config, expected):
         np.testing.assert_allclose(got, ref, atol=2e-5, rtol=1e-4, err_msg=str(path))
 
 
+@pytest.fixture
+def model():
+    return dsx.LTI_discrete(
+        A=jnp.array([[0.9]]),
+        Q=0.1 * jnp.eye(1),
+        H=jnp.eye(1),
+        R=0.2 * jnp.eye(1),
+        B=jnp.eye(1),
+    )
+
+
 @pytest.mark.parametrize(
     "config",
     [
@@ -65,14 +82,7 @@ def check_posterior(model, config, expected):
         configs.UKFConfig(filter_source="cd_dynamax"),
     ],
 )
-def test_discrete_backend_forecasts(config):
-    model = dsx.LTI_discrete(
-        A=jnp.array([[0.9]]),
-        Q=0.1 * jnp.eye(1),
-        H=jnp.eye(1),
-        R=0.2 * jnp.eye(1),
-        B=jnp.eye(1),
-    )
+def test_discrete_backend_forecasts(config, model):
     if isinstance(config, configs.KFConfig):
         expected = lgssm_filter(
             _lti_to_lgssm_params(model), OBSERVATIONS, inputs=CONTROLS
@@ -178,21 +188,14 @@ def test_continuous_backend_moments_particles_and_observations(config):
 @pytest.mark.parametrize(
     "config",
     [
-        configs.KFConfig(filter_source="cuthbert"),
+        configs.KFConfig(filter_source="cuthbert", associative=False),
         configs.KFConfig(filter_source="cuthbert", associative=True),
         configs.EKFConfig(filter_source="cuthbert"),
         configs.EnKFConfig(n_particles=12, crn_seed=KEY),
         configs.PFConfig(n_particles=12, crn_seed=KEY),
     ],
 )
-def test_cuthbert_native_sequence(config):
-    model = dsx.LTI_discrete(
-        A=jnp.array([[0.9]]),
-        Q=0.1 * jnp.eye(1),
-        H=jnp.eye(1),
-        R=0.2 * jnp.eye(1),
-        B=jnp.eye(1),
-    )
+def test_cuthbert_native_sequence(config, model):
     inputs = FilterInputs(
         y=OBSERVATIONS,
         u=CONTROLS,
@@ -213,3 +216,38 @@ def test_cuthbert_native_sequence(config):
         key=scan_key,
     )
     check_posterior(model, config, jax.tree.map(lambda xs: xs[1:], raw))
+
+
+def test_explicit_cd_backend_accepts_default_kf_config(model):
+    posterior = compute_cd_dynamax_discrete_filter(
+        model,
+        configs.KFConfig(),
+        obs_times=TIMES,
+        obs_values=OBSERVATIONS,
+        ctrl_times=TIMES,
+        ctrl_values=CONTROLS,
+    )
+    check_posterior(model, configs.KFConfig(filter_source="cd_dynamax"), posterior)
+
+
+def test_online_particle_overrides(model):
+    pf, parallel = build_cuthbert_filter(
+        model,
+        configs.PFConfig(),
+        KEY,
+        want_parallel=False,
+        extra_filter_kwargs=dict(
+            n_filter_particles=12,
+            resampling_base_method="multinomial",
+            ess_threshold=1.0,
+        ),
+    )
+    inputs = step_inputs(model, TIMES, OBSERVATIONS, TIMES, CONTROLS)
+    _, states = run_cuthbert_steps(pf, inputs, KEY, parallel=parallel)
+    config = configs.PFConfig(
+        crn_seed=KEY,
+        n_particles=12,
+        ess_threshold_ratio=1.0,
+        resampling_method=configs.PFResamplingConfig(base_method="multinomial"),
+    )
+    check_posterior(model, config, states)

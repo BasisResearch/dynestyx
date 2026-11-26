@@ -162,12 +162,40 @@ def build_cuthbert_filter(
         raise ValueError(
             f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' or run inside a NumPyro seeded context."
         )
-    kwargs = {**filter_config.extra_filter_kwargs, **(extra_filter_kwargs or {})}
+    overrides = extra_filter_kwargs or {}
+    kwargs = {**filter_config.extra_filter_kwargs, **overrides}
+    # The online builder also accepts overrides under Cuthbert's option names.
+    fields = {}
     if isinstance(filter_config, EnKFConfig):
+        fields = dict(
+            n_particles=overrides.get("n_particles", filter_config.n_particles),
+            ensemble_subspace=overrides.get(
+                "ensemble_subspace", filter_config.ensemble_subspace
+            ),
+            inflation_delta=overrides.get("inflation", filter_config.inflation_delta),
+            perturb_measurements=overrides.get(
+                "perturbed_obs", filter_config.perturb_measurements
+            ),
+        )
         # Online control has no history to record unless requested.
         kwargs.setdefault("store_predicted_ensemble", False)
+    elif isinstance(filter_config, PFConfig):
+        method = filter_config.resampling_method
+        fields = dict(
+            n_particles=overrides.get("n_filter_particles", filter_config.n_particles),
+            ess_threshold_ratio=overrides.get(
+                "ess_threshold", filter_config.ess_threshold_ratio
+            ),
+            resampling_method=dataclasses.replace(
+                method,
+                base_method=overrides.get("resampling_base_method", method.base_method),
+                differential_method=overrides.get(
+                    "resampling_differential_method", method.differential_method
+                ),
+            ),
+        )
     filter_config = dataclasses.replace(
-        filter_config, filter_source="cuthbert", extra_filter_kwargs=kwargs
+        filter_config, filter_source="cuthbert", extra_filter_kwargs=kwargs, **fields
     )
     filter_obj = filter_config.build_filter(dynamics)
     if not isinstance(filter_obj, CuthbertFilter):
