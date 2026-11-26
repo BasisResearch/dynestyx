@@ -102,7 +102,6 @@ def run_filter_steps[P, S, E, O](
     """Collect projections in a sequential scan or from associative prefix states."""
     init_key, scan_key = _split(key)
     keys = None if scan_key is None else jax.random.split(scan_key, len(inputs.y))
-    first = jax.tree.map(lambda xs: xs[0], inputs)
     if hasattr(algorithm, "filter_combine"):
         fused = cast(CombinedSteps[E, S], algorithm)
         project = cast(Callable[[S], O], gather)
@@ -148,26 +147,51 @@ def run_filter_steps[P, S, E, O](
         raise TypeError("Expected a split filter or a prepare/combine filter.")
     split = cast(SplitSteps[P, S], algorithm)
     project_split = cast(Callable[[P, S], O], gather)
-    prior = split.initialize(first, key=init_key)
-    first_key = None if keys is None else keys[0]
-    _, update_key = _split(first_key)
-    updated = split.update(prior, first, key=update_key)
-    first_output = project_split(prior, updated)
+    if keys is None:
+        predict_keys = update_keys = None
+    else:
+        pairs = jax.vmap(lambda k: jax.random.split(k, 2))(keys)
+        predict_keys, update_keys = pairs[:, 0], pairs[:, 1]
+    return run_split_steps(
+        split, inputs, project_split, init_key, predict_keys, update_keys
+    )
+
+
+def run_split_steps[P, S, O](
+    algorithm: SplitSteps[P, S],
+    inputs: FilterInputs,
+    gather: Callable[[P, S], O],
+    init_key: PRNGKeyArray | None,
+    predict_keys: Array | None,
+    update_keys: Array | None,
+) -> O:
+    """Run split steps with explicit keys, including backend-specific key schedules."""
+    first = jax.tree.map(lambda xs: xs[0], inputs)
+    prior = algorithm.initialize(first, key=init_key)
+    first_key = None if update_keys is None else update_keys[0]
+    if len(inputs.y) == 1:
+        updated = algorithm.update(prior, first, key=first_key)
+        return jax.tree.map(lambda x: jnp.asarray(x)[None], gather(prior, updated))
+
+    # Prior and filtered pytrees may differ. The first iteration ignores the
+    # filtered carry, so infer its shape without executing an extra update.
+    shape = jax.eval_shape(lambda: algorithm.update(prior, first, key=first_key))
+    initial = jax.tree.map(jnp.zeros_like, shape)
 
     def step(
-        filtered: S, args: tuple[FilterInputs, PRNGKeyArray | None]
+        filtered: S, args: tuple[FilterInputs, PRNGKeyArray | None, PRNGKeyArray | None]
     ) -> tuple[S, O]:
-        x, k = args
-        pred_key, upd_key = _split(k)
-        predicted = split.predict(filtered, x, key=pred_key)
-        updated = split.update(predicted, x, key=upd_key)
-        return updated, project_split(predicted, updated)
+        x, pred_key, upd_key = args
+        predicted = jax.lax.cond(
+            x.is_first_step,
+            lambda: prior,
+            lambda: algorithm.predict(filtered, x, key=pred_key),
+        )
+        updated = algorithm.update(predicted, x, key=upd_key)
+        return updated, gather(predicted, updated)
 
-    if len(inputs.y) == 1:
-        return jax.tree.map(lambda x: jnp.asarray(x)[None], first_output)
-    rest = jax.tree.map(lambda xs: xs[1:], (inputs, keys))
-    _, history = jax.lax.scan(step, updated, rest)
-    return _prepend(first_output, history)
+    _, history = jax.lax.scan(step, initial, (inputs, predict_keys, update_keys))
+    return history
 
 
 def compute_custom_filter(
