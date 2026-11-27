@@ -6,7 +6,6 @@ small Dynestyx-level representation used by downstream handlers.
 
 from __future__ import annotations
 
-import dataclasses
 from typing import Any
 
 import jax
@@ -27,6 +26,9 @@ from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
 )
+from dynestyx.inference.filter_types import (
+    PredictedObservationOutputs as PredictedObservationOutputs,
+)
 from dynestyx.inference.utils.plate_utils import _make_plate_in_axes
 from dynestyx.models import DynamicalModel
 from dynestyx.models.covariances import covariance_matrix
@@ -43,18 +45,6 @@ type ContinuousObservationPredictionConfig = (
 type SupportedObservationPredictionConfig = (
     ContinuousObservationPredictionConfig | EnKFConfig
 )
-
-
-@dataclasses.dataclass(frozen=True)
-class PredictedObservationOutputs:
-    """Canonical predicted-observation outputs for Dynestyx filters."""
-
-    mean: Float[Array, "*plate time observation_dim"] | None = None
-    cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
-    obs_cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
-    ensemble: Float[Array, "*plate time n_members observation_dim"] | None = None
-    obs_ensemble: Float[Array, "*plate time n_members observation_dim"] | None = None
-    noise_cov: Float[Array, "*plate time observation_dim observation_dim"] | None = None
 
 
 def _gaussian_mean_and_covariance(

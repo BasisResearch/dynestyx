@@ -15,6 +15,7 @@ from jaxtyping import Array, Bool, PRNGKeyArray, Real
 
 from dynestyx.configs.filters import (
     BaseFilterConfig,
+    CombineFilterConfig,
     ConstructCholInnovationCovariance,
     ContinuousTimeConfigs,
     ContinuousTimeDPFConfig,
@@ -34,6 +35,7 @@ from dynestyx.configs.filters import (
     ModifyPredictedObservationCovariance,
     PFConfig,
     PFResamplingConfig,
+    SplitFilterConfig,
     TaperCovarianceFn,
     UKFConfig,
 )
@@ -51,6 +53,11 @@ from dynestyx.inference.checkers import (
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
+)
+from dynestyx.inference.filter_interface import (
+    FilterOutputs,
+    compute_custom_filter,
+    custom_distributions,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (
@@ -362,6 +369,11 @@ class Filter(BaseLogFactorAdder):
             if ctrl_values is not None:
                 ctrl_values = _ensure_trailing_event_axis(ctrl_values)
 
+        if isinstance(config, (SplitFilterConfig, CombineFilterConfig)):
+            outputs = compute_custom_filter(
+                dynamics, config, obs_times, obs_values, ctrl_times, ctrl_values, key
+            )
+            return self._finish_custom(config, outputs, ())
         if dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
@@ -432,6 +444,18 @@ class Filter(BaseLogFactorAdder):
 
         return filtered_dists
 
+    def _finish_custom(
+        self,
+        config: BaseFilterConfig,
+        outputs: FilterOutputs,
+        plate_shapes: tuple[int, ...],
+    ) -> list[numpyro.distributions.Distribution]:
+        self.marginal_loglik = outputs.log_normalizing_constant[..., -1]
+        self.filtered_states = outputs
+        self.predicted_observations = outputs.predicted_observations
+        self._filter_config_used = config
+        return custom_distributions(outputs, plate_shapes)
+
     def _build_infer_result(
         self,
         times: Real[Array, "*time_plate time"] | None,
@@ -456,7 +480,9 @@ class Filter(BaseLogFactorAdder):
                     cast(jax.Array, states),
                     cast(HMMConfig, config),
                 )
-            elif _is_batched:
+            elif _is_batched and not isinstance(
+                config, (SplitFilterConfig, CombineFilterConfig)
+            ):
                 # TODO: support per-field recording for batched (plate) states
                 numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
@@ -471,7 +497,12 @@ class Filter(BaseLogFactorAdder):
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
             times=times,
-            states=states,
+            states=states.states
+            if isinstance(states, FilterOutputs) and states.states is not None
+            else states,
+            extra_outputs=(states.extra_outputs or {})
+            if isinstance(states, FilterOutputs)
+            else {},
             dists=filtered_dists,
             predicted_observations=predictions,
             _register_numpyro_sites=_register,
@@ -510,7 +541,13 @@ class Filter(BaseLogFactorAdder):
         # Determine the compute function (dispatch before vmap).
         output_kind: str
         uses_preprocessed_obs = False
-        if dynamics.continuous_time:
+        if isinstance(config, (SplitFilterConfig, CombineFilterConfig)):
+            output_kind = "custom"
+
+            def _compute_output(dyn, ot, ov, ovf, om, ct, cv, k):
+                return compute_custom_filter(dyn, config, ot, ov, ct, cv, k)
+
+        elif dynamics.continuous_time:
             if not isinstance(config, ContinuousTimeConfigs):
                 valid = [c.__name__ for c in ContinuousTimeConfigs]
                 raise ValueError(
@@ -698,6 +735,8 @@ class Filter(BaseLogFactorAdder):
                 keys,
             )
 
+        if output_kind == "custom":
+            return self._finish_custom(config, outputs, plate_shapes)
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik
             states = outputs

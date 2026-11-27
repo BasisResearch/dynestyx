@@ -35,6 +35,30 @@ Nested objects such as `extra_filter_kwargs` dictionaries are not recursively fr
 | `ContinuousTimeEnKFConfig` | Continuous-discrete | High-dimensional or expensive models with lower-dimensional structure and Gaussian observations (approximate). Performs reasonably as a default. *(default)* |
 | `ContinuousTimeDPFConfig`  | Continuous-discrete | Applicable for arbitrary state-space models, but quite expensive and noisy estimates (asymptotically exact in the limit of infinite particles, approximate in practice). |
 
+## Custom filters
+
+Subclass `dsx.configs.SplitFilterConfig[Prior, Filtered]` for a predict/update algorithm or `dsx.configs.CombineFilterConfig[Prepared, Filtered]` for a Cuthbert-style algorithm. Pass an instance to `dsx.Filter`. Declare settings on your subclass with `@dataclass(frozen=True, kw_only=True)`. The default `build_filter(model)` binds the methods below to the current `DynamicalModel`, including inferred parameters. You can override the builder to precompute model-specific quantities or return an existing split or Cuthbert filter directly, then implement the corresponding gather method.
+
+### Split filters
+
+Write $q_k^-(x)$ for the predictive belief about $x_k$ before observing $y_k$, and $q_k(x)$ for the filtered belief after observing it. Each callback works with your chosen representation of these beliefs, such as a Gaussian mean and covariance or a set of weighted particles. `Prior` is the type returned by `initialize` and `predict`. `Filtered` is the type returned by `update`. The corresponding gather callback has signature `(Prior, Filtered) -> FilterOutputs`.
+
+1. `initialize(self, model, inputs, *, key)` returns the prior $q_1^-(x)=p(x_1=x)$ at the first observation time, with cumulative log likelihood initialized to zero. Dynestyx passes this prior directly to `update` for the first observation.
+2. `predict(self, model, filtered, inputs, *, key)` propagates the previous filtered belief through the model transition. For $k>1$, return a representation or approximation of $q_k^-(x)=\int p(x_k=x\mid x_{k-1}=z,u_{k-1})\,q_{k-1}(z)\,dz$. The interval endpoints are `inputs.time_prev` and `inputs.time`, and its control is `inputs.u_prev`.
+3. `update(self, model, prior, inputs, *, key)` conditions the predictive belief on `inputs.y`. With observation likelihood $g_k(x)=p(y_k\mid x_k=x,u_k)$, the predictive probability or density of the observation is $Z_k=\int g_k(x)\,q_k^-(x)\,dx$. Return a filtered state representing $q_k(x)=g_k(x)\,q_k^-(x)/Z_k$ and carry forward the cumulative log likelihood $\ell_k=\ell_{k-1}+\log Z_k$. Approximate filters use their own approximations to these integrals.
+
+### Combined filters
+
+A combined filter implements `init_prepare(self, model, *, key)`, `filter_prepare(self, model, inputs, *, key)`, and `filter_combine(self, model, previous, prepared)`. Initialization returns a state $s_0$ encoding the initial prior and $\ell_0=0$. At observation $k$, preparation builds an element $e_k$ using only the current step inputs and its key. For example, $e_k$ can hold the observation and the parameters needed to evaluate the transition and observation likelihood. The combine operation computes $s_k=s_{k-1}\otimes e_k$, which must encode the filtered belief $q_k$ and cumulative log likelihood $\ell_k$ defined above. Use `inputs.is_first_step` to assimilate $y_1$ directly into the initial prior.
+
+For parallel filtering, each prepared element must also be a valid operand for combining adjacent observation blocks. Combining a block for $i$ through $j$ with one for $j+1$ through $k$ must summarize the block for $i$ through $k$, with $(a\otimes b)\otimes c=a\otimes(b\otimes c)$. A prefix $s_0\otimes e_1\otimes\cdots\otimes e_k$ then gives the same filtered state regardless of grouping. Declare `associative = True` on the config subclass (or return an associative filter from an overridden builder) and pass `parallel=True` when constructing the config to use this execution mode.
+
+### Gathering outputs
+
+Implement `gather_outputs(self, prior, filtered)` for a split filter or `gather_outputs(self, filtered)` for a combined filter. Return `FilterOutputs` with `log_normalizing_constant` set to $\ell_k=\sum_{j=1}^k\log Z_j$ and either the mean and covariance of $q_k$ or its particles and log weights. The last $\ell_k$ becomes `result.marginal_loglik`. Optional `predicted_observations` describe $p(y_k\mid y_{1:k-1})$ before the update and support observation scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`, with leading plate dimensions followed by observation time. Set `states` to an optional pytree of arrays to expose it as `result.states`. The runner stacks it over time and plates alongside the rest of the output.
+
+[Build a custom filter with Dynestyx](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
+
 ## EnKF localization
 
 Localization is a common technique in EnKFs, related to the issue of estimating a covariance matrix from a few samples. The (cuthbert, discrete-time) EnKF supports localization via covariance tapering via pairwise distances, or direct control over localization functions, using `EnKFLocalizationConfig` for the former and `EnKFLocalizationFunctions` for the latter. For localization in a deterministic continuous-time dynamics, combine `EnKFConfig` with an ODE-flow `Discretizer`.

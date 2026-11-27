@@ -234,6 +234,10 @@ class ConditionedResult(Result):
         default=None, repr=False
     )
 
+    extra_outputs: dict[str, Array] = dataclasses.field(
+        default_factory=dict, kw_only=True
+    )
+
     def _backend_value(self, name: str) -> object:
         value = getattr(self.states, name, None)
         if value is None:
