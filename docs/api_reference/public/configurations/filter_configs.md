@@ -55,7 +55,7 @@ For parallel filtering, each prepared element must also be a valid operand for c
 
 ### Gathering outputs
 
-Implement `gather_outputs(self, prior, filtered)` for a split filter or `gather_outputs(self, filtered)` for a combined filter. Return `FilterOutputs` with `log_normalizing_constant` set to $\ell_k=\sum_{j=1}^k\log Z_j$ and either the mean and covariance of $q_k$ or its particles and log weights. The last $\ell_k$ becomes `result.marginal_loglik`. Optional `predicted_observations` describe $p(y_k\mid y_{1:k-1})$ before the update and support observation scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`, with leading plate dimensions followed by observation time.
+Implement `gather_outputs(self, prior, filtered)` for a split filter or `gather_outputs(self, filtered)` for a combined filter. Return `FilterOutputs` with `log_normalizing_constant` set to $\ell_k=\sum_{j=1}^k\log Z_j$ and either the mean and covariance of $q_k$ or its particles and log weights. The last $\ell_k$ becomes `result.marginal_loglik`. Optional `predicted_observations` describe $p(y_k\mid y_{1:k-1})$ before the update and support observation scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`, with leading plate dimensions followed by observation time. Set `states` to an optional pytree of arrays to expose it as `result.states`. The runner stacks it over time and plates alongside the rest of the output.
 
 [Build a custom filter with Dynestyx](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
 
