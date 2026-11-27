@@ -247,6 +247,10 @@ Welcome to the `dynestyx` examples page
 
     **[Sparse identification of FitzHugh–Nagumo dynamics](deep_dives/fhn_sparse_id.ipynb)**
 
+-   ![Four panels show a heldout forecast with ensemble bands, forecast validity across test paths, the long-run marginal, and autocorrelation](assets/gallery/lorenz63_neural_ode.png)
+
+    **[Learning a neural ODE from partial Lorenz–63 observations](deep_dives/lorenz63_neural_ode_simple.ipynb)**
+
 -   ![Predator and prey phase-space loop with the true trajectory, noisy observations, and inferred uncertainty](assets/gallery/lv_uode.png)
 
     **[Learning Lotka–Volterra dynamics with a universal ODE](deep_dives/lv_uode.ipynb)**
