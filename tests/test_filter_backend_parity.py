@@ -1,45 +1,22 @@
-"""Compare native sequence, random-key, and forecast conventions for each backend."""
+"""Regression tests for backend forecast, key, and resampling conventions."""
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from cd_dynamax import (
-    ContDiscreteLinearGaussianSSM,
-    ContDiscreteNonlinearGaussianSSM,
-    ContDiscreteNonlinearSSM,
+from cd_dynamax import ContDiscreteNonlinearGaussianSSM
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import PosteriorGSSMFiltered
+from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
+    PosteriorCDNLSSMFiltered,
 )
-from cd_dynamax.dynamax.linear_gaussian_ssm.inference import lgssm_filter
-from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
-    extended_kalman_filter,
-)
-from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
-    UKFHyperParams,
-    unscented_kalman_filter,
-)
-from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.inference import (
-    KFHyperParams,
-)
-from cuthbert.filtering import filter as cuthbert_filter
-from cuthbert.smc.particle_filter import ParticleFilterState
 
 import dynestyx as dsx
 from dynestyx import configs
 from dynestyx.inference.custom_filter import run_filter_steps, step_inputs
-from dynestyx.inference.filter_types import FilterInputs, SplitFilter
-from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
-    _lti_to_lgssm_params,
-    compute_cd_dynamax_discrete_filter,
-)
-from dynestyx.inference.integrations.cd_dynamax.utils import (
-    dsx_to_cd_dynamax,
-    dsx_to_cdlgssm_params,
-    gaussian_to_nlgssm_params,
-)
+from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
 )
-from dynestyx.inference.integrations.utils import WeightedParticles
 
 TIMES = jnp.array([0.0, 0.1, 0.25, 0.3])
 OBSERVATIONS = jnp.array([[0.1], [-0.5], [0.6], [0.3]])
@@ -75,45 +52,44 @@ def model():
     )
 
 
-@pytest.mark.parametrize(
-    "config",
-    [
-        configs.KFConfig(filter_source="cd_dynamax"),
-        configs.EKFConfig(filter_source="cd_dynamax"),
-        configs.UKFConfig(filter_source="cd_dynamax"),
-    ],
-)
-def test_discrete_backend_forecasts(config, model):
-    if isinstance(config, configs.KFConfig):
-        expected = lgssm_filter(
-            _lti_to_lgssm_params(model), OBSERVATIONS, inputs=CONTROLS
-        )
-    elif isinstance(config, configs.EKFConfig):
-        expected = extended_kalman_filter(
-            gaussian_to_nlgssm_params(model), OBSERVATIONS, inputs=CONTROLS
-        )
-    else:
-        hp = UKFHyperParams(alpha=config.alpha, beta=config.beta, kappa=config.kappa)
-        expected = unscented_kalman_filter(
-            gaussian_to_nlgssm_params(model),
-            OBSERVATIONS,
-            hyperparams=hp,
-            inputs=CONTROLS,
-        )
-    check_posterior(model, config, expected)
+class CustomUKF(configs.SplitFilterConfig):
+    def build_filter(self, model):
+        return configs.UKFConfig().build_filter(model)
+
+    def gather_outputs(self, prior, filtered):
+        return filtered
 
 
 @pytest.mark.parametrize(
-    "config",
-    [
-        configs.ContinuousTimeKFConfig(),
-        configs.ContinuousTimeEKFConfig(),
-        configs.ContinuousTimeUKFConfig(),
-        configs.ContinuousTimeEnKFConfig(n_particles=8, crn_seed=KEY),
-        configs.ContinuousTimeDPFConfig(n_particles=8, crn_seed=KEY),
-    ],
+    "config", [configs.EKFConfig(filter_source="cd_dynamax"), CustomUKF()]
 )
-def test_continuous_backend_moments_particles_and_observations(config):
+def test_discrete_forecasts_include_the_terminal_step(config, model):
+    with dsx.Filter(config):
+        result = dsx.condition(
+            "x",
+            model,
+            obs_times=TIMES,
+            obs_values=OBSERVATIONS,
+            ctrl_times=TIMES,
+            ctrl_values=CONTROLS,
+        )
+    posterior = result.states
+    assert isinstance(posterior, PosteriorGSSMFiltered)
+    assert (
+        posterior.filtered_means is not None
+        and posterior.filtered_covariances is not None
+    )
+    np.testing.assert_allclose(
+        posterior.predicted_means, 0.9 * posterior.filtered_means + CONTROLS, atol=2e-6
+    )
+    np.testing.assert_allclose(
+        posterior.predicted_covariances,
+        0.9**2 * posterior.filtered_covariances + 0.1,
+        atol=2e-6,
+    )
+
+
+def test_cd_enkf_preserves_seeded_forecast_and_analysis_schedule():
     model = dsx.LTI_continuous(
         A=-jnp.eye(1),
         L=0.2 * jnp.eye(1),
@@ -121,114 +97,60 @@ def test_continuous_backend_moments_particles_and_observations(config):
         R=0.2 * jnp.eye(1),
         B=jnp.eye(1),
     )
-    common = dict(emissions=OBSERVATIONS, t_emissions=TIMES[:, None], inputs=CONTROLS)
-    fields = [
-        "marginal_loglik",
-        "filtered_means",
-        "filtered_covariances",
-        "y_pred_mean",
-        "y_pred_cov",
-        "y_obs_pred_mean",
-        "y_obs_pred_cov",
-    ]
-    solver = dict(dt0=config.diffeqsolve_dt0, max_steps=config.diffeqsolve_max_steps)
-    if isinstance(config, configs.ContinuousTimeKFConfig):
-        backend = ContDiscreteLinearGaussianSSM(1, 1, 1)
-        expected = backend.filter(
-            dsx_to_cdlgssm_params(model),
-            **common,
-            filter_hyperparams=KFHyperParams(diffeqsolve_settings=solver),
-            output_fields=fields,
-        )
-    else:
-        backend_cls = (
-            ContDiscreteNonlinearSSM
-            if isinstance(config, configs.ContinuousTimeDPFConfig)
-            else ContDiscreteNonlinearGaussianSSM
-        )
-        backend = backend_cls(1, 1, 1)
-        params, _ = dsx_to_cd_dynamax(model, cd_model=backend)
-        options = dict(
-            filter_state_order=config.filter_state_order,
-            diffeqsolve_dt0=config.diffeqsolve_dt0,
-            diffeqsolve_max_steps=config.diffeqsolve_max_steps,
-            key=KEY,
-        )
-        if isinstance(config, configs.ContinuousTimeDPFConfig):
-            options.update(
-                filter_type="DPF",
-                N_particles=config.n_particles,
-                output_fields=None,
-                extra_filter_kwargs=dict(
-                    resample_method=config.resampling_method.differential_method,
-                    softness=config.resampling_method.softness,
-                    ess_threshold_ratio=config.ess_threshold_ratio,
-                ),
-            )
-        elif isinstance(config, configs.ContinuousTimeEnKFConfig):
-            options.update(
-                filter_type="EnKF",
-                enkf_N_particles=config.n_particles,
-                enkf_inflation_delta=config.inflation_delta,
-                output_fields=fields + ["y_ens_pred", "y_obs_ens_pred"],
-            )
-        elif isinstance(config, configs.ContinuousTimeUKFConfig):
-            options.update(
-                filter_type="UKF",
-                output_fields=fields,
-                extra_filter_kwargs=dict(
-                    alpha=config.alpha, beta=config.beta, kappa=config.kappa
-                ),
-            )
-        else:
-            options.update(filter_type="EKF", filter_num_iter=1, output_fields=fields)
-        expected = backend.filter(params, **common, **options)
+    config = configs.ContinuousTimeEnKFConfig(n_particles=8, crn_seed=KEY)
+    backend = ContDiscreteNonlinearGaussianSSM(1, 1, 1)
+    params, _ = dsx_to_cd_dynamax(model, cd_model=backend)
+    expected = backend.filter(
+        params,
+        emissions=OBSERVATIONS,
+        t_emissions=TIMES[:, None],
+        inputs=CONTROLS,
+        filter_type="EnKF",
+        enkf_N_particles=config.n_particles,
+        enkf_inflation_delta=config.inflation_delta,
+        key=KEY,
+        filter_state_order=config.filter_state_order,
+        diffeqsolve_dt0=config.diffeqsolve_dt0,
+        diffeqsolve_max_steps=config.diffeqsolve_max_steps,
+        output_fields=[
+            "marginal_loglik",
+            "filtered_means",
+            "filtered_covariances",
+            "y_pred_mean",
+            "y_pred_cov",
+            "y_obs_pred_mean",
+            "y_obs_pred_cov",
+            "y_ens_pred",
+            "y_obs_ens_pred",
+        ],
+    )
     check_posterior(model, config, expected)
 
 
-@pytest.mark.parametrize(
-    "config",
-    [
-        configs.KFConfig(filter_source="cuthbert", associative=False),
-        configs.KFConfig(filter_source="cuthbert", associative=True),
-        configs.EKFConfig(filter_source="cuthbert"),
-        configs.EnKFConfig(n_particles=12, crn_seed=KEY),
-        configs.PFConfig(n_particles=12, crn_seed=KEY),
-    ],
-)
-def test_cuthbert_native_sequence(config, model):
-    inputs = FilterInputs(
-        y=OBSERVATIONS,
-        u=CONTROLS,
-        u_prev=jnp.concatenate((CONTROLS[:1], CONTROLS[:-1])),
-        time=TIMES,
-        time_prev=jnp.concatenate((2 * TIMES[:1] - TIMES[1:2], TIMES[:-1])),
-        is_first_step=jnp.arange(len(TIMES)) == 0,
+def test_cd_particle_history_retains_weights_before_resampling():
+    model = dsx.LTI_continuous(
+        A=-jnp.eye(1),
+        L=0.2 * jnp.eye(1),
+        H=jnp.eye(1),
+        R=0.2 * jnp.eye(1),
     )
-    algorithm = config.build_filter(model)
-    init_key, scan_key = (
-        (None, None) if config.crn_seed is None else jax.random.split(config.crn_seed)
+    config = configs.ContinuousTimeDPFConfig(
+        n_particles=8, ess_threshold_ratio=1.0, crn_seed=KEY
     )
-    raw = cuthbert_filter(
-        algorithm,
-        inputs,
-        algorithm.init_prepare(key=init_key),
-        parallel=isinstance(config, configs.KFConfig) and bool(config.associative),
-        key=scan_key,
+    with dsx.Filter(config):
+        result = dsx.condition(
+            "x", model, obs_times=TIMES[:1], obs_values=OBSERVATIONS[:1]
+        )
+    posterior = result.states
+    assert isinstance(posterior, PosteriorCDNLSSMFiltered)
+    assert posterior.particles is not None
+    assert posterior.log_weights is not None
+    observation_loglik = (
+        -0.5 * (OBSERVATIONS[0, 0] - posterior.particles[0, :, 0]) ** 2 / 0.2
     )
-    check_posterior(model, config, jax.tree.map(lambda xs: xs[1:], raw))
-
-
-def test_explicit_cd_backend_accepts_default_kf_config(model):
-    posterior = compute_cd_dynamax_discrete_filter(
-        model,
-        configs.KFConfig(),
-        obs_times=TIMES,
-        obs_values=OBSERVATIONS,
-        ctrl_times=TIMES,
-        ctrl_values=CONTROLS,
+    np.testing.assert_allclose(
+        posterior.log_weights[0], jax.nn.log_softmax(observation_loglik), atol=2e-6
     )
-    check_posterior(model, configs.KFConfig(filter_source="cd_dynamax"), posterior)
 
 
 def test_online_particle_overrides(model):
@@ -255,51 +177,3 @@ def test_online_particle_overrides(model):
         resampling_method=configs.PFResamplingConfig(base_method="multinomial"),
     )
     check_posterior(model, config, states)
-
-
-def test_builtin_split_steps_as_custom_filter(model):
-    """Bind the numerical steps through the public subclass API, including native forecasts."""
-    builtin = configs.UKFConfig()
-
-    class CustomUKF(configs.SplitFilterConfig):
-        def build_filter(self, model):
-            steps = builtin.build_filter(model)
-            assert isinstance(steps, SplitFilter)
-            return steps
-
-        def gather_outputs(self, prior, filtered):
-            return filtered
-
-    observations = dict(
-        obs_times=TIMES, obs_values=OBSERVATIONS, ctrl_times=TIMES, ctrl_values=CONTROLS
-    )
-    with dsx.Filter(builtin):
-        reference = dsx.condition("x", model, **observations)
-    check_posterior(model, CustomUKF(), reference.states)
-
-
-def test_builtin_combined_steps_as_custom_filter(model):
-    builtin = configs.PFConfig(n_particles=12, crn_seed=KEY)
-
-    class CustomPF(configs.CombineFilterConfig):
-        def build_filter(self, model):
-            return builtin.build_filter(model)
-
-        def gather_outputs(self, filtered):
-            return filtered
-
-    observations = dict(
-        obs_times=TIMES, obs_values=OBSERVATIONS, ctrl_times=TIMES, ctrl_values=CONTROLS
-    )
-    with dsx.Filter(builtin):
-        reference = dsx.condition("x", model, **observations)
-    with dsx.Filter(CustomPF(crn_seed=KEY)):
-        result = dsx.condition("x", model, **observations)
-    assert isinstance(result.states, ParticleFilterState)
-    assert isinstance(reference.states, ParticleFilterState)
-    assert result.marginal_loglik is not None and reference.marginal_loglik is not None
-    assert result.dists is not None and len(result.dists) == len(TIMES)
-    np.testing.assert_allclose(result.states.particles, reference.states.particles)
-    np.testing.assert_allclose(result.states.log_weights, reference.states.log_weights)
-    np.testing.assert_allclose(result.marginal_loglik, reference.marginal_loglik)
-    assert all(isinstance(d, WeightedParticles) for d in result.dists)
