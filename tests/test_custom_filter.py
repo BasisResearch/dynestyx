@@ -12,7 +12,7 @@ from numpyro.handlers import seed, trace
 
 import dynestyx as dsx
 from dynestyx.configs import CombineFilterConfig, KFConfig, SplitFilterConfig
-from dynestyx.inference.custom_filter import FilterInputs, FilterOutputs, SplitFilter
+from dynestyx.inference.filter_interface import FilterInputs, FilterOutputs, SplitFilter
 from dynestyx.inference.observation_predictions import PredictedObservationOutputs
 
 

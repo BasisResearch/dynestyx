@@ -43,13 +43,13 @@ from dynestyx.inference.checkers import (
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.custom_filter import (
+from dynestyx.inference.enkf_localization import (
+    resolve_enkf_localization,
+)
+from dynestyx.inference.filter_interface import (
     FilterOutputs,
     filter_distributions,
     filter_history,
-)
-from dynestyx.inference.enkf_localization import (
-    resolve_enkf_localization,
 )
 from dynestyx.inference.hmm_filters import compute_hmm_filter
 from dynestyx.inference.observation_predictions import (

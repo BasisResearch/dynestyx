@@ -15,7 +15,7 @@ from jax.experimental import sparse as jax_sparse
 from jaxtyping import Array, PRNGKeyArray, Real
 
 from dynestyx.configs.filters import BaseFilterConfig, EKFConfig, KFConfig, UKFConfig
-from dynestyx.inference.custom_filter import _legacy_filter_result, filter_history
+from dynestyx.inference.filter_interface import _legacy_filter_result, filter_history
 from dynestyx.inference.filter_types import FilterObservations, SplitFilter
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,

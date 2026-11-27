@@ -20,7 +20,7 @@ from dynestyx.configs.smoother import (
     KFSmootherConfig,
     PFSmootherConfig,
 )
-from dynestyx.inference.custom_filter import filter_history
+from dynestyx.inference.filter_interface import filter_history
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _drop_cuthbert_dummy_step,

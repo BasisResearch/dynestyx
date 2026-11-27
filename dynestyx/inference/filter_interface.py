@@ -1,4 +1,4 @@
-"""Step contracts and observation-aligned execution for user-defined filters."""
+"""Filter step contracts and observation-aligned execution."""
 
 from collections.abc import Callable
 from typing import cast, overload

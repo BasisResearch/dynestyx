@@ -35,7 +35,7 @@ from dynestyx.configs.filters import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
 )
-from dynestyx.inference.custom_filter import _legacy_filter_result, filter_history
+from dynestyx.inference.filter_interface import _legacy_filter_result, filter_history
 from dynestyx.inference.filter_types import FilterObservations, SplitFilter
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,

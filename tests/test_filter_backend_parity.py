@@ -12,7 +12,7 @@ from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
 
 import dynestyx as dsx
 from dynestyx import configs
-from dynestyx.inference.custom_filter import (
+from dynestyx.inference.filter_interface import (
     FilterOutputs,
     run_filter_steps,
     step_inputs,
