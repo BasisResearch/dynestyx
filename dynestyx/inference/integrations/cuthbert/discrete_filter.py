@@ -1,6 +1,6 @@
 import dataclasses
 import warnings
-from typing import Any
+from typing import Any, Unpack
 
 import equinox as eqx
 import jax
@@ -30,16 +30,14 @@ from dynestyx.configs.filters import (
 )
 from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
 from dynestyx.inference.custom_filter import FilterInputs as CuthbertInputs
-from dynestyx.inference.custom_filter import run_filter_steps, step_inputs
+from dynestyx.inference.custom_filter import _legacy_filter_result, filter_history
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
 )
+from dynestyx.inference.filter_types import FilterObservations
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
-)
-from dynestyx.inference.utils.distribution_utils import (
-    _cholesky_state_sequence_to_dists,
 )
 from dynestyx.models import (
     DeterministicStateEvolution,
@@ -359,139 +357,6 @@ def compute_cuthbert_belief_analysis(
         "Filter only exposes the fused predict-and-update filter_combine, so an "
         "analysis-only step still has to be built from cuthbertlib primitives."
     )
-
-
-def compute_cuthbert_filter(
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    key: PRNGKeyArray | None = None,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    align_to_observations: bool = True,
-    store_predicted_ensemble: bool | None = None,
-    resolved_localization: ResolvedEnKFLocalization | None = None,
-) -> tuple[Real[Array, ""], Any]:
-    """Pure-JAX cuthbert filter computation (no numpyro side-effects).
-
-    For an EnKF, ``store_predicted_ensemble=None`` follows
-    ``filter_config.include_predicted_observations``. Passing ``True`` or
-    ``False`` explicitly overrides that default; smoothers use the explicit
-    form when their backward pass requires forecast ensembles.
-
-    ``resolved_localization`` lets the caller share localization callbacks with
-    prediction extraction without storing fixed tapers in the state sequence.
-
-    Returns:
-        tuple: (marginal_loglik, states). By default states are aligned to
-        obs_times; pass align_to_observations=False for raw cuthbert T+1 states.
-    """
-    inputs = step_inputs(dynamics, obs_times, obs_values, ctrl_times, ctrl_values)
-    if store_predicted_ensemble is None:
-        store_predicted_ensemble = bool(
-            isinstance(filter_config, EnKFConfig)
-            and filter_config.include_predicted_observations
-        )
-
-    build_kwargs = {"store_predicted_ensemble": store_predicted_ensemble}
-    if resolved_localization is not None:
-        build_kwargs["_resolved_enkf_localization"] = resolved_localization
-
-    filter_obj, parallel = build_cuthbert_filter(
-        dynamics,
-        filter_config,
-        key,
-        want_parallel=True,
-        extra_filter_kwargs=build_kwargs,
-    )
-
-    return run_cuthbert_steps(
-        filter_obj,
-        inputs,
-        key,
-        parallel=parallel,
-        include_initial=not align_to_observations,
-    )
-
-
-def run_cuthbert_steps(
-    algorithm: CuthbertFilter,
-    inputs: CuthbertInputs,
-    key: PRNGKeyArray | None,
-    *,
-    parallel: bool,
-    include_initial: bool = False,
-):
-    # Keep the previous-time metadata historically exposed in result.model_inputs.
-    time_prev = inputs.time_prev
-    if len(inputs.time) > 1:
-        time_prev = time_prev.at[0].set(
-            inputs.time[0] - (inputs.time[1] - inputs.time[0])
-        )
-    cuthbert_inputs = inputs._replace(time_prev=time_prev)
-
-    states = run_filter_steps(
-        algorithm,
-        cuthbert_inputs,
-        key,
-        lambda state: state,
-        parallel=parallel,
-        include_initial=include_initial,
-    )
-    return states.log_normalizing_constant[-1], states
-
-
-def run_discrete_filter(
-    name: str,
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    key: PRNGKeyArray | None = None,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    resolved_localization: ResolvedEnKFLocalization | None = None,
-    **kwargs,
-) -> tuple[Real[Array, ""] | None, object | None, list[dist.Distribution]]:
-    """Run discrete-time filter via cuthbert (Kalman, Taylor KF, particle filter).
-
-    Pure computation — no numpyro side-effects. Callers are responsible for
-    registering numpyro.factor / numpyro.deterministic if needed.
-
-    Returns:
-        tuple of:
-            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}),
-              or None if obs_values is empty.
-            - raw_states: cuthbert filter state object (KalmanFilterState,
-              ParticleFilterState, etc.), or None if obs_values is empty.
-            - filtered_dists: list of distributions p(x_t | y_{1:t}) at each
-              obs time, for posterior rollout.
-    """
-    obs_len = int(obs_values.shape[0])
-    if obs_len == 0:
-        return None, None, []
-
-    marginal_loglik, states = compute_cuthbert_filter(
-        dynamics,
-        filter_config,
-        key,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        resolved_localization=resolved_localization,
-    )
-    filtered_dists = _cholesky_state_sequence_to_dists(
-        states,
-        particle_mode=isinstance(filter_config, PFConfig),
-        covariance_jitter=getattr(
-            filter_config, "recorded_filtered_states_cov_jitter", 0.0
-        ),
-    )
-    return marginal_loglik, states, filtered_dists
 
 
 def _pf_resampling_fn(method: PFResamplingConfig):
@@ -901,4 +766,47 @@ def build_ekf(dynamics: DynamicalModel, config: EKFConfig) -> CuthbertFilter:
         associative=False,
         rtol=config.extra_filter_kwargs.get("rtol"),
         ignore_nan_dims=True,
+    )
+
+
+def compute_cuthbert_filter(
+    dynamics: DynamicalModel,
+    filter_config: BaseFilterConfig,
+    key: PRNGKeyArray | None = None,
+    *,
+    align_to_observations: bool = True,
+    store_predicted_ensemble: bool | None = None,
+    resolved_localization: ResolvedEnKFLocalization | None = None,
+    **observations: Unpack[FilterObservations],
+):
+    options = dict(filter_config.extra_filter_kwargs)
+    if isinstance(filter_config, EnKFConfig):
+        options["store_predicted_ensemble"] = (
+            filter_config.include_predicted_observations
+            if store_predicted_ensemble is None
+            else store_predicted_ensemble
+        )
+        if resolved_localization is not None:
+            options["_resolved_enkf_localization"] = resolved_localization
+    config = dataclasses.replace(
+        filter_config, filter_source="cuthbert", extra_filter_kwargs=options
+    )
+    return filter_history(
+        dynamics, config, key, include_initial=not align_to_observations, **observations
+    )
+
+
+def run_discrete_filter(
+    name, dynamics, filter_config, key=None, *, obs_values, **kwargs
+):
+    if not len(obs_values):
+        return None, None, []
+    return _legacy_filter_result(
+        compute_cuthbert_filter,
+        name,
+        dynamics,
+        filter_config,
+        key,
+        obs_values=obs_values,
+        **kwargs,
     )

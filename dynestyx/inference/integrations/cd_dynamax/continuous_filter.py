@@ -1,10 +1,10 @@
 """Model-bound continuous-discrete filters using CD-Dynamax numerical kernels."""
 
-from typing import Any
+from functools import partial
+from typing import Unpack
 
 import jax
 import jax.numpy as jnp
-import numpyro.distributions as dist
 from cd_dynamax import ContDiscreteNonlinearSSM
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm import inference as kf
 from cd_dynamax.src.continuous_discrete_nonlinear_gaussian_ssm import (
@@ -26,7 +26,7 @@ from cd_dynamax.src.continuous_discrete_nonlinear_ssm.inference_dpf import (
 from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
     PosteriorCDNLSSMFiltered,
 )
-from jaxtyping import Array, PRNGKeyArray, Real
+from jaxtyping import PRNGKeyArray
 
 from dynestyx.configs.filters import (
     ContinuousTimeDPFConfig,
@@ -35,19 +35,16 @@ from dynestyx.configs.filters import (
     ContinuousTimeKFConfig,
     ContinuousTimeUKFConfig,
 )
-from dynestyx.inference.custom_filter import step_inputs
-from dynestyx.inference.integrations.cd_dynamax.filter_steps import (
-    CDFilter,
-    gaussian_filter,
-)
+from dynestyx.inference.custom_filter import _legacy_filter_result, filter_history
+from dynestyx.inference.filter_types import FilterObservations, SplitFilter
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     dsx_to_cd_dynamax,
     dsx_to_cdlgssm_params,
+    gaussian_filter,
 )
 from dynestyx.inference.observation_predictions import (
     wants_observation_prediction_diagnostics,
 )
-from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import DynamicalModel
 
 ContinuousTimeFilterConfig = (
@@ -57,58 +54,6 @@ ContinuousTimeFilterConfig = (
     | ContinuousTimeEKFConfig
     | ContinuousTimeUKFConfig
 )
-
-
-def compute_continuous_filter(
-    dynamics: DynamicalModel,
-    filter_config: ContinuousTimeFilterConfig,
-    key: PRNGKeyArray | None = None,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-) -> Any:
-    """Pure-JAX continuous-time filter computation (no numpyro side-effects)."""
-    inputs = step_inputs(dynamics, obs_times, obs_values, ctrl_times, ctrl_values)
-    if key is None and isinstance(
-        filter_config, (ContinuousTimeEnKFConfig, ContinuousTimeDPFConfig)
-    ):
-        raise ValueError(
-            f"{type(filter_config).__name__} requires a PRNG key: set 'crn_seed' in the filter config, or run inside a NumPyro seeded context."
-        )
-    return filter_config.build_filter(dynamics).run(inputs, key)
-
-
-def run_continuous_filter(
-    name: str,
-    dynamics: DynamicalModel,
-    filter_config: ContinuousTimeFilterConfig,
-    key: PRNGKeyArray | None = None,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    **kwargs,
-) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
-    """Return the likelihood, native posterior, and distributions for rollout."""
-    filtered = compute_continuous_filter(
-        dynamics,
-        filter_config,
-        key,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-    )
-
-    filtered_dists = _posterior_sequence_to_dists(
-        filtered,
-        particle_mode=isinstance(filter_config, ContinuousTimeDPFConfig),
-        missing_message="Filtered means/covariances unexpectedly None for non-DPF config",
-    )
-    return filtered.marginal_loglik, filtered, filtered_dists
 
 
 def _solver_kwargs(config: ContinuousTimeFilterConfig):
@@ -134,7 +79,7 @@ def _diagnostics(enabled, mean, cov, obs_mean, obs_cov):
     return {}
 
 
-def build_kf(model: DynamicalModel, config: ContinuousTimeKFConfig) -> CDFilter:
+def build_kf(model: DynamicalModel, config: ContinuousTimeKFConfig) -> SplitFilter:
     params = dsx_to_cdlgssm_params(model)
     solver = {
         "dt0": config.diffeqsolve_dt0,
@@ -169,7 +114,7 @@ def build_kf(model: DynamicalModel, config: ContinuousTimeKFConfig) -> CDFilter:
     )
 
 
-def build_ekf(model: DynamicalModel, config: ContinuousTimeEKFConfig) -> CDFilter:
+def build_ekf(model: DynamicalModel, config: ContinuousTimeEKFConfig) -> SplitFilter:
     params, _ = dsx_to_cd_dynamax(model)
     hp = build_filter_hyperparams(
         filter_type="EKF",
@@ -203,7 +148,7 @@ def build_ekf(model: DynamicalModel, config: ContinuousTimeEKFConfig) -> CDFilte
     return gaussian_filter(initial, predict, condition)
 
 
-def build_ukf(model: DynamicalModel, config: ContinuousTimeUKFConfig) -> CDFilter:
+def build_ukf(model: DynamicalModel, config: ContinuousTimeUKFConfig) -> SplitFilter:
     params, _ = dsx_to_cd_dynamax(model)
     hp = build_filter_hyperparams(
         filter_type="UKF",
@@ -248,7 +193,7 @@ def build_ukf(model: DynamicalModel, config: ContinuousTimeUKFConfig) -> CDFilte
     return gaussian_filter(initial, predict, condition)
 
 
-def build_enkf(model: DynamicalModel, config: ContinuousTimeEnKFConfig) -> CDFilter:
+def build_enkf(model: DynamicalModel, config: ContinuousTimeEnKFConfig) -> SplitFilter:
     params, _ = dsx_to_cd_dynamax(model)
     hp = build_filter_hyperparams(
         filter_type="EnKF",
@@ -288,7 +233,8 @@ def build_enkf(model: DynamicalModel, config: ContinuousTimeEnKFConfig) -> CDFil
         return ensemble, jnp.zeros((), dtype=ensemble.dtype)
 
     def predict(filtered, x, *, key):
-        ensemble, ll, _ = filtered
+        ensemble, posterior = filtered
+        ll = posterior.marginal_loglik
         return enkf._predict(
             key, ensemble, params, x.time_prev, x.time, x.u_prev, hp
         ), ll
@@ -309,29 +255,22 @@ def build_enkf(model: DynamicalModel, config: ContinuousTimeEnKFConfig) -> CDFil
             warn=warn,
         )
         fields = {name: analysis[name] for name in observation_fields}
-        return analysis["x_cond"], ll + analysis["loglik_step"], fields
-
-    def gather(prior, filtered):
-        ensemble, ll, fields = filtered
+        ensemble = analysis["x_cond"]
+        ll = ll + analysis["loglik_step"]
         mean = jnp.mean(ensemble, axis=0)
         centered = ensemble - mean
         cov = enkf.psd(
             jnp.sum(enkf._outer(centered, centered), axis=0) / (hp.N_particles - 1),
             warn=warn,
         )
-        return ll, dict(filtered_means=mean, filtered_covariances=cov, **fields)
+        return ensemble, enkf.PosteriorGSSMFiltered(
+            marginal_loglik=ll, filtered_means=mean, filtered_covariances=cov, **fields
+        )
 
-    return CDFilter(
-        initialize,
-        predict,
-        update,
-        gather,
-        enkf.PosteriorGSSMFiltered,
-        ensemble_keys=True,
-    )
+    return SplitFilter(initialize, predict, update)
 
 
-def build_dpf(model: DynamicalModel, config: ContinuousTimeDPFConfig) -> CDFilter:
+def build_dpf(model: DynamicalModel, config: ContinuousTimeDPFConfig) -> SplitFilter:
     if config.resampling_method.base_method != "multinomial":
         raise ValueError("Only multinomial resampling is supported for CD-Dynamax DPF.")
     backend = ContDiscreteNonlinearSSM(
@@ -399,24 +338,27 @@ def build_dpf(model: DynamicalModel, config: ContinuousTimeDPFConfig) -> CDFilte
             resample,
             lambda: (particles, weights),
         )
-        return (next_particles, next_weights, ll + increment), (particles, weights)
-
-    def gather(prior, filtered):
-        carry, (particles, log_w) = filtered
-        weights = jnp.exp(log_w)
-        mean, cov = dpf.dpf_moments(particles, weights / jnp.sum(weights))
-        return carry[2], dict(
+        probabilities = jnp.exp(weights)
+        mean, cov = dpf.dpf_moments(particles, probabilities / jnp.sum(probabilities))
+        posterior = PosteriorCDNLSSMFiltered(
             filtered_means=mean,
             filtered_covariances=cov,
             particles=particles,
-            log_weights=log_w,
+            log_weights=weights,
+            marginal_loglik=ll + increment,
         )
+        return (next_particles, next_weights, ll + increment), posterior
 
-    return CDFilter(initialize, predict, update, gather, PosteriorCDNLSSMFiltered)
+    return SplitFilter(initialize, predict, update)
 
 
-__all__ = [
-    "ContinuousTimeFilterConfig",
-    "compute_continuous_filter",
-    "run_continuous_filter",
-]
+def compute_continuous_filter(
+    dynamics: DynamicalModel,
+    filter_config: ContinuousTimeFilterConfig,
+    key: PRNGKeyArray | None = None,
+    **observations: Unpack[FilterObservations],
+):
+    return filter_history(dynamics, filter_config, key, **observations)[1]
+
+
+run_continuous_filter = partial(_legacy_filter_result, compute_continuous_filter)

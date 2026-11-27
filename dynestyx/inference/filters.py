@@ -4,7 +4,6 @@ from typing import cast
 
 import jax
 import numpyro
-from cuthbert.inference import Filter as CuthbertFilter
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
 from jaxtyping import Array, Bool, Real
@@ -46,19 +45,13 @@ from dynestyx.inference.checkers import (
 )
 from dynestyx.inference.custom_filter import (
     FilterOutputs,
-    compute_custom_filter,
-    custom_distributions,
-    step_inputs,
+    filter_distributions,
+    filter_history,
 )
 from dynestyx.inference.enkf_localization import (
     resolve_enkf_localization,
 )
 from dynestyx.inference.hmm_filters import compute_hmm_filter
-from dynestyx.inference.integrations.cd_dynamax.filter_steps import (
-    CDFilter,
-    CDPosterior,
-)
-from dynestyx.inference.integrations.cuthbert.discrete_filter import run_cuthbert_steps
 from dynestyx.inference.observation_predictions import (
     PredictedObservationOutputs,
     add_observation_prediction_sites,
@@ -66,8 +59,6 @@ from dynestyx.inference.observation_predictions import (
 )
 from dynestyx.inference.utils.distribution_utils import (
     _categorical_log_probs_to_dists,
-    _cholesky_state_sequence_to_dists,
-    _posterior_sequence_to_dists,
 )
 from dynestyx.inference.utils.numpyro_sites import (
     register_filter_sites,
@@ -290,14 +281,6 @@ class Filter(ObjectInterpretation, HandlesSelf):
             self._filter_config_used = config
             return []
 
-        if key is None and isinstance(
-            config,
-            (PFConfig, EnKFConfig, ContinuousTimeDPFConfig, ContinuousTimeEnKFConfig),
-        ):
-            raise ValueError(
-                f"{type(config).__name__} requires a PRNG key: set 'crn_seed' or run inside a NumPyro seeded context."
-            )
-
         resolved_localization = None
         binding_config = config
         if isinstance(config, EnKFConfig):
@@ -327,23 +310,14 @@ class Filter(ObjectInterpretation, HandlesSelf):
             ov = _ensure_trailing_event_axis(ov)
             if cv is not None:
                 cv = _ensure_trailing_event_axis(cv)
-            if isinstance(config, (SplitFilterConfig, CombineFilterConfig)):
-                outputs = compute_custom_filter(dyn, config, ot, ov, ct, cv, k)
-                return outputs.log_normalizing_constant[-1], outputs
-            inputs = step_inputs(dyn, ot, ov, ct, cv)
-            algorithm = binding_config.build_filter(dyn)
-            if isinstance(algorithm, CDFilter):
-                posterior = algorithm.run(inputs, k)
-                return posterior.marginal_loglik, posterior
-            if isinstance(algorithm, CuthbertFilter):
-                return run_cuthbert_steps(
-                    algorithm,
-                    inputs,
-                    k,
-                    parallel=isinstance(config, KFConfig) and bool(config.associative),
-                )
-            raise TypeError(
-                f"Unsupported built-in filter returned by {type(config).__name__}."
+            return filter_history(
+                dyn,
+                binding_config,
+                k,
+                obs_times=ot,
+                obs_values=ov,
+                ctrl_times=ct,
+                ctrl_values=cv,
             )
 
         outputs = _map_inference(
@@ -364,10 +338,6 @@ class Filter(ObjectInterpretation, HandlesSelf):
         self.filtered_states = states
         self._filter_config_used = config
 
-        if isinstance(states, FilterOutputs):
-            self.predicted_observations = states.predicted_observations
-            return custom_distributions(states, plate_shapes)
-
         self.predicted_observations = extract_filter_predictions(
             states,
             dynamics=dynamics,
@@ -378,28 +348,13 @@ class Filter(ObjectInterpretation, HandlesSelf):
             resolved_localization=resolved_localization,
         )
 
-        if isinstance(states, CDPosterior):
-            return _posterior_sequence_to_dists(
-                states,
-                particle_mode=isinstance(config, ContinuousTimeDPFConfig),
-                plate_shapes=plate_shapes,
-                missing="empty"
-                if not dynamics.continuous_time and not plate_shapes
-                else "raise",
-                missing_message="Filtered means/covariances were unavailable for a Gaussian rollout path.",
-            )
         if hmm:
             return _categorical_log_probs_to_dists(
                 states,
                 plate_shapes=plate_shapes,
             )
-        return _cholesky_state_sequence_to_dists(
-            states,
-            particle_mode=isinstance(config, PFConfig),
-            plate_shapes=plate_shapes,
-            covariance_jitter=getattr(
-                config, "recorded_filtered_states_cov_jitter", 0.0
-            ),
+        return filter_distributions(
+            states, config, plate_shapes, continuous_time=dynamics.continuous_time
         )
 
     def _build_infer_result(

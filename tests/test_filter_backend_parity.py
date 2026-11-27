@@ -24,8 +24,8 @@ from cuthbert.filtering import filter as cuthbert_filter
 
 import dynestyx as dsx
 from dynestyx import configs
-from dynestyx.inference.custom_filter import step_inputs
-from dynestyx.inference.filter_types import FilterInputs
+from dynestyx.inference.custom_filter import run_filter_steps, step_inputs
+from dynestyx.inference.filter_types import FilterInputs, SplitFilter
 from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
     _lti_to_lgssm_params,
     compute_cd_dynamax_discrete_filter,
@@ -37,8 +37,8 @@ from dynestyx.inference.integrations.cd_dynamax.utils import (
 )
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
-    run_cuthbert_steps,
 )
+from dynestyx.inference.integrations.utils import WeightedParticles
 
 TIMES = jnp.array([0.0, 0.1, 0.25, 0.3])
 OBSERVATIONS = jnp.array([[0.1], [-0.5], [0.6], [0.3]])
@@ -243,7 +243,10 @@ def test_online_particle_overrides(model):
         ),
     )
     inputs = step_inputs(model, TIMES, OBSERVATIONS, TIMES, CONTROLS)
-    _, states = run_cuthbert_steps(pf, inputs, KEY, parallel=parallel)
+    inputs = inputs._replace(
+        time_prev=inputs.time_prev.at[0].set(2 * TIMES[0] - TIMES[1])
+    )
+    states = run_filter_steps(pf, inputs, KEY, lambda state: state, parallel=parallel)
     config = configs.PFConfig(
         crn_seed=KEY,
         n_particles=12,
@@ -251,3 +254,47 @@ def test_online_particle_overrides(model):
         resampling_method=configs.PFResamplingConfig(base_method="multinomial"),
     )
     check_posterior(model, config, states)
+
+
+def test_builtin_split_steps_as_custom_filter(model):
+    """Bind the numerical steps through the public subclass API, including native forecasts."""
+    builtin = configs.UKFConfig()
+
+    class CustomUKF(configs.SplitFilterConfig):
+        def build_filter(self, model):
+            steps = builtin.build_filter(model)
+            assert isinstance(steps, SplitFilter)
+            return steps
+
+        def gather_outputs(self, prior, filtered):
+            return filtered
+
+    observations = dict(
+        obs_times=TIMES, obs_values=OBSERVATIONS, ctrl_times=TIMES, ctrl_values=CONTROLS
+    )
+    with dsx.Filter(builtin):
+        reference = dsx.condition("x", model, **observations)
+    check_posterior(model, CustomUKF(), reference.states)
+
+
+def test_builtin_combined_steps_as_custom_filter(model):
+    builtin = configs.PFConfig(n_particles=12, crn_seed=KEY)
+
+    class CustomPF(configs.CombineFilterConfig):
+        def build_filter(self, model):
+            return builtin.build_filter(model)
+
+        def gather_outputs(self, filtered):
+            return filtered
+
+    observations = dict(
+        obs_times=TIMES, obs_values=OBSERVATIONS, ctrl_times=TIMES, ctrl_values=CONTROLS
+    )
+    with dsx.Filter(builtin):
+        reference = dsx.condition("x", model, **observations)
+    with dsx.Filter(CustomPF(crn_seed=KEY)):
+        result = dsx.condition("x", model, **observations)
+    np.testing.assert_allclose(result.states.particles, reference.states.particles)
+    np.testing.assert_allclose(result.states.log_weights, reference.states.log_weights)
+    np.testing.assert_allclose(result.marginal_loglik, reference.marginal_loglik)
+    assert all(isinstance(d, WeightedParticles) for d in result.dists)

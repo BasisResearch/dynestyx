@@ -13,14 +13,17 @@ from cd_dynamax import (
 from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
     ParamsLGSSMEmissions,
     ParamsLGSSMInitial,
+    PosteriorGSSMFiltered,
 )
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
 from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.cdlgssm_utils import (
     ParamsCDLGSSMDynamics,
 )
+from jaxtyping import Array, PRNGKeyArray
 
 from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
+from dynestyx.inference.filter_types import FilterInputs, SplitFilter
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
@@ -575,3 +578,51 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             cast(Covariance | jnp.ndarray, obs.R), dynamics.observation_dim
         ),
     )
+
+
+type Moments = tuple[Array, Array]
+type GaussianPrior = tuple[Moments, Array]
+
+
+def gaussian_filter(
+    initial: Moments,
+    predict_moments: Callable[[Moments, FilterInputs], Moments],
+    condition: Callable[
+        [Moments, FilterInputs], tuple[Array, Moments, dict[str, Array]]
+    ],
+    *,
+    save_forecasts: bool = False,
+) -> SplitFilter[GaussianPrior, PosteriorGSSMFiltered]:
+    """condition returns the likelihood increment, filtered moments and diagnostics."""
+
+    def initialize(x: FilterInputs, *, key: PRNGKeyArray | None) -> GaussianPrior:
+        return initial, jnp.zeros((), dtype=initial[0].dtype)
+
+    def predict(
+        posterior, x: FilterInputs, *, key: PRNGKeyArray | None
+    ) -> GaussianPrior:
+        if save_forecasts:
+            moments = posterior.predicted_means, posterior.predicted_covariances
+        else:
+            moments = predict_moments(
+                (posterior.filtered_means, posterior.filtered_covariances), x
+            )
+        return moments, posterior.marginal_loglik
+
+    def update(prior: GaussianPrior, x: FilterInputs, *, key: PRNGKeyArray | None):
+        moments, ll = prior
+        increment, filtered, diagnostics = condition(moments, x)
+        # Discrete EKF/UKF expose the forecast *after* each analysis, including
+        # the last one. Reuse that forecast as the prior at the next observation.
+        if save_forecasts:
+            diagnostics["predicted_means"], diagnostics["predicted_covariances"] = (
+                predict_moments(filtered, x._replace(u_prev=x.u))
+            )
+        return PosteriorGSSMFiltered(
+            marginal_loglik=ll + increment,
+            filtered_means=filtered[0],
+            filtered_covariances=filtered[1],
+            **diagnostics,
+        )
+
+    return SplitFilter(initialize, predict, update)

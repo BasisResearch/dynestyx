@@ -1,10 +1,28 @@
 """Public callback and output types for custom filtering algorithms."""
 
 import dataclasses
-from typing import NamedTuple, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import NamedTuple, NotRequired, Protocol, TypedDict, runtime_checkable
 
 import jax
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import PosteriorGSSMFiltered
+from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
+    PosteriorCDNLSSMFiltered,
+)
+from cuthbert.ensemble_kalman.ensemble_kalman_filter import EnKFState
+from cuthbert.gaussian.kalman import KalmanFilterState
+from cuthbert.gaussian.taylor import LinearizedKalmanFilterState
+from cuthbert.smc.particle_filter import ParticleFilterState
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real, Shaped
+
+
+class FilterObservations(TypedDict):
+    """Observation and control arrays for one unbatched forward pass."""
+
+    obs_times: Real[Array, " obs_time"]
+    obs_values: Shaped[Array, "obs_time observation_dim"]
+    ctrl_times: NotRequired[Real[Array, " control_time"] | None]
+    ctrl_values: NotRequired[Real[Array, "control_time control_dim"] | None]
 
 
 class FilterInputs(NamedTuple):
@@ -100,3 +118,11 @@ class FilterOutputs(NamedTuple):
     log_weights: Real[Array, "*batch_time n_particles"] | None = None
     predicted_observations: PredictedObservationOutputs | None = None
     extra_outputs: dict[str, Array] | None = None
+
+
+CDPosterior = PosteriorGSSMFiltered | PosteriorCDNLSSMFiltered
+CuthbertState = (
+    KalmanFilterState | LinearizedKalmanFilterState | ParticleFilterState | EnKFState
+)
+type FilterHistory = FilterOutputs | CDPosterior | CuthbertState
+type SplitKeys = Callable[[PRNGKeyArray, int], tuple[Array, Array, Array]]

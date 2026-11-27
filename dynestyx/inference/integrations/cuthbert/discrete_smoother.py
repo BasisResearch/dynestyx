@@ -1,5 +1,6 @@
 """Discrete-time smoothers via cuthbert: Kalman, Taylor-KF, EnRTS, and PF."""
 
+import dataclasses
 from collections.abc import Callable
 from functools import partial
 from typing import Any, cast
@@ -19,12 +20,12 @@ from dynestyx.configs.smoother import (
     KFSmootherConfig,
     PFSmootherConfig,
 )
+from dynestyx.inference.custom_filter import filter_history
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     CuthbertInputs,
     _drop_cuthbert_dummy_step,
     _kalman_dynamics_params_builder,
     _pf_resampling_fn,
-    compute_cuthbert_filter,
 )
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
@@ -150,16 +151,23 @@ def compute_cuthbert_smoother(
 ) -> tuple[Real[Array, ""], Any]:
     """Pure-JAX cuthbert smoother computation (no numpyro side-effects)."""
     obs_len = int(obs_values.shape[0])
-    marginal_loglik, filtered_states = compute_cuthbert_filter(
-        dynamics,
+    config = dataclasses.replace(
         smoother_config,
+        filter_source="cuthbert",
+        extra_filter_kwargs=dict(
+            smoother_config.extra_filter_kwargs,
+            store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
+        ),
+    )
+    marginal_loglik, filtered_states = filter_history(
+        dynamics,
+        config,
         key,
         obs_times=obs_times,
         obs_values=obs_values,
         ctrl_times=ctrl_times,
         ctrl_values=ctrl_values,
-        align_to_observations=False,
-        store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
+        include_initial=True,
     )
 
     if isinstance(smoother_config, KFSmootherConfig):

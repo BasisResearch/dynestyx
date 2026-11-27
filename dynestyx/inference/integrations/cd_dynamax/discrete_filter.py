@@ -2,7 +2,8 @@
 
 import dataclasses
 import warnings
-from typing import Any, cast
+from functools import partial
+from typing import Unpack, cast
 
 import jax
 import jax.numpy as jnp
@@ -11,25 +12,17 @@ from cd_dynamax.dynamax.linear_gaussian_ssm import inference as kf
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm import inference_ekf as ekf
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm import inference_ukf as ukf
 from jax.experimental import sparse as jax_sparse
-from jaxtyping import Array, Real
+from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.configs.filters import (
-    BaseFilterConfig,
-    EKFConfig,
-    KFConfig,
-    UKFConfig,
-)
-from dynestyx.inference.custom_filter import step_inputs
-from dynestyx.inference.integrations.cd_dynamax.filter_steps import (
-    CDFilter,
-    gaussian_filter,
-)
+from dynestyx.configs.filters import BaseFilterConfig, EKFConfig, KFConfig, UKFConfig
+from dynestyx.inference.custom_filter import _legacy_filter_result, filter_history
+from dynestyx.inference.filter_types import FilterObservations, SplitFilter
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
+    gaussian_filter,
     gaussian_to_nlgssm_params,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
-from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
     DynamicalModel,
     LinearGaussianObservation,
@@ -110,37 +103,7 @@ def _prepare_inputs(
     return emissions, inputs
 
 
-def compute_cd_dynamax_discrete_filter(
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-) -> Any:
-    """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects)."""
-    inputs = step_inputs(dynamics, obs_times, obs_values, ctrl_times, ctrl_values)
-    if not isinstance(filter_config, (KFConfig, EKFConfig, UKFConfig)):
-        raise ValueError(
-            f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}"
-        )
-    if filter_config.filter_source != "cd_dynamax":
-        if isinstance(filter_config, KFConfig):
-            filter_config = dataclasses.replace(
-                filter_config, filter_source="cd_dynamax", associative=False
-            )
-        else:
-            filter_config = dataclasses.replace(
-                filter_config, filter_source="cd_dynamax"
-            )
-    algorithm = filter_config.build_filter(dynamics)
-    if not isinstance(algorithm, CDFilter):
-        raise TypeError("Expected a CD-Dynamax split filter.")
-    return algorithm.run(inputs, None)
-
-
-def build_kf(dynamics: DynamicalModel) -> CDFilter:
+def build_kf(dynamics: DynamicalModel) -> SplitFilter:
     params = _lti_to_lgssm_params(dynamics)
     F, b, B, Q = params.dynamics
     H, d, D, R = params.emissions
@@ -161,7 +124,7 @@ def build_kf(dynamics: DynamicalModel) -> CDFilter:
     )
 
 
-def build_ekf(dynamics: DynamicalModel) -> CDFilter:
+def build_ekf(dynamics: DynamicalModel) -> SplitFilter:
     params_nl = gaussian_to_nlgssm_params(dynamics)
     f, h = params_nl.dynamics_function, params_nl.emission_function
     Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
@@ -191,7 +154,7 @@ def build_ekf(dynamics: DynamicalModel) -> CDFilter:
     )
 
 
-def build_ukf(dynamics: DynamicalModel, config: UKFConfig) -> CDFilter:
+def build_ukf(dynamics: DynamicalModel, config: UKFConfig) -> SplitFilter:
     params_nl = gaussian_to_nlgssm_params(dynamics)
     f, h = params_nl.dynamics_function, params_nl.emission_function
     Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
@@ -215,37 +178,24 @@ def build_ukf(dynamics: DynamicalModel, config: UKFConfig) -> CDFilter:
     )
 
 
-def run_discrete_filter(
-    name: str,
+def compute_cd_dynamax_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    **kwargs,
-) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
-    """Return the evidence, native posterior, and observation-aligned beliefs."""
-    posterior = compute_cd_dynamax_discrete_filter(
-        dynamics,
-        filter_config,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-    )
-
-    return (
-        posterior.marginal_loglik,
-        posterior,
-        _posterior_sequence_to_dists(posterior, missing="empty"),
-    )
+    key: PRNGKeyArray | None = None,
+    **observations: Unpack[FilterObservations],
+):
+    if not isinstance(filter_config, (KFConfig, EKFConfig, UKFConfig)):
+        raise ValueError(
+            f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}"
+        )
+    if filter_config.filter_source != "cd_dynamax":
+        overrides = (
+            {"associative": False} if isinstance(filter_config, KFConfig) else {}
+        )
+        filter_config = dataclasses.replace(
+            filter_config, filter_source="cd_dynamax", **overrides
+        )
+    return filter_history(dynamics, filter_config, key, **observations)[1]
 
 
-__all__ = [
-    "compute_cd_dynamax_discrete_filter",
-    "run_discrete_filter",
-    "_lti_to_lgssm_params",
-    "_prepare_inputs",
-]
+run_discrete_filter = partial(_legacy_filter_result, compute_cd_dynamax_discrete_filter)
