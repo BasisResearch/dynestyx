@@ -87,7 +87,11 @@ class PredictedObservationOutputs:
 
 
 class FilterOutputs(NamedTuple):
-    """One step or a stacked history. Supply Gaussian moments or weighted particles."""
+    """Arrays gathered from one step, stacked over time by the runner.
+
+    Provide Gaussian moments or weighted particles for the filtered belief.
+    Optionally supply a state pytree to expose as `result.states`.
+    """
 
     log_normalizing_constant: Real[Array, "*batch_time"]
     filtered_means: Real[Array, "*batch_time state_dim"] | None = None
@@ -100,3 +104,4 @@ class FilterOutputs(NamedTuple):
     log_weights: Real[Array, "*batch_time n_particles"] | None = None
     predicted_observations: PredictedObservationOutputs | None = None
     extra_outputs: dict[str, Array] | None = None
+    states: object = None

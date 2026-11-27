@@ -497,7 +497,9 @@ class Filter(BaseLogFactorAdder):
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
             times=times,
-            states=states,
+            states=states.states
+            if isinstance(states, FilterOutputs) and states.states is not None
+            else states,
             extra_outputs=(states.extra_outputs or {})
             if isinstance(states, FilterOutputs)
             else {},

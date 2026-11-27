@@ -153,6 +153,7 @@ def test_keys_and_nested_plates():
                     mean=prior, cov=jnp.eye(1)
                 ),
                 extra_outputs={"prior": prior},
+                states={"sample": filtered.mean},
             )
 
     config = RandomWalk(crn_seed=jax.random.key(5))
@@ -174,6 +175,8 @@ def test_keys_and_nested_plates():
         a.predicted_observations.mean, a.extra_outputs["prior"]
     )
     assert a.extra_outputs["prior"].shape == (3, 2, 4, 1)
+    assert isinstance(a.states, dict)
+    assert a.states["sample"].shape == (3, 2, 4, 1)
     np.testing.assert_array_equal(a.extra_outputs["prior"], b.extra_outputs["prior"])
     assert np.unique(a.extra_outputs["prior"]).size == 24
 
