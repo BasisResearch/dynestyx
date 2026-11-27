@@ -21,6 +21,7 @@ from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.inference import (
     KFHyperParams,
 )
 from cuthbert.filtering import filter as cuthbert_filter
+from cuthbert.smc.particle_filter import ParticleFilterState
 
 import dynestyx as dsx
 from dynestyx import configs
@@ -294,6 +295,10 @@ def test_builtin_combined_steps_as_custom_filter(model):
         reference = dsx.condition("x", model, **observations)
     with dsx.Filter(CustomPF(crn_seed=KEY)):
         result = dsx.condition("x", model, **observations)
+    assert isinstance(result.states, ParticleFilterState)
+    assert isinstance(reference.states, ParticleFilterState)
+    assert result.marginal_loglik is not None and reference.marginal_loglik is not None
+    assert result.dists is not None and len(result.dists) == len(TIMES)
     np.testing.assert_allclose(result.states.particles, reference.states.particles)
     np.testing.assert_allclose(result.states.log_weights, reference.states.log_weights)
     np.testing.assert_allclose(result.marginal_loglik, reference.marginal_loglik)
