@@ -182,23 +182,14 @@ def test_keys_and_nested_plates():
 
 
 def test_parallel_custom_cuthbert_filter():
-    from dynestyx.inference.integrations.cuthbert.discrete_filter import (
-        build_cuthbert_filter,
-    )
+    from cuthbert.gaussian.kalman import KalmanFilterState
 
     class NativeKF(CombineFilterConfig):
         def build_filter(self, model):
-            algorithm, _ = build_cuthbert_filter(
-                model, KFConfig(filter_source="cuthbert"), None, want_parallel=True
-            )
-            return algorithm
+            return KFConfig(filter_source="cuthbert").build_filter(model)
 
         def gather_outputs(self, state):
-            return FilterOutputs(
-                state.log_normalizing_constant,
-                state.mean,
-                state.chol_cov @ state.chol_cov.T,
-            )
+            return FilterOutputs(state.log_normalizing_constant, states=state)
 
     model = make_model(0.8)
     data = dict(obs_times=jnp.arange(3.0), obs_values=jnp.array([[0.1], [0.2], [0.3]]))
@@ -206,6 +197,9 @@ def test_parallel_custom_cuthbert_filter():
         result = dsx.condition("x", model, **data)
     with dsx.Filter(KFConfig(filter_source="cuthbert", associative=False)):
         exact = dsx.condition("x", model, **data)
+    assert isinstance(result.states, KalmanFilterState)
+    assert isinstance(exact.states, KalmanFilterState)
+    np.testing.assert_allclose(result.states.chol_cov, exact.states.chol_cov, atol=1e-5)
     np.testing.assert_allclose(
         result.log_normalizing_constant, exact.log_normalizing_constant, atol=1e-5
     )

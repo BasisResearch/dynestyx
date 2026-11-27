@@ -7,6 +7,7 @@ from collections.abc import Callable
 from functools import partial
 from typing import Any, ClassVar, Literal, Protocol
 
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 from cuthbert.inference import Filter as CuthbertFilter
@@ -260,8 +261,23 @@ class BaseFilterConfig(abc.ABC):
     record_predicted_observations_ensemble: bool = True
     record_max_elems: int = 100_000
     filter_source: FilterSource | None = None
+    requires_key: ClassVar[bool] = False
     cov_rescaling: float | None = None
     crn_seed: PRNGKeyArray | None = None
+
+    def gather_outputs(self, *step: Any, **kwargs: Any) -> FilterOutputs:
+        """Gather a native filter state and its cumulative log likelihood."""
+        filtered = step[-1]
+        loglik = (
+            filtered.marginal_loglik
+            if len(step) == 2
+            else filtered.log_normalizing_constant
+        )
+        return FilterOutputs(loglik, states=filtered)
+
+    def build_filter(self, model: DynamicalModel) -> SplitSteps | CombinedSteps:
+        """Bind a filtering algorithm to one model before scanning observations."""
+        raise ValueError(f"Invalid filter config: {type(self).__name__}")
 
 
 def _require_steps(
@@ -391,6 +407,7 @@ class CombineFilterConfig[Prepared, Filtered](BaseFilterConfig):
 class EnKFBaseConfig(BaseFilterConfig):
     """Shared options for discrete- and continuous-time EnKF configs."""
 
+    requires_key: ClassVar[bool] = True
     n_particles: int = 30
     crn_seed: PRNGKeyArray | None = dataclasses.field(
         default_factory=lambda: jr.PRNGKey(0)
@@ -545,6 +562,11 @@ class EnKFConfig(EnKFBaseConfig):
 
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
+    def build_filter(self, model: DynamicalModel) -> CuthbertFilter:
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_enkf
+
+        return build_enkf(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class PFResamplingConfig:
@@ -597,6 +619,7 @@ class PFResamplingConfig:
 class PFBaseConfig(BaseFilterConfig):
     """Shared options for discrete- and continuous-time PF configs."""
 
+    requires_key: ClassVar[bool] = True
     n_particles: int = 1_000
     resampling_method: PFResamplingConfig = dataclasses.field(
         default_factory=PFResamplingConfig
@@ -665,6 +688,11 @@ class PFConfig(PFBaseConfig):
 
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
 
+    def build_filter(self, model: DynamicalModel) -> CuthbertFilter:
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_pf
+
+        return build_pf(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class EKFConfig(BaseFilterConfig):
@@ -718,6 +746,17 @@ class EKFConfig(BaseFilterConfig):
 
     filter_source: CuthbertOrCDDynamaxFilterSource = "cuthbert"
     filter_emission_order: FilterEmissionOrder = "first"
+
+    def build_filter(self, model: DynamicalModel) -> SplitFilter | CuthbertFilter:
+        if self.filter_source == "cd_dynamax":
+            from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+                build_ekf,
+            )
+
+            return build_ekf(model)
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_ekf
+
+        return build_ekf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -802,6 +841,17 @@ class KFConfig(BaseFilterConfig):
                 "filter_source='cuthbert'."
             )
 
+    def build_filter(self, model: DynamicalModel) -> SplitFilter | CuthbertFilter:
+        if self.filter_source == "cd_dynamax":
+            from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+                build_kf,
+            )
+
+            return build_kf(model)
+        from dynestyx.inference.integrations.cuthbert.discrete_filter import build_kf
+
+        return build_kf(model)
+
 
 @dataclasses.dataclass(frozen=True)
 class UKFConfig(BaseFilterConfig):
@@ -857,6 +907,13 @@ class UKFConfig(BaseFilterConfig):
     beta: int = 2
     kappa: int = 1
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+    def build_filter(self, model: DynamicalModel) -> SplitFilter:
+        from dynestyx.inference.integrations.cd_dynamax.discrete_filter import (
+            build_ukf,
+        )
+
+        return build_ukf(model, self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -928,6 +985,13 @@ class ContinuousTimeKFConfig(BaseFilterConfig, ContinuousTimeConfig):
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
+    def build_filter(self, model: DynamicalModel) -> SplitFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            build_kf,
+        )
+
+        return build_kf(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
@@ -976,6 +1040,22 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
                 "discrete EnKFConfig instead."
             )
 
+    def split_keys(self, key: PRNGKeyArray, length: int):
+        # CD-EnKF pairs analysis at t with the forecast from t to t+1.
+        keys = jr.split(key, length + 1)
+        pairs = jax.vmap(lambda k: jr.split(k, 2))(keys[1:])
+        return keys[0], jnp.roll(pairs[:, 0], 1, axis=0), pairs[:, 1]
+
+    def gather_outputs(self, prior, filtered) -> FilterOutputs:
+        return super().gather_outputs(prior, filtered[1])
+
+    def build_filter(self, model: DynamicalModel) -> SplitFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            build_enkf,
+        )
+
+        return build_enkf(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
@@ -1009,6 +1089,16 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
 
+    def gather_outputs(self, prior, filtered) -> FilterOutputs:
+        return super().gather_outputs(prior, filtered[1])
+
+    def build_filter(self, model: DynamicalModel) -> SplitFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            build_dpf,
+        )
+
+        return build_dpf(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
@@ -1037,6 +1127,13 @@ class ContinuousTimeEKFConfig(EKFConfig, ContinuousTimeConfig):
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
 
+    def build_filter(self, model: DynamicalModel) -> SplitFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            build_ekf,
+        )
+
+        return build_ekf(model, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
@@ -1064,6 +1161,13 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
     """
 
     filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+    def build_filter(self, model: DynamicalModel) -> SplitFilter:
+        from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
+            build_ukf,
+        )
+
+        return build_ukf(model, self)
 
 
 DiscreteTimeConfigs: tuple[type, ...] = (

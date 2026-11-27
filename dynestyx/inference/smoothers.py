@@ -1,11 +1,8 @@
 import dataclasses
-import math
 from abc import ABC, abstractmethod
 from typing import cast
 
-import equinox as eqx
 import jax
-import jax.numpy as jnp
 import numpyro
 from effectful.ops.semantics import fwd
 from effectful.ops.syntax import ObjectInterpretation, implements
@@ -30,7 +27,6 @@ from dynestyx.handlers import (
     _DynestyxStackKind,
 )
 from dynestyx.inference.checkers import (
-    _validate_batched_plate_alignment,
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
@@ -60,18 +56,13 @@ from dynestyx.inference.utils.distribution_utils import (
     _posterior_sequence_to_dists,
 )
 from dynestyx.inference.utils.numpyro_sites import register_smoother_sites
-from dynestyx.inference.utils.plate_utils import (
-    _array_plate_axis,
-    _make_plate_in_axes,
-    _slice_dist_for_plate_member,
-)
+from dynestyx.inference.utils.plate_utils import _map_inference
 from dynestyx.models import DynamicalModel
 from dynestyx.types import (
     ConditionedResult,
     chain_numpyro_site_registrations,
 )
 from dynestyx.utils.arrays import _ensure_trailing_event_axis
-from dynestyx.utils.plates import _dist_has_plate_batch_dims
 
 DiscreteSmootherConfig = (
     KFSmootherConfig
@@ -468,89 +459,23 @@ class Smoother(BaseSmootherLogFactorAdder):
                 f"Unsupported smoother config for plate: {type(config).__name__}"
             )
 
-        def compute_output(dyn, ot, ov, ct, cv, k):
+        def compute_output(dyn, ot, ov, _filled, _mask, ct, cv, k):
             # Add scalar event axes after vmap removes plate dimensions.
             ov = _ensure_trailing_event_axis(ov)
             if cv is not None:
                 cv = _ensure_trailing_event_axis(cv)
             return _compute_output(dyn, ot, ov, ct, cv, k)
 
-        if key is not None:
-            if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
-                key = jax.random.wrap_key_data(key)
-            total = math.prod(plate_shapes)
-            split_keys = jax.random.split(key, total)
-            keys = split_keys.reshape(*plate_shapes, *split_keys.shape[1:])
-        else:
-            keys = None
-
-        dyn_axes = _make_plate_in_axes(dynamics, plate_shapes)
-        ot_axis = _array_plate_axis(obs_times, plate_shapes)
-        ov_axis = _array_plate_axis(obs_values, plate_shapes)
-        ct_axis = _array_plate_axis(ctrl_times, plate_shapes)
-        cv_axis = _array_plate_axis(ctrl_values, plate_shapes)
-        _validate_batched_plate_alignment(
+        outputs = _map_inference(
+            compute_output,
             dynamics,
             plate_shapes,
-            obs_times=obs_times,
-            obs_values=obs_values,
-            ctrl_times=ctrl_times,
-            ctrl_values=ctrl_values,
+            obs_times,
+            obs_values,
+            ctrl_times,
+            ctrl_values,
+            key,
         )
-        k_axis = 0 if keys is not None else None
-        base_axes = (dyn_axes, ot_axis, ov_axis, ct_axis, cv_axis, k_axis)
-
-        # A plate-batched ``initial_condition`` cannot be sliced by vmap (numpyro
-        # keeps ``batch_shape`` in static aux-data). Thread a per-plate-member index
-        # through the nested vmap and rebuild the member's initial condition from the
-        # clean original. See ``Filter._add_log_factors_batched`` for details.
-        ic_batched = _dist_has_plate_batch_dims(
-            dynamics.initial_condition, plate_shapes
-        )
-
-        if ic_batched:
-            orig_ic = dynamics.initial_condition
-
-            def compute_output_member(dyn, ot, ov, ct, cv, k, *idxs):
-                member_ic = _slice_dist_for_plate_member(
-                    orig_ic, plate_shapes, tuple(idxs)
-                )
-                dyn = eqx.tree_at(
-                    lambda m: m.initial_condition,
-                    dyn,
-                    member_ic,
-                    is_leaf=lambda x: x is None,
-                )
-                return compute_output(dyn, ot, ov, ct, cv, k)
-
-            idx_arrays = [jnp.arange(s) for s in plate_shapes]
-            n_plates = len(plate_shapes)
-            vmapped = compute_output_member
-            for w in range(n_plates):
-                d = n_plates - 1 - w
-                idx_axes = tuple(0 if j == d else None for j in range(n_plates))
-                vmapped = jax.vmap(vmapped, in_axes=(*base_axes, *idx_axes))
-            outputs = vmapped(
-                dynamics,
-                obs_times,
-                obs_values,
-                ctrl_times,
-                ctrl_values,
-                keys,
-                *idx_arrays,
-            )
-        else:
-            vmapped = compute_output
-            for _ in plate_shapes:
-                vmapped = jax.vmap(vmapped, in_axes=base_axes)
-            outputs = vmapped(
-                dynamics,
-                obs_times,
-                obs_values,
-                ctrl_times,
-                ctrl_values,
-                keys,
-            )
 
         if output_kind in {"continuous", "cd_dynamax_discrete"}:
             marginal_logliks = outputs.marginal_loglik

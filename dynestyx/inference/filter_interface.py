@@ -10,8 +10,18 @@ from cuthbert.utils import dummy_leading_element
 from jaxtyping import Array, PRNGKeyArray, Real, Shaped
 from numpyro.distributions import Distribution
 
-from dynestyx.configs.filters import CombineFilterConfig, SplitFilterConfig
-from dynestyx.inference.filter_types import CombinedSteps, SplitSteps
+from dynestyx.configs.filters import (
+    BaseFilterConfig,
+    CombineFilterConfig,
+    SplitFilterConfig,
+)
+from dynestyx.inference.filter_types import (
+    CDPosterior,
+    CombinedSteps,
+    CuthbertState,
+    SplitKeys,
+    SplitSteps,
+)
 from dynestyx.inference.filter_types import FilterInputs as FilterInputs
 from dynestyx.inference.filter_types import FilterOutputs as FilterOutputs
 from dynestyx.inference.filter_types import (
@@ -19,8 +29,10 @@ from dynestyx.inference.filter_types import (
 )
 from dynestyx.inference.filter_types import SplitFilter as SplitFilter
 from dynestyx.inference.utils.distribution_utils import (
+    _cholesky_state_sequence_to_dists,
     _gaussian_sequence_to_dists,
     _particle_sequence_to_dists,
+    _posterior_sequence_to_dists,
 )
 from dynestyx.models import DynamicalModel
 
@@ -75,6 +87,7 @@ def run_filter_steps[P, S, O](
     *,
     parallel: bool = False,
     include_initial: bool = False,
+    split_keys: SplitKeys | None = None,
 ) -> O: ...
 
 
@@ -87,6 +100,7 @@ def run_filter_steps[E, S, O](
     *,
     parallel: bool = False,
     include_initial: bool = False,
+    split_keys: None = None,
 ) -> O: ...
 
 
@@ -98,6 +112,7 @@ def run_filter_steps[P, S, E, O](
     *,
     parallel: bool = False,
     include_initial: bool = False,
+    split_keys: SplitKeys | None = None,
 ) -> O:
     """Collect projections in a sequential scan or from associative prefix states."""
     init_key, scan_key = _split(key)
@@ -147,7 +162,11 @@ def run_filter_steps[P, S, E, O](
         raise TypeError("Expected a split filter or a prepare/combine filter.")
     split = cast(SplitSteps[P, S], algorithm)
     project_split = cast(Callable[[P, S], O], gather)
-    if keys is None:
+    if split_keys is not None:
+        if key is None:
+            raise ValueError("An explicit split key schedule requires a PRNG key.")
+        init_key, predict_keys, update_keys = split_keys(key, len(inputs.y))
+    elif keys is None:
         predict_keys = update_keys = None
     else:
         pairs = jax.vmap(lambda k: jax.random.split(k, 2))(keys)
@@ -194,18 +213,37 @@ def run_split_steps[P, S, O](
     return history
 
 
-def compute_custom_filter(
-    dynamics: DynamicalModel,
-    config: SplitFilterConfig | CombineFilterConfig,
-    times: Real[Array, " time"],
-    values: Shaped[Array, "time observation_dim"],
-    ctrl_times: Real[Array, " control_time"] | None,
-    controls: Real[Array, "control_time control_dim"] | None,
-    key: PRNGKeyArray | None,
-) -> FilterOutputs:
-    inputs = step_inputs(dynamics, times, values, ctrl_times, controls)
+def filter_history(
+    model: DynamicalModel,
+    config: BaseFilterConfig,
+    key: PRNGKeyArray | None = None,
+    *,
+    obs_times: Real[Array, " time"],
+    obs_values: Shaped[Array, "time observation_dim"],
+    ctrl_times: Real[Array, " control_time"] | None = None,
+    ctrl_values: Real[Array, "control_time control_dim"] | None = None,
+    include_initial: bool = False,
+) -> tuple[Array, FilterOutputs]:
+    """Bind one model, scan its steps and collect its selected history."""
+    if config.requires_key and key is None:
+        raise ValueError(
+            f"{type(config).__name__} requires a PRNG key: set 'crn_seed' or run inside a NumPyro seeded context."
+        )
+    inputs = step_inputs(model, obs_times, obs_values, ctrl_times, ctrl_values)
+    algorithm = config.build_filter(model)
+    custom = isinstance(config, (SplitFilterConfig, CombineFilterConfig))
+    if not custom and config.filter_source == "cuthbert" and len(inputs.time) > 1:
+        # Native Cuthbert states expose this historical value in model_inputs.
+        inputs = inputs._replace(
+            time_prev=inputs.time_prev.at[0].set(
+                inputs.time[0] - (inputs.time[1] - inputs.time[0])
+            )
+        )
+    if not custom and config.filter_source == "cd_dynamax" and key is not None:
+        key = jax.random.key_data(key)
 
-    def checked(output: FilterOutputs) -> FilterOutputs:
+    def gather(*step):
+        output = config.gather_outputs(*step)
         if not isinstance(output, FilterOutputs):
             raise TypeError("gather_outputs must return FilterOutputs.")
         if jnp.ndim(output.log_normalizing_constant) != 0:
@@ -214,25 +252,53 @@ def compute_custom_filter(
             output = output._replace(predicted_observations=None)
         return output
 
-    if isinstance(config, SplitFilterConfig):
-        return run_filter_steps(
-            config.build_filter(dynamics),
-            inputs,
-            key,
-            lambda prior, filtered: checked(config.gather_outputs(prior, filtered)),
-        )
-    return run_filter_steps(
-        config.build_filter(dynamics),
+    outputs = run_filter_steps(
+        algorithm,
         inputs,
         key,
-        lambda filtered: checked(config.gather_outputs(filtered)),
-        parallel=config.parallel,
+        gather,
+        parallel=bool(
+            getattr(config, "parallel", getattr(config, "associative", False))
+        ),
+        include_initial=include_initial,
+        split_keys=getattr(config, "split_keys", None),
     )
+    loglik = outputs.log_normalizing_constant[-1]
+    if isinstance(outputs.states, CDPosterior):
+        # The native posterior reports the final score as a scalar.
+        outputs = outputs._replace(
+            states=outputs.states._replace(marginal_loglik=loglik)
+        )
+    return loglik, outputs
 
 
-def custom_distributions(
-    outputs: FilterOutputs, plate_shapes: tuple[int, ...]
+def filter_distributions(
+    outputs: FilterOutputs | CDPosterior | CuthbertState,
+    config: BaseFilterConfig,
+    plate_shapes: tuple[int, ...] = (),
+    *,
+    continuous_time: bool,
 ) -> list[Distribution]:
+    """Construct per-time beliefs from the representation selected by the projection."""
+    if isinstance(outputs, FilterOutputs):
+        outputs = outputs.belief
+    if isinstance(outputs, CDPosterior):
+        return _posterior_sequence_to_dists(
+            outputs,
+            particle_mode=hasattr(outputs, "particles"),
+            plate_shapes=plate_shapes,
+            missing="raise" if continuous_time or plate_shapes else "empty",
+            missing_message="Filtered means/covariances were unavailable for a Gaussian rollout path.",
+        )
+    if isinstance(outputs, CuthbertState):
+        return _cholesky_state_sequence_to_dists(
+            outputs,
+            particle_mode=hasattr(outputs, "particles"),
+            plate_shapes=plate_shapes,
+            covariance_jitter=getattr(
+                config, "recorded_filtered_states_cov_jitter", 0.0
+            ),
+        )
     gaussian = (
         outputs.filtered_means is not None,
         outputs.filtered_covariances is not None,
@@ -254,4 +320,41 @@ def custom_distributions(
         )
     raise ValueError(
         "FilterOutputs requires either Gaussian means and covariances or particles and log weights."
+    )
+
+
+def _legacy_filter_result(
+    compute,
+    name,
+    dynamics,
+    filter_config,
+    key=None,
+    *,
+    obs_times,
+    obs_values,
+    ctrl_times=None,
+    ctrl_values=None,
+    resolved_localization=None,
+    **kwargs,
+):
+    """Support the original low-level run_* functions with the shared belief conversion."""
+    options = dict(
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    if resolved_localization is not None:
+        options["resolved_localization"] = resolved_localization
+    history = compute(dynamics, filter_config, key, **options)
+    if isinstance(history, CDPosterior):
+        ll, states = history.marginal_loglik, history
+    else:
+        ll, states = history
+    return (
+        ll,
+        states,
+        filter_distributions(
+            states, filter_config, continuous_time=dynamics.continuous_time
+        ),
     )

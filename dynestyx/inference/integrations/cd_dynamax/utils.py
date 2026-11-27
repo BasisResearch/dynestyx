@@ -6,15 +6,24 @@ import equinox as eqx
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from cd_dynamax import (
-    ContDiscreteLinearGaussianSSM,
     ContDiscreteNonlinearGaussianSSM,
     ContDiscreteNonlinearSSM,
     ParamsCDLGSSM,
 )
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
+    ParamsLGSSMEmissions,
+    ParamsLGSSMInitial,
+    PosteriorGSSMFiltered,
+)
 from cd_dynamax.dynamax.nonlinear_gaussian_ssm.models import ParamsNLGSSM
 from cd_dynamax.dynamax.parameters import ParameterProperties
+from cd_dynamax.src.continuous_discrete_linear_gaussian_ssm.cdlgssm_utils import (
+    ParamsCDLGSSMDynamics,
+)
+from jaxtyping import Array, PRNGKeyArray
 
 from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
+from dynestyx.inference.filter_types import FilterInputs, SplitFilter
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
 from dynestyx.models import (
     AffineDrift,
@@ -140,53 +149,6 @@ def _as_learnable(value: Any) -> Any:
     return _ConstantFunction(value=jnp.asarray(value))
 
 
-def _initialize_model_params(model: Any, **raw_kwargs: Any) -> Any:
-    """Initialize cd_dynamax params, handling both raw and dict-wrapped APIs."""
-    if isinstance(model, ContDiscreteLinearGaussianSSM):
-        # HD-UQ/public expects `{params, props}` wrappers for CDLGSSM initialize,
-        # but tensor-valued fields should remain raw arrays (not function wrappers).
-        wrapped_linear_kwargs: dict[str, Any] = {}
-        for key, value in raw_kwargs.items():
-            wrapped_linear_kwargs[key] = (
-                value if key == "dynamics_approx_order" else _fixed_param(value)
-            )
-        cdlg_params, _ = model.initialize(  # type: ignore[arg-type]
-            **wrapped_linear_kwargs
-        )
-        return cdlg_params
-
-    if isinstance(model, (ContDiscreteNonlinearGaussianSSM, ContDiscreteNonlinearSSM)):
-        wrapped_nonlinear_kwargs: dict[str, Any] = {}
-        learnable_fn_keys = {
-            "initial_mean",
-            "initial_cov",
-            "dynamics_drift",
-            "dynamics_diffusion_coefficient",
-            "dynamics_diffusion_cov",
-            "emission_function",
-            "emission_cov",
-        }
-        for key, value in raw_kwargs.items():
-            if key == "dynamics_approx_order":
-                wrapped_nonlinear_kwargs[key] = value
-            elif key in learnable_fn_keys:
-                wrapped_nonlinear_kwargs[key] = _fixed_param(_as_learnable(value))
-            else:
-                wrapped_nonlinear_kwargs[key] = _fixed_param(value)
-        cdnl_params, _ = model.initialize(  # type: ignore[arg-type]
-            **wrapped_nonlinear_kwargs
-        )
-        return cdnl_params
-
-    raise TypeError(
-        "_initialize_model_params only supports "
-        "ContDiscreteLinearGaussianSSM, "
-        "ContDiscreteNonlinearGaussianSSM, and "
-        "ContDiscreteNonlinearSSM; "
-        f"got {type(model).__name__}."
-    )
-
-
 def _require_constant_linear_gaussian_fields(
     component: Any,
     field_names: tuple[str, ...],
@@ -290,25 +252,25 @@ def dsx_to_cdlgssm_params(dsx_model: DynamicalModel) -> ParamsCDLGSSM:
     )
     d = obs.bias if obs.bias is not None else jnp.zeros(dsx_model.observation_dim)
 
-    cd_model = ContDiscreteLinearGaussianSSM(
-        state_dim=dsx_model.state_dim,
-        emission_dim=dsx_model.observation_dim,
-        input_dim=dsx_model.control_dim,
-    )
-    return _initialize_model_params(
-        cd_model,
-        initial_mean=squeeze_leading_singletons(ic.loc, 1),
-        initial_cov=squeeze_leading_singletons(ic.covariance_matrix, 2),
-        dynamics_weights=drift.A,
-        dynamics_input_weights=B,
-        dynamics_bias=b,
-        dynamics_diffusion_coefficient=L,
-        dynamics_diffusion_cov=Q,
-        emission_weights=obs.H,
-        emission_input_weights=D,
-        emission_bias=d,
-        emission_cov=covariance_matrix(
-            cast(Covariance | jnp.ndarray, obs.R), dsx_model.observation_dim
+    return ParamsCDLGSSM(
+        initial=ParamsLGSSMInitial(
+            mean=squeeze_leading_singletons(ic.loc, 1),
+            cov=squeeze_leading_singletons(ic.covariance_matrix, 2),
+        ),
+        dynamics=ParamsCDLGSSMDynamics(
+            weights=drift.A,
+            bias=b,
+            input_weights=B,
+            diffusion_coefficient=L,
+            diffusion_cov=Q,
+        ),
+        emissions=ParamsLGSSMEmissions(
+            weights=obs.H,
+            bias=d,
+            input_weights=D,
+            cov=covariance_matrix(
+                cast(Covariance | jnp.ndarray, obs.R), dsx_model.observation_dim
+            ),
         ),
     )
 
@@ -466,23 +428,20 @@ def dsx_to_cd_dynamax(
         }
 
     if cd_model is None:
-        if non_gaussian_flag:
-            model_to_use: SSMType = ContDiscreteNonlinearSSM(
-                state_dim=dsx_model.state_dim,
-                emission_dim=dsx_model.observation_dim,
-                input_dim=dsx_model.control_dim,
-            )
-        else:
-            model_to_use = ContDiscreteNonlinearGaussianSSM(
-                state_dim=dsx_model.state_dim,
-                emission_dim=dsx_model.observation_dim,
-                input_dim=dsx_model.control_dim,
-            )
-    else:
-        model_to_use = cd_model
-
-    cd_dynamax_params = _initialize_model_params(model_to_use, **model_params)
-
+        cd_model = ContDiscreteNonlinearGaussianSSM(
+            state_dim=dsx_model.state_dim,
+            emission_dim=dsx_model.observation_dim,
+            input_dim=dsx_model.control_dim,
+        )
+    # CD-Dynamax evaluates means, covariances and dynamics via .f(x, u, t).
+    # The particle filter takes the initial and emission distributions directly.
+    fields = {
+        name: _fixed_param(
+            value if name.endswith("_distribution") else _as_learnable(value)
+        )
+        for name, value in model_params.items()
+    }
+    cd_dynamax_params, _ = cd_model.initialize(**fields)
     return cd_dynamax_params, non_gaussian_flag
 
 
@@ -619,3 +578,51 @@ def gaussian_to_nlgssm_params(dynamics: DynamicalModel) -> ParamsNLGSSM:
             cast(Covariance | jnp.ndarray, obs.R), dynamics.observation_dim
         ),
     )
+
+
+type Moments = tuple[Array, Array]
+type GaussianPrior = tuple[Moments, Array]
+
+
+def gaussian_filter(
+    initial: Moments,
+    predict_moments: Callable[[Moments, FilterInputs], Moments],
+    condition: Callable[
+        [Moments, FilterInputs], tuple[Array, Moments, dict[str, Array]]
+    ],
+    *,
+    save_forecasts: bool = False,
+) -> SplitFilter[GaussianPrior, PosteriorGSSMFiltered]:
+    """condition returns the likelihood increment, filtered moments and diagnostics."""
+
+    def initialize(x: FilterInputs, *, key: PRNGKeyArray | None) -> GaussianPrior:
+        return initial, jnp.zeros((), dtype=initial[0].dtype)
+
+    def predict(
+        posterior, x: FilterInputs, *, key: PRNGKeyArray | None
+    ) -> GaussianPrior:
+        if save_forecasts:
+            moments = posterior.predicted_means, posterior.predicted_covariances
+        else:
+            moments = predict_moments(
+                (posterior.filtered_means, posterior.filtered_covariances), x
+            )
+        return moments, posterior.marginal_loglik
+
+    def update(prior: GaussianPrior, x: FilterInputs, *, key: PRNGKeyArray | None):
+        moments, ll = prior
+        increment, filtered, diagnostics = condition(moments, x)
+        # Discrete EKF/UKF expose the forecast *after* each analysis, including
+        # the last one. Reuse that forecast as the prior at the next observation.
+        if save_forecasts:
+            diagnostics["predicted_means"], diagnostics["predicted_covariances"] = (
+                predict_moments(filtered, x._replace(u_prev=x.u))
+            )
+        return PosteriorGSSMFiltered(
+            marginal_loglik=ll + increment,
+            filtered_means=filtered[0],
+            filtered_covariances=filtered[1],
+            **diagnostics,
+        )
+
+    return SplitFilter(initialize, predict, update)

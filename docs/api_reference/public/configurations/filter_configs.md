@@ -41,7 +41,7 @@ Subclass `dsx.configs.SplitFilterConfig[Prior, Filtered]` for a predict/update a
 
 ### Split filters
 
-Write $q_k^-(x)$ for the predictive belief about $x_k$ before observing $y_k$, and $q_k(x)$ for the filtered belief after observing it. Each callback works with your chosen representation of these beliefs, such as a Gaussian mean and covariance or a set of weighted particles. `Prior` is the type returned by `initialize` and `predict`. `Filtered` is the type returned by `update`. The corresponding gather callback has signature `(Prior, Filtered) -> FilterOutputs`.
+Write $q_k^-(x)$ for the predictive belief about $x_k$ before observing $y_k$, and $q_k(x)$ for the filtered belief after observing it. Each callback works with your chosen representation of these beliefs, such as a Gaussian mean and covariance or a set of weighted particles. `Prior` is the type returned by `initialize` and `predict`. `Filtered` is the type returned by `update`. The gather callback receives both the prior and the filtered state.
 
 1. `initialize(self, model, inputs, *, key)` returns the prior $q_1^-(x)=p(x_1=x)$ at the first observation time, with cumulative log likelihood initialized to zero. Dynestyx passes this prior directly to `update` for the first observation.
 2. `predict(self, model, filtered, inputs, *, key)` propagates the previous filtered belief through the model transition. For $k>1$, return a representation or approximation of $q_k^-(x)=\int p(x_k=x\mid x_{k-1}=z,u_{k-1})\,q_{k-1}(z)\,dz$. The interval endpoints are `inputs.time_prev` and `inputs.time`, and its control is `inputs.u_prev`.
@@ -56,6 +56,8 @@ For parallel filtering, each prepared element must also be a valid operand for c
 ### Gathering outputs
 
 Implement `gather_outputs(self, prior, filtered)` for a split filter or `gather_outputs(self, filtered)` for a combined filter. Return `FilterOutputs` with `log_normalizing_constant` set to $\ell_k=\sum_{j=1}^k\log Z_j$ and either the mean and covariance of $q_k$ or its particles and log weights. The last $\ell_k$ becomes `result.marginal_loglik`. Optional `predicted_observations` describe $p(y_k\mid y_{1:k-1})$ before the update and support observation scoring. A fixed dictionary of diagnostic arrays becomes `result.extra_outputs`, with leading plate dimensions followed by observation time. Set `states` to an optional pytree of arrays to expose it as `result.states`. The runner stacks it over time and plates alongside the rest of the output.
+
+When binding a supported native Cuthbert filter or CD-Dynamax posterior as `states`, the native state already provides the filtered belief. For example, a combined Cuthbert Kalman filter can return `FilterOutputs(filtered.log_normalizing_constant, states=filtered)`. This preserves the Cholesky factors in `result.states`. A CD-Dynamax split filter can use its step posterior’s cumulative `marginal_loglik` as the first argument.
 
 [Build a custom filter with Dynestyx](../../../deep_dives/custom_gauss_hermite_filter.ipynb)
 

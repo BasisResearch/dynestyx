@@ -1,17 +1,20 @@
 """Slice and reshape values that carry NumPyro plate dimensions."""
 
+import math
+from collections.abc import Callable
 from contextlib import contextmanager
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpyro
-from jaxtyping import Array, Int, Shaped
+from jaxtyping import Array, Int, PRNGKeyArray, Real, Shaped
 
 from dynestyx.models import Covariance, Diffusion, DynamicalModel
 from dynestyx.utils.models import (
     _covariance_is_plate_batched,
     _diffusion_coefficient_is_plate_batched,
+    _has_any_batched_plate_source,
     _is_opaque_plate_leaf,
 )
 from dynestyx.utils.plates import (
@@ -76,6 +79,153 @@ def _array_plate_axis(
     arr: Shaped[Array, "..."] | None, plate_shapes: tuple[int, ...]
 ) -> int | None:
     return 0 if _array_has_plate_dims(arr, plate_shapes, min_suffix_ndim=1) else None
+
+
+def _leading_dims(
+    arr: Shaped[Array, "..."] | None, n_dims: int
+) -> tuple[int, ...] | None:
+    """Return up to n_dims leading dimensions for diagnostics."""
+    if arr is None:
+        return None
+    n = min(n_dims, arr.ndim)
+    return tuple(int(d) for d in arr.shape[:n])
+
+
+def _summarize_dynamics_leading_dims(
+    dynamics: DynamicalModel, n_dims: int, max_items: int = 6
+) -> str:
+    """Summarize leading dimensions from JAX-array leaves in a model pytree."""
+    shapes: list[tuple[int, ...]] = []
+    for leaf in jax.tree.leaves(
+        dynamics,
+        is_leaf=lambda node: isinstance(node, numpyro.distributions.Distribution),
+    ):
+        if isinstance(leaf, jax.Array):
+            n = min(n_dims, leaf.ndim)
+            shapes.append(tuple(int(d) for d in leaf.shape[:n]))
+
+    unique_shapes: list[tuple[int, ...]] = []
+    seen: set[tuple[int, ...]] = set()
+    for shape in shapes:
+        if shape not in seen:
+            seen.add(shape)
+            unique_shapes.append(shape)
+
+    if len(unique_shapes) <= max_items:
+        return str(unique_shapes)
+    return f"{unique_shapes[:max_items]} (+{len(unique_shapes) - max_items} more)"
+
+
+def _validate_batched_plate_alignment(
+    dynamics: DynamicalModel,
+    plate_shapes: tuple[int, ...],
+    *,
+    obs_times: Real[Array, "*obs_time_plate obs_time"] | None,
+    obs_values: Real[Array, "*obs_value_plate obs_time observation_dim"]
+    | Real[Array, "*obs_value_plate obs_time"]
+    | None,
+    ctrl_times: Real[Array, "*ctrl_time_plate ctrl_time"] | None,
+    ctrl_values: Real[Array, "*ctrl_value_plate ctrl_time control_dim"]
+    | Real[Array, "*ctrl_value_plate ctrl_time"]
+    | None,
+) -> None:
+    """Raise early when plate_shapes do not align with any batched input source."""
+    if _has_any_batched_plate_source(
+        dynamics,
+        plate_shapes,
+        arrays=(obs_times, obs_values, ctrl_times, ctrl_values),
+    ):
+        return
+
+    n_plates = len(plate_shapes)
+    diagnostics = (
+        "Plate/data shape alignment failed before batched filtering. "
+        f"plate_shapes={plate_shapes}. No dynamics leaves or observed/control arrays "
+        "have leading dimensions matching plate_shapes. "
+        f"dynamics_leading_dims={_summarize_dynamics_leading_dims(dynamics, n_plates)}; "
+        f"obs_times_leading_dims={_leading_dims(obs_times, n_plates)}; "
+        f"obs_values_leading_dims={_leading_dims(obs_values, n_plates)}; "
+        f"ctrl_times_leading_dims={_leading_dims(ctrl_times, n_plates)}; "
+        f"ctrl_values_leading_dims={_leading_dims(ctrl_values, n_plates)}. "
+        "Expected at least one batched source to start with plate_shapes."
+    )
+    raise ValueError(diagnostics)
+
+
+def _map_inference[T](
+    compute: Callable[
+        [
+            DynamicalModel,
+            Array,
+            Array,
+            Array | None,
+            Array | None,
+            Array | None,
+            Array | None,
+            PRNGKeyArray | None,
+        ],
+        T,
+    ],
+    dynamics: DynamicalModel,
+    plate_shapes: tuple[int, ...],
+    obs_times: Array,
+    obs_values: Array,
+    ctrl_times: Array | None,
+    ctrl_values: Array | None,
+    key: PRNGKeyArray | None,
+    filled: Array | None = None,
+    mask: Array | None = None,
+) -> T:
+    """Run a single model directly or map the computation over nested plates."""
+    if not plate_shapes:
+        return compute(
+            dynamics, obs_times, obs_values, filled, mask, ctrl_times, ctrl_values, key
+        )
+    _validate_batched_plate_alignment(
+        dynamics,
+        plate_shapes,
+        obs_times=obs_times,
+        obs_values=obs_values,
+        ctrl_times=ctrl_times,
+        ctrl_values=ctrl_values,
+    )
+    if key is not None:
+        if not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
+            key = jax.random.wrap_key_data(key)
+        keys = jax.random.split(key, math.prod(plate_shapes)).reshape(plate_shapes)
+    else:
+        keys = None
+
+    arrays = (obs_times, obs_values, filled, mask, ctrl_times, ctrl_values)
+    axes = (
+        _make_plate_in_axes(dynamics, plate_shapes),
+        *(_array_plate_axis(a, plate_shapes) for a in arrays),
+        0 if keys is not None else None,
+    )
+
+    initial = dynamics.initial_condition
+    if not _dist_has_plate_batch_dims(initial, plate_shapes):
+        vmapped = compute
+        for _ in plate_shapes:
+            vmapped = jax.vmap(vmapped, in_axes=axes)
+        return vmapped(dynamics, *arrays, keys)
+
+    # NumPyro's static batch_shape survives vmap slicing. Rebuild the initial
+    # distribution with its member indices to remove the mapped batch axes.
+    def member(dyn, ot, ov, ovf, om, ct, cv, k, *indices):
+        member_ic = _slice_dist_for_plate_member(initial, plate_shapes, indices)
+        dyn = eqx.tree_at(
+            lambda m: m.initial_condition, dyn, member_ic, is_leaf=lambda x: x is None
+        )
+        return compute(dyn, ot, ov, ovf, om, ct, cv, k)
+
+    vmapped = member
+    indices = tuple(jnp.arange(size) for size in plate_shapes)
+    for axis in reversed(range(len(plate_shapes))):
+        # Consume the matching vector of indices at its own nesting level.
+        index_axes = tuple(0 if i == axis else None for i in range(len(indices)))
+        vmapped = jax.vmap(vmapped, in_axes=(*axes, *index_axes))
+    return vmapped(dynamics, *arrays, keys, *indices)
 
 
 def _get_time_axis(plate_shapes: tuple[int, ...]) -> int:

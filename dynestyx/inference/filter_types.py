@@ -1,10 +1,28 @@
 """Public callback and output types for custom filtering algorithms."""
 
 import dataclasses
-from typing import NamedTuple, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import NamedTuple, NotRequired, Protocol, TypedDict, runtime_checkable
 
 import jax
+from cd_dynamax.dynamax.linear_gaussian_ssm.inference import PosteriorGSSMFiltered
+from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
+    PosteriorCDNLSSMFiltered,
+)
+from cuthbert.ensemble_kalman.ensemble_kalman_filter import EnKFState
+from cuthbert.gaussian.kalman import KalmanFilterState
+from cuthbert.gaussian.taylor import LinearizedKalmanFilterState
+from cuthbert.smc.particle_filter import ParticleFilterState
 from jaxtyping import Array, Bool, Float, PRNGKeyArray, Real, Shaped
+
+
+class FilterObservations(TypedDict):
+    """Observation and control arrays for one unbatched forward pass."""
+
+    obs_times: Real[Array, " obs_time"]
+    obs_values: Shaped[Array, "obs_time observation_dim"]
+    ctrl_times: NotRequired[Real[Array, " control_time"] | None]
+    ctrl_values: NotRequired[Real[Array, "control_time control_dim"] | None]
 
 
 class FilterInputs(NamedTuple):
@@ -105,3 +123,25 @@ class FilterOutputs(NamedTuple):
     predicted_observations: PredictedObservationOutputs | None = None
     extra_outputs: dict[str, Array] | None = None
     states: object = None
+
+    @property
+    def belief(self) -> "FilterOutputs | CDPosterior | CuthbertState":
+        """Prefer explicitly gathered belief arrays, then use a native state."""
+        if isinstance(self.states, (CDPosterior, CuthbertState)) and all(
+            field is None
+            for field in (
+                self.filtered_means,
+                self.filtered_covariances,
+                self.particles,
+                self.log_weights,
+            )
+        ):
+            return self.states
+        return self
+
+
+CDPosterior = PosteriorGSSMFiltered | PosteriorCDNLSSMFiltered
+CuthbertState = (
+    KalmanFilterState | LinearizedKalmanFilterState | ParticleFilterState | EnKFState
+)
+type SplitKeys = Callable[[PRNGKeyArray, int], tuple[Array, Array, Array]]

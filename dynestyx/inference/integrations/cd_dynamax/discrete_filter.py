@@ -1,95 +1,80 @@
 """Discrete-time filters via cd-dynamax (dynamax): KF, EKF, UKF."""
 
+import dataclasses
 import warnings
-from typing import Any, cast
+from functools import partial
+from typing import Unpack, cast
 
+import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
-from cd_dynamax.dynamax.linear_gaussian_ssm.inference import (
-    lgssm_filter,
-)
-from cd_dynamax.dynamax.linear_gaussian_ssm.models import LinearGaussianSSM
-from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ekf import (
-    extended_kalman_filter,
-)
-from cd_dynamax.dynamax.nonlinear_gaussian_ssm.inference_ukf import (
-    UKFHyperParams,
-    unscented_kalman_filter,
-)
+from cd_dynamax.dynamax.linear_gaussian_ssm import inference as kf
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm import inference_ekf as ekf
+from cd_dynamax.dynamax.nonlinear_gaussian_ssm import inference_ukf as ukf
 from jax.experimental import sparse as jax_sparse
-from jaxtyping import Array, Real
+from jaxtyping import Array, PRNGKeyArray, Real
 
-from dynestyx.configs.filters import (
-    BaseFilterConfig,
-    EKFConfig,
-    KFConfig,
-    UKFConfig,
-)
+from dynestyx.configs.filters import BaseFilterConfig, EKFConfig, KFConfig, UKFConfig
+from dynestyx.inference.filter_interface import _legacy_filter_result, filter_history
+from dynestyx.inference.filter_types import FilterObservations, SplitFilter
 from dynestyx.inference.integrations.cd_dynamax.utils import (
     _require_constant_linear_gaussian_fields,
+    gaussian_filter,
     gaussian_to_nlgssm_params,
 )
 from dynestyx.inference.integrations.utils import squeeze_leading_singletons
-from dynestyx.inference.utils.distribution_utils import _posterior_sequence_to_dists
 from dynestyx.models import (
-    Covariance,
     DynamicalModel,
     LinearGaussianObservation,
     LinearGaussianStateEvolution,
 )
-from dynestyx.models.covariances import covariance_matrix
 
 
 def _lti_to_lgssm_params(dynamics: DynamicalModel):
-    """Build dynamax ParamsLGSSM from LinearGaussianSSM.initialize for an LTI model."""
-    state_dim = dynamics.state_dim
-    emission_dim = dynamics.observation_dim
-    control_dim = dynamics.control_dim
-
-    if (
-        isinstance(dynamics.state_evolution, LinearGaussianStateEvolution)
-        and isinstance(dynamics.observation_model, LinearGaussianObservation)
-        and isinstance(dynamics.initial_condition, dist.MultivariateNormal)
+    """Translate constant model matrices into the backend's typed parameter record."""
+    evo, obs, prior = (
+        dynamics.state_evolution,
+        dynamics.observation_model,
+        dynamics.initial_condition,
+    )
+    if not (
+        isinstance(evo, LinearGaussianStateEvolution)
+        and isinstance(obs, LinearGaussianObservation)
+        and isinstance(prior, dist.MultivariateNormal)
     ):
-        evo = dynamics.state_evolution
-        obs = dynamics.observation_model
-        ic = dynamics.initial_condition
-        _require_constant_linear_gaussian_fields(
-            evo,
-            ("A", "B", "bias", "cov"),
-            where="The cd_dynamax discrete Kalman filter",
+        raise TypeError(
+            "filter_type='kf' expects a DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation and initial_condition as MultivariateNormal."
         )
-        _require_constant_linear_gaussian_fields(
-            obs,
-            ("H", "D", "bias", "R"),
-            where="The cd_dynamax discrete Kalman filter",
-        )
-        model = LinearGaussianSSM(
-            state_dim=state_dim,
-            emission_dim=emission_dim,
-            input_dim=control_dim,
-            has_dynamics_bias=evo.bias is not None,
-            has_emissions_bias=obs.bias is not None,
-        )
-        params, _ = model.initialize(
-            initial_mean=squeeze_leading_singletons(ic.loc, 1),
-            initial_covariance=squeeze_leading_singletons(ic.covariance_matrix, 2),
-            dynamics_weights=evo.A,
-            dynamics_bias=evo.bias,
-            dynamics_input_weights=evo.B,
-            dynamics_covariance=covariance_matrix(
-                cast(Covariance | Array, evo.cov), state_dim
-            ),
-            emission_weights=obs.H,
-            emission_bias=obs.bias,
-            emission_input_weights=obs.D,
-            emission_covariance=covariance_matrix(
-                cast(Covariance | Array, obs.R), emission_dim
-            ),
-        )
-        return params
-    raise TypeError(
-        "filter_type='kf' expects a DynamicalModel with LinearGaussianStateEvolution and LinearGaussianObservation and initial_condition as MultivariateNormal."
+    where = "The cd_dynamax discrete Kalman filter"
+    _require_constant_linear_gaussian_fields(
+        evo, ("A", "B", "bias", "cov"), where=where
+    )
+    _require_constant_linear_gaussian_fields(obs, ("H", "D", "bias", "R"), where=where)
+    A, B, b, Q = evo.params_at(0, 1)
+    H, D, d, R = obs.params_at(0)
+    # Use the backend's zero defaults for absent control matrices and offsets.
+    state_dim, obs_dim, control_dim = (
+        dynamics.state_dim,
+        dynamics.observation_dim,
+        dynamics.control_dim,
+    )
+    return kf.ParamsLGSSM(
+        initial=kf.ParamsLGSSMInitial(
+            squeeze_leading_singletons(prior.loc, 1),
+            squeeze_leading_singletons(prior.covariance_matrix, 2),
+        ),
+        dynamics=kf.ParamsLGSSMDynamics(
+            weights=A,
+            bias=jnp.zeros(state_dim) if b is None else b,
+            input_weights=jnp.zeros((state_dim, control_dim)) if B is None else B,
+            cov=Q,
+        ),
+        emissions=kf.ParamsLGSSMEmissions(
+            weights=H,
+            bias=jnp.zeros(obs_dim) if d is None else d,
+            input_weights=jnp.zeros((obs_dim, control_dim)) if D is None else D,
+            cov=R,
+        ),
     )
 
 
@@ -118,100 +103,99 @@ def _prepare_inputs(
     return emissions, inputs
 
 
+def build_kf(dynamics: DynamicalModel) -> SplitFilter:
+    params = _lti_to_lgssm_params(dynamics)
+    F, b, B, Q = params.dynamics
+    H, d, D, R = params.emissions
+
+    def predict(moments, x):
+        return kf._predict(*moments, F, B, b, Q, x.u_prev)
+
+    def condition(moments, x):
+        mean, cov = moments
+        obs_mean = H @ mean + D @ x.u + d
+        increment = kf.MVN(obs_mean, R + H @ cov @ cast(Array, H).T).log_prob(x.y)
+        return increment, kf._condition_on(mean, cov, H, D, d, R, x.u, x.y), {}
+
+    return gaussian_filter(
+        (params.initial.mean, params.initial.cov),
+        predict,
+        condition,
+    )
+
+
+def build_ekf(dynamics: DynamicalModel) -> SplitFilter:
+    params_nl = gaussian_to_nlgssm_params(dynamics)
+    f, h = params_nl.dynamics_function, params_nl.emission_function
+    Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
+    if isinstance(dynamics.observation_model, LinearGaussianObservation) and isinstance(
+        dynamics.observation_model.H, jax_sparse.JAXSparse
+    ):
+        warnings.warn(
+            "A sparse observation matrix H was passed to EKFConfig. This works correctly, but likely gives no efficiency gain due to internal use of automatic differentiation.",
+            stacklevel=2,
+        )
+    F, H = jax.jacfwd(f), jax.jacfwd(h)
+
+    def predict(moments, x):
+        return ekf._predict(*moments, f, F, Q, x.u_prev)
+
+    def condition(moments, x):
+        m, P = moments
+        J = H(m, x.u)
+        increment = ekf.MVN(h(m, x.u), J @ P @ J.T + R).log_prob(x.y)
+        return increment, ekf._condition_on(m, P, h, H, R, x.u, x.y, 1), {}
+
+    return gaussian_filter(
+        (params_nl.initial_mean, params_nl.initial_covariance),
+        predict,
+        condition,
+        save_forecasts=True,
+    )
+
+
+def build_ukf(dynamics: DynamicalModel, config: UKFConfig) -> SplitFilter:
+    params_nl = gaussian_to_nlgssm_params(dynamics)
+    f, h = params_nl.dynamics_function, params_nl.emission_function
+    Q, R = params_nl.dynamics_covariance, params_nl.emission_covariance
+    n = dynamics.state_dim
+    scale = ukf._compute_lambda(config.alpha, config.kappa, n)
+    wm, wc = ukf._compute_weights(n, config.alpha, config.beta, scale)
+
+    def predict(moments, x):
+        m, P, _ = ukf._predict(*moments, f, Q, scale, wm, wc, x.u_prev)
+        return m, P
+
+    def condition(moments, x):
+        ll, m, P = ukf._condition_on(*moments, h, R, scale, wm, wc, x.u, x.y)
+        return ll, (m, P), {}
+
+    return gaussian_filter(
+        (params_nl.initial_mean, params_nl.initial_covariance),
+        predict,
+        condition,
+        save_forecasts=True,
+    )
+
+
 def compute_cd_dynamax_discrete_filter(
     dynamics: DynamicalModel,
     filter_config: BaseFilterConfig,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-) -> Any:
-    """Pure-JAX cd-dynamax discrete filter computation (no numpyro side-effects)."""
-    emissions, inputs = _prepare_inputs(
-        dynamics, obs_values, obs_times, ctrl_times, ctrl_values
-    )
-
-    if isinstance(filter_config, KFConfig):
-        params = _lti_to_lgssm_params(dynamics)
-        return lgssm_filter(params, emissions, inputs=inputs)
-
-    # EKF and UKF share the same nonlinear params representation.
-    params_nl = gaussian_to_nlgssm_params(dynamics)
-
-    if isinstance(filter_config, EKFConfig):
-        obs_model = dynamics.observation_model
-        if isinstance(obs_model, LinearGaussianObservation) and isinstance(
-            obs_model.H, jax_sparse.JAXSparse
-        ):
-            warnings.warn(
-                "A sparse observation matrix H was passed to EKFConfig. This works "
-                "correctly, but likely gives no efficiency gain due to internal"
-                "use of automatic differentiation.",
-                stacklevel=2,
-            )
-        return extended_kalman_filter(params_nl, emissions, inputs=inputs)
-    if isinstance(filter_config, UKFConfig):
-        hyperparams = UKFHyperParams(
-            alpha=filter_config.alpha,
-            beta=filter_config.beta,
-            kappa=filter_config.kappa,
+    key: PRNGKeyArray | None = None,
+    **observations: Unpack[FilterObservations],
+):
+    if not isinstance(filter_config, (KFConfig, EKFConfig, UKFConfig)):
+        raise ValueError(
+            f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}"
         )
-        return unscented_kalman_filter(
-            params_nl, emissions, hyperparams=hyperparams, inputs=inputs
+    if filter_config.filter_source != "cd_dynamax":
+        overrides = (
+            {"associative": False} if isinstance(filter_config, KFConfig) else {}
         )
-    raise ValueError(
-        f"Unsupported cd-dynamax discrete config: {type(filter_config).__name__}. "
-        "Expected KFConfig, EKFConfig, or UKFConfig."
-    )
+        filter_config = dataclasses.replace(
+            filter_config, filter_source="cd_dynamax", **overrides
+        )
+    return filter_history(dynamics, filter_config, key, **observations)[1].states
 
 
-def run_discrete_filter(
-    name: str,
-    dynamics: DynamicalModel,
-    filter_config: BaseFilterConfig,
-    *,
-    obs_times: Real[Array, " obs_time"],
-    obs_values: Real[Array, "obs_time observation_dim"],
-    ctrl_times: Real[Array, " ctrl_time"] | None = None,
-    ctrl_values: Real[Array, "ctrl_time control_dim"] | None = None,
-    **kwargs,
-) -> tuple[Real[Array, ""], object, list[dist.Distribution]]:
-    """Run discrete-time filter via cd-dynamax (KF, EKF, UKF).
-
-    Pure computation — no numpyro side-effects. Callers are responsible for
-    registering numpyro.factor / numpyro.deterministic if needed.
-
-    Returns:
-        tuple of:
-            - marginal_loglik: scalar marginal log-likelihood log p(y_{1:T}).
-            - posterior: CD-Dynamax posterior object with filtered_means and
-              filtered_covariances attributes.
-            - filtered_dists: list of MultivariateNormal distributions p(x_t | y_{1:t})
-              at each obs time, for posterior rollout.
-    """
-    posterior = compute_cd_dynamax_discrete_filter(
-        dynamics,
-        filter_config,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-    )
-
-    filtered_dists = _posterior_sequence_to_dists(
-        posterior,
-        means_attr="filtered_means",
-        covariances_attr="filtered_covariances",
-        particle_mode=False,
-        missing="empty",
-    )
-    return posterior.marginal_loglik, posterior, filtered_dists
-
-
-__all__ = [
-    "compute_cd_dynamax_discrete_filter",
-    "run_discrete_filter",
-    "_lti_to_lgssm_params",
-    "_prepare_inputs",
-]
+run_discrete_filter = partial(_legacy_filter_result, compute_cd_dynamax_discrete_filter)
