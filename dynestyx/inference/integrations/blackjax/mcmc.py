@@ -1,4 +1,4 @@
-"""BlackJAX implementations for filter-based posterior inference."""
+"""BlackJAX implementations for posterior inference on NumPyro models."""
 
 from collections.abc import Callable
 
@@ -170,10 +170,7 @@ def run_blackjax_mcmc_with_diagnostics(
     mcmc_config: BaseMCMCConfig,
     rng_key: jnp.ndarray,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    /,
     *model_args,
     **model_kwargs,
 ) -> tuple[dict, dict[str, jax.Array]]:
@@ -184,19 +181,15 @@ def run_blackjax_mcmc_with_diagnostics(
     init_params, potential_fn_gen, postprocess_fn = init_model(
         rng_key=init_keys,
         model=model,
-        model_args=(obs_times, obs_values, ctrl_times, ctrl_values, *model_args),
+        model_args=model_args,
         model_kwargs=model_kwargs,
         init_strategy=mcmc_config.init_strategy,
     )
     initial_positions = init_params.z
     has_chain_axis = _has_chain_axis(initial_positions, mcmc_config.num_chains)
 
-    potential_fn = potential_fn_gen(
-        obs_times, obs_values, ctrl_times, ctrl_values, *model_args, **model_kwargs
-    )
-    transform_fn = postprocess_fn(
-        obs_times, obs_values, ctrl_times, ctrl_values, *model_args, **model_kwargs
-    )
+    potential_fn = potential_fn_gen(*model_args, **model_kwargs)
+    transform_fn = postprocess_fn(*model_args, **model_kwargs)
 
     def make_logdensity(density_key):
         return lambda position: -potential_fn(position, density_key)
@@ -457,23 +450,12 @@ def run_blackjax_mcmc(
     mcmc_config: BaseMCMCConfig,
     rng_key: jnp.ndarray,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    /,
     *model_args,
     **model_kwargs,
 ) -> dict:
     """Run BlackJAX-based inference and return posterior samples."""
     samples, _ = run_blackjax_mcmc_with_diagnostics(
-        mcmc_config,
-        rng_key,
-        model,
-        obs_times,
-        obs_values,
-        ctrl_times,
-        ctrl_values,
-        *model_args,
-        **model_kwargs,
+        mcmc_config, rng_key, model, *model_args, **model_kwargs
     )
     return samples

@@ -21,14 +21,13 @@ from dynestyx.inference.integrations.blackjax import (
 class MCMCInference:
     """Provides a high-level interface for MCMC inference, consistent between NumPyro and BlackJAX backends.
 
-    Models must take in `obs_times`, `obs_values`, `ctrl_times`, `ctrl_values` as arguments (and optionally, `*model_args`, `**model_kwargs`).
+    Supply arguments to `run` according to your model's signature.
 
     Attributes:
         mcmc_config: Sampler configuration dataclass (`NUTSConfig`,
             `HMCConfig`, `AdaptiveMetropolisConfig`, `AdaptiveMWGConfig`, `SGLDConfig`, or
             `MALAConfig`).
-        model: Callable probabilistic model with signature
-            `model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)`.
+        model: Callable probabilistic model.
     """
 
     def __init__(self, mcmc_config: BaseMCMCConfig, model: Callable):
@@ -57,11 +56,8 @@ class MCMCInference:
 
     def run(
         self,
+        /,
         rng_key: jnp.ndarray,
-        obs_times: jnp.ndarray,
-        obs_values: jnp.ndarray,
-        ctrl_times: jnp.ndarray | None = None,
-        ctrl_values: jnp.ndarray | None = None,
         *model_args,
         **model_kwargs,
     ) -> dict:
@@ -69,12 +65,10 @@ class MCMCInference:
 
         Args:
             rng_key: JAX PRNG key.
-            obs_times: Observation times.
-            obs_values: Observation values.
-            ctrl_times: Control times.
-            ctrl_values: Control values.
-            *model_args: Additional positional arguments passed to `model`.
-            **model_kwargs: Additional keyword arguments passed to `model`.
+            *model_args: Positional arguments passed to `model`.
+            **model_kwargs: Keyword arguments passed to `model` by name.
+                With the NumPyro backend, `MCMC.run` options such as
+                `init_params` and `extra_fields` configure the sampler.
 
         Returns:
             Dict-like pytree of posterior samples.
@@ -82,28 +76,12 @@ class MCMCInference:
 
         self._diagnostics = None
         if self.mcmc_config.mcmc_source == "numpyro":
-            samples, diagnostics = _numpyro_mcmc(  # type: ignore
-                mcmc_config=self.mcmc_config,
-                rng_key=rng_key,
-                model=self.model,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                *model_args,  # type: ignore
-                **model_kwargs,
+            samples, diagnostics = _numpyro_mcmc(
+                self.mcmc_config, rng_key, self.model, *model_args, **model_kwargs
             )
         elif self.mcmc_config.mcmc_source == "blackjax":
-            samples, diagnostics = _blackjax_mcmc(  # type: ignore
-                mcmc_config=self.mcmc_config,
-                rng_key=rng_key,
-                model=self.model,
-                obs_times=obs_times,
-                obs_values=obs_values,
-                ctrl_times=ctrl_times,
-                ctrl_values=ctrl_values,
-                *model_args,  # type: ignore
-                **model_kwargs,
+            samples, diagnostics = _blackjax_mcmc(
+                self.mcmc_config, rng_key, self.model, *model_args, **model_kwargs
             )
         else:
             raise ValueError(f"Invalid MCMC source: {self.mcmc_config.mcmc_source}")
@@ -115,10 +93,7 @@ def _numpyro_mcmc(
     mcmc_config: BaseMCMCConfig,
     rng_key: jnp.ndarray,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    /,
     *model_args,
     **model_kwargs,
 ) -> tuple[dict, dict[str, jax.Array]]:
@@ -133,6 +108,11 @@ def _numpyro_mcmc(
             num_warmup=mcmc_config.num_warmup,
             num_samples=mcmc_config.num_samples,
             num_chains=mcmc_config.num_chains,
+        )
+        model_kwargs["extra_fields"] = (
+            *model_kwargs.get("extra_fields", ()),
+            "accept_prob",
+            "diverging",
         )
     elif isinstance(mcmc_config, HMCConfig):
         mcmc = MCMC(
@@ -150,18 +130,7 @@ def _numpyro_mcmc(
         )
     else:
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    run_kwargs = dict(model_kwargs)
-    if isinstance(mcmc_config, NUTSConfig):
-        run_kwargs["extra_fields"] = ("accept_prob", "diverging")
-    mcmc.run(  # type: ignore
-        rng_key,
-        obs_times,
-        obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        *model_args,
-        **run_kwargs,
-    )
+    mcmc.run(rng_key, *model_args, **model_kwargs)
     diagnostics = {}
     if isinstance(mcmc_config, NUTSConfig):
         extra_fields = mcmc.get_extra_fields(group_by_chain=True)
@@ -176,10 +145,7 @@ def _blackjax_mcmc(
     mcmc_config: BaseMCMCConfig,
     rng_key: jnp.ndarray,
     model: Callable,
-    obs_times: jnp.ndarray,
-    obs_values: jnp.ndarray,
-    ctrl_times: jnp.ndarray | None = None,
-    ctrl_values: jnp.ndarray | None = None,
+    /,
     *model_args,
     **model_kwargs,
 ) -> tuple[dict, dict[str, jax.Array]]:
@@ -194,14 +160,6 @@ def _blackjax_mcmc(
         | MALAConfig,
     ):
         raise ValueError(f"Invalid MCMC config: {mcmc_config}")
-    return run_blackjax_mcmc_with_diagnostics(  # type: ignore
-        mcmc_config=mcmc_config,
-        rng_key=rng_key,
-        model=model,
-        obs_times=obs_times,
-        obs_values=obs_values,
-        ctrl_times=ctrl_times,
-        ctrl_values=ctrl_values,
-        *model_args,  # type: ignore
-        **model_kwargs,
+    return run_blackjax_mcmc_with_diagnostics(
+        mcmc_config, rng_key, model, *model_args, **model_kwargs
     )
