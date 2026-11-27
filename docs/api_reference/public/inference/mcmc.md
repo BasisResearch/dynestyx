@@ -1,10 +1,6 @@
 # MCMC Inference
 
-`MCMCInference` runs a NumPyro model with the configured backend (`numpyro` or
-`blackjax`). `run(rng_key, *args, **kwargs)` accepts positional and keyword
-arguments for your model. Use `run(rng_key)` for a model that takes no arguments.
-Call `get_diagnostics()` afterward for compact sampler-specific diagnostics
-when supported.
+`MCMCInference` is the high-level inference wrapper for filter-based parameter inference. It wraps your model in an inference context and dispatches to the configured backend (`numpyro` or `blackjax`). `run(prng_key, *args, **kwargs)` keeps its samples-only return value; call `get_diagnostics()` afterward for compact sampler-specific diagnostics when supported.
 
 For a model that calls `dsx.sample(...)`, provide observation and control data
 according to your model's signature.
