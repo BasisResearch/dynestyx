@@ -791,9 +791,10 @@ def compute_cuthbert_filter(
     config = dataclasses.replace(
         filter_config, filter_source="cuthbert", extra_filter_kwargs=options
     )
-    return filter_history(
+    loglik, outputs = filter_history(
         dynamics, config, key, include_initial=not align_to_observations, **observations
     )
+    return loglik, outputs.states
 
 
 def run_discrete_filter(

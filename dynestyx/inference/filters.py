@@ -388,7 +388,10 @@ class Filter(ObjectInterpretation, HandlesSelf):
                 numpyro.factor(f"{site_name}_marginal_log_likelihood", marginal_loglik)
                 numpyro.deterministic(f"{site_name}_marginal_loglik", marginal_loglik)
             else:
-                register_filter_sites(site_name, marginal_loglik, states, config)
+                recorded = (
+                    states.belief if isinstance(states, FilterOutputs) else states
+                )
+                register_filter_sites(site_name, marginal_loglik, recorded, config)
             add_observation_prediction_sites(
                 site_name,
                 filter_config=config,
@@ -398,7 +401,9 @@ class Filter(ObjectInterpretation, HandlesSelf):
         return ConditionedResult(
             marginal_loglik=marginal_loglik,
             times=times,
-            states=states,
+            states=states.states
+            if isinstance(states, FilterOutputs) and states.states is not None
+            else states,
             extra_outputs=(states.extra_outputs or {})
             if isinstance(states, FilterOutputs)
             else {},

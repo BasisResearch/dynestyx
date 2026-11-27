@@ -452,7 +452,9 @@ def extract_filter_predictions(
     if not filter_config.include_predicted_observations or posterior is None:
         return None
     if isinstance(posterior, FilterOutputs):
-        return posterior.predicted_observations
+        if posterior.predicted_observations is not None or posterior.states is None:
+            return posterior.predicted_observations
+        posterior = posterior.states
 
     if isinstance(
         filter_config,

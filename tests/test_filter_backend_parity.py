@@ -12,7 +12,11 @@ from cd_dynamax.src.continuous_discrete_nonlinear_ssm.models import (
 
 import dynestyx as dsx
 from dynestyx import configs
-from dynestyx.inference.custom_filter import run_filter_steps, step_inputs
+from dynestyx.inference.custom_filter import (
+    FilterOutputs,
+    run_filter_steps,
+    step_inputs,
+)
 from dynestyx.inference.integrations.cd_dynamax.utils import dsx_to_cd_dynamax
 from dynestyx.inference.integrations.cuthbert.discrete_filter import (
     build_cuthbert_filter,
@@ -57,7 +61,7 @@ class CustomUKF(configs.SplitFilterConfig):
         return configs.UKFConfig().build_filter(model)
 
     def gather_outputs(self, prior, filtered):
-        return filtered
+        return FilterOutputs(filtered.marginal_loglik, states=filtered)
 
 
 @pytest.mark.parametrize(

@@ -159,7 +159,7 @@ def compute_cuthbert_smoother(
             store_predicted_ensemble=isinstance(smoother_config, EnRTSSmootherConfig),
         ),
     )
-    marginal_loglik, filtered_states = filter_history(
+    marginal_loglik, outputs = filter_history(
         dynamics,
         config,
         key,
@@ -169,6 +169,7 @@ def compute_cuthbert_smoother(
         ctrl_values=ctrl_values,
         include_initial=True,
     )
+    filtered_states = outputs.states
 
     if isinstance(smoother_config, KFSmootherConfig):
         smoother_obj = kalman.build_smoother(

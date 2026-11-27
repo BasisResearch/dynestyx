@@ -19,7 +19,6 @@ from dynestyx.inference.filter_types import (
     CDPosterior,
     CombinedSteps,
     CuthbertState,
-    FilterHistory,
     SplitKeys,
     SplitSteps,
 )
@@ -224,7 +223,7 @@ def filter_history(
     ctrl_times: Real[Array, " control_time"] | None = None,
     ctrl_values: Real[Array, "control_time control_dim"] | None = None,
     include_initial: bool = False,
-) -> tuple[Array, FilterHistory]:
+) -> tuple[Array, FilterOutputs]:
     """Bind one model, scan its steps and collect its selected history."""
     if config.requires_key and key is None:
         raise ValueError(
@@ -245,19 +244,15 @@ def filter_history(
 
     def gather(*step):
         output = config.gather_outputs(*step)
-        if isinstance(output, (CDPosterior, CuthbertState)):
-            return output
         if not isinstance(output, FilterOutputs):
-            raise TypeError(
-                "gather_outputs must return FilterOutputs or a supported native filter state."
-            )
+            raise TypeError("gather_outputs must return FilterOutputs.")
         if jnp.ndim(output.log_normalizing_constant) != 0:
             raise ValueError("Expected a scalar cumulative log likelihood per step.")
         if not config.include_predicted_observations:
             output = output._replace(predicted_observations=None)
         return output
 
-    states = run_filter_steps(
+    outputs = run_filter_steps(
         algorithm,
         inputs,
         key,
@@ -268,20 +263,25 @@ def filter_history(
         include_initial=include_initial,
         split_keys=getattr(config, "split_keys", None),
     )
-    if isinstance(states, CDPosterior):
-        ll = states.marginal_loglik[-1]
-        return ll, states._replace(marginal_loglik=ll)
-    return states.log_normalizing_constant[-1], states
+    loglik = outputs.log_normalizing_constant[-1]
+    if isinstance(outputs.states, CDPosterior):
+        # The native posterior reports the final score as a scalar.
+        outputs = outputs._replace(
+            states=outputs.states._replace(marginal_loglik=loglik)
+        )
+    return loglik, outputs
 
 
 def filter_distributions(
-    outputs: FilterHistory,
+    outputs: FilterOutputs | CDPosterior | CuthbertState,
     config: BaseFilterConfig,
     plate_shapes: tuple[int, ...] = (),
     *,
     continuous_time: bool,
 ) -> list[Distribution]:
     """Construct per-time beliefs from the representation selected by the projection."""
+    if isinstance(outputs, FilterOutputs):
+        outputs = outputs.belief
     if isinstance(outputs, CDPosterior):
         return _posterior_sequence_to_dists(
             outputs,

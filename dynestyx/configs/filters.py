@@ -16,8 +16,8 @@ from jaxtyping import Array, ArrayLike, PRNGKeyArray
 
 from dynestyx.inference.filter_types import (
     CombinedSteps,
-    FilterHistory,
     FilterInputs,
+    FilterOutputs,
     SplitFilter,
     SplitSteps,
 )
@@ -265,9 +265,15 @@ class BaseFilterConfig(abc.ABC):
     cov_rescaling: float | None = None
     crn_seed: PRNGKeyArray | None = None
 
-    def gather_outputs(self, *step: Any, **kwargs: Any) -> FilterHistory:
-        """Native builders retain their completed state, the last step argument."""
-        return step[-1]
+    def gather_outputs(self, *step: Any, **kwargs: Any) -> FilterOutputs:
+        """Gather a native filter state and its cumulative log likelihood."""
+        filtered = step[-1]
+        loglik = (
+            filtered.marginal_loglik
+            if len(step) == 2
+            else filtered.log_normalizing_constant
+        )
+        return FilterOutputs(loglik, states=filtered)
 
     def build_filter(self, model: DynamicalModel) -> SplitSteps | CombinedSteps:
         """Bind a filtering algorithm to one model before scanning observations."""
@@ -338,7 +344,7 @@ class SplitFilterConfig[Prior, Filtered](BaseFilterConfig):
         )
 
     @abc.abstractmethod
-    def gather_outputs(self, prior: Prior, filtered: Filtered, /) -> FilterHistory:
+    def gather_outputs(self, prior: Prior, filtered: Filtered, /) -> FilterOutputs:
         """Select the evidence, belief, and diagnostics to retain for this observation."""
         ...
 
@@ -392,7 +398,7 @@ class CombineFilterConfig[Prepared, Filtered](BaseFilterConfig):
         )
 
     @abc.abstractmethod
-    def gather_outputs(self, filtered: Filtered, /) -> FilterHistory:
+    def gather_outputs(self, filtered: Filtered, /) -> FilterOutputs:
         """Select the evidence, belief, and diagnostics to retain for this observation."""
         ...
 
@@ -1040,8 +1046,8 @@ class ContinuousTimeEnKFConfig(EnKFBaseConfig, ContinuousTimeConfig):
         pairs = jax.vmap(lambda k: jr.split(k, 2))(keys[1:])
         return keys[0], jnp.roll(pairs[:, 0], 1, axis=0), pairs[:, 1]
 
-    def gather_outputs(self, prior, filtered) -> FilterHistory:
-        return filtered[1]
+    def gather_outputs(self, prior, filtered) -> FilterOutputs:
+        return super().gather_outputs(prior, filtered[1])
 
     def build_filter(self, model: DynamicalModel) -> SplitFilter:
         from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (
@@ -1083,8 +1089,8 @@ class ContinuousTimeDPFConfig(PFBaseConfig, ContinuousTimeConfig):
         default_factory=lambda: PFResamplingConfig(base_method="multinomial")
     )
 
-    def gather_outputs(self, prior, filtered) -> FilterHistory:
-        return filtered[1]
+    def gather_outputs(self, prior, filtered) -> FilterOutputs:
+        return super().gather_outputs(prior, filtered[1])
 
     def build_filter(self, model: DynamicalModel) -> SplitFilter:
         from dynestyx.inference.integrations.cd_dynamax.continuous_filter import (

@@ -195,7 +195,7 @@ def compute_cd_dynamax_discrete_filter(
         filter_config = dataclasses.replace(
             filter_config, filter_source="cd_dynamax", **overrides
         )
-    return filter_history(dynamics, filter_config, key, **observations)[1]
+    return filter_history(dynamics, filter_config, key, **observations)[1].states
 
 
 run_discrete_filter = partial(_legacy_filter_result, compute_cd_dynamax_discrete_filter)

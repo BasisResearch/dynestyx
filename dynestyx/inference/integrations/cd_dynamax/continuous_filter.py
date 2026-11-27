@@ -358,7 +358,7 @@ def compute_continuous_filter(
     key: PRNGKeyArray | None = None,
     **observations: Unpack[FilterObservations],
 ):
-    return filter_history(dynamics, filter_config, key, **observations)[1]
+    return filter_history(dynamics, filter_config, key, **observations)[1].states
 
 
 run_continuous_filter = partial(_legacy_filter_result, compute_continuous_filter)
