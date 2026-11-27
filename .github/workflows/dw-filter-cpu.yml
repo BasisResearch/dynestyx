@@ -1,0 +1,63 @@
+name: Migrated filter CPU measurements
+on:
+  push:
+    branches: [dw-filter-cpu-295-gather-992e09ea]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      JAX_PLATFORMS: cpu
+      BASE_SHA: ee793a9f226573ad648175ad4752686fc3f5033e
+      LAST_SHA: 992e09ea4d35beea36951a7df68df0781696d26e
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          source "$RUNNER_TEMP/venv/bin/activate"
+          pip install uv
+          uv pip install . 'jax[cpu]==0.11.2' 'jaxlib==0.11.2' 'cuthbert==0.1.1' 'cd-dynamax==0.5.0'
+      - name: Prepare checkouts and CPU metadata
+        run: |
+          for sha in "$BASE_SHA" "$LAST_SHA"; do
+            mkdir "$RUNNER_TEMP/$sha"
+            git archive "$sha" | tar x -C "$RUNNER_TEMP/$sha"
+          done
+          mkdir "$RUNNER_TEMP/results"
+          lscpu > "$RUNNER_TEMP/results/cpu.txt"
+          "$RUNNER_TEMP/venv/bin/pip" freeze > "$RUNNER_TEMP/results/environment.txt"
+          cp scripts/benchmark_filters.py "$RUNNER_TEMP/benchmark_filters.py"
+          cp .github/benchmark-run/paired.py "$RUNNER_TEMP/results/paired.py"
+      - name: Measure public filtering and numerical parity
+        run: |
+          source "$RUNNER_TEMP/venv/bin/activate"
+          cd "$RUNNER_TEMP/results"
+          export BASELINE="$RUNNER_TEMP/$BASE_SHA"
+          export CANDIDATE="$RUNNER_TEMP/$LAST_SHA"
+          export BENCHMARK="$RUNNER_TEMP/benchmark_filters.py"
+          export REFERENCE="$RUNNER_TEMP/reference"
+          PYTHONPATH="$BASELINE" python "$BENCHMARK" --public --repeats 15 --save-outputs "$REFERENCE" --output base1.json
+          PYTHONPATH="$CANDIDATE" python "$BENCHMARK" --public --repeats 15 --reference "$REFERENCE" --output cand1.json
+          flagged="$(python "$GITHUB_WORKSPACE/.github/benchmark-run/flagged.py" base1.json cand1.json)"
+          if [[ -n "$flagged" ]]; then
+            python paired.py "$CANDIDATE" $flagged
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filter-cpu-results
+          path: |
+            ${{ runner.temp }}/results/*.txt
+            ${{ runner.temp }}/results/*.json
