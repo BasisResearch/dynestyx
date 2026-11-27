@@ -50,14 +50,14 @@ from dynestyx.inference.checkers import (
     _validate_inference_supported_model_classes,
     _validate_missing_observation_support,
 )
-from dynestyx.inference.custom_filter import (
-    FilterOutputs,
-    compute_custom_filter,
-    custom_distributions,
-)
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
+)
+from dynestyx.inference.filter_interface import (
+    FilterOutputs,
+    compute_custom_filter,
+    custom_distributions,
 )
 from dynestyx.inference.hmm_filters import _filter_hmm, compute_hmm_filter
 from dynestyx.inference.integrations.cd_dynamax.continuous import (

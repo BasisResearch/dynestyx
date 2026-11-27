@@ -27,11 +27,11 @@ from dynestyx.configs.filters import (
     PFConfig,
 )
 from dynestyx.discretization.ode_flow import _ODEFlowStateEvolution
-from dynestyx.inference.custom_filter import FilterInputs as CuthbertInputs
 from dynestyx.inference.enkf_localization import (
     ResolvedEnKFLocalization,
     resolve_enkf_localization,
 )
+from dynestyx.inference.filter_interface import FilterInputs as CuthbertInputs
 from dynestyx.inference.integrations.utils import (
     squeeze_leading_singletons,
 )

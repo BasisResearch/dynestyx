@@ -28,7 +28,7 @@ def model(a):
 
 
 def sequential_runner(method):
-    from dynestyx.inference.custom_filter import (
+    from dynestyx.inference.filter_interface import (
         FilterOutputs,
         run_filter_steps,
         step_inputs,
@@ -107,7 +107,7 @@ def sequential_runner(method):
 
 
 def associative_runner(native):
-    from dynestyx.inference.custom_filter import run_filter_steps, step_inputs
+    from dynestyx.inference.filter_interface import run_filter_steps, step_inputs
     from dynestyx.inference.integrations.cuthbert.discrete_filter import (
         build_cuthbert_filter,
     )
