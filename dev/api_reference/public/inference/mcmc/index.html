@@ -5817,7 +5817,11 @@
 
 
 <h1 id="mcmc-inference">MCMC Inference<a class="headerlink" href="#mcmc-inference" title="Permanent link">&para;</a></h1>
-<p><code>MCMCInference</code> is the high-level inference wrapper for filter-based parameter inference. It wraps your model in an inference context and dispatches to the configured backend (<code>numpyro</code> or <code>blackjax</code>). <code>run()</code> keeps its samples-only return value; call <code>get_diagnostics()</code> afterward for compact sampler-specific diagnostics when supported.</p>
+<p><code>MCMCInference</code> is the high-level inference wrapper for filter-based parameter inference. It wraps your model in an inference context and dispatches to the configured backend (<code>numpyro</code> or <code>blackjax</code>). <code>run(prng_key, *args, **kwargs)</code> keeps its samples-only return value; call <code>get_diagnostics()</code> afterward for compact sampler-specific diagnostics when supported.</p>
+<p>For a model that calls <code>dsx.sample(...)</code>, provide observation and control data
+according to your model's signature.</p>
+<p>When using the NumPyro backend, <code>init_params</code> and <code>extra_fields</code> retain their
+meaning as NumPyro <code>MCMC.run</code> options. Both backends use NumPyro helpers that can have their own keyword name collisions.</p>
 <p>See <a href="../../configurations/mcmc_configs/">MCMC configurations</a>.</p>
 <p>For joint Gaussian random-walk proposals, use <code>AdaptiveMetropolisConfig</code>.
 Its mean, full covariance, and global multiplier adapt only during warmup.
@@ -5870,7 +5874,7 @@ retain one acceptance rate and final proposal scale per coordinate.</p>
 
 
         <p>Provides a high-level interface for MCMC inference, consistent between NumPyro and BlackJAX backends.</p>
-<p>Models must take in <code>obs_times</code>, <code>obs_values</code>, <code>ctrl_times</code>, <code>ctrl_values</code> as arguments (and optionally, <code>*model_args</code>, <code>**model_kwargs</code>).</p>
+<p>Supply arguments to <code>run</code> according to your model's signature.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>
@@ -5901,8 +5905,7 @@ retain one acceptance rate and final proposal scale per coordinate.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Callable probabilistic model with signature
-<code>model(obs_times=..., obs_values=..., ctrl_times=..., ctrl_values=..., *model_args, **model_kwargs)</code>.</p>
+                <p>Callable probabilistic model.</p>
               </div>
             </td>
           </tr>
@@ -5983,7 +5986,7 @@ the global multiplier and numerical diagonal regularization.</p>
 
 
 <h3 id="dynestyx.inference.mcmc.MCMCInference.run" class="doc doc-heading">
-            <code class=" language-python"><span class="n">run</span><span class="p">(</span><span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">obs_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ctrl_times</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ctrl_values</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span></code>
+            <code class=" language-python"><span class="n">run</span><span class="p">(</span><span class="n">rng_key</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span></code>
 
 <a href="#dynestyx.inference.mcmc.MCMCInference.run" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -6022,77 +6025,13 @@ the global multiplier and numerical diagonal regularization.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>obs_times</code>
-            </td>
-            <td>
-                  <code><span title="jax.numpy.ndarray">ndarray</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Observation times.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>obs_values</code>
-            </td>
-            <td>
-                  <code><span title="jax.numpy.ndarray">ndarray</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Observation values.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>ctrl_times</code>
-            </td>
-            <td>
-                  <code><span title="jax.numpy.ndarray">ndarray</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Control times.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>ctrl_values</code>
-            </td>
-            <td>
-                  <code><span title="jax.numpy.ndarray">ndarray</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Control values.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
                 <code>*model_args</code>
             </td>
             <td>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Additional positional arguments passed to <code>model</code>.</p>
+                <p>Positional arguments passed to <code>model</code>.</p>
               </div>
             </td>
             <td>
@@ -6107,7 +6046,9 @@ the global multiplier and numerical diagonal regularization.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Additional keyword arguments passed to <code>model</code>.</p>
+                <p>Keyword arguments passed to <code>model</code> by name.
+With the NumPyro backend, <code>MCMC.run</code> options such as
+<code>init_params</code> and <code>extra_fields</code> configure the sampler.</p>
               </div>
             </td>
             <td>
