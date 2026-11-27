@@ -28,6 +28,7 @@ Nested objects such as `extra_filter_kwargs` dictionaries are not recursively fr
 | `EKFConfig`                | Discrete            | Nonlinear, differentiable Gaussian dynamics, nonlinear (and with `cuthbert`, non-Gaussian) but differentiable observations (approximate). |
 | `UKFConfig`                | Discrete            | Nonlinear, differentiable Gaussian dynamics, nonlinear but differentiable Gaussian observations (approximate). Generally more accurate, but slower than `EKFConfig`. |
 | `PFConfig`                 | Discrete            | Applicable for arbitrary state-space models, but quite expensive and noisy estimates (asymptotically exact in the limit of infinite particles, approximate in practice). |
+| `RBPFConfig`               | Discrete            | Switching linear dynamical systems with Gaussian observations. |
 | `HMMConfig`                | Discrete (HMM)      | Finite discrete latent state space (exact & optimal). |
 | `ContinuousTimeKFConfig`   | Continuous-discrete | Linear-Gaussian SDE + linear-Gaussian observations (exact and optimal). |
 | `ContinuousTimeEKFConfig`  | Continuous-discrete | Mildly nonlinear SDE with differentiable drift and difussion terms; Gaussian observations (approximate). |
@@ -104,6 +105,7 @@ Projected forecast ensembles remain the raw ensemble even when the observation m
         - UKFConfig
         - PFConfig
         - PFResamplingConfig
+        - RBPFConfig
         - TaperCovarianceFn
         - ModifyCrossCovariance
         - ConstructCholInnovationCovariance

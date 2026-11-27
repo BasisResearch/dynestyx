@@ -17,6 +17,7 @@ ResamplingBaseMethod = Literal["systematic", "multinomial", "stratified"]
 ResamplingDifferentiableMethod = Literal["stop_gradient", "straight_through", "soft"]
 FilterEmissionOrder = Literal["zeroth", "first", "second"]
 FilterStateOrder = Literal["zeroth", "first", "second"]
+RBPFProposal = Literal["prior", "optimal"]
 
 CuthbertOnlyFilterSource = Literal["cuthbert"]
 CDDynamaxOnlyFilterSource = Literal["cd_dynamax"]
@@ -225,7 +226,7 @@ class BaseFilterConfig(abc.ABC):
             implement covariance inflation, which can improve robustness when
             the model is misspecified. `None` disables rescaling.
         crn_seed (PRNGKeyArray | None): Fix the PRNG key for stochastic filters
-            (EnKF, PF). Useful when differentiating through the filter:
+            (EnKF, PF, RBPF). Useful when differentiating through the filter:
             a fixed key makes the randomness a deterministic function of model
             parameters. `None` draws a fresh key each call.
         warn (bool): Whether or not to suppress warnings from filtering backends.
@@ -531,6 +532,97 @@ class PFConfig(PFBaseConfig):
     """
 
     filter_source: CuthbertOnlyFilterSource = "cuthbert"
+
+
+@dataclasses.dataclass(frozen=True)
+class RBPFConfig(BaseFilterConfig):
+    r"""Rao-Blackwellized particle filter for switching linear dynamical systems.
+
+    With `dsx.plate`, all trajectories must share the SLDS initial-state,
+    transition, and observation model parameters. Filter trajectories
+    separately when they require different parameters.
+
+    This filter samples particles over the discrete regime sequence and
+    analytically marginalizes the continuous linear-Gaussian state with
+    conditional Kalman updates.
+
+    Attributes:
+        n_particles (int): Number of particles over discrete regimes.
+        proposal ({"prior", "optimal"}): Proposal used for the discrete
+            regime particles. `"prior"` uses the bootstrap proposal, sampling
+            from the Markov transition. `"optimal"` enumerates all next regimes
+            for each particle, weights them using the current observation,
+            and applies the optimal resampling scheme of Fearnhead and
+            Clifford (2003).
+        ess_threshold_ratio (float | None): Resampling threshold as a fraction
+            of `n_particles`. The prior proposal uses the `PFConfig` default (`0.7`).
+            Must be `None` for the optimal proposal, which does not use it.
+        record_filtered_regime_probs (bool | None): Save filtered regime
+            probabilities \(p(z_t \mid y_{1:t})\).
+        filter_source (CDDynamaxOnlyFilterSource): Backend. Defaults to `"cd_dynamax"`.
+
+    ??? note "Algorithm Reference"
+        Let \(z_t\) be the discrete regime, \(x_t\) the continuous state,
+        and \(y_t\) the observation. Conditional on a regime history
+        \(z_{1:t}^{(i)}\), the model is linear-Gaussian. Each particle
+        carries the Kalman filtered mean \(m_t^{(i)}\) and covariance
+        \(P_t^{(i)}\). With \(N\) particles and normalized weights \(w_t^{(i)}\),
+        the joint filtering distribution is approximated by the mixture
+
+        \[
+            p(z_t,x_t \mid y_{1:t}) \approx
+            \sum_{i=1}^{N} w_t^{(i)}\,
+            \mathbf{1}\{z_t=z_t^{(i)}\}\,
+            \mathcal{N}\!\left(x_t; m_t^{(i)},P_t^{(i)}\right).
+        \]
+
+        For a candidate next regime \(k\), let
+        \(g_t^{(i)}(k)=p(y_t \mid y_{1:t-1},z_{1:t-1}^{(i)},z_t=k)\)
+        be the Gaussian predictive density from the conditional Kalman step.
+        Let \(T_{jk}=p(z_t=k\mid z_{t-1}=j)\).
+
+        - With `proposal="prior"`, draw \(k\) from
+          \(T_{z_{t-1}^{(i)},:}\) and assign unnormalized weight
+          \(w_{t-1}^{(i)} g_t^{(i)}(k)\). Resample when the effective sample
+          size falls below `ess_threshold_ratio * n_particles`.
+        - With `proposal="optimal"`, enumerate all candidate regimes for each
+          particle and assign each branch unnormalized weight
+          \(w_{t-1}^{(i)} T_{z_{t-1}^{(i)},k} g_t^{(i)}(k)\).
+          Apply Fearnhead–Clifford resampling to return to \(N\) particles.
+
+        For either proposal, the sum of the unnormalized weights before
+        resampling estimates the predictive density of the current
+        observation. The marginal log-likelihood estimate sums the logs of
+        these normalizers over time.
+
+        References:
+
+        - Doucet, A., de Freitas, N., Murphy, K., & Russell, S. (2000).
+          Rao-Blackwellised Particle Filtering for Dynamic Bayesian Networks.
+          Proceedings of UAI, 176–183.
+          [Paper](https://www.cs.ubc.ca/~murphyk/papers/rbpf_uai00.pdf).
+        - Fearnhead, P., & Clifford, P. (2003). On-line inference for hidden
+          Markov models via particle filters. Journal of the Royal Statistical
+          Society: Series B, 65(4), 887–899.
+          [DOI: 10.1111/1467-9868.00421](https://doi.org/10.1111/1467-9868.00421).
+    """
+
+    n_particles: int = 1_000
+    proposal: RBPFProposal = "optimal"
+    ess_threshold_ratio: float | None = None
+    record_filtered_regime_probs: bool | None = None
+    filter_source: CDDynamaxOnlyFilterSource = "cd_dynamax"
+
+    def __post_init__(self):
+        if self.proposal == "optimal" and self.ess_threshold_ratio is not None:
+            raise ValueError(
+                "ess_threshold_ratio is only supported with proposal='prior'; "
+                "leave it as None for proposal='optimal'."
+            )
+        if self.proposal == "prior" and self.ess_threshold_ratio is None:
+            object.__setattr__(
+                self, "ess_threshold_ratio", PFBaseConfig.ess_threshold_ratio
+            )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -936,6 +1028,7 @@ class ContinuousTimeUKFConfig(UKFConfig, ContinuousTimeConfig):
 DiscreteTimeConfigs: tuple[type, ...] = (
     EnKFConfig,
     PFConfig,
+    RBPFConfig,
     EKFConfig,
     KFConfig,
     UKFConfig,
@@ -1005,16 +1098,20 @@ def _config_to_record_kwargs(config: BaseFilterConfig) -> dict:
             "record_log_filtered": config.record_log_filtered,
             "record_max_elems": config.record_max_elems,
         }
-    else:
-        return {
-            "record_filtered_states_mean": config.record_filtered_states_mean,
-            "record_filtered_states_cov": config.record_filtered_states_cov,
-            "record_filtered_states_cov_diag": config.record_filtered_states_cov_diag,
-            "record_filtered_particles": config.record_filtered_particles,
-            "record_filtered_log_weights": config.record_filtered_log_weights,
-            "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
-            "record_predicted_observations_mean": config.record_predicted_observations_mean,
-            "record_predicted_observations_cov": config.record_predicted_observations_cov,
-            "record_predicted_observations_ensemble": config.record_predicted_observations_ensemble,
-            "record_max_elems": config.record_max_elems,
-        }
+    record_kwargs = {
+        "record_filtered_states_mean": config.record_filtered_states_mean,
+        "record_filtered_states_cov": config.record_filtered_states_cov,
+        "record_filtered_states_cov_diag": config.record_filtered_states_cov_diag,
+        "record_filtered_particles": config.record_filtered_particles,
+        "record_filtered_log_weights": config.record_filtered_log_weights,
+        "record_filtered_states_chol_cov": config.record_filtered_states_chol_cov,
+        "record_predicted_observations_mean": config.record_predicted_observations_mean,
+        "record_predicted_observations_cov": config.record_predicted_observations_cov,
+        "record_predicted_observations_ensemble": config.record_predicted_observations_ensemble,
+        "record_max_elems": config.record_max_elems,
+    }
+    if isinstance(config, RBPFConfig):
+        record_kwargs["record_filtered_regime_probs"] = (
+            config.record_filtered_regime_probs
+        )
+    return record_kwargs

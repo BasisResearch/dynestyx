@@ -21,6 +21,7 @@ See [Filter configurations](filter_configs.md) for algorithm and backend choices
 - `dsx.configs.UKFConfig`
 - `dsx.configs.EnKFConfig`
 - `dsx.configs.PFConfig`
+- `dsx.configs.RBPFConfig`
 
 ### Continuous-time filters
 

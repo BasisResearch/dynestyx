@@ -54,6 +54,7 @@ nav:
       - Nonlinear Gaussian SSMs:
         - Tracking a spiraling object with an EKF: tutorials/state_space_models/ekf_spiral.ipynb
         - Online learning of an MLP with an EKF: tutorials/state_space_models/ekf_mlp.ipynb
+      - Switching linear dynamical systems: tutorials/gentle_intro/SLDS_generic_model_tutorial.ipynb
     - Deep Dives:
       - Speedups with full-state low-noise observations: deep_dives/l63_speedup_dirac_vs_enkf.ipynb
       - Associative Cuthbert KF scaling: deep_dives/discrete_time_kf_associative_scaling.ipynb

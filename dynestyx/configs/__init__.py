@@ -25,6 +25,7 @@ from dynestyx.configs.filters import (
     KFConfig,
     PFConfig,
     PFResamplingConfig,
+    RBPFConfig,
     UKFConfig,
 )
 from dynestyx.configs.mcmc import (
@@ -101,6 +102,7 @@ __all__ = [
     "PFConfig",
     "PFResamplingConfig",
     "PFSmootherConfig",
+    "RBPFConfig",
     "SDESimulatorConfig",
     "SGLDConfig",
     "SimulatorConfig",
